@@ -3,29 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ember Node v.ᚠ</title>
-    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <title>Room Interface</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        header { font-family: 'Cinzel', serif; }
+        .room { margin: 20px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .chat-container { border: 1px solid #ccc; padding: 10px; margin-top: 10px; height: 200px; overflow-y: auto; }
+        .message { margin: 5px 0; }
+        input[type="text"] { width: 100%; padding: 10px; }
+        button { padding: 10px; }
+    </style>
 </head>
 <body>
     <header>
-        <h1>Ember Node v.ᚠ</h1>
+        <h1>Welcome to the Room Interface</h1>
     </header>
-    <nav>
-        <ul>
-            <li><a href="#hearth">Hearth</a></li>
-            <li><a href="#workshop">Workshop</a></li>
-            <li><a href="#threshold">Threshold</a></li>
-        </ul>
-    </nav>
-    <section class="chat-window">
-        <div class="messages">
-            <!-- Chat messages will appear here -->
-        </div>
-        <div class="input-area">
-            <input type="text" placeholder="Type your message..." />
-            <button>Send</button>
-        </div>
-    </section>
-    <script src="script.js"></script>
+    <main>
+        <section class="room" id="hearth">
+            <h2>Hearth</h2>
+            <div class="chat-container" id="hearth-chat"></div>
+            <input type="text" id="hearth-msg" placeholder="Type a message...">
+            <button onclick="sendMessage('hearth')">Send</button>
+        </section>
+        <section class="room" id="workshop">
+            <h2>Workshop</h2>
+            <div class="chat-container" id="workshop-chat"></div>
+            <input type="text" id="workshop-msg" placeholder="Type a message...">
+            <button onclick="sendMessage('workshop')">Send</button>
+        </section>
+        <section class="room" id="threshold">
+            <h2>Threshold</h2>
+            <div class="chat-container" id="threshold-chat"></div>
+            <input type="text" id="threshold-msg" placeholder="Type a message...">
+            <button onclick="sendMessage('threshold')">Send</button>
+        </section>
+    </main>
+    <script src="app.js"></script>
+    <script>
+        function sendMessage(room) {
+            let msgInput = document.getElementById(room + '-msg');
+            let chatContainer = document.getElementById(room + '-chat');
+            let msg = msgInput.value;
+            if (msg) {
+                let messageContainer = document.createElement('div');
+                messageContainer.classList.add('message');
+                messageContainer.textContent = msg;
+                chatContainer.appendChild(messageContainer);
+                msgInput.value = '';
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+    </script>
 </body>
 </html>
