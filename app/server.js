@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const axios = require('axios');
+const { listCartridges, loadCartridge } = require('./cartridgeLoader');
 
 const app = express();
 const PORT = 3477;
@@ -33,6 +34,20 @@ app.post('/chat', async (req, res) => {
     }
 });
 
+// List available cartridges
+app.get('/cartridges', (req, res) => {
+    res.json({ cartridges: listCartridges() });
+});
+
+// Load a specific cartridge's content
+app.get('/cartridges/:name', (req, res) => {
+    const cartridge = loadCartridge(req.params.name);
+    if (!cartridge) {
+        return res.status(404).json({ error: `Cartridge "${req.params.name}" not found.` });
+    }
+    res.json(cartridge);
+});
+
 // Check that the required Ollama model is available before starting
 async function checkModel() {
     try {
@@ -63,4 +78,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { app, MODEL, OLLAMA_CHAT_URL, OLLAMA_BASE_URL };
+module.exports = { app, MODEL, OLLAMA_CHAT_URL, OLLAMA_BASE_URL, listCartridges, loadCartridge };
