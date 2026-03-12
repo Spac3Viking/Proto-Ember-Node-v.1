@@ -1,0 +1,66 @@
+/* Styling for Ember Node UI */
+
+/* Header styling */
+header {
+    background-color: #333;
+    color: white;
+    padding: 10px;
+    text-align: center;
+}
+
+/* Tab styling */
+tabs {
+    display: flex;
+    justify-content: space-around;
+    background-color: #444;
+    padding: 10px 0;
+}
+
+tab {
+    flex: 1;
+    text-align: center;
+    color: white;
+    padding: 10px;
+    cursor: pointer;
+}
+
+tab.active {
+    background-color: #555;
+}
+
+/* Chat window styling */
+.chat-window {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    margin: 10px;
+    padding: 10px;
+    height: 300px;
+    overflow-y: scroll;
+    background-color: #f9f9f9;
+}
+
+/* Input area styling */
+.input-area {
+    display: flex;
+    margin: 10px;
+}
+
+.input-area input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.input-area button {
+    padding: 10px;
+    background-color: #333;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.input-area button:hover {
+    background-color: #555;
+}
