@@ -6,19 +6,29 @@ const sendButton = document.querySelector('#send-button');
 
 // Function to send chat prompt
 sendButton.addEventListener('click', async () => {
-    const message = messageInput.value;
-    const response = await fetch('/chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({message: message}),
-    });
-    const data = await response.json();
+    const message = messageInput.value.trim();
+    if (!message) return;
+
     displayMessage(message, 'message-user');
-    displayMessage(data.response, 'message-heart');
     messageInput.value = '';
     autoScrollToBottom();
+
+    try {
+        const response = await fetch('/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message }),
+        });
+
+        const data = await response.json();
+        displayMessage(data.message.content, 'message-heart');
+        autoScrollToBottom();
+    } catch (error) {
+        displayMessage('Error: could not reach the Heart.', 'message-heart');
+        autoScrollToBottom();
+    }
 });
 
 // Function to display messages
