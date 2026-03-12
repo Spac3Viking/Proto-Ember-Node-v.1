@@ -1,0 +1,1 @@
+{\n  "name": "proto-ember-node-v1",\n  "version": "1.0.0",\n  "description": "Ember Node v.1 project",\n  "main": "index.js",\n  "scripts": {\n    "start": "node index.js",\n    "dev": "nodemon index.js"\n  },\n  "dependencies": {\n    "express": "^4.17.1",\n    "cors": "^2.8.5",\n    "axios": "^0.21.1"\n  },\n  "devDependencies": {\n    "nodemon": "^2.0.7"\n  }\n}
