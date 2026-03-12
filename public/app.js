@@ -1,48 +1,42 @@
-// public/app.js
+// Updated app.js for chat handling
 
-const chatContainer = document.getElementById('chat-container');
-const promptInput = document.getElementById('prompt-input');
-const sendButton = document.getElementById('send-button');
-const tabs = document.querySelectorAll('.tab');
+const chatContainer = document.querySelector('#messages');
+const messageInput = document.querySelector('#message-input');
+const sendButton = document.querySelector('#send-button');
 
-// Function to send chat prompt to the /chat endpoint
-async function sendChatPrompt(prompt) {
+// Function to send chat prompt
+sendButton.addEventListener('click', async () => {
+    const message = messageInput.value;
     const response = await fetch('/chat', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ prompt }),
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({message: message}),
     });
-    return response.json();
-}
-
-// Function to display the chat response
-function displayResponse(response) {
-    const messageElement = document.createElement('div');
-    messageElement.classList.add('chat-response');
-    messageElement.textContent = response.message;
-    chatContainer.appendChild(messageElement);
-}
-
-// Event Listener for send button
-sendButton.addEventListener('click', async () => {
-    const prompt = promptInput.value;
-    const response = await sendChatPrompt(prompt);
-    displayResponse(response);
-    promptInput.value = ''; // Clear the input field
+    const data = await response.json();
+    displayMessage(message, 'message-user');
+    displayMessage(data.response, 'message-heart');
+    messageInput.value = '';
+    autoScrollToBottom();
 });
 
-// Tab switching functionality
-function switchTab(event) {
-    const targetTab = event.currentTarget.dataset.tab;
-    tabs.forEach(tab => {
-        tab.classList.remove('active');
-        if (tab.id === targetTab) {
-            tab.classList.add('active');
-        }
-    });
+// Function to display messages
+function displayMessage(text, className) {
+    const msgElement = document.createElement('div');
+    msgElement.className = className;
+    msgElement.textContent = text;
+    chatContainer.appendChild(msgElement);
 }
 
-// Attach click events to tabs
-tabs.forEach(tab => {
-    tab.addEventListener('click', switchTab);
-});
+// Function to auto-scroll chat window
+function autoScrollToBottom() {
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Function for tab switching between rooms
+function switchTab(room) {
+    // Logic to switch between Hearth, Workshop, and Threshold
+}
+
+// Additional event listeners for tab switching can be added here
