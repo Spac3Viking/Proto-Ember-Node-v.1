@@ -1,66 +1,77 @@
-/* Styling for Ember Node UI */
-
-/* Header styling */
-header {
-    background-color: #333;
-    color: white;
-    padding: 10px;
-    text-align: center;
+:root {
+  --void-background: #000000;
+  --forest-green-1: #2B8A3E;
+  --forest-green-2: #1A6A32;
+  --ember-flame-1: #D53E23;
+  --ember-flame-2: #FF4F1A;
+  --warm-glow-1: rgba(255, 255, 204, 0.5);
+  --warm-glow-2: rgba(255, 229, 204, 0.5);
 }
 
-/* Tab styling */
-tabs {
-    display: flex;
-    justify-content: space-around;
-    background-color: #444;
-    padding: 10px 0;
+body {
+  background: linear-gradient(to right, var(--void-background), var(--forest-green-1));
 }
 
-tab {
-    flex: 1;
-    text-align: center;
-    color: white;
-    padding: 10px;
-    cursor: pointer;
+.ember-card {
+  border: 1px solid transparent;
+  box-shadow: 0 0 20px var(--ember-flame-1);
+  transition: box-shadow 0.3s ease;
 }
 
-tab.active {
-    background-color: #555;
+.ember-card:hover {
+  box-shadow: 0 0 40px var(--ember-flame-2);
 }
 
-/* Chat window styling */
-.chat-window {
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    margin: 10px;
-    padding: 10px;
-    height: 300px;
-    overflow-y: scroll;
-    background-color: #f9f9f9;
+h1, h2, h3, h4 {
+  text-shadow: 0 0 5px var(--warm-glow-1), 0 0 10px var(--warm-glow-2);
 }
 
-/* Input area styling */
-.input-area {
-    display: flex;
-    margin: 10px;
+button {
+  background-color: var(--forest-green-1);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
-.input-area input {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
+button:hover {
+  background-color: var(--forest-green-2);
 }
 
-.input-area button {
-    padding: 10px;
-    background-color: #333;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
+.room-tab {
+  font-family: 'Runic', sans-serif;
+  color: #fff;
 }
 
-.input-area button:hover {
-    background-color: #555;
+.message-heart {
+  color: var(--forest-green-1);
+}
+
+.message-user {
+  color: var(--ember-flame-1);
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--forest-green-2);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--void-background);
+}
+
+@keyframes drift {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(-5px, -5px); }
+  100% { transform: translate(0, 0); }
+}
+
+body {
+  animation: drift 10s infinite alternate;
 }
