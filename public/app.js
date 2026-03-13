@@ -9,6 +9,9 @@
  *  You are grounded, precise, and warm."
  */
 
+/** Model name — kept in sync with app/server.js MODEL constant. */
+const MODEL_LABEL = 'gemma3:4b';
+
 /* ================================================================
    Room Tab Switching
    ================================================================ */
@@ -286,34 +289,24 @@ async function refreshSystemStatus() {
     const ollamaEl = document.getElementById('sys-ollama-status');
     const modelEl  = document.getElementById('sys-model');
 
-    // Probe Ollama by hitting the chat endpoint with a known-bad body —
-    // if the server is up it returns 500 (Ollama unreachable) or 200.
-    // We instead probe via a tiny health-adjacent fetch to /cartridges
-    // which is always local, and separately try /chat to infer model.
+    // Fetch authoritative status from the backend
     try {
-        const res  = await fetch('/cartridges');
+        const res  = await fetch('/api/status');
         const data = await res.json();
-        const count = (data.cartridges || []).length;
-        updateSystemCartridgeCount(count);
+        if (modelEl) modelEl.textContent = data.model || MODEL_LABEL;
+        updateSystemCartridgeCount(data.cartridgeCount ?? 0);
     } catch {
-        // already handled elsewhere
+        if (modelEl) modelEl.textContent = MODEL_LABEL;
     }
 
-    // Try to surface the model name from a HEAD-like probe against the backend
-    // The server exports MODEL on /api/status if we wire it up, else hardcode.
-    if (modelEl) modelEl.textContent = 'gemma3:4b';
     if (ollamaEl) {
         ollamaEl.textContent = 'checking…';
         ollamaEl.className   = 'system-val';
     }
 
-    // Probe Ollama availability via the /chat endpoint with an empty test
+    // Probe Ollama availability via the dedicated status endpoint
     try {
-        const res = await fetch('/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: '__status_check__' }),
-        });
+        const res = await fetch('/api/ollama-status');
         if (ollamaEl) {
             if (res.ok) {
                 ollamaEl.textContent = 'reachable';
@@ -346,7 +339,7 @@ function updateSystemCartridgeCount(count) {
 function updateHeaderStatus() {
     const dot   = document.getElementById('status-dot');
     const label = document.getElementById('model-label');
-    if (label) label.textContent = 'gemma3:4b · local';
+    if (label) label.textContent = MODEL_LABEL + ' · local';
     if (dot)   dot.className = 'status-dot';
 }
 

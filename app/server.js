@@ -48,6 +48,26 @@ app.get('/cartridges/:name', (req, res) => {
     res.json(cartridge);
 });
 
+// System status endpoint — used by the frontend System room
+app.get('/api/status', (req, res) => {
+    res.json({
+        model: MODEL,
+        ollamaBaseUrl: OLLAMA_BASE_URL,
+        port: PORT,
+        cartridgeCount: listCartridges().length,
+    });
+});
+
+// Ollama reachability probe — used by the frontend System room health check
+app.get('/api/ollama-status', async (req, res) => {
+    try {
+        await axios.get(`${OLLAMA_BASE_URL}/api/tags`);
+        res.json({ status: 'reachable' });
+    } catch {
+        res.status(503).json({ status: 'unreachable' });
+    }
+});
+
 // Check that the required Ollama model is available before starting
 async function checkModel() {
     try {

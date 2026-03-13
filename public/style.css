@@ -367,6 +367,14 @@ input:focus, textarea:focus {
   min-height: 0;
 }
 
+/* The chat card itself uses the same flex-column layout */
+.hearth-chat-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .chat-window {
   flex: 1;
   min-height: 320px;

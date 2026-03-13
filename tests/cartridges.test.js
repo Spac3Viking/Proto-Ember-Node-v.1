@@ -49,7 +49,7 @@ describe('cartridgeLoader', () => {
         });
 
         test('returns empty array when cartridges directory does not exist', () => {
-            const fsSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+            const fsSpy = jest.spyOn(fs, 'existsSync').mockReturnValueOnce(false);
             const { listCartridges } = require('../app/cartridgeLoader');
             expect(listCartridges()).toEqual([]);
             fsSpy.mockRestore();

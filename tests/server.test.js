@@ -57,3 +57,38 @@ describe('POST /chat enforces gemma3:4b model', () => {
         expect(res.status).toBe(500);
     });
 });
+
+describe('GET /api/status', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('returns 200 with model, cartridgeCount, and port', async () => {
+        const res = await request(app).get('/api/status');
+        expect(res.status).toBe(200);
+        expect(res.body.model).toBe('gemma3:4b');
+        expect(typeof res.body.cartridgeCount).toBe('number');
+        expect(res.body.cartridgeCount).toBeGreaterThan(0);
+        expect(res.body.port).toBe(3477);
+    });
+});
+
+describe('GET /api/ollama-status', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('returns 200 when Ollama is reachable', async () => {
+        axios.get.mockResolvedValue({ data: { models: [] } });
+        const res = await request(app).get('/api/ollama-status');
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe('reachable');
+    });
+
+    test('returns 503 when Ollama is unreachable', async () => {
+        axios.get.mockRejectedValue(new Error('ECONNREFUSED'));
+        const res = await request(app).get('/api/ollama-status');
+        expect(res.status).toBe(503);
+        expect(res.body.status).toBe('unreachable');
+    });
+});
