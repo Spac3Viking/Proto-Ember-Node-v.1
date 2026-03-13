@@ -46,9 +46,10 @@ function listCartridges() {
 
 /**
  * Loads all readable text files (.md, .txt) inside a named cartridge
- * directory and returns their combined content together with the
- * cartridge name and optional manifest metadata.  Returns null when the
- * cartridge does not exist.
+ * directory — including any files found inside a docs/ subdirectory —
+ * and returns their combined content together with the cartridge name
+ * and optional manifest metadata.  Returns null when the cartridge does
+ * not exist.
  *
  * @param {string} name  Cartridge directory name
  * @returns {{ name: string, manifest: object|null, content: string } | null}
@@ -59,12 +60,26 @@ function loadCartridge(name) {
 
     const manifest = loadManifest(cartridgeDir);
 
-    const files = fs.readdirSync(cartridgeDir)
-        .filter(f => f.endsWith('.md') || f.endsWith('.txt'))
-        .sort();
+    // Collect top-level text files
+    const topFiles = fs.readdirSync(cartridgeDir)
+        .filter(f => {
+            if (!f.endsWith('.md') && !f.endsWith('.txt')) return false;
+            return fs.statSync(path.join(cartridgeDir, f)).isFile();
+        })
+        .sort()
+        .map(f => path.join(cartridgeDir, f));
 
-    const content = files
-        .map(file => fs.readFileSync(path.join(cartridgeDir, file), 'utf8'))
+    // Collect files from docs/ subdirectory if present
+    const docsDir   = path.join(cartridgeDir, 'docs');
+    const docsFiles = fs.existsSync(docsDir) && fs.statSync(docsDir).isDirectory()
+        ? fs.readdirSync(docsDir)
+              .filter(f => f.endsWith('.md') || f.endsWith('.txt'))
+              .sort()
+              .map(f => path.join(docsDir, f))
+        : [];
+
+    const content = [...topFiles, ...docsFiles]
+        .map(filePath => fs.readFileSync(filePath, 'utf8'))
         .join('\n\n');
 
     return { name, manifest, content };

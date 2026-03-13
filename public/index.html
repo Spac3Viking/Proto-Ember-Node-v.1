@@ -44,7 +44,16 @@
           <h2 class="room-heading"><span class="room-rune">ᚺ</span> Hearth</h2>
           <div class="ember-card hearth-chat-card" style="padding: 0;">
             <div class="chat-window" id="messages" aria-live="polite" aria-label="Conversation"></div>
-            <div class="signal-trace-bar" id="signal-trace">Signal Trace — awaiting exchange</div>
+
+            <!-- Signal Trace Panel -->
+            <div class="signal-trace-panel" id="signal-trace-panel">
+              <div class="signal-trace-header">
+                <span class="signal-trace-label">Signal Trace</span>
+                <span class="signal-trace-status" id="signal-trace-status">awaiting exchange</span>
+              </div>
+              <div class="signal-trace-sources" id="signal-trace-sources"></div>
+            </div>
+
             <div class="chat-input-row" style="padding: 0.75rem 1rem;">
               <input
                 type="text"
@@ -63,7 +72,9 @@
       <section class="room-panel" id="room-workshop" role="tabpanel">
         <div class="workshop-layout">
           <h2 class="room-heading"><span class="room-rune">ᚹ</span> Workshop</h2>
-          <div class="ember-card workshop-layout" style="padding: 1rem;">
+
+          <!-- Draft Pane -->
+          <div class="ember-card workshop-draft-card" style="padding: 1rem;">
             <div class="draft-area">
               <label for="workshop-draft" class="visually-hidden">Draft area</label>
               <textarea
@@ -73,9 +84,27 @@
               ></textarea>
             </div>
             <div class="workshop-controls">
-              <button class="primary" id="save-snapshot-btn">Save Snapshot</button>
-              <button class="primary" id="clear-draft-btn">Clear Draft</button>
+              <button class="primary" id="save-note-btn">Save Note</button>
+              <button class="primary" id="clear-draft-btn">Clear</button>
               <span class="workshop-status" id="workshop-status"></span>
+            </div>
+          </div>
+
+          <!-- Index Management Pane -->
+          <div class="ember-card workshop-index-card" style="padding: 1rem;">
+            <div class="workshop-section-title">Cartridge Index</div>
+            <div id="ws-cartridge-index-list" class="ws-cartridge-list">
+              <span class="message-system">Loading cartridges…</span>
+            </div>
+
+            <div class="workshop-section-title" style="margin-top: 1rem;">Indexed Sources</div>
+            <div id="ws-sources-list" class="ws-sources-list">
+              <span class="message-system">No sources indexed.</span>
+            </div>
+
+            <div class="workshop-section-title" style="margin-top: 1rem;">Workshop Notes</div>
+            <div id="ws-notes-list" class="ws-notes-list">
+              <span class="message-system">No notes saved.</span>
             </div>
           </div>
         </div>
@@ -85,22 +114,49 @@
       <section class="room-panel" id="room-threshold" role="tabpanel">
         <div class="threshold-layout">
           <h2 class="room-heading"><span class="room-rune">ᚦ</span> Threshold</h2>
+
           <div class="ember-card" style="padding: 1rem 1.25rem;">
             <p class="threshold-notice">
               The Threshold is the intake room. All external material — documents, imports, and unverified signals —
               lands here before touching the Hearth. Nothing crosses automatically. Inspection precedes ingestion.
-              <br><br>
-              Full document ingestion and signal inspection arrive in Phase 3.
             </p>
           </div>
+
+          <!-- Drop Zone -->
           <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.875rem;">
-            <div class="drop-zone" id="threshold-drop-zone">
+            <div
+              class="drop-zone"
+              id="threshold-drop-zone"
+              role="button"
+              tabindex="0"
+              aria-label="Drop zone for file intake"
+            >
               <span class="drop-zone-rune">ᚦ</span>
-              Document intake arrives in Phase 3.<br>
-              <span style="font-size:0.75rem; opacity:0.6;">Files dropped here will be quarantined for inspection before any Hearth access.</span>
+              Drop <strong>.txt</strong> or <strong>.md</strong> files here, or
+              <label for="threshold-file-input" class="drop-zone-browse-label">browse</label>
+              <input
+                type="file"
+                id="threshold-file-input"
+                accept=".txt,.md"
+                multiple
+                style="display:none;"
+                aria-label="Choose files to ingest"
+              >
+              <span style="font-size:0.72rem; opacity:0.55;">Files land here for inspection before any Hearth access.</span>
             </div>
+
+            <!-- File List -->
+            <div class="threshold-file-section">
+              <div class="workshop-section-title">Intake Queue</div>
+              <div id="threshold-file-list" class="threshold-file-list">
+                <span class="message-system">No files in Threshold.</span>
+              </div>
+              <div id="threshold-status" class="threshold-status"></div>
+            </div>
+
+            <!-- Scratch Notes -->
             <div class="threshold-scratch">
-              <label for="threshold-notes" style="font-size:0.78rem; color:var(--archive-muted); letter-spacing:0.06em; text-transform:uppercase; font-family:'Cinzel',serif;">Scratch Notes</label>
+              <label for="threshold-notes" class="workshop-section-title">Scratch Notes</label>
               <textarea
                 id="threshold-notes"
                 placeholder="Temporary notes about imported material. These remain in the Threshold — not written to Hearth."
@@ -185,6 +241,21 @@
               </div>
             </div>
             <div class="ember-card system-block">
+              <div class="system-block-title">Knowledge Index</div>
+              <div class="system-row">
+                <span class="system-key">Indexed chunks</span>
+                <span class="system-val" id="sys-indexed-chunks">—</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Indexed sources</span>
+                <span class="system-val" id="sys-indexed-sources">—</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Index path</span>
+                <span class="system-val">./data/indexes/</span>
+              </div>
+            </div>
+            <div class="ember-card system-block">
               <div class="system-block-title">Memory Discipline</div>
               <div class="system-row">
                 <span class="system-key">Auto-memory</span>
@@ -203,7 +274,7 @@
           <div class="ember-card system-block">
             <div class="system-block-title">Phase Roadmap</div>
             <p class="system-future-note">
-              Phase 3 — document ingestion, chunking, embeddings, retrieval, signal trace<br>
+              Phase 3 ✓ — document ingestion, chunking, embeddings, retrieval, signal trace<br>
               Phase 4 — Remember / Archive mechanics, curated Hearth writes, Workshop snapshots<br>
               Phase 5 — true offline cartridge engine, portable export/import, desktop shell packaging
             </p>
