@@ -15,10 +15,11 @@
 
 'use strict';
 
-const express = require('express');
-const path    = require('path');
-const fs      = require('fs');
-const axios   = require('axios');
+const express   = require('express');
+const path      = require('path');
+const fs        = require('fs');
+const axios     = require('axios');
+const rateLimit = require('express-rate-limit');
 
 const { listCartridges, loadCartridge }      = require('./cartridgeLoader');
 const { ingestFile, ingestCartridge, DATA_DIR, extractText } = require('./ingest');
@@ -46,6 +47,26 @@ const HEART_SYSTEM_PROMPT = (
     'know something, you say: "That signal has not reached this hearth." ' +
     'You are grounded, precise, and warm.'
 );
+
+// ── Rate limiters ─────────────────────────────────────────────────────────────
+// Applied to endpoints that perform file system writes or expensive operations.
+// Limits are generous for local use but guard against runaway processes.
+
+const writeLimiter = rateLimit({
+    windowMs:          60 * 1000,  // 1 minute
+    max:               60,          // 60 write operations per minute
+    standardHeaders:   true,
+    legacyHeaders:     false,
+    message:           { error: 'Too many requests. Please slow down.' },
+});
+
+const indexLimiter = rateLimit({
+    windowMs:          60 * 1000,  // 1 minute
+    max:               10,          // 10 indexing operations per minute
+    standardHeaders:   true,
+    legacyHeaders:     false,
+    message:           { error: 'Too many indexing requests. Please slow down.' },
+});
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
@@ -78,7 +99,7 @@ app.post('/chat', async (req, res) => {
  * Body: { query, rooms?, cartridgeId? }
  * Response: { answer, sources, grounded }
  */
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', writeLimiter, async (req, res) => {
     try {
         const { query, rooms = null, cartridgeId = null } = req.body;
         if (!query || typeof query !== 'string') {
@@ -121,7 +142,7 @@ app.post('/api/chat', async (req, res) => {
  * Body: { filename, content, room?, cartridgeId? }
  * Saves the file to data/{room}/ and records its manifest.
  */
-app.post('/api/ingest', (req, res) => {
+app.post('/api/ingest', writeLimiter, (req, res) => {
     try {
         const { filename, content, room = 'threshold', cartridgeId = null } = req.body;
 
@@ -173,7 +194,7 @@ app.post('/api/ingest', (req, res) => {
  * Body: { room? }
  * Ingests, chunks, and embeds all docs in a cartridge.
  */
-app.post('/api/index/cartridge/:id', async (req, res) => {
+app.post('/api/index/cartridge/:id', indexLimiter, async (req, res) => {
     try {
         const cartridgeId  = req.params.id;
         const cartridgeDir = path.join(__dirname, '..', 'cartridges', cartridgeId);
@@ -227,7 +248,7 @@ app.post('/api/index/cartridge/:id', async (req, res) => {
  * Chunks and embeds a previously ingested file.
  * Optionally moves it to a different room (e.g. threshold → hearth).
  */
-app.post('/api/index/file', async (req, res) => {
+app.post('/api/index/file', indexLimiter, async (req, res) => {
     try {
         const { sourceId, targetRoom } = req.body;
         if (!sourceId) {
@@ -301,7 +322,7 @@ app.get('/api/sources', (req, res) => {
  * POST /api/sources/:id/exclude
  * Body: { exclude: bool }   (default true)
  */
-app.post('/api/sources/:id/exclude', (req, res) => {
+app.post('/api/sources/:id/exclude', writeLimiter, (req, res) => {
     const { id }           = req.params;
     const { exclude = true } = req.body || {};
     const current          = loadExcluded();
@@ -318,7 +339,7 @@ app.post('/api/sources/:id/exclude', (req, res) => {
  * POST /api/notes
  * Body: { content, title? }
  */
-app.post('/api/notes', (req, res) => {
+app.post('/api/notes', writeLimiter, (req, res) => {
     try {
         const { content, title } = req.body;
         if (!content || typeof content !== 'string') {
@@ -347,7 +368,7 @@ app.post('/api/notes', (req, res) => {
 /**
  * GET /api/notes
  */
-app.get('/api/notes', (req, res) => {
+app.get('/api/notes', writeLimiter, (req, res) => {
     const workshopDir = path.join(DATA_DIR, 'workshop');
     if (!fs.existsSync(workshopDir)) return res.json({ notes: [] });
 
@@ -372,7 +393,7 @@ app.get('/api/notes', (req, res) => {
 /**
  * GET /api/threshold/list
  */
-app.get('/api/threshold/list', (req, res) => {
+app.get('/api/threshold/list', writeLimiter, (req, res) => {
     const thresholdDir = path.join(DATA_DIR, 'threshold');
     if (!fs.existsSync(thresholdDir)) return res.json({ files: [] });
 

@@ -137,3 +137,13 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Ember Node — runtime data directories (keep .gitkeep, ignore actual data)
+data/hearth/*
+data/workshop/*
+data/threshold/*
+data/system/*
+data/cartridges/*
+data/indexes/*
+data/exports/*
+!data/**/.gitkeep

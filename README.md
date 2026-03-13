@@ -2,27 +2,29 @@
 
 A local-first sovereign AI console descended from the Green Fire Archive.
 
-Ember Node is a personal workstation built around local models, local knowledge,
-local memory discipline, explicit user control, modular cartridges, and offline
-resilience.
+Ember Node is a recursive refinement engine — a personal workstation built around local
+models, local knowledge, local memory discipline, explicit user control, modular
+cartridges, and offline resilience.
 
-The AI inside the system is called **The Heart** — a grounded resident intelligence,
-not an oracle.
+The AI inside the system is called **The Heart** — a grounded resident intelligence that
+answers from remembered local knowledge, not just the base model.
 
 ---
 
-## Phase 2 — Offline Console + Cartridge Shelf
+## Phase 3 — Local Knowledge Engine
 
-Phase 2 extends the working Phase 1 prototype into a coherent Ember Node shell:
+Phase 3 implements the first true memory-and-retrieval loop:
 
-- **Green Fire design system** — carved-stone aesthetic with amber and green laser light
-- **Room-based navigation** — five rooms, one visible at a time
-- **Fully functional Hearth chat** — local Ollama integration preserved
-- **Cartridge Shelf** — browse, inspect, and read installed cartridges with manifest metadata
-- **Workshop** — draft panel with snapshot scaffold
-- **Threshold** — intake room scaffold for future document ingestion
-- **System room** — live status for model, Ollama, and cartridge shelf
-- **data/ scaffold** — directory structure prepared for future retrieval and memory phases
+- **Document ingestion** — `.txt` and `.md` files enter through Threshold
+- **Chunking** — documents are split into retrievable overlapping chunks
+- **Embeddings** — local vector generation via Ollama (`nomic-embed-text` default)
+- **Keyword fallback** — retrieval works even without an embedding model
+- **Room-aware retrieval** — Hearth sources are prioritised over Workshop; Threshold excluded by default
+- **Grounded Heart responses** — The Heart answers from local remembered sources
+- **Signal Trace** — every response shows which sources informed the answer
+- **Cartridge indexing** — cartridges can be indexed from Workshop; their docs/ become retrievable knowledge
+- **Workshop notes** — draft text can be saved as local Markdown and optionally indexed
+- **Threshold file intake** — drag-and-drop `.txt`/`.md` intake with inspect and index controls
 
 ---
 
@@ -30,9 +32,9 @@ Phase 2 extends the working Phase 1 prototype into a coherent Ember Node shell:
 
 | Room | Rune | Purpose |
 |------|------|---------|
-| Hearth | ᚺ | Reflection and remembered signal — includes system identity and Archive |
-| Workshop | ᚹ | Crafting, coding, and refinement — includes cartridges and build tools |
-| Threshold | ᚦ | Boundary of exchange — inbound imports and outbound exports |
+| Hearth | ᚺ | Reflection and remembered signal — grounded Heart chat with Signal Trace |
+| Workshop | ᚹ | Crafting, coding, and refinement — note saving, cartridge indexing, source management |
+| Threshold | ᚦ | Boundary of exchange — file intake, staging, inspection before Hearth access |
 
 Cartridges live inside Workshop. System identity lives inside Hearth.
 See [docs/architecture.md](docs/architecture.md) for the full design charter.
@@ -43,7 +45,11 @@ See [docs/architecture.md](docs/architecture.md) for the full design charter.
 
 - [Node.js](https://nodejs.org/) 18+
 - [Ollama](https://ollama.com/) running locally
-- Model pulled: `ollama pull gemma3:4b`
+- Chat model: `ollama pull gemma3:4b`
+- Embedding model (optional, for vector retrieval): `ollama pull nomic-embed-text`
+
+If the embedding model is not installed, Ember Node falls back to keyword-overlap scoring
+automatically.
 
 ---
 
@@ -58,81 +64,125 @@ Open [http://localhost:3477](http://localhost:3477) in your browser.
 
 ---
 
-## Cartridge System
-
-Cartridges are modular knowledge packs stored in `./cartridges/`.
-
-```
-cartridges/
-  green_fire/
-    manifest.json
-    README.md
-  philosophy/
-    manifest.json
-    README.md
-  survival/
-    manifest.json
-    README.md
-  journals/
-    manifest.json
-    README.md
-```
-
-Each cartridge may include a `manifest.json` with fields:
-
-```json
-{
-  "name": "Display Name",
-  "id": "directory-id",
-  "description": "What this cartridge contains",
-  "version": "0.1.0",
-  "type": "knowledge-pack",
-  "permissions": {
-    "writeHearth": false,
-    "networkAccess": false
-  }
-}
-```
-
-No cartridge may silently write into Hearth.
-
----
-
-## Data Directory
-
-Phase 2 prepares the following scaffold for later retrieval and memory phases:
-
-```
-data/
-  hearth/       — curated Hearth writes (Phase 4)
-  workshop/     — Workshop snapshots (Phase 4)
-  threshold/    — quarantined imports (Phase 3)
-  system/       — system state (future)
-  cartridges/   — cartridge runtime cache (future)
-```
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/chat` | Forward message to Ollama (model: gemma3:4b) |
-| `GET`  | `/cartridges` | List all installed cartridges with metadata |
-| `GET`  | `/cartridges/:name` | Inspect a cartridge's manifest and content |
-
----
-
 ## Architecture Principles
 
-- local-first continuity
+- local-first sovereignty
 - no silent actions
 - memory must be earned
 - imports land in Threshold first
 - nothing writes to Hearth automatically
 - network is an expedition, not a dependency
 - chat is a pane, not the whole room
-- cartridges are inserted / inspected intentionally
+- cartridges are knowledge packs, indexed intentionally
+- all AI-generated changes require user review before being remembered
+- remembered works fuel future creation
+- retrieval must remain transparent — Signal Trace shows all sources
+- the node is a forge, not a filing cabinet
+
+---
+
+## Cartridge System
+
+Cartridges are modular knowledge packs stored in `./cartridges/`.
+Each may contain top-level `.md`/`.txt` files and a `docs/` subdirectory.
+
+```
+cartridges/
+  green_fire/
+    manifest.json
+    README.md
+    docs/
+      first-codex.md
+      signal-saga.md
+  philosophy/
+    manifest.json
+    README.md
+    docs/
+      core-notes.md
+  survival/
+    manifest.json
+    README.md
+    docs/
+      field-notes.md
+  journals/
+    manifest.json
+    README.md
+    docs/
+      entry-guide.md
+```
+
+Cartridges can be indexed from the Workshop room. Once indexed, their content is
+retrievable by the Heart during Hearth chat.
+
+---
+
+## Data Directory
+
+```
+data/
+  hearth/       — curated Hearth sources (manually moved from Workshop)
+  workshop/     — Workshop notes and active drafts
+  threshold/    — quarantined imports awaiting inspection
+  system/       — system state
+  cartridges/   — cartridge runtime cache
+  indexes/      — local knowledge index (chunks, embeddings, manifests)
+  exports/      — outbound packages (Phase 5)
+```
+
+All files in `data/` are local-only. The `data/indexes/` directory is the local
+knowledge index, generated by indexing operations.
+
+---
+
+## API Endpoints
+
+### Phase 2 (preserved)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/chat` | Forward message to Ollama (backward-compatible) |
+| `GET`  | `/cartridges` | List all installed cartridges |
+| `GET`  | `/cartridges/:name` | Inspect a cartridge's manifest and content |
+
+### Phase 3 (new)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/chat` | Grounded chat — returns `{ answer, sources, grounded }` |
+| `POST` | `/api/ingest` | Ingest a file into a room |
+| `POST` | `/api/index/cartridge/:id` | Index all docs in a cartridge |
+| `POST` | `/api/index/file` | Index a previously-ingested file |
+| `GET`  | `/api/sources` | List indexed source manifests |
+| `POST` | `/api/sources/:id/exclude` | Toggle source exclusion from retrieval |
+| `POST` | `/api/notes` | Save a Workshop note |
+| `GET`  | `/api/notes` | List Workshop notes |
+| `GET`  | `/api/threshold/list` | List files in Threshold intake |
+| `GET`  | `/api/status` | System status (includes indexedChunks, indexedSources) |
+
+---
+
+## Signal Trace
+
+Every grounded Heart response includes a Signal Trace — a visible list of the local
+sources that informed the answer:
+
+```json
+{
+  "answer": "…",
+  "sources": [
+    {
+      "room": "hearth",
+      "shelf": "green_fire",
+      "cartridgeId": "green_fire",
+      "file": "first-codex.md",
+      "chunkId": "hearth-green-fire-first-codex-md-000",
+      "score": 0.87
+    }
+  ],
+  "grounded": true
+}
+```
+
+When no local sources are found, the Heart responds from the base model and the Signal
+Trace indicates: *base model — no local sources*.
 
 ---
 
@@ -142,6 +192,6 @@ data/
 |-------|-------|
 | Phase 1 ✓ | Local Node/Express + Ollama chat + basic cartridge endpoints |
 | Phase 2 ✓ | Green Fire UI shell + Cartridge Shelf + room navigation |
-| Phase 3   | Document ingestion, chunking, embeddings, retrieval, signal trace |
+| Phase 3 ✓ | Document ingestion, chunking, embeddings, retrieval, signal trace |
 | Phase 4   | Remember / Archive mechanics, curated Hearth writes |
 | Phase 5   | Offline cartridge engine, portable export/import, desktop shell |
