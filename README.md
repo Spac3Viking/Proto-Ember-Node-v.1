@@ -30,11 +30,12 @@ Phase 2 extends the working Phase 1 prototype into a coherent Ember Node shell:
 
 | Room | Rune | Purpose |
 |------|------|---------|
-| Hearth | ᚺ | Preserved signal, primary chat, curated continuity |
-| Workshop | ᚹ | Drafting, experimentation, creation, building |
-| Threshold | ᚦ | Inspection space for imported or untrusted material |
-| Cartridges | ᚲ | Modular knowledge pack shelf and inspector |
-| System | ᛟ | Status, configuration, and phase roadmap |
+| Hearth | ᚺ | Reflection and remembered signal — includes system identity and Archive |
+| Workshop | ᚹ | Crafting, coding, and refinement — includes cartridges and build tools |
+| Threshold | ᚦ | Boundary of exchange — inbound imports and outbound exports |
+
+Cartridges live inside Workshop. System identity lives inside Hearth.
+See [docs/architecture.md](docs/architecture.md) for the full design charter.
 
 ---
 
