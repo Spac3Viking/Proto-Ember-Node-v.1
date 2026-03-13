@@ -24,11 +24,11 @@ const rateLimit = require('express-rate-limit');
 const { listCartridges, loadCartridge }      = require('./cartridgeLoader');
 const { ingestFile, ingestCartridge, DATA_DIR, extractText } = require('./ingest');
 const { chunkText }                          = require('./chunker');
-const { generateEmbedding }                  = require('./embeddings');
+const { generateEmbedding, getEmbeddingStatus }              = require('./embeddings');
 const {
     upsertChunks, upsertEmbeddings, upsertManifest,
     loadManifests, loadExcluded, setExcluded,
-    loadChunks,
+    loadChunks, loadEmbeddings, removeEmbeddingsByChunkIds,
 }                                            = require('./indexStore');
 const { retrieve, buildGroundedPrompt }      = require('./retrieval');
 const { buildSignalTrace, formatSignalTraceSummary } = require('./signalTrace');
@@ -48,10 +48,35 @@ const HEART_SYSTEM_PROMPT = (
     'You are grounded, precise, and warm.'
 );
 
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Remove any stored embeddings belonging to the old chunks of a source,
+ * preventing stale embedding accumulation across reindex cycles.
+ *
+ * @param {string} sourceId
+ */
+function removeStaleEmbeddingsForSource(sourceId) {
+    const oldChunkIds = loadChunks()
+        .filter(c => c.sourceId === sourceId)
+        .map(c => c.id);
+    removeEmbeddingsByChunkIds(oldChunkIds);
+}
+
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 // Applied to endpoints that perform file system writes or expensive operations.
 // Limits are generous for local use but guard against runaway processes.
 
+/** Light limiter for read-only endpoints (GET status, list calls, etc.) */
+const readLimiter = rateLimit({
+    windowMs:          60 * 1000,  // 1 minute
+    max:               120,         // 120 read requests per minute
+    standardHeaders:   true,
+    legacyHeaders:     false,
+    message:           { error: 'Too many requests. Please slow down.' },
+});
+
+/** Moderate limiter for write endpoints (note saving, ingest, etc.) */
 const writeLimiter = rateLimit({
     windowMs:          60 * 1000,  // 1 minute
     max:               60,          // 60 write operations per minute
@@ -60,12 +85,22 @@ const writeLimiter = rateLimit({
     message:           { error: 'Too many requests. Please slow down.' },
 });
 
+/** Strict limiter for heavy/expensive operations (indexing, embeddings) */
 const indexLimiter = rateLimit({
     windowMs:          60 * 1000,  // 1 minute
     max:               10,          // 10 indexing operations per minute
     standardHeaders:   true,
     legacyHeaders:     false,
     message:           { error: 'Too many indexing requests. Please slow down.' },
+});
+
+/** Limiter for the chat endpoint — local use, no need to be as strict as indexing */
+const chatLimiter = rateLimit({
+    windowMs:          60 * 1000,  // 1 minute
+    max:               30,          // 30 chat requests per minute
+    standardHeaders:   true,
+    legacyHeaders:     false,
+    message:           { error: 'Too many chat requests. Please slow down.' },
 });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
@@ -99,7 +134,7 @@ app.post('/chat', async (req, res) => {
  * Body: { query, rooms?, cartridgeId? }
  * Response: { answer, sources, grounded }
  */
-app.post('/api/chat', writeLimiter, async (req, res) => {
+app.post('/api/chat', chatLimiter, async (req, res) => {
     try {
         const { query, rooms = null, cartridgeId = null } = req.body;
         if (!query || typeof query !== 'string') {
@@ -212,6 +247,10 @@ app.post('/api/index/cartridge/:id', indexLimiter, async (req, res) => {
 
         for (const { source, text } of ingested) {
             const chunks = chunkText({ text, sourceRecord: source });
+
+            // Remove stale embeddings for this source before replacing chunks
+            removeStaleEmbeddingsForSource(source.id);
+
             upsertChunks(chunks);
             upsertManifest(source.id, source);
             totalChunks += chunks.length;
@@ -261,14 +300,46 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
             return res.status(404).json({ error: 'Source not found in manifest' });
         }
 
-        // Optionally promote to a different room
+        // Optionally promote to a different room — physically moves the file
         if (targetRoom) {
             const validRooms = ['hearth', 'workshop', 'threshold'];
             if (!validRooms.includes(targetRoom)) {
                 return res.status(400).json({ error: 'Invalid room "' + targetRoom + '"' });
             }
-            source.room = targetRoom;
-            upsertManifest(sourceId, source);
+
+            if (source.room !== targetRoom) {
+                const oldAbsPath = path.join(__dirname, '..', source.path);
+                const newRoomDir = path.join(DATA_DIR, targetRoom);
+
+                if (!fs.existsSync(newRoomDir)) {
+                    fs.mkdirSync(newRoomDir, { recursive: true });
+                }
+
+                const newAbsPath = path.join(newRoomDir, path.basename(source.path));
+                const newRelPath = path.relative(path.join(__dirname, '..'), newAbsPath);
+
+                // Only move files that live inside the data/ directory tree
+                const dataRoot = path.resolve(DATA_DIR);
+                if (path.resolve(oldAbsPath).startsWith(dataRoot)) {
+                    try {
+                        fs.renameSync(oldAbsPath, newAbsPath);
+                    } catch (moveErr) {
+                        // renameSync can fail across devices — fall back to copy + delete
+                        try {
+                            fs.copyFileSync(oldAbsPath, newAbsPath);
+                            fs.unlinkSync(oldAbsPath);
+                        } catch (copyErr) {
+                            return res.status(500).json({
+                                error: 'Failed to move file to target room: ' + copyErr.message,
+                            });
+                        }
+                    }
+                    source.path = newRelPath;
+                }
+
+                source.room = targetRoom;
+                upsertManifest(sourceId, source);
+            }
         }
 
         const filePath = path.join(__dirname, '..', source.path);
@@ -282,6 +353,10 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
         }
 
         const chunks = chunkText({ text, sourceRecord: source });
+
+        // Remove stale embeddings for this source before replacing chunks
+        removeStaleEmbeddingsForSource(sourceId);
+
         upsertChunks(chunks);
 
         let embeddingsGenerated = 0;
@@ -338,6 +413,10 @@ app.post('/api/sources/:id/exclude', writeLimiter, (req, res) => {
 /**
  * POST /api/notes
  * Body: { content, title? }
+ *
+ * Notes are saved with deterministic filenames based on title.
+ * Re-saving a note with the same title overwrites it in place, which keeps
+ * source identities stable and prevents duplicate source records.
  */
 app.post('/api/notes', writeLimiter, (req, res) => {
     try {
@@ -351,13 +430,26 @@ app.post('/api/notes', writeLimiter, (req, res) => {
             fs.mkdirSync(workshopDir, { recursive: true });
         }
 
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const safeTitle = (title || 'note').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
-        const filename  = safeTitle + '-' + timestamp + '.md';
+        // Deterministic filename: based on title only — no timestamp.
+        // Re-saving a note with the same title overwrites the existing file,
+        // keeping the source identity stable.
+        const safeTitle = (title || 'workshop-note')
+            .replace(/[^a-zA-Z0-9-_]/g, '-')
+            .toLowerCase()
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+        const filename  = safeTitle + '.md';
         const filePath  = path.join(workshopDir, filename);
         const noteText  = '# ' + (title || 'Workshop Note') + '\n\n' + content + '\n';
 
         fs.writeFileSync(filePath, noteText, 'utf8');
+
+        // Register as a Workshop source so it can be indexed and retrieved
+        const result = ingestFile({ filePath, room: 'workshop' });
+        if (result) {
+            upsertManifest(result.source.id, result.source);
+        }
+
         res.json({ success: true, filename, path: 'data/workshop/' + filename });
     } catch (error) {
         console.error('Error saving note:', error.message);
@@ -368,7 +460,7 @@ app.post('/api/notes', writeLimiter, (req, res) => {
 /**
  * GET /api/notes
  */
-app.get('/api/notes', writeLimiter, (req, res) => {
+app.get('/api/notes', readLimiter, (req, res) => {
     const workshopDir = path.join(DATA_DIR, 'workshop');
     if (!fs.existsSync(workshopDir)) return res.json({ notes: [] });
 
@@ -393,7 +485,7 @@ app.get('/api/notes', writeLimiter, (req, res) => {
 /**
  * GET /api/threshold/list
  */
-app.get('/api/threshold/list', writeLimiter, (req, res) => {
+app.get('/api/threshold/list', readLimiter, (req, res) => {
     const thresholdDir = path.join(DATA_DIR, 'threshold');
     if (!fs.existsSync(thresholdDir)) return res.json({ files: [] });
 
@@ -435,13 +527,23 @@ app.get('/cartridges/:name', (req, res) => {
 // ── System status ─────────────────────────────────────────────────────────────
 
 app.get('/api/status', (req, res) => {
+    const embStatus    = getEmbeddingStatus();
+    const chunks       = loadChunks();
+    const embeddings   = loadEmbeddings();
+    const manifests    = loadManifests();
+
     res.json({
-        model:          MODEL,
-        ollamaBaseUrl:  OLLAMA_BASE_URL,
-        port:           PORT,
-        cartridgeCount: listCartridges().length,
-        indexedChunks:  loadChunks().length,
-        indexedSources: Object.keys(loadManifests()).length,
+        model:               MODEL,
+        ollamaBaseUrl:       OLLAMA_BASE_URL,
+        port:                PORT,
+        cartridgeCount:      listCartridges().length,
+        indexedChunks:       chunks.length,
+        indexedSources:      Object.keys(manifests).length,
+        embeddingCount:      Object.keys(embeddings).length,
+        embeddingsActive:    embStatus.working,
+        embeddingEndpoint:   embStatus.activeEndpoint,
+        embeddingModel:      embStatus.model,
+        retrievalMode:       embStatus.working ? 'semantic' : 'keyword-fallback',
     });
 });
 
