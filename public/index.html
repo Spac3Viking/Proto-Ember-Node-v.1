@@ -1,59 +1,219 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel&family=Inter:wght@400;700&display=swap" rel="stylesheet">
-    <title>Room Interface</title>
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        header { font-family: 'Cinzel', serif; }
-        .room { margin: 20px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
-        .chat-container { border: 1px solid #ccc; padding: 10px; margin-top: 10px; height: 200px; overflow-y: auto; }
-        .message { margin: 5px 0; }
-        input[type="text"] { width: 100%; padding: 10px; }
-        button { padding: 10px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ember Node v.ᚠ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <h1>Welcome to the Room Interface</h1>
+  <div class="app-shell">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <h1 class="header-title">Ember Node v.ᚠ</h1>
+        <span class="header-subtitle">local-first sovereign console</span>
+      </div>
+      <div class="header-status">
+        <span class="status-pill" id="model-pill">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="model-label">loading…</span>
+        </span>
+      </div>
     </header>
-    <main>
-        <section class="room" id="hearth">
-            <h2>Hearth</h2>
-            <div class="chat-container" id="messages"></div>
-            <input type="text" id="message-input" placeholder="Type a message...">
-            <button id="send-button">Send</button>
-        </section>
-        <section class="room" id="workshop">
-            <h2>Workshop</h2>
-            <div class="chat-container" id="workshop-chat"></div>
-            <input type="text" id="workshop-msg" placeholder="Type a message...">
-            <button onclick="sendMessage('workshop')">Send</button>
-        </section>
-        <section class="room" id="threshold">
-            <h2>Threshold</h2>
-            <div class="chat-container" id="threshold-chat"></div>
-            <input type="text" id="threshold-msg" placeholder="Type a message...">
-            <button onclick="sendMessage('threshold')">Send</button>
-        </section>
+
+    <!-- Room Tab Row -->
+    <nav class="room-tabs" role="tablist" aria-label="Rooms">
+      <button class="room-tab active" role="tab" aria-selected="true"  data-room="hearth"     aria-controls="room-hearth">ᚺ Hearth</button>
+      <button class="room-tab"        role="tab" aria-selected="false" data-room="workshop"   aria-controls="room-workshop">ᚹ Workshop</button>
+      <button class="room-tab"        role="tab" aria-selected="false" data-room="threshold"  aria-controls="room-threshold">ᚦ Threshold</button>
+      <button class="room-tab"        role="tab" aria-selected="false" data-room="cartridges" aria-controls="room-cartridges">ᚲ Cartridges</button>
+      <button class="room-tab"        role="tab" aria-selected="false" data-room="system"     aria-controls="room-system">ᛟ System</button>
+    </nav>
+
+    <!-- Room Content -->
+    <main class="room-content">
+
+      <!-- Hearth -->
+      <section class="room-panel active" id="room-hearth" role="tabpanel">
+        <div class="hearth-layout">
+          <h2 class="room-heading"><span class="room-rune">ᚺ</span> Hearth</h2>
+          <div class="ember-card hearth-layout" style="padding: 0;">
+            <div class="chat-window" id="messages" aria-live="polite" aria-label="Conversation"></div>
+            <div class="signal-trace-bar" id="signal-trace">Signal Trace — awaiting exchange</div>
+            <div class="chat-input-row" style="padding: 0.75rem 1rem;">
+              <input
+                type="text"
+                id="message-input"
+                placeholder="Speak to the Heart…"
+                autocomplete="off"
+                aria-label="Message input"
+              >
+              <button class="primary" id="send-button" aria-label="Send">Send</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workshop -->
+      <section class="room-panel" id="room-workshop" role="tabpanel">
+        <div class="workshop-layout">
+          <h2 class="room-heading"><span class="room-rune">ᚹ</span> Workshop</h2>
+          <div class="ember-card workshop-layout" style="padding: 1rem;">
+            <div class="draft-area">
+              <label for="workshop-draft" class="visually-hidden">Draft area</label>
+              <textarea
+                id="workshop-draft"
+                placeholder="Draft your signal here. Write, revise, compose. Nothing leaves this room until you say so."
+                spellcheck="true"
+              ></textarea>
+            </div>
+            <div class="workshop-controls">
+              <button class="primary" id="save-snapshot-btn">Save Snapshot</button>
+              <button class="primary" id="clear-draft-btn">Clear Draft</button>
+              <span class="workshop-status" id="workshop-status"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Threshold -->
+      <section class="room-panel" id="room-threshold" role="tabpanel">
+        <div class="threshold-layout">
+          <h2 class="room-heading"><span class="room-rune">ᚦ</span> Threshold</h2>
+          <div class="ember-card" style="padding: 1rem 1.25rem;">
+            <p class="threshold-notice">
+              The Threshold is the intake room. All external material — documents, imports, and unverified signals —
+              lands here before touching the Hearth. Nothing crosses automatically. Inspection precedes ingestion.
+              <br><br>
+              Full document ingestion and signal inspection arrive in Phase 3.
+            </p>
+          </div>
+          <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.875rem;">
+            <div class="drop-zone" id="threshold-drop-zone">
+              <span class="drop-zone-rune">ᚦ</span>
+              Document intake arrives in Phase 3.<br>
+              <span style="font-size:0.75rem; opacity:0.6;">Files dropped here will be quarantined for inspection before any Hearth access.</span>
+            </div>
+            <div class="threshold-scratch">
+              <label for="threshold-notes" style="font-size:0.78rem; color:var(--archive-muted); letter-spacing:0.06em; text-transform:uppercase; font-family:'Cinzel',serif;">Scratch Notes</label>
+              <textarea
+                id="threshold-notes"
+                placeholder="Temporary notes about imported material. These remain in the Threshold — not written to Hearth."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cartridges -->
+      <section class="room-panel" id="room-cartridges" role="tabpanel">
+        <h2 class="room-heading"><span class="room-rune">ᚲ</span> Cartridge Shelf</h2>
+        <div class="cartridge-layout">
+          <!-- Shelf list -->
+          <div class="ember-card cartridge-shelf" style="padding: 1rem;">
+            <div class="cartridge-shelf-title">Installed Cartridges</div>
+            <div class="cartridge-list" id="cartridge-list" aria-label="Cartridge list">
+              <div class="message-system loading-dots" id="cartridge-loading">Loading</div>
+            </div>
+          </div>
+          <!-- Inspector -->
+          <div class="ember-card cartridge-inspector" id="cartridge-inspector" style="padding: 0;">
+            <div class="inspector-empty" id="inspector-empty">
+              <span class="inspector-rune">ᚲ</span>
+              Select a cartridge to inspect
+            </div>
+            <div id="inspector-content-area" style="display:none; flex-direction:column; height:100%;">
+              <div class="inspector-name"        id="inspector-name"></div>
+              <div class="inspector-description" id="inspector-description"></div>
+              <div class="inspector-meta"        id="inspector-meta"></div>
+              <div class="inspector-perms"       id="inspector-perms"></div>
+              <div class="inspector-content"     id="inspector-content"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- System -->
+      <section class="room-panel" id="room-system" role="tabpanel">
+        <div class="system-layout">
+          <h2 class="room-heading"><span class="room-rune">ᛟ</span> System</h2>
+          <div class="system-grid">
+            <div class="ember-card system-block">
+              <div class="system-block-title">Heart Configuration</div>
+              <div class="system-row">
+                <span class="system-key">Model</span>
+                <span class="system-val" id="sys-model">—</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Ollama endpoint</span>
+                <span class="system-val">localhost:11434</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Ollama status</span>
+                <span class="system-val" id="sys-ollama-status">checking…</span>
+              </div>
+            </div>
+            <div class="ember-card system-block">
+              <div class="system-block-title">Server</div>
+              <div class="system-row">
+                <span class="system-key">Node server</span>
+                <span class="system-val ok">running</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Port</span>
+                <span class="system-val">3477</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Mode</span>
+                <span class="system-val">local-only</span>
+              </div>
+            </div>
+            <div class="ember-card system-block">
+              <div class="system-block-title">Cartridge Shelf</div>
+              <div class="system-row">
+                <span class="system-key">Cartridges loaded</span>
+                <span class="system-val" id="sys-cartridge-count">—</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Storage path</span>
+                <span class="system-val">./cartridges/</span>
+              </div>
+            </div>
+            <div class="ember-card system-block">
+              <div class="system-block-title">Memory Discipline</div>
+              <div class="system-row">
+                <span class="system-key">Auto-memory</span>
+                <span class="system-val warn">disabled</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Hearth writes</span>
+                <span class="system-val warn">manual only</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Threshold gate</span>
+                <span class="system-val ok">active</span>
+              </div>
+            </div>
+          </div>
+          <div class="ember-card system-block">
+            <div class="system-block-title">Phase Roadmap</div>
+            <p class="system-future-note">
+              Phase 3 — document ingestion, chunking, embeddings, retrieval, signal trace<br>
+              Phase 4 — Remember / Archive mechanics, curated Hearth writes, Workshop snapshots<br>
+              Phase 5 — true offline cartridge engine, portable export/import, desktop shell packaging
+            </p>
+          </div>
+        </div>
+      </section>
+
     </main>
-    <script src="app.js"></script>
-    <script>
-        function sendMessage(room) {
-            let msgInput = document.getElementById(room + '-msg');
-            let chatContainer = document.getElementById(room + '-chat');
-            let msg = msgInput.value;
-            if (msg) {
-                let messageContainer = document.createElement('div');
-                messageContainer.classList.add('message');
-                messageContainer.textContent = msg;
-                chatContainer.appendChild(messageContainer);
-                msgInput.value = '';
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            }
-        }
-    </script>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
