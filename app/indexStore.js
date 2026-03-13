@@ -120,6 +120,21 @@ function upsertEmbeddings(entries) {
     saveEmbeddings(existing);
 }
 
+/**
+ * Remove embeddings for the given chunk IDs.
+ * Called before reindexing a source to prevent stale embedding accumulation.
+ *
+ * @param {string[]} chunkIds
+ */
+function removeEmbeddingsByChunkIds(chunkIds) {
+    if (!chunkIds || chunkIds.length === 0) return;
+    const existing = loadEmbeddings();
+    for (const id of chunkIds) {
+        delete existing[id];
+    }
+    saveEmbeddings(existing);
+}
+
 // ── Manifests ─────────────────────────────────────────────────────────────────
 
 /**
@@ -176,6 +191,7 @@ module.exports = {
     loadEmbeddings,
     saveEmbeddings,
     upsertEmbeddings,
+    removeEmbeddingsByChunkIds,
     loadManifests,
     saveManifests,
     upsertManifest,

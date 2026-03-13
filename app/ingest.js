@@ -41,6 +41,9 @@ function extractText(filePath) {
 /**
  * Build a source metadata record for an ingested file.
  *
+ * Source IDs are deterministic: the same file re-ingested into the same room
+ * always produces the same ID, preventing duplicate source records.
+ *
  * @param {object} opts
  * @param {string} opts.filePath       - Absolute path to the file
  * @param {string} opts.room           - Target room (hearth | workshop | threshold)
@@ -53,9 +56,17 @@ function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = nu
     const ext      = path.extname(filePath).toLowerCase().slice(1);
     const relPath  = path.relative(path.join(__dirname, '..'), filePath);
 
-    // Deterministic-ish ID: room + cartridge + sanitised filename + timestamp
-    const safeName = fileName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
-    const id       = [room, cartridgeId, safeName, Date.now()].filter(Boolean).join('-');
+    // Deterministic ID: stable across re-ingestion of the same file.
+    // Uses room + cartridgeId + normalised relative path — no timestamps.
+    const safePath = relPath
+        .replace(/\\/g, '/')          // normalise Windows separators
+        .replace(/[^a-z0-9/]/gi, '-') // sanitise non-alphanumeric chars
+        .toLowerCase()
+        .replace(/\/+/g, '-')         // replace slashes with dashes
+        .replace(/-+/g, '-')          // collapse consecutive dashes
+        .replace(/^-|-$/g, '');       // trim leading/trailing dashes
+
+    const id = [room, cartridgeId, safePath].filter(Boolean).join('-');
 
     return {
         id,
