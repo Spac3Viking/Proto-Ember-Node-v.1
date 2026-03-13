@@ -1,0 +1,11 @@
+{
+  "name": "Journals",
+  "id": "journals",
+  "description": "Personal journal entries, logs, and reflections indexed for local retrieval. Timestamped notes that the Heart can reference.",
+  "version": "0.1.0",
+  "type": "journal",
+  "permissions": {
+    "writeHearth": false,
+    "networkAccess": false
+  }
+}

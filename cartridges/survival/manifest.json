@@ -1,0 +1,11 @@
+{
+  "name": "Survival",
+  "id": "survival",
+  "description": "Practical survival knowledge — wilderness skills, preparedness, and self-reliance. Fire-making, water, foraging, navigation, and first aid.",
+  "version": "0.1.0",
+  "type": "knowledge-pack",
+  "permissions": {
+    "writeHearth": false,
+    "networkAccess": false
+  }
+}

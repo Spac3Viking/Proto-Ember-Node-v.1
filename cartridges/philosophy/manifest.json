@@ -1,0 +1,11 @@
+{
+  "name": "Philosophy",
+  "id": "philosophy",
+  "description": "Philosophical reflections, frameworks, and threshold concepts explored through the Ember Node. Stoicism, local-first thinking, and the relationship between tools and thought.",
+  "version": "0.1.0",
+  "type": "knowledge-pack",
+  "permissions": {
+    "writeHearth": false,
+    "networkAccess": false
+  }
+}

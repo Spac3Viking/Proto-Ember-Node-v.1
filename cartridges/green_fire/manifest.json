@@ -1,0 +1,11 @@
+{
+  "name": "Green Fire Archive",
+  "id": "green_fire",
+  "description": "Core codices and supporting texts from the Green Fire Archive — sustainable fire, bioluminescence, and alchemical symbolism.",
+  "version": "0.1.0",
+  "type": "knowledge-pack",
+  "permissions": {
+    "writeHearth": false,
+    "networkAccess": false
+  }
+}
