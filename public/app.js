@@ -23,7 +23,12 @@ sendButton.addEventListener('click', async () => {
         });
 
         const data = await response.json();
-        displayMessage(data.message.content, 'message-heart');
+
+        if (data && data.message && data.message.content) {
+            displayMessage(data.message.content, 'message-heart');
+        } else {
+            displayMessage("Model returned an unexpected response.", 'message-heart');
+        }
         autoScrollToBottom();
     } catch (error) {
         displayMessage('Error: could not reach the Heart.', 'message-heart');
@@ -50,3 +55,9 @@ function switchTab(room) {
 }
 
 // Additional event listeners for tab switching can be added here
+
+messageInput.addEventListener("keypress", function(e) {
+    if (e.key === "Enter") {
+        sendButton.click();
+    }
+});
