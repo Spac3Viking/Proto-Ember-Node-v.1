@@ -1,20 +1,25 @@
 /**
- * Ember Node v.ᚠ — Phase 3 server
+ * Ember Node v.ᚠ — Phase 4 server
  *
- * Extends the Phase 2 server with:
- *   POST /api/chat          — grounded chat with signal trace
- *   POST /api/ingest        — file ingestion into a room
- *   POST /api/index/cartridge/:id — index a cartridge's docs
- *   POST /api/index/file    — index a specific previously-ingested file
- *   GET  /api/sources       — list indexed source manifests
- *   POST /api/sources/:id/exclude — toggle source exclusion from retrieval
- *   POST /api/notes         — save a Workshop note
- *   GET  /api/notes         — list Workshop notes
- *   GET  /api/threshold/list — list files in Threshold intake
+ * Extends Phase 3 with:
+ *   POST /api/ingest         — file ingestion with metadata (title, description, shelf)
+ *                              supports .txt, .md, .pdf, .docx (binary via base64)
+ *   GET  /api/threads        — list chat threads
+ *   POST /api/threads        — create a new chat thread
+ *   GET  /api/threads/:id    — get thread with messages
+ *   POST /api/threads/:id/messages — add message to thread
+ *   GET  /api/projects       — list Workshop projects
+ *   POST /api/projects       — create a project
+ *   GET  /api/projects/:id   — get a project
+ *   PUT  /api/projects/:id   — update a project
+ *   GET  /api/user-cartridges      — list user-created cartridges
+ *   POST /api/user-cartridges      — create a user cartridge
+ * Plus all Phase 3 endpoints.
  */
 
 'use strict';
 
+const crypto    = require('crypto');
 const express   = require('express');
 const path      = require('path');
 const fs        = require('fs');
@@ -22,7 +27,7 @@ const axios     = require('axios');
 const rateLimit = require('express-rate-limit');
 
 const { listCartridges, loadCartridge }      = require('./cartridgeLoader');
-const { ingestFile, ingestCartridge, DATA_DIR, extractText } = require('./ingest');
+const { ingestFile, ingestCartridge, DATA_DIR, extractText, extractTextAsync } = require('./ingest');
 const { chunkText }                          = require('./chunker');
 const { generateEmbedding, getEmbeddingStatus }              = require('./embeddings');
 const {
@@ -170,16 +175,29 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     }
 });
 
-// ── Phase 3: ingestion ────────────────────────────────────────────────────────
+// ── Phase 4: ingestion ────────────────────────────────────────────────────────
 
 /**
  * POST /api/ingest
- * Body: { filename, content, room?, cartridgeId? }
+ * Body: { filename, content, room?, cartridgeId?, title?, description?, shelf?, encoding? }
+ *
+ * Supports .txt and .md (content is UTF-8 string).
+ * Supports .pdf and .docx (content is base64-encoded binary, encoding='base64').
+ * For unsupported types: stores metadata only (no text extraction).
  * Saves the file to data/{room}/ and records its manifest.
  */
-app.post('/api/ingest', writeLimiter, (req, res) => {
+app.post('/api/ingest', writeLimiter, async (req, res) => {
     try {
-        const { filename, content, room = 'threshold', cartridgeId = null } = req.body;
+        const {
+            filename,
+            content,
+            room        = 'threshold',
+            cartridgeId = null,
+            title       = null,
+            description = null,
+            shelf       = null,
+            encoding    = 'utf8',
+        } = req.body;
 
         if (!filename || typeof filename !== 'string') {
             return res.status(400).json({ error: 'filename is required' });
@@ -189,9 +207,7 @@ app.post('/api/ingest', writeLimiter, (req, res) => {
         }
 
         const ext = path.extname(filename).toLowerCase();
-        if (ext !== '.txt' && ext !== '.md') {
-            return res.status(400).json({ error: 'Only .txt and .md files are supported' });
-        }
+        const ALLOWED_EXTENSIONS = ['.txt', '.md', '.pdf', '.docx'];
 
         const validRooms = ['hearth', 'workshop', 'threshold'];
         if (!validRooms.includes(room)) {
@@ -207,15 +223,48 @@ app.post('/api/ingest', writeLimiter, (req, res) => {
         // Write file safely (sanitise filename)
         const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
         const filePath = path.join(roomDir, safeName);
-        fs.writeFileSync(filePath, content, 'utf8');
 
-        const result = ingestFile({ filePath, room, cartridgeId });
-        if (!result) {
-            return res.status(500).json({ error: 'Failed to build source record' });
+        if (!ALLOWED_EXTENSIONS.includes(ext)) {
+            // Unsupported type — store metadata only, no text extraction
+            const safeId = [room, cartridgeId, safeName.replace(/[^a-z0-9]/gi, '-').toLowerCase()]
+                .filter(Boolean)
+                .join('-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+            const metaRecord = {
+                id:               safeId,
+                room,
+                file:             safeName,
+                path:             'data/' + room + '/' + safeName,
+                cartridgeId:      cartridgeId || null,
+                manifestId:       null,
+                ingestTimestamp:  new Date().toISOString(),
+                sourceType:       ext.slice(1) || 'unknown',
+                title:            title        || null,
+                description:      description  || null,
+                shelf:            shelf        || null,
+                status:           'waiting',
+                metaOnly:         true,
+            };
+            upsertManifest(metaRecord.id, metaRecord);
+            return res.json({ success: true, source: metaRecord, metaOnly: true });
         }
 
-        upsertManifest(result.source.id, result.source);
-        res.json({ success: true, source: result.source });
+        // Write file to disk
+        if (encoding === 'base64') {
+            const buffer = Buffer.from(content, 'base64');
+            fs.writeFileSync(filePath, buffer);
+        } else {
+            fs.writeFileSync(filePath, content, 'utf8');
+        }
+
+        // For PDF/DOCX we build the source record manually so we can attach metadata,
+        // because ingestFile() only handles text-extractable files synchronously.
+        const { buildSourceRecord } = require('./ingest');
+        const source = buildSourceRecord({ filePath, room, cartridgeId, title, description, shelf });
+        upsertManifest(source.id, source);
+
+        res.json({ success: true, source });
     } catch (error) {
         console.error('Error ingesting file:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -337,7 +386,10 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
                     source.path = newRelPath;
                 }
 
-                source.room = targetRoom;
+                source.room   = targetRoom;
+                source.status = targetRoom === 'hearth'    ? 'remembered'
+                              : targetRoom === 'workshop'  ? 'indexed'
+                              : 'waiting';
                 upsertManifest(sourceId, source);
             }
         }
@@ -347,10 +399,16 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
             return res.status(404).json({ error: 'File not found on disk' });
         }
 
-        const text = extractText(filePath);
+        // Use async extraction to support PDF and DOCX
+        const { text, error: extractError } = await extractTextAsync(filePath);
         if (!text) {
-            return res.status(400).json({ error: 'Could not extract text from file' });
+            const reason = extractError || 'Could not extract text from file';
+            return res.status(400).json({ error: reason });
         }
+
+        // Update lifecycle status to 'indexed'
+        source.status = 'indexed';
+        upsertManifest(sourceId, source);
 
         const chunks = chunkText({ text, sourceRecord: source });
 
@@ -480,34 +538,285 @@ app.get('/api/notes', readLimiter, (req, res) => {
     res.json({ notes });
 });
 
-// ── Phase 3: Threshold intake ─────────────────────────────────────────────────
+// ── Phase 4: Threshold intake ─────────────────────────────────────────────────
 
 /**
  * GET /api/threshold/list
+ * Returns files in the Threshold intake queue, including metadata.
  */
 app.get('/api/threshold/list', readLimiter, (req, res) => {
     const thresholdDir = path.join(DATA_DIR, 'threshold');
     if (!fs.existsSync(thresholdDir)) return res.json({ files: [] });
 
     const manifests = loadManifests();
-    const files     = fs.readdirSync(thresholdDir)
-        .filter(f => f.endsWith('.md') || f.endsWith('.txt'))
-        .map(f => {
-            const stats  = fs.statSync(path.join(thresholdDir, f));
-            const source = Object.values(manifests).find(
-                function(m) { return m.room === 'threshold' && m.file === f; }
-            );
+
+    // Include all manifest entries for threshold room (covers files not on disk yet)
+    const onDisk = new Set(fs.readdirSync(thresholdDir));
+
+    // Gather from manifests (handles all supported types)
+    const fromManifests = Object.values(manifests)
+        .filter(m => m.room === 'threshold')
+        .map(m => {
+            let size = 0;
+            const absPath = path.join(__dirname, '..', m.path);
+            if (fs.existsSync(absPath)) {
+                try { size = fs.statSync(absPath).size; } catch { /* ignore */ }
+            }
             return {
-                filename: f,
-                path:     'data/threshold/' + f,
-                size:     stats.size,
-                created:  (stats.birthtime || stats.mtime).toISOString(),
-                sourceId: source ? source.id : null,
+                filename:    m.file,
+                path:        m.path,
+                size,
+                created:     m.ingestTimestamp,
+                sourceId:    m.id,
+                title:       m.title       || null,
+                description: m.description || null,
+                shelf:       m.shelf       || null,
+                status:      m.status      || 'waiting',
+                sourceType:  m.sourceType  || null,
+                metaOnly:    m.metaOnly    || false,
             };
-        })
+        });
+
+    // Include any disk files not yet in manifests
+    const manifestFiles = new Set(fromManifests.map(f => f.filename));
+    const SUPPORTED_EXTS = new Set(['.txt', '.md', '.pdf', '.docx']);
+    const extra = fs.readdirSync(thresholdDir)
+        .filter(f => SUPPORTED_EXTS.has(path.extname(f).toLowerCase()) && !manifestFiles.has(f))
+        .map(f => {
+            const stats = fs.statSync(path.join(thresholdDir, f));
+            return {
+                filename:    f,
+                path:        'data/threshold/' + f,
+                size:        stats.size,
+                created:     (stats.birthtime || stats.mtime).toISOString(),
+                sourceId:    null,
+                title:       null,
+                description: null,
+                shelf:       null,
+                status:      'waiting',
+                sourceType:  path.extname(f).toLowerCase().slice(1),
+                metaOnly:    false,
+            };
+        });
+
+    const files = [...fromManifests, ...extra]
         .sort(function(a, b) { return b.created.localeCompare(a.created); });
 
     res.json({ files });
+});
+
+// ── Phase 4: Chat Threads ─────────────────────────────────────────────────────
+
+const THREADS_DIR = path.join(DATA_DIR, 'threads');
+
+function ensureThreadsDir() {
+    if (!fs.existsSync(THREADS_DIR)) fs.mkdirSync(THREADS_DIR, { recursive: true });
+}
+
+function loadThread(id) {
+    const file = path.join(THREADS_DIR, id + '.json');
+    if (!fs.existsSync(file)) return null;
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+function saveThread(thread) {
+    ensureThreadsDir();
+    fs.writeFileSync(path.join(THREADS_DIR, thread.id + '.json'), JSON.stringify(thread, null, 2), 'utf8');
+}
+
+/**
+ * GET /api/threads
+ * Returns all thread summaries (id, title, room, createdAt, messageCount).
+ */
+app.get('/api/threads', readLimiter, (req, res) => {
+    ensureThreadsDir();
+    const { room } = req.query;
+    const threads = fs.readdirSync(THREADS_DIR)
+        .filter(f => f.endsWith('.json'))
+        .map(f => {
+            try {
+                const t = JSON.parse(fs.readFileSync(path.join(THREADS_DIR, f), 'utf8'));
+                return {
+                    id:           t.id,
+                    title:        t.title,
+                    room:         t.room,
+                    createdAt:    t.createdAt,
+                    updatedAt:    t.updatedAt,
+                    messageCount: (t.messages || []).length,
+                };
+            } catch { return null; }
+        })
+        .filter(Boolean)
+        .filter(t => !room || t.room === room)
+        .sort(function(a, b) { return b.updatedAt.localeCompare(a.updatedAt); });
+    res.json({ threads });
+});
+
+/**
+ * POST /api/threads
+ * Body: { title, room? }
+ */
+app.post('/api/threads', writeLimiter, (req, res) => {
+    const { title = 'New Thread', room = 'hearth' } = req.body || {};
+    const validRooms = ['hearth', 'workshop'];
+    if (!validRooms.includes(room)) {
+        return res.status(400).json({ error: 'Invalid room "' + room + '"' });
+    }
+    const id     = 'thread-' + crypto.randomUUID();
+    const now    = new Date().toISOString();
+    const thread = { id, title, room, createdAt: now, updatedAt: now, messages: [] };
+    saveThread(thread);
+    res.json({ success: true, thread });
+});
+
+/**
+ * GET /api/threads/:id
+ */
+app.get('/api/threads/:id', readLimiter, (req, res) => {
+    const thread = loadThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    res.json({ thread });
+});
+
+/**
+ * POST /api/threads/:id/messages
+ * Body: { role, content }
+ */
+app.post('/api/threads/:id/messages', writeLimiter, (req, res) => {
+    const thread = loadThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    const { role, content } = req.body || {};
+    if (!role || !content) return res.status(400).json({ error: 'role and content are required' });
+    const message = { role, content, timestamp: new Date().toISOString() };
+    thread.messages.push(message);
+    thread.updatedAt = message.timestamp;
+    saveThread(thread);
+    res.json({ success: true, message });
+});
+
+/**
+ * PUT /api/threads/:id
+ * Body: { title? }
+ */
+app.put('/api/threads/:id', writeLimiter, (req, res) => {
+    const thread = loadThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    const { title } = req.body || {};
+    if (title) thread.title = title;
+    thread.updatedAt = new Date().toISOString();
+    saveThread(thread);
+    res.json({ success: true, thread });
+});
+
+// ── Phase 4: Workshop Projects ────────────────────────────────────────────────
+
+const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
+
+function ensureProjectsDir() {
+    if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+}
+
+function loadProject(id) {
+    const file = path.join(PROJECTS_DIR, id + '.json');
+    if (!fs.existsSync(file)) return null;
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+function saveProject(project) {
+    ensureProjectsDir();
+    fs.writeFileSync(path.join(PROJECTS_DIR, project.id + '.json'), JSON.stringify(project, null, 2), 'utf8');
+}
+
+/**
+ * GET /api/projects
+ */
+app.get('/api/projects', readLimiter, (req, res) => {
+    ensureProjectsDir();
+    const projects = fs.readdirSync(PROJECTS_DIR)
+        .filter(f => f.endsWith('.json'))
+        .map(f => {
+            try { return JSON.parse(fs.readFileSync(path.join(PROJECTS_DIR, f), 'utf8')); } catch { return null; }
+        })
+        .filter(Boolean)
+        .sort(function(a, b) { return b.updatedAt.localeCompare(a.updatedAt); });
+    res.json({ projects });
+});
+
+/**
+ * POST /api/projects
+ * Body: { title, notes?, linkedSources? }
+ */
+app.post('/api/projects', writeLimiter, (req, res) => {
+    const { title = 'Untitled Project', notes = '', linkedSources = [] } = req.body || {};
+    const id      = 'project-' + crypto.randomUUID();
+    const now     = new Date().toISOString();
+    const project = { id, title, notes, linkedSources, createdAt: now, updatedAt: now, threadId: null };
+    saveProject(project);
+    res.json({ success: true, project });
+});
+
+/**
+ * GET /api/projects/:id
+ */
+app.get('/api/projects/:id', readLimiter, (req, res) => {
+    const project = loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    res.json({ project });
+});
+
+/**
+ * PUT /api/projects/:id
+ * Body: { title?, notes?, linkedSources?, threadId? }
+ */
+app.put('/api/projects/:id', writeLimiter, (req, res) => {
+    const project = loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    const { title, notes, linkedSources, threadId } = req.body || {};
+    if (title         !== undefined) project.title         = title;
+    if (notes         !== undefined) project.notes         = notes;
+    if (linkedSources !== undefined) project.linkedSources = linkedSources;
+    if (threadId      !== undefined) project.threadId      = threadId;
+    project.updatedAt = new Date().toISOString();
+    saveProject(project);
+    res.json({ success: true, project });
+});
+
+// ── Phase 4: User Cartridges ──────────────────────────────────────────────────
+
+const USER_CARTRIDGES_DIR = path.join(DATA_DIR, 'cartridges');
+
+function ensureUserCartridgesDir() {
+    if (!fs.existsSync(USER_CARTRIDGES_DIR)) fs.mkdirSync(USER_CARTRIDGES_DIR, { recursive: true });
+}
+
+/**
+ * GET /api/user-cartridges
+ */
+app.get('/api/user-cartridges', readLimiter, (req, res) => {
+    ensureUserCartridgesDir();
+    const cartridges = fs.readdirSync(USER_CARTRIDGES_DIR)
+        .filter(f => f.endsWith('.json'))
+        .map(f => {
+            try { return JSON.parse(fs.readFileSync(path.join(USER_CARTRIDGES_DIR, f), 'utf8')); } catch { return null; }
+        })
+        .filter(Boolean)
+        .sort(function(a, b) { return b.createdAt.localeCompare(a.createdAt); });
+    res.json({ cartridges });
+});
+
+/**
+ * POST /api/user-cartridges
+ * Body: { title, description?, sources?, notes? }
+ */
+app.post('/api/user-cartridges', writeLimiter, (req, res) => {
+    const { title, description = '', sources = [], notes = '' } = req.body || {};
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    const id         = 'cartridge-' + crypto.randomUUID();
+    const now        = new Date().toISOString();
+    const cartridge  = { id, title, description, sources, notes, createdAt: now, updatedAt: now };
+    ensureUserCartridgesDir();
+    fs.writeFileSync(path.join(USER_CARTRIDGES_DIR, id + '.json'), JSON.stringify(cartridge, null, 2), 'utf8');
+    res.json({ success: true, cartridge });
 });
 
 // ── Phase 2: cartridges ───────────────────────────────────────────────────────

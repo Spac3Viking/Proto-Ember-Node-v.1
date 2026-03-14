@@ -1031,3 +1031,363 @@ button.secondary:disabled {
   min-height: 1.2em;
   letter-spacing: 0.04em;
 }
+
+/* ── Phase 4 — Sub-tabs ──────────────────────────────────────────────────────── */
+
+.room-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.room-header-row .room-heading {
+  margin-bottom: 0;
+}
+
+.sub-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+}
+
+.sub-tab {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gf-body-green);
+  border-bottom: 2px solid transparent;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  outline: none;
+  white-space: nowrap;
+}
+
+.sub-tab:hover {
+  color: var(--gf-wire-amber);
+  border-bottom-color: hsla(38, 100%, 70%, 0.35);
+}
+
+.sub-tab.active {
+  color: var(--gf-wire-amber);
+  border-bottom-color: var(--gf-ember-orange);
+}
+
+.sub-panel {
+  display: none;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.sub-panel.active {
+  display: flex;
+}
+
+/* ── Phase 4 — Lifecycle Pills ───────────────────────────────────────────────── */
+
+.lifecycle-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-left: 0.5rem;
+}
+
+.lifecycle-pill.waiting {
+  border: 1px solid hsla(38, 100%, 70%, 0.35);
+  color: var(--gf-wire-amber);
+  background: hsla(38, 100%, 70%, 0.06);
+}
+
+.lifecycle-pill.indexed {
+  border: 1px solid hsla(140, 100%, 70%, 0.35);
+  color: var(--gf-wire-green);
+  background: hsla(140, 100%, 70%, 0.06);
+}
+
+.lifecycle-pill.remembered {
+  border: 1px solid hsla(45, 100%, 65%, 0.35);
+  color: var(--gf-wire-gold);
+  background: hsla(45, 100%, 65%, 0.06);
+}
+
+/* Status badges used in source cards */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.status-badge.waiting   { border: 1px solid hsla(38,100%,70%,0.3);  color: var(--gf-wire-amber); }
+.status-badge.indexed   { border: 1px solid hsla(140,100%,70%,0.3); color: var(--gf-wire-green); }
+.status-badge.remembered{ border: 1px solid hsla(45,100%,65%,0.3);  color: var(--gf-wire-gold); }
+
+/* ── Phase 4 — Loading Rune Animation ────────────────────────────────────────── */
+
+@keyframes runeRotate {
+  0%   { content: "ᚠ"; }
+  16%  { content: "ᚢ"; }
+  33%  { content: "ᚦ"; }
+  50%  { content: "ᚨ"; }
+  66%  { content: "ᚱ"; }
+  83%  { content: "ᚲ"; }
+  100% { content: "ᚠ"; }
+}
+
+.loading-rune::after {
+  display: inline-block;
+  content: "ᚠ";
+  animation: runeRotate 1.8s steps(1) infinite;
+  margin-left: 0.35em;
+  opacity: 0.6;
+  color: var(--gf-wire-green);
+}
+
+/* ── Phase 4 — Chat Threads ──────────────────────────────────────────────────── */
+
+.thread-layout {
+  display: flex;
+  gap: 0.875rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.thread-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-right: 1px solid hsla(140, 100%, 70%, 0.08);
+  padding-right: 0.875rem;
+}
+
+.thread-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.07);
+}
+
+.thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.thread-item {
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  color: var(--archive-muted);
+  transition: all 0.2s ease;
+  background: hsla(120, 15%, 5%, 0.3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-item:hover {
+  border-color: hsla(140, 100%, 70%, 0.18);
+  color: var(--archive-text);
+}
+
+.thread-item.active {
+  border-color: hsla(38, 100%, 70%, 0.3);
+  color: var(--gf-wire-amber);
+  background: hsla(120, 15%, 7%, 0.7);
+}
+
+.thread-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.thread-title-bar {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.08);
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  color: var(--archive-muted);
+  letter-spacing: 0.06em;
+}
+
+.thread-active-title {
+  opacity: 0.75;
+}
+
+/* ── Phase 4 — Source Cards ──────────────────────────────────────────────────── */
+
+.source-card {
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: hsla(120, 15%, 5%, 0.4);
+  border: 1px solid hsla(140, 100%, 70%, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.source-card-title {
+  font-family: 'Cinzel', serif;
+  font-size: 0.82rem;
+  color: var(--gf-wire-amber);
+}
+
+.source-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.source-card-description {
+  font-size: 0.72rem;
+  color: var(--archive-muted);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.source-card-filename {
+  font-size: 0.66rem;
+  color: hsla(140, 100%, 70%, 0.4);
+  font-family: monospace;
+  letter-spacing: 0.02em;
+}
+
+/* ── Phase 4 — File Metadata Form ────────────────────────────────────────────── */
+
+.threshold-meta-form {
+  background: hsla(120, 15%, 5%, 0.5);
+  border: 1px solid hsla(38, 100%, 70%, 0.2);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.meta-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.meta-form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.meta-form-label {
+  font-size: 0.72rem;
+  color: var(--archive-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: 'Cinzel', serif;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.meta-form-row input {
+  flex: 1;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.6rem;
+}
+
+/* ── Phase 4 — Project Layout ────────────────────────────────────────────────── */
+
+.project-layout {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.project-list-card {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  overflow-y: auto;
+  flex: 1;
+  max-height: 320px;
+}
+
+.project-item {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  color: var(--archive-text);
+  transition: all 0.2s ease;
+  background: hsla(120, 15%, 5%, 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-item:hover {
+  border-color: hsla(140, 100%, 70%, 0.2);
+}
+
+.project-item.active {
+  border-color: hsla(38, 100%, 70%, 0.35);
+  color: var(--gf-wire-amber);
+  background: hsla(120, 15%, 8%, 0.8);
+}
+
+.project-detail-card {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Phase 4 — Threshold error message ───────────────────────────────────────── */
+
+.threshold-error {
+  color: var(--gf-ember-orange);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+/* ── Phase 4 — Room panel inner ──────────────────────────────────────────────── */
+
+.room-panel-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.75rem;
+}
+

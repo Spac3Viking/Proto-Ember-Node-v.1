@@ -42,7 +42,7 @@ describe('ingest — extractText', () => {
         expect(extractText(p)).toBe('# Title\n\nBody');
     });
 
-    test('returns null for unsupported file types', () => {
+    test('returns null for .pdf (use extractTextAsync for PDF/DOCX)', () => {
         const p = path.join(tmpDir, 'file.pdf');
         fs.writeFileSync(p, '%PDF-1.4', 'utf8');
         expect(extractText(p)).toBeNull();
@@ -89,17 +89,21 @@ describe('ingest — collectFiles', () => {
         fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    test('returns .md and .txt files', () => {
+    test('returns .md, .txt, and .pdf files (pdf now supported)', () => {
         const files = collectFiles(tmpDir);
         const names = files.map(f => path.basename(f));
         expect(names).toContain('a.md');
         expect(names).toContain('b.txt');
+        expect(names).toContain('c.pdf');
     });
 
-    test('excludes unsupported file types', () => {
+    test('excludes truly unsupported file types (.xyz)', () => {
+        const tmpXyz = path.join(tmpDir, 'e.xyz');
+        fs.writeFileSync(tmpXyz, 'data', 'utf8');
         const files = collectFiles(tmpDir);
         const names = files.map(f => path.basename(f));
-        expect(names).not.toContain('c.pdf');
+        expect(names).not.toContain('e.xyz');
+        fs.unlinkSync(tmpXyz);
     });
 
     test('recursively collects files from subdirectories', () => {
@@ -477,12 +481,18 @@ describe('POST /api/ingest', () => {
         expect(res.status).toBe(400);
     });
 
-    test('returns 400 for unsupported file type', async () => {
+    test('ingests a .pdf file into threshold (now supported)', async () => {
         const { app } = require('../app/server');
         const res = await request(app)
             .post('/api/ingest')
-            .send({ filename: 'doc.pdf', content: '%PDF' });
-        expect(res.status).toBe(400);
+            .send({ filename: 'doc.pdf', content: '%PDF', encoding: 'utf8' });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        // Clean up
+        const { DATA_DIR } = require('../app/ingest');
+        const fp = path.join(DATA_DIR, 'threshold', 'doc.pdf');
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
     });
 
     test('ingests a .md file into threshold and returns source record', async () => {
