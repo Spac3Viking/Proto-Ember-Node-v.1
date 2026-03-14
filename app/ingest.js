@@ -1,8 +1,8 @@
 /**
- * Ember Node v.ᚠ — Phase 3 Ingest
+ * Ember Node v.ᚠ — Phase 4 Ingest
  *
  * Lightweight local ingestion pipeline.
- * Supports .txt and .md files.
+ * Supports .txt, .md, .pdf, and .docx files.
  * Builds source metadata records for chunking and indexing.
  */
 
@@ -19,23 +19,71 @@ const ROOM_DIRS = {
     threshold: path.join(DATA_DIR, 'threshold'),
 };
 
-const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md']);
+const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
+const TEXT_EXTENSIONS       = new Set(['.txt', '.md']);
 
 /**
  * Extract plain text content from a file.
+ * Supports .txt and .md (sync), and .pdf/.docx (async).
  * Returns the file content string, or null if unsupported.
+ *
+ * For .pdf and .docx, use extractTextAsync instead.
  *
  * @param {string} filePath
  * @returns {string|null}
  */
 function extractText(filePath) {
     const ext = path.extname(filePath).toLowerCase();
-    if (!SUPPORTED_EXTENSIONS.has(ext)) return null;
+    if (!TEXT_EXTENSIONS.has(ext)) return null;
     try {
         return fs.readFileSync(filePath, 'utf8');
     } catch {
         return null;
     }
+}
+
+/**
+ * Extract plain text content from a file asynchronously.
+ * Handles .txt, .md, .pdf, and .docx.
+ * Returns { text, error } — text is null on failure.
+ *
+ * @param {string} filePath
+ * @returns {Promise<{ text: string|null, error: string|null }>}
+ */
+async function extractTextAsync(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+
+    if (TEXT_EXTENSIONS.has(ext)) {
+        try {
+            return { text: fs.readFileSync(filePath, 'utf8'), error: null };
+        } catch (e) {
+            return { text: null, error: 'Could not read file: ' + e.message };
+        }
+    }
+
+    if (ext === '.pdf') {
+        try {
+            // pdf-parse is a CommonJS module; require lazily to avoid side-effects in tests
+            const pdfParse = require('pdf-parse');
+            const buffer   = fs.readFileSync(filePath);
+            const data     = await pdfParse(buffer);
+            return { text: data.text || '', error: null };
+        } catch (e) {
+            return { text: null, error: 'PDF extraction failed: ' + e.message };
+        }
+    }
+
+    if (ext === '.docx') {
+        try {
+            const mammoth = require('mammoth');
+            const result  = await mammoth.extractRawText({ path: filePath });
+            return { text: result.value || '', error: null };
+        } catch (e) {
+            return { text: null, error: 'DOCX extraction failed: ' + e.message };
+        }
+    }
+
+    return { text: null, error: 'File type not supported: ' + ext };
 }
 
 /**
@@ -49,9 +97,12 @@ function extractText(filePath) {
  * @param {string} opts.room           - Target room (hearth | workshop | threshold)
  * @param {string|null} opts.cartridgeId
  * @param {string|null} opts.manifestId
+ * @param {string|null} opts.title     - Human-readable title for the source
+ * @param {string|null} opts.description - Short description of the source
+ * @param {string|null} opts.shelf     - Category or shelf tag
  * @returns {object}
  */
-function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = null }) {
+function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = null, title = null, description = null, shelf = null }) {
     const fileName = path.basename(filePath);
     const ext      = path.extname(filePath).toLowerCase().slice(1);
     const relPath  = path.relative(path.join(__dirname, '..'), filePath);
@@ -71,12 +122,19 @@ function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = nu
     return {
         id,
         room,
-        file: fileName,
-        path: relPath,
+        file:             fileName,
+        path:             relPath,
         cartridgeId:      cartridgeId  || null,
         manifestId:       manifestId   || null,
         ingestTimestamp:  new Date().toISOString(),
         sourceType:       ext,
+        title:            title        || null,
+        description:      description  || null,
+        shelf:            shelf        || null,
+        // lifecycle status: 'waiting' | 'indexed' | 'remembered'
+        status:           room === 'threshold' ? 'waiting'
+                        : room === 'workshop'  ? 'indexed'
+                        : 'remembered',
     };
 }
 
@@ -87,16 +145,17 @@ function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = nu
  * @param {object} opts
  * @returns {{ source: object, text: string }|null}
  */
-function ingestFile({ filePath, room, cartridgeId = null, manifestId = null }) {
+function ingestFile({ filePath, room, cartridgeId = null, manifestId = null, title = null, description = null, shelf = null }) {
     if (!fs.existsSync(filePath)) return null;
     const text = extractText(filePath);
     if (text === null) return null;
-    const source = buildSourceRecord({ filePath, room, cartridgeId, manifestId });
+    const source = buildSourceRecord({ filePath, room, cartridgeId, manifestId, title, description, shelf });
     return { source, text };
 }
 
 /**
- * Recursively collect all supported text files from a directory.
+ * Recursively collect all supported files from a directory.
+ * Includes .txt, .md, .pdf, and .docx files.
  *
  * @param {string} dir
  * @returns {string[]} Array of absolute file paths
@@ -142,6 +201,7 @@ function ingestCartridge({ cartridgeDir, cartridgeId, room = 'workshop' }) {
 
 module.exports = {
     extractText,
+    extractTextAsync,
     buildSourceRecord,
     ingestFile,
     ingestCartridge,
@@ -149,4 +209,5 @@ module.exports = {
     DATA_DIR,
     ROOM_DIRS,
     SUPPORTED_EXTENSIONS,
+    TEXT_EXTENSIONS,
 };

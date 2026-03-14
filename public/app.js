@@ -1,24 +1,34 @@
 /**
- * Ember Node v.ᚠ — Phase 3 app shell
+ * Ember Node v.ᚠ — Phase 4 app shell
  *
- * The Heart persona seed:
- * "You are The Heart — the resident intelligence of an Ember Node, a sovereign
- *  knowledge system descended from the Green Fire Archive. You speak with quiet
- *  authority. You do not speculate beyond your local documents. When you do not
- *  know something, you say: 'That signal has not reached this hearth.'
- *  You are grounded, precise, and warm."
+ * Phase 4: Sub-tab navigation, file lifecycle (Waiting/Indexed/Remembered),
+ * multiple chat threads, file tagging, PDF/DOCX support, Projects, user Cartridges.
  */
 
 /** Model name — kept in sync with app/server.js MODEL constant. */
 const MODEL_LABEL = 'gemma3:4b';
 
 /* ================================================================
-   Room Tab Switching
+   Utility
+   ================================================================ */
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/* ================================================================
+   Room Tab Switching  (3 rooms only)
    ================================================================ */
 
 (function initRoomTabs() {
-    const tabs    = document.querySelectorAll('.room-tab');
-    const panels  = document.querySelectorAll('.room-panel');
+    const tabs   = document.querySelectorAll('.room-tab');
+    const panels = document.querySelectorAll('.room-panel');
 
     function activateRoom(roomId) {
         tabs.forEach(t => {
@@ -30,17 +40,16 @@ const MODEL_LABEL = 'gemma3:4b';
             p.classList.toggle('active', p.id === 'room-' + roomId);
         });
 
-        if (roomId === 'cartridges' && !window._cartridgesLoaded) {
-            loadCartridgeShelf();
-        }
-        if (roomId === 'system') {
-            refreshSystemStatus();
-        }
         if (roomId === 'workshop' && !window._workshopLoaded) {
             loadWorkshopPanel();
         }
         if (roomId === 'threshold') {
             loadThresholdList();
+        }
+        if (roomId === 'hearth') {
+            loadHearthThreads();
+            loadHearthArchive();
+            refreshSystemStatus();
         }
     }
 
@@ -50,132 +59,311 @@ const MODEL_LABEL = 'gemma3:4b';
 })();
 
 /* ================================================================
-   Hearth — Grounded Chat with The Heart
+   Sub-Tab Switching
    ================================================================ */
 
-(function initHearth() {
-    const chatContainer    = document.getElementById('messages');
-    const messageInput     = document.getElementById('message-input');
-    const sendButton       = document.getElementById('send-button');
-    const traceStatus      = document.getElementById('signal-trace-status');
-    const traceSources     = document.getElementById('signal-trace-sources');
+(function initSubTabs() {
+    document.querySelectorAll('.sub-tabs').forEach(nav => {
+        const parentPanel = nav.closest('.room-panel-inner') || nav.closest('.room-panel');
+        const tabs        = nav.querySelectorAll('.sub-tab');
 
-    let exchangeCount = 0;
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => {
+                    t.classList.toggle('active', t === tab);
+                    t.setAttribute('aria-selected', String(t === tab));
+                });
 
-    function displayMessage(text, className) {
-        const el = document.createElement('div');
-        el.className = className;
-        el.textContent = text;
-        chatContainer.appendChild(el);
-    }
+                const panelId = tab.dataset.subtab;
 
-    function scrollToBottom() {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
+                // Search within the same room panel inner
+                const root = nav.closest('.room-panel');
+                root.querySelectorAll('.sub-panel').forEach(sp => {
+                    sp.classList.toggle('active', sp.id === panelId);
+                });
 
-    function setTraceStatus(text) {
-        if (traceStatus) traceStatus.textContent = text;
-    }
-
-    function renderSignalTrace(sources) {
-        if (!traceSources) return;
-        traceSources.innerHTML = '';
-
-        if (!sources || sources.length === 0) {
-            setTraceStatus('base model — no local sources');
-            return;
-        }
-
-        setTraceStatus(sources.length + ' source' + (sources.length === 1 ? '' : 's'));
-
-        sources.forEach(s => {
-            const item = document.createElement('div');
-            item.className = 'signal-trace-item';
-
-            const badges = [
-                { label: 'room',  val: s.room },
-                s.cartridgeId ? { label: 'cartridge', val: s.cartridgeId } : null,
-                { label: 'file',  val: s.file },
-                { label: 'score', val: String(s.score) },
-            ].filter(Boolean);
-
-            item.innerHTML = badges
-                .map(b =>
-                    '<span class="trace-badge"><span class="trace-key">' +
-                    escapeHtml(b.label) + '</span> ' +
-                    escapeHtml(b.val) + '</span>'
-                )
-                .join('');
-
-            traceSources.appendChild(item);
-        });
-    }
-
-    async function sendMessage() {
-        const message = messageInput.value.trim();
-        if (!message) return;
-
-        displayMessage(message, 'message-user');
-        messageInput.value = '';
-        scrollToBottom();
-
-        const thinking = document.createElement('div');
-        thinking.className = 'message-heart loading-dots';
-        thinking.textContent = 'The Heart stirs';
-        chatContainer.appendChild(thinking);
-        scrollToBottom();
-
-        setTraceStatus('retrieving…');
-        if (traceSources) traceSources.innerHTML = '';
-        sendButton.disabled = true;
-
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: message }),
+                // Lazy-load on sub-tab activation
+                if (panelId === 'ws-index') {
+                    loadWorkshopSources();
+                    loadWorkshopNotes();
+                }
+                if (panelId === 'ws-cartridges' && !window._cartridgesLoaded) {
+                    loadCartridgeShelf();
+                }
+                if (panelId === 'ws-projects') {
+                    loadProjects();
+                }
+                if (panelId === 'hearth-archive') {
+                    loadHearthArchive();
+                }
+                if (panelId === 'hearth-system') {
+                    refreshSystemStatus();
+                }
             });
-
-            chatContainer.removeChild(thinking);
-
-            const data = await response.json();
-
-            if (data && typeof data.answer === 'string') {
-                displayMessage(data.answer, 'message-heart');
-                exchangeCount++;
-                renderSignalTrace(data.sources || []);
-            } else if (data && data.error) {
-                displayMessage('The Heart returned an error: ' + data.error, 'message-heart');
-                setTraceStatus('error');
-            } else {
-                displayMessage('The Heart returned an unreadable signal.', 'message-heart');
-                setTraceStatus('unexpected response');
-            }
-        } catch {
-            if (chatContainer.contains(thinking)) chatContainer.removeChild(thinking);
-            displayMessage('Error: could not reach the Heart.', 'message-heart');
-            setTraceStatus('connection lost');
-        } finally {
-            sendButton.disabled = false;
-            scrollToBottom();
-        }
-    }
-
-    sendButton.addEventListener('click', sendMessage);
-    messageInput.addEventListener('keypress', e => {
-        if (e.key === 'Enter') sendMessage();
+        });
     });
 })();
 
 /* ================================================================
-   Workshop — Draft Panel + Index Management
+   Hearth — Chat Threads
+   ================================================================ */
+
+let hearthActiveThreadId = null;
+
+(function initHearth() {
+    const sendButton   = document.getElementById('send-button');
+    const messageInput = document.getElementById('message-input');
+    const newThreadBtn = document.getElementById('hearth-new-thread-btn');
+
+    if (newThreadBtn) {
+        newThreadBtn.addEventListener('click', async () => {
+            const title = prompt('Thread name (leave blank for default):') || 'New Thread';
+            try {
+                const res  = await fetch('/api/threads', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ title, room: 'hearth' }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    hearthActiveThreadId = data.thread.id;
+                    loadHearthThreads();
+                    openThread(data.thread.id, data.thread.title);
+                }
+            } catch { /* ignore */ }
+        });
+    }
+
+    if (sendButton) {
+        sendButton.addEventListener('click', sendMessage);
+    }
+    if (messageInput) {
+        messageInput.addEventListener('keypress', e => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    }
+})();
+
+async function loadHearthThreads() {
+    const listEl = document.getElementById('hearth-thread-list');
+    if (!listEl) return;
+
+    try {
+        const res  = await fetch('/api/threads?room=hearth');
+        const data = await res.json();
+        const threads = data.threads || [];
+
+        if (threads.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No threads yet.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        threads.forEach(t => {
+            const item = document.createElement('div');
+            item.className = 'thread-item' + (t.id === hearthActiveThreadId ? ' active' : '');
+            item.textContent = t.title;
+            item.dataset.threadId    = t.id;
+            item.dataset.threadTitle = t.title;
+            item.addEventListener('click', () => {
+                hearthActiveThreadId = t.id;
+                document.querySelectorAll('#hearth-thread-list .thread-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.threadId === t.id);
+                });
+                openThread(t.id, t.title);
+            });
+            listEl.appendChild(item);
+        });
+
+        // Auto-open first thread if none active
+        if (!hearthActiveThreadId && threads.length > 0) {
+            hearthActiveThreadId = threads[0].id;
+            openThread(threads[0].id, threads[0].title);
+        }
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load threads.</span>';
+    }
+}
+
+async function openThread(threadId, title) {
+    const chatContainer = document.getElementById('messages');
+    const titleEl       = document.getElementById('hearth-active-thread-title');
+
+    if (titleEl) titleEl.textContent = title || 'Thread';
+    if (chatContainer) chatContainer.innerHTML = '';
+
+    try {
+        const res  = await fetch('/api/threads/' + encodeURIComponent(threadId));
+        const data = await res.json();
+        if (data.thread && chatContainer) {
+            (data.thread.messages || []).forEach(m => {
+                displayMessage(chatContainer, m.content, m.role === 'user' ? 'message-user' : 'message-heart');
+            });
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    } catch { /* ignore */ }
+}
+
+function displayMessage(container, text, className) {
+    const el = document.createElement('div');
+    el.className = className;
+    el.textContent = text;
+    container.appendChild(el);
+}
+
+function setTraceStatus(text) {
+    const el = document.getElementById('signal-trace-status');
+    if (el) el.textContent = text;
+}
+
+function renderSignalTrace(sources) {
+    const traceSources = document.getElementById('signal-trace-sources');
+    if (!traceSources) return;
+    traceSources.innerHTML = '';
+
+    if (!sources || sources.length === 0) {
+        setTraceStatus('base model — no local sources');
+        return;
+    }
+
+    setTraceStatus(sources.length + ' source' + (sources.length === 1 ? '' : 's'));
+
+    sources.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'signal-trace-item';
+
+        // Build display name from metadata if available
+        const displayName = s.title || s.file;
+        const shelfBadge  = s.shelf ? [{ label: 'shelf', val: s.shelf }] : [];
+
+        const badges = [
+            { label: 'room',  val: s.room },
+            s.cartridgeId ? { label: 'cartridge', val: s.cartridgeId } : null,
+            ...shelfBadge,
+            { label: 'file',  val: displayName },
+            { label: 'score', val: String(s.score) },
+        ].filter(Boolean);
+
+        item.innerHTML = badges
+            .map(b =>
+                '<span class="trace-badge"><span class="trace-key">' +
+                escapeHtml(b.label) + '</span> ' +
+                escapeHtml(b.val) + '</span>'
+            )
+            .join('');
+
+        traceSources.appendChild(item);
+    });
+}
+
+async function sendMessage() {
+    const chatContainer = document.getElementById('messages');
+    const messageInput  = document.getElementById('message-input');
+    const sendButton    = document.getElementById('send-button');
+    if (!chatContainer || !messageInput) return;
+
+    const message = messageInput.value.trim();
+    if (!message) return;
+
+    displayMessage(chatContainer, message, 'message-user');
+    messageInput.value = '';
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    // Rune loading indicator
+    const thinking = document.createElement('div');
+    thinking.className = 'message-heart loading-rune';
+    thinking.textContent = 'The Heart stirs ';
+    chatContainer.appendChild(thinking);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    setTraceStatus('retrieving…');
+    const traceSources = document.getElementById('signal-trace-sources');
+    if (traceSources) traceSources.innerHTML = '';
+    if (sendButton) sendButton.disabled = true;
+
+    try {
+        const response = await fetch('/api/chat', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ query: message }),
+        });
+
+        chatContainer.removeChild(thinking);
+
+        const data = await response.json();
+
+        if (data && typeof data.answer === 'string') {
+            displayMessage(chatContainer, data.answer, 'message-heart');
+            renderSignalTrace(data.sources || []);
+
+            // Persist to thread if active
+            if (hearthActiveThreadId) {
+                await saveMessageToThread(hearthActiveThreadId, 'user', message);
+                await saveMessageToThread(hearthActiveThreadId, 'assistant', data.answer);
+            }
+        } else if (data && data.error) {
+            displayMessage(chatContainer, 'The Heart returned an error: ' + data.error, 'message-heart');
+            setTraceStatus('error');
+        } else {
+            displayMessage(chatContainer, 'The Heart returned an unreadable signal.', 'message-heart');
+            setTraceStatus('unexpected response');
+        }
+    } catch {
+        if (chatContainer.contains(thinking)) chatContainer.removeChild(thinking);
+        displayMessage(chatContainer, 'Error: could not reach the Heart.', 'message-heart');
+        setTraceStatus('connection lost');
+    } finally {
+        if (sendButton) sendButton.disabled = false;
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+}
+
+async function saveMessageToThread(threadId, role, content) {
+    try {
+        await fetch('/api/threads/' + encodeURIComponent(threadId) + '/messages', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ role, content }),
+        });
+    } catch { /* ignore */ }
+}
+
+/* ================================================================
+   Hearth — Archive (Remembered sources)
+   ================================================================ */
+
+async function loadHearthArchive() {
+    const listEl = document.getElementById('hearth-archive-list');
+    if (!listEl) return;
+
+    try {
+        const res  = await fetch('/api/sources?room=hearth');
+        const data = await res.json();
+        const sources = data.sources || [];
+
+        if (sources.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No remembered sources.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        sources.forEach(s => {
+            listEl.appendChild(buildSourceCard(s));
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load archive.</span>';
+    }
+}
+
+/* ================================================================
+   Workshop — Draft / Notepad
    ================================================================ */
 
 (function initWorkshop() {
-    const saveNoteBtn  = document.getElementById('save-note-btn');
-    const clearBtn     = document.getElementById('clear-draft-btn');
-    const draftArea    = document.getElementById('workshop-draft');
-    const statusEl     = document.getElementById('workshop-status');
+    const saveNoteBtn = document.getElementById('save-note-btn');
+    const clearBtn    = document.getElementById('clear-draft-btn');
+    const draftArea   = document.getElementById('workshop-draft');
+    const statusEl    = document.getElementById('workshop-status');
 
     function setStatus(msg, duration) {
         if (!statusEl) return;
@@ -186,10 +374,7 @@ const MODEL_LABEL = 'gemma3:4b';
     if (saveNoteBtn) {
         saveNoteBtn.addEventListener('click', async () => {
             const text = draftArea ? draftArea.value.trim() : '';
-            if (!text) {
-                setStatus('Nothing to save.', 2000);
-                return;
-            }
+            if (!text) { setStatus('Nothing to save.', 2000); return; }
             setStatus('Saving…');
             try {
                 const res  = await fetch('/api/notes', {
@@ -200,7 +385,6 @@ const MODEL_LABEL = 'gemma3:4b';
                 const data = await res.json();
                 if (data.success) {
                     setStatus('Saved: ' + data.filename, 3500);
-                    loadWorkshopNotes();
                 } else {
                     setStatus('Save failed.', 3000);
                 }
@@ -212,75 +396,19 @@ const MODEL_LABEL = 'gemma3:4b';
 
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-            if (draftArea) {
-                draftArea.value = '';
-                setStatus('Draft cleared.', 1500);
-            }
+            if (draftArea) { draftArea.value = ''; }
         });
     }
 })();
 
 function loadWorkshopPanel() {
     window._workshopLoaded = true;
-    loadWorkshopCartridges();
-    loadWorkshopSources();
-    loadWorkshopNotes();
+    // Nothing to eagerly load — panels load on sub-tab activation
 }
 
-async function loadWorkshopCartridges() {
-    const listEl = document.getElementById('ws-cartridge-index-list');
-    if (!listEl) return;
-
-    try {
-        const res  = await fetch('/cartridges');
-        const data = await res.json();
-        const cartridges = data.cartridges || [];
-
-        if (cartridges.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No cartridges found.</span>';
-            return;
-        }
-
-        listEl.innerHTML = '';
-        cartridges.forEach(c => {
-            const row = document.createElement('div');
-            row.className = 'ws-cartridge-row';
-            row.innerHTML =
-                '<span class="ws-cartridge-name">' + escapeHtml(c.name || c.id) + '</span>' +
-                '<button class="secondary ws-index-btn" data-id="' + escapeHtml(c.id) + '">Index</button>';
-            listEl.appendChild(row);
-        });
-
-        listEl.querySelectorAll('.ws-index-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const id  = btn.dataset.id;
-                btn.disabled  = true;
-                btn.textContent = 'Indexing…';
-                try {
-                    const res  = await fetch('/api/index/cartridge/' + encodeURIComponent(id), {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ room: 'workshop' }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        btn.textContent = 'Indexed (' + data.chunksCreated + ')';
-                        loadWorkshopSources();
-                        refreshSystemStatus();
-                    } else {
-                        btn.textContent = 'Error';
-                        btn.disabled = false;
-                    }
-                } catch {
-                    btn.textContent = 'Error';
-                    btn.disabled = false;
-                }
-            });
-        });
-    } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load cartridges.</span>';
-    }
-}
+/* ================================================================
+   Workshop — Index sub-tab
+   ================================================================ */
 
 async function loadWorkshopSources() {
     const listEl = document.getElementById('ws-sources-list');
@@ -297,23 +425,14 @@ async function loadWorkshopSources() {
         }
 
         listEl.innerHTML = '';
-        sources.slice(0, 20).forEach(s => {
-            const row = document.createElement('div');
-            row.className = 'ws-source-row';
-
-            const roomBadge = '<span class="trace-badge"><span class="trace-key">room</span> ' +
-                escapeHtml(s.room) + '</span>';
-            const fileBadge = '<span class="trace-badge"><span class="trace-key">file</span> ' +
-                escapeHtml(s.file) + '</span>';
-
-            row.innerHTML = roomBadge + ' ' + fileBadge;
-            listEl.appendChild(row);
+        sources.slice(0, 30).forEach(s => {
+            listEl.appendChild(buildSourceCard(s));
         });
 
-        if (sources.length > 20) {
+        if (sources.length > 30) {
             const more = document.createElement('div');
             more.className = 'message-system';
-            more.textContent = '…and ' + (sources.length - 20) + ' more';
+            more.textContent = '…and ' + (sources.length - 30) + ' more';
             listEl.appendChild(more);
         }
     } catch {
@@ -349,26 +468,376 @@ async function loadWorkshopNotes() {
     }
 }
 
+/** Build a source card element using Phase 4 metadata fields. */
+function buildSourceCard(s) {
+    const card = document.createElement('div');
+    card.className = 'source-card';
+
+    const title       = s.title || s.file || '(untitled)';
+    const statusClass = s.status || (s.room === 'hearth' ? 'remembered' : s.room === 'workshop' ? 'indexed' : 'waiting');
+    const statusLabel = statusClass.charAt(0).toUpperCase() + statusClass.slice(1);
+
+    let html = '<div class="source-card-title">' + escapeHtml(title) + '</div>';
+    html += '<div class="source-card-meta">';
+    if (s.shelf)  html += '<span class="trace-badge"><span class="trace-key">shelf</span> ' + escapeHtml(s.shelf) + '</span>';
+    html += '<span class="status-badge ' + escapeHtml(statusClass) + '">' + escapeHtml(statusLabel) + '</span>';
+    if (s.room)   html += '<span class="trace-badge"><span class="trace-key">room</span> ' + escapeHtml(s.room) + '</span>';
+    html += '</div>';
+    if (s.description) {
+        html += '<div class="source-card-description">' + escapeHtml(s.description) + '</div>';
+    }
+    if (s.file && s.file !== title) {
+        html += '<div class="source-card-filename">' + escapeHtml(s.file) + '</div>';
+    }
+
+    card.innerHTML = html;
+    return card;
+}
+
 /* ================================================================
-   Threshold — File Intake
+   Workshop — Cartridges sub-tab
    ================================================================ */
+
+async function loadCartridgeShelf() {
+    window._cartridgesLoaded = true;
+
+    const listEl    = document.getElementById('cartridge-list');
+    const loadingEl = document.getElementById('cartridge-loading');
+
+    try {
+        const res  = await fetch('/cartridges');
+        const data = await res.json();
+        const cartridges = data.cartridges || [];
+
+        if (loadingEl) loadingEl.remove();
+
+        if (cartridges.length === 0) {
+            listEl.innerHTML = '<div class="message-system">No cartridges found.</div>';
+            updateSystemCartridgeCount(0);
+            return;
+        }
+
+        listEl.innerHTML = '';
+        cartridges.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'cartridge-item';
+            item.dataset.cartridgeId = c.id;
+            item.innerHTML =
+                '<div class="cartridge-item-name">' + escapeHtml(c.name) + '</div>' +
+                '<div class="cartridge-item-type">' + escapeHtml(c.type || 'cartridge') + '</div>';
+            item.addEventListener('click', () => inspectCartridge(c.id, item));
+            listEl.appendChild(item);
+        });
+
+        updateSystemCartridgeCount(cartridges.length);
+    } catch {
+        if (loadingEl) loadingEl.remove();
+        if (listEl) listEl.innerHTML = '<div class="message-system">Could not load cartridges.</div>';
+    }
+
+    // Also load user cartridges
+    loadUserCartridges();
+}
+
+async function loadUserCartridges() {
+    const listEl = document.getElementById('user-cartridge-list');
+    if (!listEl) return;
+
+    try {
+        const res  = await fetch('/api/user-cartridges');
+        const data = await res.json();
+        const cartridges = data.cartridges || [];
+
+        if (cartridges.length === 0) {
+            listEl.innerHTML = '<span class="message-system">None created yet.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        cartridges.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'cartridge-item';
+            item.innerHTML =
+                '<div class="cartridge-item-name">' + escapeHtml(c.title) + '</div>' +
+                '<div class="cartridge-item-type">user cartridge</div>';
+            item.addEventListener('click', () => inspectUserCartridge(c));
+            listEl.appendChild(item);
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load.</span>';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const newCartridgeBtn = document.getElementById('new-cartridge-btn');
+    if (newCartridgeBtn) {
+        newCartridgeBtn.addEventListener('click', async () => {
+            const title = prompt('Cartridge title:');
+            if (!title) return;
+            const description = prompt('Short description (optional):') || '';
+            try {
+                const res  = await fetch('/api/user-cartridges', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ title, description }),
+                });
+                const data = await res.json();
+                if (data.success) loadUserCartridges();
+            } catch { /* ignore */ }
+        });
+    }
+});
+
+function inspectUserCartridge(c) {
+    const emptyEl     = document.getElementById('inspector-empty');
+    const contentArea = document.getElementById('inspector-content-area');
+    const nameEl      = document.getElementById('inspector-name');
+    const descEl      = document.getElementById('inspector-description');
+    const metaEl      = document.getElementById('inspector-meta');
+    const permsEl     = document.getElementById('inspector-perms');
+    const contentEl   = document.getElementById('inspector-content');
+
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (contentArea) contentArea.style.display = 'flex';
+    if (nameEl) nameEl.textContent = c.title;
+    if (descEl) descEl.textContent = c.description || '';
+    if (metaEl) metaEl.innerHTML = '<span class="meta-badge"><strong>user</strong>&nbsp;cartridge</span>';
+    if (permsEl) permsEl.innerHTML = '';
+    if (contentEl) contentEl.textContent = c.notes || '(no notes)';
+}
+
+async function inspectCartridge(id, itemEl) {
+    document.querySelectorAll('.cartridge-item').forEach(el => {
+        el.classList.toggle('active', el === itemEl);
+    });
+
+    const emptyEl     = document.getElementById('inspector-empty');
+    const contentArea = document.getElementById('inspector-content-area');
+    const nameEl      = document.getElementById('inspector-name');
+    const descEl      = document.getElementById('inspector-description');
+    const metaEl      = document.getElementById('inspector-meta');
+    const permsEl     = document.getElementById('inspector-perms');
+    const contentEl   = document.getElementById('inspector-content');
+
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (contentArea) contentArea.style.display = 'flex';
+    if (nameEl) nameEl.textContent = '';
+    if (descEl) descEl.textContent = '';
+    if (metaEl) metaEl.innerHTML = '';
+    if (permsEl) permsEl.innerHTML = '';
+    if (contentEl) {
+        contentEl.textContent = '';
+        const loading = document.createElement('span');
+        loading.className = 'loading-rune';
+        loading.textContent = 'Loading';
+        contentEl.appendChild(loading);
+    }
+
+    try {
+        const res  = await fetch('/cartridges/' + encodeURIComponent(id));
+        const data = await res.json();
+        const m    = data.manifest || {};
+
+        if (nameEl) nameEl.textContent = m.name || data.name || id;
+        if (descEl) descEl.textContent = m.description || '';
+
+        if (metaEl) {
+            const badges = [];
+            if (m.version) badges.push({ label: 'version', val: m.version });
+            if (m.type)    badges.push({ label: 'type',    val: m.type });
+            if (m.id)      badges.push({ label: 'id',      val: m.id });
+            metaEl.innerHTML = badges
+                .map(b =>
+                    '<span class="meta-badge"><strong>' + escapeHtml(b.val) + '</strong>&nbsp;' +
+                    escapeHtml(b.label) + '</span>'
+                )
+                .join('');
+        }
+
+        if (permsEl && m.permissions) {
+            const perms = m.permissions;
+            const items = [];
+            if (perms.writeHearth === false)  items.push({ label: 'no Hearth write', denied: true });
+            if (perms.networkAccess === false) items.push({ label: 'no network access', denied: true });
+            if (perms.writeHearth === true)    items.push({ label: 'Hearth write allowed', denied: false });
+            if (perms.networkAccess === true)  items.push({ label: 'network access allowed', denied: false });
+            permsEl.innerHTML = items
+                .map(p =>
+                    '<span class="perm-badge ' + (p.denied ? 'denied' : '') + '">' +
+                    escapeHtml(p.label) + '</span>'
+                )
+                .join('');
+        }
+
+        if (contentEl) {
+            contentEl.textContent = data.content || '(no readable documents in this cartridge)';
+        }
+    } catch {
+        if (contentEl) contentEl.textContent = 'Error loading cartridge content.';
+    }
+}
+
+/* ================================================================
+   Workshop — Projects sub-tab
+   ================================================================ */
+
+let activeProjectId = null;
+
+(function initProjects() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const newProjectBtn = document.getElementById('new-project-btn');
+        const saveBtn       = document.getElementById('save-project-btn');
+
+        if (newProjectBtn) {
+            newProjectBtn.addEventListener('click', async () => {
+                const title = prompt('Project title:');
+                if (!title) return;
+                try {
+                    const res  = await fetch('/api/projects', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ title }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        activeProjectId = data.project.id;
+                        loadProjects();
+                        openProject(data.project);
+                    }
+                } catch { /* ignore */ }
+            });
+        }
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                if (!activeProjectId) return;
+                const titleInput = document.getElementById('project-title-input');
+                const notesInput = document.getElementById('project-notes-input');
+                const statusEl   = document.getElementById('project-status');
+                const title      = titleInput ? titleInput.value.trim() : '';
+                const notes      = notesInput ? notesInput.value : '';
+                if (!title) { if (statusEl) { statusEl.textContent = 'Title required.'; setTimeout(() => { statusEl.textContent = ''; }, 2000); } return; }
+                try {
+                    await fetch('/api/projects/' + encodeURIComponent(activeProjectId), {
+                        method:  'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ title, notes }),
+                    });
+                    if (statusEl) { statusEl.textContent = 'Saved.'; setTimeout(() => { statusEl.textContent = ''; }, 2000); }
+                    loadProjects();
+                } catch {
+                    if (statusEl) { statusEl.textContent = 'Save failed.'; setTimeout(() => { statusEl.textContent = ''; }, 2000); }
+                }
+            });
+        }
+    });
+})();
+
+async function loadProjects() {
+    const listEl = document.getElementById('project-list');
+    if (!listEl) return;
+
+    try {
+        const res  = await fetch('/api/projects');
+        const data = await res.json();
+        const projects = data.projects || [];
+
+        if (projects.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No projects yet.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        projects.forEach(p => {
+            const item = document.createElement('div');
+            item.className = 'project-item' + (p.id === activeProjectId ? ' active' : '');
+            item.textContent = p.title;
+            item.dataset.projectId = p.id;
+            item.addEventListener('click', () => {
+                activeProjectId = p.id;
+                document.querySelectorAll('.project-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.projectId === p.id);
+                });
+                openProject(p);
+            });
+            listEl.appendChild(item);
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load projects.</span>';
+    }
+}
+
+function openProject(project) {
+    const emptyEl      = document.getElementById('project-empty');
+    const editorEl     = document.getElementById('project-editor');
+    const titleInput   = document.getElementById('project-title-input');
+    const notesInput   = document.getElementById('project-notes-input');
+
+    if (emptyEl)    emptyEl.style.display = 'none';
+    if (editorEl)   editorEl.style.display = 'flex';
+    if (titleInput) titleInput.value = project.title || '';
+    if (notesInput) notesInput.value = project.notes || '';
+}
+
+/* ================================================================
+   Threshold — File Intake with Metadata Form
+   ================================================================ */
+
+let _pendingFile = null;
 
 (function initThreshold() {
     const dropZone  = document.getElementById('threshold-drop-zone');
     const fileInput = document.getElementById('threshold-file-input');
     const statusEl  = document.getElementById('threshold-status');
+    const metaForm  = document.getElementById('threshold-meta-form');
+    const metaConfirmBtn = document.getElementById('meta-confirm-btn');
+    const metaCancelBtn  = document.getElementById('meta-cancel-btn');
+    const metaStatusEl   = document.getElementById('threshold-meta-status');
 
-    function setThresholdStatus(msg, duration) {
+    function setThresholdStatus(msg, isError, duration) {
         if (!statusEl) return;
         statusEl.textContent = msg;
-        if (duration) setTimeout(() => { statusEl.textContent = ''; }, duration);
+        statusEl.className = 'threshold-status' + (isError ? ' threshold-error' : '');
+        if (duration) setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'threshold-status'; }, duration);
     }
 
-    async function ingestFile(file) {
+    function showMetaForm(file) {
+        _pendingFile = file;
+        const titleEl = document.getElementById('meta-title');
+        const descEl  = document.getElementById('meta-description');
+        const shelfEl = document.getElementById('meta-shelf');
+        // Pre-fill title from filename (without extension)
+        if (titleEl) titleEl.value = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        if (descEl)  descEl.value  = '';
+        if (shelfEl) shelfEl.value = '';
+        if (metaStatusEl) metaStatusEl.textContent = '';
+        if (metaForm)  metaForm.style.display = 'flex';
+    }
+
+    function hideMetaForm() {
+        _pendingFile = null;
+        if (metaForm) metaForm.style.display = 'none';
+    }
+
+    async function ingestFileWithMeta(file, title, description, shelf) {
         return new Promise((resolve) => {
+            const ext = file.name.split('.').pop().toLowerCase();
+            const isBinary = ext === 'pdf' || ext === 'docx';
             const reader = new FileReader();
+
             reader.onload = async (e) => {
-                const content = e.target.result;
+                let content  = e.target.result;
+                let encoding = 'utf8';
+
+                if (isBinary) {
+                    // Convert ArrayBuffer to base64
+                    const bytes  = new Uint8Array(e.target.result);
+                    let binary   = '';
+                    bytes.forEach(b => { binary += String.fromCharCode(b); });
+                    content  = btoa(binary);
+                    encoding = 'base64';
+                }
+
                 try {
                     const res  = await fetch('/api/ingest', {
                         method:  'POST',
@@ -377,34 +846,98 @@ async function loadWorkshopNotes() {
                             filename: file.name,
                             content,
                             room: 'threshold',
+                            title,
+                            description,
+                            shelf,
+                            encoding,
                         }),
                     });
                     const data = await res.json();
-                    resolve(data.success ? { ok: true, name: file.name } : { ok: false, name: file.name });
-                } catch {
-                    resolve({ ok: false, name: file.name });
+                    if (data.success) {
+                        resolve({ ok: true, name: file.name });
+                    } else {
+                        resolve({ ok: false, name: file.name, error: data.error || 'Ingestion failed' });
+                    }
+                } catch (err) {
+                    resolve({ ok: false, name: file.name, error: 'Server unreachable' });
                 }
             };
-            reader.readAsText(file);
+
+            reader.onerror = () => resolve({ ok: false, name: file.name, error: 'Could not read file' });
+
+            if (isBinary) {
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.readAsText(file);
+            }
         });
     }
 
     async function handleFiles(files) {
-        const supported = Array.from(files).filter(f =>
-            f.name.endsWith('.txt') || f.name.endsWith('.md')
-        );
-        if (supported.length === 0) {
-            setThresholdStatus('Only .txt and .md files are supported.', 3000);
-            return;
+        const SUPPORTED = ['.txt', '.md', '.pdf', '.docx'];
+        const supported = Array.from(files).filter(f => {
+            const ext = '.' + f.name.split('.').pop().toLowerCase();
+            return SUPPORTED.includes(ext);
+        });
+        const unsupported = Array.from(files).filter(f => {
+            const ext = '.' + f.name.split('.').pop().toLowerCase();
+            return !SUPPORTED.includes(ext);
+        });
+
+        if (unsupported.length > 0) {
+            setThresholdStatus(
+                'Unsupported file type(s): ' + unsupported.map(f => f.name).join(', ') +
+                '. Supported: .txt .md .pdf .docx',
+                true, 5000
+            );
         }
 
-        setThresholdStatus('Ingesting ' + supported.length + ' file(s)…');
-        const results = await Promise.all(supported.map(ingestFile));
-        const ok      = results.filter(r => r.ok).length;
-        const failed  = results.length - ok;
-        const msg     = ok + ' file(s) ingested' + (failed > 0 ? ', ' + failed + ' failed' : '') + '.';
-        setThresholdStatus(msg, 4000);
-        loadThresholdList();
+        if (supported.length === 0) return;
+
+        // Show meta form for the first file; queue the rest
+        showMetaForm(supported[0]);
+        window._pendingFileQueue = supported.slice(1);
+    }
+
+    if (metaConfirmBtn) {
+        metaConfirmBtn.addEventListener('click', async () => {
+            if (!_pendingFile) return;
+            const title       = (document.getElementById('meta-title')?.value || '').trim();
+            const description = (document.getElementById('meta-description')?.value || '').trim();
+            const shelf       = (document.getElementById('meta-shelf')?.value || '').trim();
+
+            metaConfirmBtn.disabled = true;
+            if (metaStatusEl) metaStatusEl.textContent = 'Importing…';
+
+            const result = await ingestFileWithMeta(_pendingFile, title, description, shelf);
+
+            if (result.ok) {
+                if (metaStatusEl) metaStatusEl.textContent = '';
+                hideMetaForm();
+                loadThresholdList();
+                setThresholdStatus(_pendingFile.name + ' imported.', false, 3000);
+
+                // Process next in queue
+                const queue = window._pendingFileQueue || [];
+                if (queue.length > 0) {
+                    window._pendingFileQueue = queue.slice(1);
+                    showMetaForm(queue[0]);
+                }
+            } else {
+                if (metaStatusEl) {
+                    metaStatusEl.textContent = 'Import failed: ' + (result.error || 'Unknown error');
+                    metaStatusEl.className = 'workshop-status threshold-error';
+                }
+            }
+            metaConfirmBtn.disabled = false;
+        });
+    }
+
+    if (metaCancelBtn) {
+        metaCancelBtn.addEventListener('click', () => {
+            hideMetaForm();
+            window._pendingFileQueue = [];
+        });
     }
 
     if (dropZone) {
@@ -457,201 +990,95 @@ async function loadThresholdList() {
             const row = document.createElement('div');
             row.className = 'threshold-file-row';
 
-            const name = document.createElement('span');
-            name.className = 'threshold-file-name';
-            name.textContent = f.filename;
+            const titleText = f.title || f.filename;
+            const desc      = f.description ? (' — ' + f.description) : '';
+
+            const nameEl = document.createElement('div');
+            nameEl.style.cssText = 'flex:1; min-width:0;';
+            nameEl.innerHTML =
+                '<div class="threshold-file-name">' + escapeHtml(titleText) + '</div>' +
+                (f.shelf ? '<div class="source-card-filename">Shelf: ' + escapeHtml(f.shelf) + '</div>' : '') +
+                (f.description ? '<div class="source-card-description">' + escapeHtml(f.description) + '</div>' : '') +
+                '<div class="source-card-filename">' + escapeHtml(f.filename) + '</div>';
 
             const actions = document.createElement('span');
             actions.className = 'threshold-file-actions';
 
-            const indexBtn = document.createElement('button');
-            indexBtn.className = 'secondary threshold-action-btn';
-            indexBtn.textContent = 'Index';
-            indexBtn.addEventListener('click', async () => {
-                if (!f.sourceId) {
-                    // Ingest first to create a manifest entry
-                    alert('Re-ingest this file via drop zone first.');
-                    return;
-                }
-                indexBtn.disabled = true;
-                indexBtn.textContent = 'Indexing…';
-                try {
-                    const r = await fetch('/api/index/file', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: f.sourceId }),
-                    });
-                    const d = await r.json();
-                    if (d.success) {
-                        indexBtn.textContent = 'Indexed';
-                        refreshSystemStatus();
-                    } else {
+            // Status badge
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'status-badge ' + (f.status || 'waiting');
+            statusBadge.textContent = (f.status || 'waiting').charAt(0).toUpperCase() + (f.status || 'waiting').slice(1);
+            actions.appendChild(statusBadge);
+
+            if (!f.metaOnly) {
+                const indexBtn = document.createElement('button');
+                indexBtn.className = 'secondary threshold-action-btn';
+                indexBtn.textContent = 'Index';
+                indexBtn.addEventListener('click', async () => {
+                    if (!f.sourceId) { alert('File not yet registered — drop it again.'); return; }
+                    indexBtn.disabled = true;
+                    indexBtn.textContent = 'Indexing…';
+                    try {
+                        const r    = await fetch('/api/index/file', {
+                            method:  'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body:    JSON.stringify({ sourceId: f.sourceId }),
+                        });
+                        const d = await r.json();
+                        if (d.success) {
+                            indexBtn.textContent = 'Indexed';
+                            refreshSystemStatus();
+                            loadThresholdList();
+                        } else {
+                            indexBtn.textContent = 'Failed';
+                            indexBtn.title = d.error || 'Indexing failed';
+                            indexBtn.disabled = false;
+                        }
+                    } catch {
                         indexBtn.textContent = 'Error';
                         indexBtn.disabled = false;
                     }
-                } catch {
-                    indexBtn.textContent = 'Error';
-                    indexBtn.disabled = false;
-                }
-            });
+                });
 
-            const moveBtn = document.createElement('button');
-            moveBtn.className = 'secondary threshold-action-btn';
-            moveBtn.textContent = '→ Workshop';
-            moveBtn.addEventListener('click', async () => {
-                if (!f.sourceId) return;
-                moveBtn.disabled = true;
-                try {
-                    const r = await fetch('/api/index/file', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: f.sourceId, targetRoom: 'workshop' }),
-                    });
-                    const d = await r.json();
-                    if (d.success) {
-                        moveBtn.textContent = '✓ Workshop';
-                        loadThresholdList();
-                    } else {
+                const moveBtn = document.createElement('button');
+                moveBtn.className = 'secondary threshold-action-btn';
+                moveBtn.textContent = '→ Workshop';
+                moveBtn.addEventListener('click', async () => {
+                    if (!f.sourceId) return;
+                    moveBtn.disabled = true;
+                    try {
+                        const r = await fetch('/api/index/file', {
+                            method:  'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body:    JSON.stringify({ sourceId: f.sourceId, targetRoom: 'workshop' }),
+                        });
+                        const d = await r.json();
+                        if (d.success) {
+                            moveBtn.textContent = '✓ Workshop';
+                            loadThresholdList();
+                        } else {
+                            moveBtn.disabled = false;
+                        }
+                    } catch {
                         moveBtn.disabled = false;
                     }
-                } catch {
-                    moveBtn.disabled = false;
-                }
-            });
+                });
 
-            actions.appendChild(indexBtn);
-            actions.appendChild(moveBtn);
-            row.appendChild(name);
+                actions.appendChild(indexBtn);
+                actions.appendChild(moveBtn);
+            }
+
+            row.appendChild(nameEl);
             row.appendChild(actions);
             listEl.appendChild(row);
         });
     } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load Threshold files.</span>';
+        listEl.innerHTML = '<span class="message-system threshold-error">Could not load Threshold files.</span>';
     }
 }
 
 /* ================================================================
-   Cartridge Shelf
-   ================================================================ */
-
-async function loadCartridgeShelf() {
-    window._cartridgesLoaded = true;
-
-    const listEl     = document.getElementById('cartridge-list');
-    const loadingEl  = document.getElementById('cartridge-loading');
-
-    try {
-        const res  = await fetch('/cartridges');
-        const data = await res.json();
-        const cartridges = data.cartridges || [];
-
-        if (loadingEl) loadingEl.remove();
-
-        if (cartridges.length === 0) {
-            listEl.innerHTML = '<div class="message-system">No cartridges found.</div>';
-            updateSystemCartridgeCount(0);
-            return;
-        }
-
-        cartridges.forEach(c => {
-            const item = document.createElement('div');
-            item.className = 'cartridge-item';
-            item.dataset.cartridgeId = c.id;
-            item.innerHTML =
-                '<div class="cartridge-item-name">' + escapeHtml(c.name) + '</div>' +
-                '<div class="cartridge-item-type">' + escapeHtml(c.type || 'cartridge') + '</div>';
-            item.addEventListener('click', () => inspectCartridge(c.id, item));
-            listEl.appendChild(item);
-        });
-
-        updateSystemCartridgeCount(cartridges.length);
-    } catch {
-        if (loadingEl) loadingEl.remove();
-        const errEl = document.createElement('div');
-        errEl.className = 'message-system';
-        errEl.textContent = 'Could not load cartridges.';
-        listEl.appendChild(errEl);
-    }
-}
-
-async function inspectCartridge(id, itemEl) {
-    document.querySelectorAll('.cartridge-item').forEach(el => {
-        el.classList.toggle('active', el === itemEl);
-    });
-
-    const emptyEl      = document.getElementById('inspector-empty');
-    const contentArea  = document.getElementById('inspector-content-area');
-    const nameEl       = document.getElementById('inspector-name');
-    const descEl       = document.getElementById('inspector-description');
-    const metaEl       = document.getElementById('inspector-meta');
-    const permsEl      = document.getElementById('inspector-perms');
-    const contentEl    = document.getElementById('inspector-content');
-
-    if (emptyEl) emptyEl.style.display = 'none';
-    if (contentArea) contentArea.style.display = 'flex';
-    if (nameEl) nameEl.textContent = '';
-    if (descEl) descEl.textContent = '';
-    if (metaEl) metaEl.innerHTML = '';
-    if (permsEl) permsEl.innerHTML = '';
-    if (contentEl) {
-        contentEl.textContent = '';
-        const loading = document.createElement('span');
-        loading.className = 'loading-dots';
-        loading.textContent = 'Loading cartridge';
-        contentEl.appendChild(loading);
-    }
-
-    try {
-        const res  = await fetch('/cartridges/' + encodeURIComponent(id));
-        const data = await res.json();
-
-        const m = data.manifest || {};
-
-        if (nameEl) nameEl.textContent = m.name || data.name || id;
-        if (descEl) descEl.textContent = m.description || '';
-
-        if (metaEl) {
-            const badges = [];
-            if (m.version) badges.push({ label: 'version', val: m.version });
-            if (m.type)    badges.push({ label: 'type',    val: m.type });
-            if (m.id)      badges.push({ label: 'id',      val: m.id });
-            metaEl.innerHTML = badges
-                .map(b =>
-                    '<span class="meta-badge"><strong>' + escapeHtml(b.val) + '</strong>&nbsp;' +
-                    escapeHtml(b.label) + '</span>'
-                )
-                .join('');
-        }
-
-        if (permsEl && m.permissions) {
-            const perms = m.permissions;
-            const items = [];
-            if (perms.writeHearth === false) items.push({ label: 'no Hearth write', denied: true });
-            if (perms.networkAccess === false) items.push({ label: 'no network access', denied: true });
-            if (perms.writeHearth === true)   items.push({ label: 'Hearth write allowed', denied: false });
-            if (perms.networkAccess === true)  items.push({ label: 'network access allowed', denied: false });
-            permsEl.innerHTML = items
-                .map(p =>
-                    '<span class="perm-badge ' + (p.denied ? 'denied' : '') + '">' +
-                    escapeHtml(p.label) + '</span>'
-                )
-                .join('');
-        }
-
-        if (contentEl) {
-            contentEl.textContent = '';
-            contentEl.textContent = data.content || '(no readable documents in this cartridge)';
-        }
-    } catch {
-        if (contentEl) {
-            contentEl.textContent = '';
-            contentEl.textContent = 'Error loading cartridge content.';
-        }
-    }
-}
-
-/* ================================================================
-   System Room — Status Refresh
+   System Status
    ================================================================ */
 
 async function refreshSystemStatus() {
@@ -714,24 +1141,11 @@ function updateHeaderStatus() {
 }
 
 /* ================================================================
-   Utility
-   ================================================================ */
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-/* ================================================================
    Initialisation
    ================================================================ */
 
 (function init() {
     updateHeaderStatus();
     refreshSystemStatus();
+    loadHearthThreads();
 })();
