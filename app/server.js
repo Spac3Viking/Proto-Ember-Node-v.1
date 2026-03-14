@@ -79,6 +79,16 @@ const HEART_SYSTEM_PROMPT = (
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+/** Maximum number of characters returned by the source preview endpoint. */
+const PREVIEW_MAX_LENGTH = 600;
+
+/**
+ * Maximum number of pinned-source chunks prepended to retrieval results
+ * when a user attaches sources to Hearth Chat.  Kept small to avoid
+ * oversized prompts while still providing useful reference context.
+ */
+const MAX_PINNED_CHUNKS = 8;
+
 /**
  * Remove any stored embeddings belonging to the old chunks of a source,
  * preventing stale embedding accumulation across reindex cycles.
@@ -167,19 +177,34 @@ app.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, rooms?, cartridgeId? }
+ * Body: { query, rooms?, cartridgeId?, sourceIds? }
  * Response: { answer, sources, grounded }
+ *
+ * sourceIds (optional) — array of source IDs whose chunks are pinned into the
+ * retrieved context regardless of semantic relevance.  This enables the
+ * "Send to Hearth Chat" reference attachment feature.
  */
 app.post('/api/chat', chatLimiter, async (req, res) => {
     try {
-        const { query, rooms = null, cartridgeId = null } = req.body;
+        const { query, rooms = null, cartridgeId = null, sourceIds = null } = req.body;
         if (!query || typeof query !== 'string') {
             return res.status(400).json({ error: 'query is required' });
         }
 
-        // Retrieve relevant local chunks
-        const retrieved = await retrieve({ query, rooms, cartridgeId });
-        const sources   = buildSignalTrace(retrieved);
+        // Retrieve relevant local chunks via semantic / keyword search
+        let retrieved = await retrieve({ query, rooms, cartridgeId });
+
+        // Prepend chunks from any user-pinned sources (deduped by chunk id)
+        if (Array.isArray(sourceIds) && sourceIds.length > 0) {
+            const allChunks    = loadChunks();
+            const retrievedIds = new Set(retrieved.map(c => c.id));
+            const pinned       = allChunks
+                .filter(c => sourceIds.includes(c.sourceId) && !retrievedIds.has(c.id))
+                .slice(0, MAX_PINNED_CHUNKS);  // cap to avoid prompt bloat
+            retrieved = [...pinned, ...retrieved];
+        }
+
+        const sources = buildSignalTrace(retrieved);
 
         // Build prompt (grounded when local chunks were found)
         const userContent = buildGroundedPrompt({ query, retrievedChunks: retrieved });
@@ -501,6 +526,89 @@ app.post('/api/sources/:id/exclude', writeLimiter, (req, res) => {
     res.json({ success: true, sourceId: id, excluded: exclude });
 });
 
+/**
+ * GET /api/sources/:id
+ * Returns the full source manifest plus a short plaintext preview for txt/md files.
+ */
+app.get('/api/sources/:id', readLimiter, (req, res) => {
+    const manifests = loadManifests();
+    const source    = manifests[req.params.id];
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+
+    let preview = null;
+    const filePath = resolveSourcePath(source.path);
+    if (filePath && fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        if (ext === '.txt' || ext === '.md') {
+            try {
+                const content = fs.readFileSync(filePath, 'utf8');
+                preview = content.slice(0, PREVIEW_MAX_LENGTH);
+            } catch { /* skip preview on read error */ }
+        }
+    }
+
+    res.json({ source, preview });
+});
+
+/**
+ * POST /api/sources/:id/remember
+ * Promotes a Workshop or Threshold source to Hearth.
+ * Copies the file into hearth/ and updates the manifest.
+ * Re-indexes in the Hearth room context so retrieval benefits immediately.
+ */
+app.post('/api/sources/:id/remember', writeLimiter, async (req, res) => {
+    try {
+        const manifests = loadManifests();
+        const source    = manifests[req.params.id];
+        if (!source) return res.status(404).json({ error: 'Source not found' });
+
+        if (source.room === 'hearth') {
+            return res.json({ success: true, source, alreadyRemembered: true });
+        }
+
+        const oldAbsPath = resolveSourcePath(source.path);
+        const hearthDir  = path.join(DATA_DIR, 'hearth');
+        if (!fs.existsSync(hearthDir)) fs.mkdirSync(hearthDir, { recursive: true });
+
+        const baseName    = path.basename(source.file || source.path);
+        const destFile    = path.join(hearthDir, baseName);
+        const destRelPath = 'hearth/' + baseName;
+
+        // Copy file to hearth (preserve provenance in original room)
+        if (oldAbsPath && fs.existsSync(oldAbsPath)) {
+            fs.copyFileSync(oldAbsPath, destFile);
+        }
+
+        source.room         = 'hearth';
+        source.status       = 'remembered';
+        source.path         = destRelPath;
+        source.rememberedAt = new Date().toISOString();
+        upsertManifest(source.id, source);
+
+        // Re-index in Hearth room context (best-effort — don't fail if extraction fails)
+        try {
+            const { text } = await extractTextAsync(destFile);
+            if (text) {
+                const chunks = chunkText({ text, sourceRecord: source });
+                removeStaleEmbeddingsForSource(source.id);
+                upsertChunks(chunks);
+                const embeddingMap = {};
+                for (const chunk of chunks) {
+                    const vector = await generateEmbedding(chunk.text);
+                    if (vector) embeddingMap[chunk.id] = vector;
+                }
+                if (Object.keys(embeddingMap).length > 0) upsertEmbeddings(embeddingMap);
+            }
+        } catch { /* indexing is best-effort */ }
+
+        console.log('[remember] ' + req.params.id + ' promoted to Hearth');
+        res.json({ success: true, source });
+    } catch (error) {
+        console.error('Error remembering source:', error.message);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 // ── Phase 3: Workshop notes ───────────────────────────────────────────────────
 
 /**
@@ -801,6 +909,62 @@ app.put('/api/projects/:id', writeLimiter, (req, res) => {
     if (threadId      !== undefined) project.threadId      = threadId;
     project.updatedAt = new Date().toISOString();
     saveProject(project);
+    res.json({ success: true, project });
+});
+
+/**
+ * POST /api/projects/:id/sources
+ * Body: { sourceId }
+ * Attaches an indexed source to a project by recording it in linkedSources.
+ */
+app.post('/api/projects/:id/sources', writeLimiter, (req, res) => {
+    const project = loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const { sourceId } = req.body || {};
+    if (!sourceId) return res.status(400).json({ error: 'sourceId is required' });
+
+    const manifests = loadManifests();
+    const source    = manifests[sourceId];
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+
+    if (!project.linkedSources) project.linkedSources = [];
+
+    // Avoid duplicates — compare by sourceId field
+    const alreadyLinked = project.linkedSources.some(ls =>
+        (typeof ls === 'string' ? ls : ls.sourceId) === sourceId
+    );
+
+    if (!alreadyLinked) {
+        project.linkedSources.push({
+            sourceId:    source.id,
+            title:       source.title || source.file || source.id,
+            room:        source.room,
+            status:      source.status,
+            description: source.description || null,
+            addedAt:     new Date().toISOString(),
+        });
+        project.updatedAt = new Date().toISOString();
+        saveProject(project);
+    }
+
+    res.json({ success: true, project });
+});
+
+/**
+ * DELETE /api/projects/:id/sources/:sourceId
+ * Removes a linked source from a project.
+ */
+app.delete('/api/projects/:id/sources/:sourceId', writeLimiter, (req, res) => {
+    const project = loadProject(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    project.linkedSources = (project.linkedSources || []).filter(ls =>
+        (typeof ls === 'string' ? ls : ls.sourceId) !== req.params.sourceId
+    );
+    project.updatedAt = new Date().toISOString();
+    saveProject(project);
+
     res.json({ success: true, project });
 });
 

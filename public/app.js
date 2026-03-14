@@ -285,7 +285,10 @@ async function sendMessage() {
         const response = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ query: message }),
+            body:    JSON.stringify({
+                query:     message,
+                sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
+            }),
         });
 
         chatContainer.removeChild(thinking);
@@ -468,7 +471,7 @@ async function loadWorkshopNotes() {
     }
 }
 
-/** Build a source card element using Phase 4 metadata fields. */
+/** Build a source card element using Phase 4 metadata fields, with action row. */
 function buildSourceCard(s) {
     const card = document.createElement('div');
     card.className = 'source-card';
@@ -491,6 +494,63 @@ function buildSourceCard(s) {
     }
 
     card.innerHTML = html;
+
+    // Action row — only for sources with a real server-side ID
+    if (s.id) {
+        const actionRow = document.createElement('div');
+        actionRow.className = 'source-card-actions';
+
+        // Inspect button
+        const inspBtn = document.createElement('button');
+        inspBtn.className = 'secondary source-action-btn';
+        inspBtn.textContent = 'Inspect';
+        inspBtn.addEventListener('click', () => inspectSource(s.id));
+        actionRow.appendChild(inspBtn);
+
+        // Actions dropdown
+        const dropdown = document.createElement('div');
+        dropdown.className = 'source-action-dropdown';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'secondary source-action-btn source-dropdown-toggle';
+        toggleBtn.textContent = '▾ Actions';
+        dropdown.appendChild(toggleBtn);
+
+        const menu = document.createElement('div');
+        menu.className = 'source-action-menu';
+
+        const menuItems = [];
+        if (s.room !== 'hearth') {
+            menuItems.push({ label: 'Remember to Hearth', fn: () => rememberSource(s.id) });
+        }
+        menuItems.push({ label: '→ Hearth Chat',  fn: () => sendSourceToChat(s) });
+        menuItems.push({ label: '→ Notepad',       fn: () => sendSourceToNotepad(s) });
+        menuItems.push({ label: '→ Project',       fn: () => attachSourceToProject(s.id, s.title || s.file) });
+
+        menuItems.forEach(item => {
+            const btn = document.createElement('button');
+            btn.textContent = item.label;
+            btn.addEventListener('click', () => {
+                menu.classList.remove('open');
+                item.fn();
+            });
+            menu.appendChild(btn);
+        });
+
+        dropdown.appendChild(menu);
+
+        toggleBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            const isOpen = menu.classList.contains('open');
+            // Close all other open menus
+            document.querySelectorAll('.source-action-menu.open').forEach(m => m.classList.remove('open'));
+            if (!isOpen) menu.classList.add('open');
+        });
+
+        actionRow.appendChild(dropdown);
+        card.appendChild(actionRow);
+    }
+
     return card;
 }
 
@@ -788,6 +848,9 @@ function openProject(project) {
     if (editorEl)   editorEl.style.display = 'flex';
     if (titleInput) titleInput.value = project.title || '';
     if (notesInput) notesInput.value = project.notes || '';
+
+    activeProjectId = project.id;
+    loadProjectSources(project.id);
 }
 
 /* ================================================================
@@ -1155,6 +1218,329 @@ function updateHeaderStatus() {
 }
 
 /* ================================================================
+   Phase 6 — Source Actions: Remember, Send To, Inspect, Attach
+   ================================================================ */
+
+/** Active chat reference context — array of { sourceId, title } objects. */
+let _chatRefs = [];
+
+/** Update the Hearth Chat references bar to reflect current _chatRefs. */
+function updateChatRefsBar() {
+    const bar   = document.getElementById('chat-refs-bar');
+    const chips = document.getElementById('chat-refs-chips');
+    if (!bar || !chips) return;
+
+    if (_chatRefs.length === 0) {
+        bar.style.display = 'none';
+        return;
+    }
+
+    bar.style.display = 'flex';
+    chips.innerHTML   = '';
+    _chatRefs.forEach(ref => {
+        const chip = document.createElement('span');
+        chip.className = 'chat-ref-chip';
+        chip.innerHTML =
+            '<span class="chat-ref-title">' + escapeHtml(ref.title) + '</span>' +
+            '<button class="chat-ref-remove" title="Remove reference">✕</button>';
+        // Remove by sourceId to avoid stale-index issues after prior removals
+        chip.querySelector('.chat-ref-remove').addEventListener('click', () => {
+            _chatRefs = _chatRefs.filter(r => r.sourceId !== ref.sourceId);
+            updateChatRefsBar();
+        });
+        chips.appendChild(chip);
+    });
+}
+
+/** Close the source inspector modal. */
+function closeInspector() {
+    const overlay = document.getElementById('source-inspector-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * Open the source inspector modal for the given sourceId.
+ * Fetches full metadata + preview from the backend.
+ */
+async function inspectSource(sourceId) {
+    let source  = null;
+    let preview = null;
+
+    try {
+        const res  = await fetch('/api/sources/' + encodeURIComponent(sourceId));
+        const data = await res.json();
+        source  = data.source;
+        preview = data.preview;
+    } catch {
+        showFlashMessage('Could not load source details.');
+        return;
+    }
+
+    if (!source) { showFlashMessage('Source not found.'); return; }
+
+    const titleEl  = document.getElementById('insp-title');
+    const statusEl = document.getElementById('insp-status');
+    const roomEl   = document.getElementById('insp-room');
+    const shelfEl  = document.getElementById('insp-shelf');
+    const fileEl   = document.getElementById('insp-file');
+    const descEl   = document.getElementById('insp-desc');
+    const pathEl   = document.getElementById('insp-path');
+    const idEl     = document.getElementById('insp-id');
+    const prevEl   = document.getElementById('insp-preview');
+    const actEl    = document.getElementById('insp-actions');
+
+    if (titleEl)  titleEl.textContent  = source.title || source.file || '(untitled)';
+
+    if (statusEl) {
+        const st = source.status || (source.room === 'hearth' ? 'remembered' : source.room === 'workshop' ? 'indexed' : 'waiting');
+        statusEl.innerHTML = '<span class="status-badge ' + escapeHtml(st) + '">' +
+            escapeHtml(st.charAt(0).toUpperCase() + st.slice(1)) + '</span>';
+    }
+
+    if (roomEl)  roomEl.textContent  = source.room        || '—';
+    if (shelfEl) shelfEl.textContent = source.shelf       || '—';
+    if (fileEl)  fileEl.textContent  = source.file        || '—';
+    if (descEl)  descEl.textContent  = source.description || '—';
+    if (pathEl)  pathEl.textContent  = source.path        || '—';
+    if (idEl)    idEl.textContent    = source.id          || '—';
+    if (prevEl)  prevEl.textContent  = preview            || 'No preview available.';
+
+    if (actEl) {
+        actEl.innerHTML = '';
+        const actions = [];
+        if (source.room !== 'hearth') {
+            actions.push({ label: 'Remember to Hearth', fn: () => { closeInspector(); rememberSource(source.id); } });
+        }
+        actions.push({ label: '→ Hearth Chat',  fn: () => { closeInspector(); sendSourceToChat(source); } });
+        actions.push({ label: '→ Notepad',       fn: () => { closeInspector(); sendSourceToNotepad(source); } });
+        actions.push({ label: '→ Project',       fn: () => { closeInspector(); attachSourceToProject(source.id, source.title || source.file); } });
+
+        actions.forEach(a => {
+            const btn = document.createElement('button');
+            btn.className = 'secondary insp-action-btn';
+            btn.textContent = a.label;
+            btn.addEventListener('click', a.fn);
+            actEl.appendChild(btn);
+        });
+    }
+
+    const overlay = document.getElementById('source-inspector-overlay');
+    if (overlay) overlay.style.display = 'flex';
+}
+
+/**
+ * Promote a source to Hearth (Remember action).
+ * Updates lifecycle to Remembered and moves the source into Hearth retrieval.
+ */
+async function rememberSource(sourceId) {
+    try {
+        const res  = await fetch('/api/sources/' + encodeURIComponent(sourceId) + '/remember', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            if (data.alreadyRemembered) {
+                showFlashMessage('Already in Hearth.');
+            } else {
+                loadWorkshopSources();
+                loadHearthArchive();
+                refreshSystemStatus();
+                showFlashMessage('Remembered → Hearth ✓');
+            }
+        } else {
+            showFlashMessage('Remember failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+/**
+ * Attach a source as an active reference in Hearth Chat.
+ * Switches to Hearth > Chat and adds the source to the reference bar.
+ */
+function sendSourceToChat(source) {
+    // Switch to Hearth > Chat
+    const hearthTab  = document.querySelector('.room-tab[data-room="hearth"]');
+    if (hearthTab) hearthTab.click();
+    const chatSubTab = document.querySelector('.sub-tab[data-subtab="hearth-chat"]');
+    if (chatSubTab) chatSubTab.click();
+
+    const ref = { sourceId: source.id, title: source.title || source.file || source.id };
+    if (!_chatRefs.some(r => r.sourceId === ref.sourceId)) {
+        _chatRefs.push(ref);
+        updateChatRefsBar();
+    }
+    showFlashMessage('Source attached to Hearth Chat');
+}
+
+/**
+ * Insert a labeled reference block for the source into the Workshop Notepad.
+ * Appends to existing content — does not overwrite.
+ */
+function sendSourceToNotepad(source) {
+    // Switch to Workshop > Notepad
+    const workshopTab  = document.querySelector('.room-tab[data-room="workshop"]');
+    if (workshopTab) workshopTab.click();
+    const notepadTab   = document.querySelector('.sub-tab[data-subtab="ws-notepad"]');
+    if (notepadTab) notepadTab.click();
+
+    const draftArea = document.getElementById('workshop-draft');
+    if (!draftArea) return;
+
+    const refBlock =
+        '\n\n---\n' +
+        '**Source Reference**\n' +
+        'Title: ' + (source.title || source.file || source.id) + '\n' +
+        'ID: ' + source.id + '\n' +
+        'Room: ' + (source.room || '—') + '\n' +
+        (source.description ? 'Description: ' + source.description + '\n' : '') +
+        '---\n';
+
+    draftArea.value = (draftArea.value || '') + refBlock;
+    draftArea.scrollTop = draftArea.scrollHeight;
+    draftArea.focus();
+    showFlashMessage('Reference inserted into Notepad');
+}
+
+/**
+ * Attach a source to a Workshop project.
+ * Presents a project picker, then calls POST /api/projects/:id/sources.
+ */
+async function attachSourceToProject(sourceId, sourceTitle) {
+    let projects = [];
+    try {
+        const res  = await fetch('/api/projects');
+        const data = await res.json();
+        projects   = data.projects || [];
+    } catch {
+        showFlashMessage('Could not load projects.');
+        return;
+    }
+
+    if (projects.length === 0) {
+        showFlashMessage('No projects — create one in Workshop → Projects first.');
+        return;
+    }
+
+    const options = projects.map((p, i) => (i + 1) + '. ' + p.title).join('\n');
+    const choice  = prompt(
+        'Attach "' + (sourceTitle || sourceId) + '" to which project?\n\n' +
+        options + '\n\nEnter number:'
+    );
+    if (!choice) return;
+
+    const idx = parseInt(choice, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= projects.length) {
+        showFlashMessage('Invalid selection.');
+        return;
+    }
+
+    const project = projects[idx];
+    try {
+        const res  = await fetch('/api/projects/' + encodeURIComponent(project.id) + '/sources', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ sourceId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showFlashMessage('Attached to "' + project.title + '" ✓');
+            // Refresh linked sources if the project is currently open
+            if (activeProjectId === project.id) {
+                loadProjectSources(project.id);
+            }
+        } else {
+            showFlashMessage('Attach failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+/**
+ * Render the linked sources section in the active project detail panel.
+ */
+async function loadProjectSources(projectId) {
+    const listEl  = document.getElementById('project-sources-list');
+    const emptyEl = document.getElementById('project-sources-empty');
+    if (!listEl) return;
+
+    // Remove previous source rows (keep the empty placeholder)
+    listEl.querySelectorAll('.project-source-row').forEach(el => el.remove());
+    if (emptyEl) emptyEl.style.display = '';
+
+    try {
+        const res  = await fetch('/api/projects/' + encodeURIComponent(projectId));
+        const data = await res.json();
+        if (!data.project) return;
+
+        const linked = data.project.linkedSources || [];
+        if (linked.length === 0) return;
+
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        linked.forEach(ls => {
+            const sid    = typeof ls === 'string' ? ls : ls.sourceId;
+            const title  = typeof ls === 'string' ? ls : (ls.title  || ls.sourceId || '—');
+            const room   = typeof ls === 'string' ? ''  : (ls.room   || '');
+            const status = typeof ls === 'string' ? ''  : (ls.status || '');
+            const desc   = typeof ls === 'string' ? ''  : (ls.description || '');
+
+            const row = document.createElement('div');
+            row.className = 'project-source-row';
+
+            let inner = '<span class="project-source-title">' + escapeHtml(title) + '</span>';
+            if (room)   inner += '<span class="trace-badge"><span class="trace-key">room</span> ' + escapeHtml(room) + '</span>';
+            if (status) inner += '<span class="status-badge ' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>';
+            if (desc)   inner += '<span class="source-card-description" style="margin-left:0.3rem;">' + escapeHtml(desc) + '</span>';
+            row.innerHTML = inner;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'secondary source-action-btn';
+            removeBtn.title = 'Remove from project';
+            removeBtn.textContent = '✕';
+            removeBtn.addEventListener('click', async () => {
+                try {
+                    await fetch('/api/projects/' + encodeURIComponent(projectId) + '/sources/' + encodeURIComponent(sid), {
+                        method: 'DELETE',
+                    });
+                    loadProjectSources(projectId);
+                } catch { /* ignore */ }
+            });
+
+            row.appendChild(removeBtn);
+            listEl.insertBefore(row, emptyEl);
+        });
+    } catch {
+        if (listEl) {
+            const errEl = document.createElement('span');
+            errEl.className = 'message-system';
+            errEl.textContent = 'Could not load sources.';
+            listEl.appendChild(errEl);
+        }
+    }
+}
+
+/** Show a brief flash message at the bottom of the viewport. */
+let _flashTimeout = null;
+function showFlashMessage(msg) {
+    let flash = document.getElementById('flash-message');
+    if (!flash) {
+        flash = document.createElement('div');
+        flash.id = 'flash-message';
+        flash.className = 'flash-message';
+        document.body.appendChild(flash);
+    }
+    flash.textContent = msg;
+    flash.classList.add('flash-visible');
+    clearTimeout(_flashTimeout);
+    _flashTimeout = setTimeout(() => flash.classList.remove('flash-visible'), 2500);
+}
+
+/* ================================================================
    Initialisation
    ================================================================ */
 
@@ -1162,4 +1548,28 @@ function updateHeaderStatus() {
     updateHeaderStatus();
     refreshSystemStatus();
     loadHearthThreads();
+
+    // Close all source action dropdown menus when clicking outside
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.source-action-menu.open').forEach(m => m.classList.remove('open'));
+    });
+
+    // Inspector close button and backdrop click
+    const inspClose   = document.getElementById('insp-close');
+    const inspOverlay = document.getElementById('source-inspector-overlay');
+    if (inspClose)   inspClose.addEventListener('click', closeInspector);
+    if (inspOverlay) {
+        inspOverlay.addEventListener('click', e => {
+            if (e.target === inspOverlay) closeInspector();
+        });
+    }
+
+    // Chat refs clear button
+    const clearRefsBtn = document.getElementById('clear-chat-refs');
+    if (clearRefsBtn) {
+        clearRefsBtn.addEventListener('click', () => {
+            _chatRefs = [];
+            updateChatRefsBar();
+        });
+    }
 })();

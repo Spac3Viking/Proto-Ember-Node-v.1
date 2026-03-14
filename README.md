@@ -83,7 +83,70 @@ Bundled cartridges come from the new app install (they are not user data).
 
 ---
 
-## Phase 3 — Local Knowledge Engine
+## Phase 6 — Mobility Layer (Operational Completion)
+
+Phase 6 completes the practical mobility layer, making Ember Node a real working local
+workspace rather than a static retrieval viewer.
+
+### What changed
+
+**Indexed sources are now actionable.**  Every source card in Workshop → Index and
+Hearth → Archive now exposes an action row with:
+
+- **Inspect** — opens the Source Inspector panel
+- **▾ Actions** dropdown:
+  - *Remember to Hearth* — promotes a Workshop/Threshold source to Hearth
+  - *→ Hearth Chat* — attaches the source as active reference context for the chat
+  - *→ Notepad* — inserts a labeled reference block into the Workshop Notepad
+  - *→ Project* — attaches the source to a Workshop project
+
+**Explicit Remember to Hearth is available.**  Users can explicitly promote any indexed
+source to Hearth with a single action.  The source file is copied to `hearth/`, the
+manifest is updated to `status: remembered`, and the source is immediately re-indexed
+in the Hearth room context.  No automatic Remember behavior; this remains a conscious
+user action.
+
+**Sources can be inspected.**  The Source Inspector modal shows full metadata:
+- Title, lifecycle status, room, shelf, description
+- Source filename in monospace
+- Collapsible *Path & Storage* section with storage-root-relative path and Source ID
+- Plaintext preview excerpt (txt/md files)
+- Quick action buttons: Remember, Send to Chat/Notepad/Project
+
+**Sources can be sent to Hearth Chat.**  Attaching a source to Hearth Chat adds it to
+an active-references bar above the input.  These source IDs are passed to `/api/chat`
+as `sourceIds`, which pins their chunks into the grounded retrieval context even if
+not semantically top-ranked.
+
+**Sources can be sent to Notepad.**  Inserts a labeled reference block (title, ID, room)
+into the Workshop Notepad textarea.  Appends — does not overwrite existing content.
+
+**Projects support linked sources.**  Attaching a source to a project records it in
+`project.linkedSources` (title, room, status, description).  The project detail panel
+now shows the linked sources list with room and status badges and a remove button.
+
+**Archive items are usable references.**  Hearth → Archive items are rendered with the
+same action row as Workshop index items (minus Remember, since they are already Hearth
+sources).
+
+**Path visibility exists.**  The Source Inspector's collapsible *Path & Storage* section
+exposes the storage-root-relative path and Source ID without cluttering the card itself.
+
+### New API endpoints (Phase 6)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`    | `/api/sources/:id`                     | Get full source manifest + plaintext preview |
+| `POST`   | `/api/sources/:id/remember`            | Promote source to Hearth (copies file, re-indexes) |
+| `POST`   | `/api/projects/:id/sources`            | Attach a source to a project |
+| `DELETE` | `/api/projects/:id/sources/:sourceId`  | Remove a linked source from a project |
+
+`POST /api/chat` now accepts an optional `sourceIds` array.  Chunks from pinned sources
+are prepended to the grounded retrieval context regardless of semantic score.
+
+---
+
+
 
 Phase 3 implements the first true memory-and-retrieval loop:
 
@@ -248,12 +311,14 @@ Use `GET /api/storage-info` to confirm which data root is active and see migrati
 ### Phase 3 (new)
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/chat` | Grounded chat — returns `{ answer, sources, grounded }` |
+| `POST` | `/api/chat` | Grounded chat — returns `{ answer, sources, grounded }`; accepts optional `sourceIds` to pin sources |
 | `POST` | `/api/ingest` | Ingest a file into a room |
 | `POST` | `/api/index/cartridge/:id` | Index all docs in a bundled cartridge |
 | `POST` | `/api/index/file` | Index / re-index a file; pass `targetRoom` to transfer rooms |
 | `GET`  | `/api/sources` | List indexed source manifests |
+| `GET`  | `/api/sources/:id` | Get single source manifest + preview (Phase 6) |
 | `POST` | `/api/sources/:id/exclude` | Toggle source exclusion from retrieval |
+| `POST` | `/api/sources/:id/remember` | Promote source to Hearth — copies file and re-indexes (Phase 6) |
 | `POST` | `/api/notes` | Save a Workshop note (deterministic filename; creates manifest entry) |
 | `GET`  | `/api/notes` | List Workshop notes |
 | `GET`  | `/api/threshold/list` | List files in Threshold intake |
@@ -271,6 +336,8 @@ Use `GET /api/storage-info` to confirm which data root is active and see migrati
 | `POST` | `/api/projects` | Create a project |
 | `GET`  | `/api/projects/:id` | Get a project |
 | `PUT`  | `/api/projects/:id` | Update a project |
+| `POST` | `/api/projects/:id/sources` | Attach a source to a project (Phase 6) |
+| `DELETE` | `/api/projects/:id/sources/:sourceId` | Remove a linked source from a project (Phase 6) |
 | `GET`  | `/api/user-cartridges` | List user-owned cartridges |
 | `POST` | `/api/user-cartridges` | Create a user cartridge |
 
@@ -313,7 +380,7 @@ Trace indicates: *base model — no local sources*.
 | Phase 3.2 ✓ | Deterministic source IDs, embeddings endpoint fallback, room-transfer file moves, Workshop notes indexing, tiered rate limiting |
 | Phase 4 ✓ | Threads, projects, user cartridges, Threshold intake, PDF/DOCX support |
 | Phase 5 ✓ | Storage stabilization: external data root, legacy migration, storage-root-native paths, cartridge ownership clarity, portability readiness |
-| Phase 6   | Offline cartridge engine, portable export/import, desktop shell |
+| Phase 6 ✓ | Mobility layer: actionable source cards, source inspector, Remember to Hearth, Send To (Chat/Notepad/Project), project linked sources, path visibility, cross-room reference flow |
 
 ---
 
