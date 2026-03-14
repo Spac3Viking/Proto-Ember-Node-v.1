@@ -2,7 +2,7 @@
  * Ember Node v.ᚠ — Phase 3 Index Store
  *
  * JSON-based local index for chunks, embeddings, manifests, and exclusions.
- * All data persists under data/indexes/.
+ * All data persists under <data-root>/indexes/ (see app/storageConfig.js).
  *
  * Files:
  *   chunks.json      — array of chunk records
@@ -16,7 +16,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const INDEXES_DIR      = path.join(__dirname, '..', 'data', 'indexes');
+const { INDEXES_DIR }  = require('./storageConfig');
 const CHUNKS_FILE      = path.join(INDEXES_DIR, 'chunks.json');
 const EMBEDDINGS_FILE  = path.join(INDEXES_DIR, 'embeddings.json');
 const MANIFESTS_FILE   = path.join(INDEXES_DIR, 'manifests.json');

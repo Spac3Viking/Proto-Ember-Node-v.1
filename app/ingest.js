@@ -4,6 +4,8 @@
  * Lightweight local ingestion pipeline.
  * Supports .txt, .md, .pdf, and .docx files.
  * Builds source metadata records for chunking and indexing.
+ *
+ * Data storage is resolved via storageConfig — see app/storageConfig.js.
  */
 
 'use strict';
@@ -11,13 +13,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-
-const ROOM_DIRS = {
-    hearth:    path.join(DATA_DIR, 'hearth'),
-    workshop:  path.join(DATA_DIR, 'workshop'),
-    threshold: path.join(DATA_DIR, 'threshold'),
-};
+const { DATA_ROOT: DATA_DIR, ROOM_DIRS } = require('./storageConfig');
 
 const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
 const TEXT_EXTENSIONS       = new Set(['.txt', '.md']);
