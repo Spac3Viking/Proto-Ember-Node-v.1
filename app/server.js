@@ -58,9 +58,7 @@ const DATA_DIR = DATA_ROOT;
 function resolveSourcePath(storedPath) {
     if (!storedPath) return null;
     // Strip legacy 'data/' prefix — after migration, files live directly under DATA_ROOT
-    const normalized = (storedPath.startsWith('data/') || storedPath.startsWith('data\\'))
-        ? storedPath.slice(5)
-        : storedPath;
+    const normalized = storedPath.replace(/^data[\\/]/, '');
     return path.join(DATA_DIR, normalized);
 }
 
@@ -855,7 +853,7 @@ app.get('/cartridges/:name', (req, res) => {
 
 // ── System status ─────────────────────────────────────────────────────────────
 
-app.get('/api/status', (req, res) => {
+app.get('/api/status', readLimiter, (req, res) => {
     const embStatus    = getEmbeddingStatus();
     const chunks       = loadChunks();
     const embeddings   = loadEmbeddings();

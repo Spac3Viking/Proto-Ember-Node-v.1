@@ -72,7 +72,8 @@ const USER_CARTRIDGES_DIR = path.join(DATA_ROOT, 'cartridges');
 const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
 const EXPORTS_DIR         = path.join(DATA_ROOT, 'exports');
 
-// ── Legacy data directory (in-project, older layout) ─────────────────────────
+// Placeholder files that should not be treated as real user content
+const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store']);
 
 /**
  * Path to the in-project data/ folder used by older Ember Node versions.
@@ -125,7 +126,7 @@ function copyDirSafe(src, dest) {
     }
     const entries = fs.readdirSync(src, { withFileTypes: true });
     for (const entry of entries) {
-        if (entry.name === '.gitkeep' || entry.name === '.DS_Store') continue;
+        if (IGNORE_FILES.has(entry.name)) continue;
         const srcPath  = path.join(src,  entry.name);
         const destPath = path.join(dest, entry.name);
         if (entry.isDirectory()) {
@@ -148,7 +149,7 @@ function dirHasContent(dir) {
     if (!fs.existsSync(dir)) return false;
     let entries;
     try {
-        entries = fs.readdirSync(dir).filter(f => f !== '.gitkeep' && f !== '.DS_Store');
+        entries = fs.readdirSync(dir).filter(f => !IGNORE_FILES.has(f));
     } catch {
         return false;
     }

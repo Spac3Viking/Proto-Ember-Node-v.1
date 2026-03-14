@@ -148,7 +148,8 @@ describe('storageConfig — LEGACY_DATA_DIR', () => {
         jest.resetModules();
         delete process.env.EMBER_DATA_ROOT;
         const storageConfig = require('../app/storageConfig');
-        expect(storageConfig.LEGACY_DATA_DIR).toMatch(/[/\\]data$/);
+        const sep = require('path').sep;
+        expect(storageConfig.LEGACY_DATA_DIR.endsWith(sep + 'data')).toBe(true);
     });
 });
 
