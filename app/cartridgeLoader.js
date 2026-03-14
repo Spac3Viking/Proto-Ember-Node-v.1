@@ -1,7 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 
-const CARTRIDGES_DIR = path.join(__dirname, '..', 'cartridges');
+/**
+ * Bundled cartridges — shipped with the app code.
+ *
+ * These are starter reference packs, example modules, and built-in seeds.
+ * They live inside the app folder and may change when the app is updated.
+ * They are NOT user-owned and should not be treated as part of the user archive.
+ *
+ * Contrast with user cartridges, which live under USER_CARTRIDGES_DIR in the
+ * external data root and travel with the archive across machines.
+ */
+const BUNDLED_CARTRIDGES_DIR = path.join(__dirname, '..', 'cartridges');
+
+// Backward-compatible alias kept for existing call sites
+const CARTRIDGES_DIR = BUNDLED_CARTRIDGES_DIR;
 
 /**
  * Attempts to read and parse manifest.json from a cartridge directory.
@@ -21,25 +34,31 @@ function loadManifest(cartridgeDir) {
 }
 
 /**
- * Returns a list of cartridge summary objects found in the cartridges
+ * Returns a list of cartridge summary objects found in the bundled cartridges
  * directory.  Each entry includes the directory name and, when available,
  * the fields from manifest.json.  Returns an empty array when the
  * directory does not exist or is empty.
  *
- * @returns {Array<{ id: string, name: string, description: string, version: string, type: string }>}
+ * All entries carry `ownership: 'bundled'` to distinguish them from
+ * user-created cartridges that live in the external data root.
+ *
+ * @returns {Array<{ id: string, name: string, description: string, version: string, type: string, ownership: string }>}
  */
 function listCartridges() {
-    if (!fs.existsSync(CARTRIDGES_DIR)) return [];
-    return fs.readdirSync(CARTRIDGES_DIR, { withFileTypes: true })
+    if (!fs.existsSync(BUNDLED_CARTRIDGES_DIR)) return [];
+    return fs.readdirSync(BUNDLED_CARTRIDGES_DIR, { withFileTypes: true })
         .filter(entry => entry.isDirectory())
         .map(entry => {
-            const manifest = loadManifest(path.join(CARTRIDGES_DIR, entry.name));
+            const manifest = loadManifest(path.join(BUNDLED_CARTRIDGES_DIR, entry.name));
             return {
-                id: entry.name,
-                name: (manifest && manifest.name) || entry.name,
+                id:          entry.name,
+                name:        (manifest && manifest.name)        || entry.name,
                 description: (manifest && manifest.description) || '',
-                version: (manifest && manifest.version) || '',
-                type: (manifest && manifest.type) || '',
+                version:     (manifest && manifest.version)     || '',
+                type:        (manifest && manifest.type)        || '',
+                // Explicit ownership tag — these cartridges are bundled with the app,
+                // not created or owned by the user.
+                ownership:   'bundled',
             };
         });
 }
@@ -55,7 +74,7 @@ function listCartridges() {
  * @returns {{ name: string, manifest: object|null, content: string } | null}
  */
 function loadCartridge(name) {
-    const cartridgeDir = path.join(CARTRIDGES_DIR, name);
+    const cartridgeDir = path.join(BUNDLED_CARTRIDGES_DIR, name);
     if (!fs.existsSync(cartridgeDir)) return null;
 
     const manifest = loadManifest(cartridgeDir);
@@ -85,4 +104,4 @@ function loadCartridge(name) {
     return { name, manifest, content };
 }
 
-module.exports = { listCartridges, loadCartridge, CARTRIDGES_DIR };
+module.exports = { listCartridges, loadCartridge, BUNDLED_CARTRIDGES_DIR, CARTRIDGES_DIR };

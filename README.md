@@ -11,6 +11,78 @@ answers from remembered local knowledge, not just the base model.
 
 ---
 
+## Architecture: Shell over a User-Owned Archive
+
+Ember Node is designed as a **shell over a user-owned archive**, not an app folder
+that owns the data.
+
+This means:
+
+- **App code** and **user data** live in entirely separate locations.
+- The user archive (rooms, threads, projects, indexes, user cartridges) lives in an
+  external **data root** that belongs entirely to the user.
+- Updating or reinstalling Ember Node never touches the user's data root.
+- Moving an archive to a new machine is a folder copy — no special export needed.
+
+---
+
+## Phase 5 — Storage Stabilization
+
+Phase 5 hardens the storage architecture with four structural improvements:
+
+### 1. Legacy Migration
+
+Older Ember Node versions stored data inside the app folder (`data/`).
+
+On startup, Ember Node now detects that legacy layout and safely copies the contents
+into the external data root.  Migration is:
+- **copy-based** — originals are not deleted
+- **non-destructive** — existing files in the data root are not overwritten
+- **idempotent** — safe to run repeatedly
+- **skipped automatically** if the data root already has content
+
+Migration status is visible in `GET /api/storage-info` under the `migration` key.
+
+### 2. Storage-Root-Native Paths
+
+Source metadata paths are now stored **relative to the data root**, not the app folder.
+
+Old format (removed):   `data/workshop/file.md`
+New format:             `workshop/file.md`
+
+All path reads and writes go through the data root.  No `__dirname`-based traversal
+in stored records.  Legacy `data/...` paths in existing manifests are handled
+transparently via a normalisation step.
+
+### 3. Cartridge Ownership Clarity
+
+Cartridges are now explicitly classified:
+
+| Class | Location | Ownership |
+|-------|----------|-----------|
+| **Bundled** | `cartridges/` inside the app folder | App-owned. May change on update. |
+| **User** | `<data-root>/cartridges/` | User-owned. Travels with the archive. |
+
+- `GET /cartridges` returns bundled cartridges, each with `ownership: "bundled"`.
+- `GET /api/user-cartridges` / `POST /api/user-cartridges` manage user-owned cartridges.
+- `GET /api/status` and `GET /api/storage-info` report a cartridge breakdown
+  (`bundled` count and `user` count).
+
+### 4. Machine-to-Machine Portability
+
+To move an Ember Node archive to a new machine:
+
+1. Copy the data root directory (`~/.ember-node` or wherever `EMBER_DATA_ROOT` points)
+   to the new machine.
+2. Install Ember Node there.
+3. Set `EMBER_DATA_ROOT` to the copied directory path.
+4. Start the server.
+
+Rooms, threads, projects, indexes, and user cartridges resume intact.
+Bundled cartridges come from the new app install (they are not user data).
+
+---
+
 ## Phase 3 — Local Knowledge Engine
 
 Phase 3 implements the first true memory-and-retrieval loop:
@@ -78,13 +150,19 @@ Open [http://localhost:3477](http://localhost:3477) in your browser.
 - remembered works fuel future creation
 - retrieval must remain transparent — Signal Trace shows all sources
 - the node is a forge, not a filing cabinet
+- the app is a shell; the archive belongs to the user
 
 ---
 
 ## Cartridge System
 
-Cartridges are modular knowledge packs stored in `./cartridges/`.
-Each may contain top-level `.md`/`.txt` files and a `docs/` subdirectory.
+Cartridges are modular knowledge packs.
+
+### Bundled cartridges
+
+Shipped with the app code in `./cartridges/`.  These are starter reference packs and
+built-in seeds.  They may be updated or replaced when the app is updated.  They live
+inside the app folder and are **not** part of the user archive.
 
 ```
 cartridges/
@@ -100,19 +178,16 @@ cartridges/
     docs/
       core-notes.md
   survival/
-    manifest.json
-    README.md
-    docs/
-      field-notes.md
   journals/
-    manifest.json
-    README.md
-    docs/
-      entry-guide.md
 ```
 
-Cartridges can be indexed from the Workshop room. Once indexed, their content is
-retrievable by the Heart during Hearth chat.
+### User cartridges
+
+Created, edited, or imported by the user.  Stored in `<data-root>/cartridges/` as JSON
+files.  These travel with the archive and survive app updates.
+
+Use `POST /api/user-cartridges` to create one.
+Use `GET /api/user-cartridges` to list them.
 
 ---
 
@@ -157,7 +232,7 @@ On first run, Ember Node creates the full directory tree automatically.
 ```
 
 The data root is entirely user-owned. Updating or reinstalling Ember Node never touches it.
-Use `GET /api/storage-info` to confirm which data root is active.
+Use `GET /api/storage-info` to confirm which data root is active and see migration status.
 
 ---
 
@@ -167,23 +242,37 @@ Use `GET /api/storage-info` to confirm which data root is active.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/chat` | Forward message to Ollama (backward-compatible) |
-| `GET`  | `/cartridges` | List all installed cartridges |
-| `GET`  | `/cartridges/:name` | Inspect a cartridge's manifest and content |
+| `GET`  | `/cartridges` | List all bundled cartridges |
+| `GET`  | `/cartridges/:name` | Inspect a bundled cartridge's manifest and content |
 
 ### Phase 3 (new)
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/chat` | Grounded chat — returns `{ answer, sources, grounded }` |
 | `POST` | `/api/ingest` | Ingest a file into a room |
-| `POST` | `/api/index/cartridge/:id` | Index all docs in a cartridge |
+| `POST` | `/api/index/cartridge/:id` | Index all docs in a bundled cartridge |
 | `POST` | `/api/index/file` | Index / re-index a file; pass `targetRoom` to transfer rooms |
 | `GET`  | `/api/sources` | List indexed source manifests |
 | `POST` | `/api/sources/:id/exclude` | Toggle source exclusion from retrieval |
 | `POST` | `/api/notes` | Save a Workshop note (deterministic filename; creates manifest entry) |
 | `GET`  | `/api/notes` | List Workshop notes |
 | `GET`  | `/api/threshold/list` | List files in Threshold intake |
-| `GET`  | `/api/status` | System status (chunks, sources, embeddings health, retrieval mode) |
-| `GET`  | `/api/storage-info` | Active data root path and directory layout |
+| `GET`  | `/api/status` | System status (chunks, sources, embeddings, storage root, cartridge breakdown) |
+| `GET`  | `/api/storage-info` | Active data root, directory layout, migration state, cartridge counts |
+
+### Phase 4 (new)
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/api/threads` | List chat threads |
+| `POST` | `/api/threads` | Create a new chat thread |
+| `GET`  | `/api/threads/:id` | Get thread with messages |
+| `POST` | `/api/threads/:id/messages` | Add message to thread |
+| `GET`  | `/api/projects` | List Workshop projects |
+| `POST` | `/api/projects` | Create a project |
+| `GET`  | `/api/projects/:id` | Get a project |
+| `PUT`  | `/api/projects/:id` | Update a project |
+| `GET`  | `/api/user-cartridges` | List user-owned cartridges |
+| `POST` | `/api/user-cartridges` | Create a user cartridge |
 
 ---
 
@@ -222,8 +311,8 @@ Trace indicates: *base model — no local sources*.
 | Phase 2 ✓ | Green Fire UI shell + Cartridge Shelf + room navigation |
 | Phase 3 ✓ | Document ingestion, chunking, embeddings, retrieval, signal trace |
 | Phase 3.2 ✓ | Deterministic source IDs, embeddings endpoint fallback, room-transfer file moves, Workshop notes indexing, tiered rate limiting |
-| Phase 4   | Remember / Archive mechanics, curated Hearth writes |
-| Phase 5 ✓ | Local storage root + data separation (`EMBER_DATA_ROOT`, `~/.ember-node` default, `ensureDataRoot`, `/api/storage-info`) |
+| Phase 4 ✓ | Threads, projects, user cartridges, Threshold intake, PDF/DOCX support |
+| Phase 5 ✓ | Storage stabilization: external data root, legacy migration, storage-root-native paths, cartridge ownership clarity, portability readiness |
 | Phase 6   | Offline cartridge engine, portable export/import, desktop shell |
 
 ---

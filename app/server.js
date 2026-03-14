@@ -1,21 +1,15 @@
 /**
- * Ember Node v.ᚠ — Phase 4 server
+ * Ember Node v.ᚠ — Phase 5 server
  *
- * Extends Phase 3 with:
- *   POST /api/ingest         — file ingestion with metadata (title, description, shelf)
- *                              supports .txt, .md, .pdf, .docx (binary via base64)
- *   GET  /api/threads        — list chat threads
- *   POST /api/threads        — create a new chat thread
- *   GET  /api/threads/:id    — get thread with messages
- *   POST /api/threads/:id/messages — add message to thread
- *   GET  /api/projects       — list Workshop projects
- *   POST /api/projects       — create a project
- *   GET  /api/projects/:id   — get a project
- *   PUT  /api/projects/:id   — update a project
+ * Extends Phase 4 with:
+ *   Legacy migration     — copies in-project data/ into the external data root
+ *   Storage-root paths   — all source paths are stored relative to DATA_ROOT
+ *   Cartridge ownership  — bundled vs user cartridges clearly distinguished
+ *   Portability          — data root reported in status; no app-relative path assumptions
  *   GET  /api/user-cartridges      — list user-created cartridges
  *   POST /api/user-cartridges      — create a user cartridge
- *   GET  /api/storage-info         — current data root and subdirectory layout
- * Plus all Phase 3 endpoints.
+ *   GET  /api/storage-info         — current data root, migration state, and subdirectory layout
+ * Plus all Phase 3 / Phase 4 endpoints.
  */
 
 'use strict';
@@ -31,9 +25,9 @@ const {
     DATA_ROOT, ROOM_DIRS,
     INDEXES_DIR, PROJECTS_DIR, THREADS_DIR,
     USER_CARTRIDGES_DIR, SYSTEM_DIR, EXPORTS_DIR,
-    ensureDataRoot,
+    ensureDataRoot, migrateLegacyData,
 }                                            = require('./storageConfig');
-const { listCartridges, loadCartridge }      = require('./cartridgeLoader');
+const { listCartridges, loadCartridge, BUNDLED_CARTRIDGES_DIR } = require('./cartridgeLoader');
 const { ingestFile, ingestCartridge, extractText, extractTextAsync } = require('./ingest');
 const { chunkText }                          = require('./chunker');
 const { generateEmbedding, getEmbeddingStatus }              = require('./embeddings');
@@ -47,6 +41,28 @@ const { buildSignalTrace, formatSignalTraceSummary } = require('./signalTrace');
 
 // DATA_DIR is now the resolved data root from storageConfig
 const DATA_DIR = DATA_ROOT;
+
+// ── Path resolution helper ────────────────────────────────────────────────────
+
+/**
+ * Resolve a stored source path to an absolute filesystem path.
+ *
+ * Handles two formats:
+ *   New (storage-root-relative): 'workshop/file.md'  → <DATA_ROOT>/workshop/file.md
+ *   Legacy (app-root-relative):  'data/workshop/file.md' → <DATA_ROOT>/workshop/file.md
+ *
+ * The legacy format was used by older Ember Node versions that stored data
+ * inside the app folder.  The data/ prefix is stripped so both formats
+ * resolve correctly against the external data root after migration.
+ */
+function resolveSourcePath(storedPath) {
+    if (!storedPath) return null;
+    // Strip legacy 'data/' prefix — after migration, files live directly under DATA_ROOT
+    const normalized = (storedPath.startsWith('data/') || storedPath.startsWith('data\\'))
+        ? storedPath.slice(5)
+        : storedPath;
+    return path.join(DATA_DIR, normalized);
+}
 
 const app  = express();
 const PORT = 3477;
@@ -118,10 +134,12 @@ const chatLimiter = rateLimit({
     message:           { error: 'Too many chat requests. Please slow down.' },
 });
 
-// ── Phase 5: Ensure data root exists on every load ────────────────────────────
-// This guarantees all storage directories exist whether the server is started
-// directly or required in a test context.
+// ── Phase 5: Ensure data root exists and run legacy migration ─────────────────
+// ensureDataRoot() guarantees all storage directories exist.
+// migrateLegacyData() copies in-project data/ into the external data root when
+// upgrading from an older version — safe, idempotent, copy-based.
 ensureDataRoot();
+const MIGRATION_RESULT = migrateLegacyData();
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
@@ -199,7 +217,7 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
  * Supports .txt and .md (content is UTF-8 string).
  * Supports .pdf and .docx (content is base64-encoded binary, encoding='base64').
  * For unsupported types: stores metadata only (no text extraction).
- * Saves the file to data/{room}/ and records its manifest.
+ * Saves the file to <data-root>/{room}/ and records its manifest.
  */
 app.post('/api/ingest', writeLimiter, async (req, res) => {
     try {
@@ -250,7 +268,7 @@ app.post('/api/ingest', writeLimiter, async (req, res) => {
                 id:               safeId,
                 room,
                 file:             safeName,
-                path:             'data/' + room + '/' + safeName,
+                path:             room + '/' + safeName,
                 cartridgeId:      cartridgeId || null,
                 manifestId:       null,
                 ingestTimestamp:  new Date().toISOString(),
@@ -296,7 +314,10 @@ app.post('/api/ingest', writeLimiter, async (req, res) => {
 app.post('/api/index/cartridge/:id', indexLimiter, async (req, res) => {
     try {
         const cartridgeId  = req.params.id;
-        const cartridgeDir = path.join(__dirname, '..', 'cartridges', cartridgeId);
+        // Bundled cartridges live inside the app folder (BUNDLED_CARTRIDGES_DIR).
+        // User cartridges that are separately stored under DATA_ROOT/cartridges/
+        // are not indexed via this endpoint.
+        const cartridgeDir = path.join(BUNDLED_CARTRIDGES_DIR, cartridgeId);
 
         if (!fs.existsSync(cartridgeDir)) {
             return res.status(404).json({ error: 'Cartridge "' + cartridgeId + '" not found' });
@@ -372,7 +393,7 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
             }
 
             if (source.room !== targetRoom) {
-                const oldAbsPath = path.join(__dirname, '..', source.path);
+                const oldAbsPath = resolveSourcePath(source.path);
                 const newRoomDir = path.join(DATA_DIR, targetRoom);
 
                 if (!fs.existsSync(newRoomDir)) {
@@ -380,11 +401,12 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
                 }
 
                 const newAbsPath = path.join(newRoomDir, path.basename(source.path));
-                const newRelPath = path.relative(path.join(__dirname, '..'), newAbsPath);
+                // Storage-root-relative new path (e.g. 'hearth/file.md')
+                const newRelPath = path.relative(DATA_DIR, newAbsPath).replace(/\\/g, '/');
 
-                // Only move files that live inside the data/ directory tree
+                // Only move files that live inside the data root
                 const dataRoot = path.resolve(DATA_DIR);
-                if (path.resolve(oldAbsPath).startsWith(dataRoot)) {
+                if (oldAbsPath && path.resolve(oldAbsPath).startsWith(dataRoot)) {
                     try {
                         fs.renameSync(oldAbsPath, newAbsPath);
                     } catch (moveErr) {
@@ -409,8 +431,8 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
             }
         }
 
-        const filePath = path.join(__dirname, '..', source.path);
-        if (!fs.existsSync(filePath)) {
+        const filePath = resolveSourcePath(source.path);
+        if (!filePath || !fs.existsSync(filePath)) {
             return res.status(404).json({ error: 'File not found on disk' });
         }
 
@@ -523,7 +545,7 @@ app.post('/api/notes', writeLimiter, (req, res) => {
             upsertManifest(result.source.id, result.source);
         }
 
-        res.json({ success: true, filename, path: 'data/workshop/' + filename });
+        res.json({ success: true, filename, path: 'workshop/' + filename });
     } catch (error) {
         console.error('Error saving note:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -543,7 +565,7 @@ app.get('/api/notes', readLimiter, (req, res) => {
             const stats = fs.statSync(path.join(workshopDir, f));
             return {
                 filename: f,
-                path:     'data/workshop/' + f,
+                path:     'workshop/' + f,
                 size:     stats.size,
                 created:  (stats.birthtime || stats.mtime).toISOString(),
             };
@@ -573,7 +595,7 @@ app.get('/api/threshold/list', readLimiter, (req, res) => {
         .filter(m => m.room === 'threshold')
         .map(m => {
             let size = 0;
-            const absPath = path.join(__dirname, '..', m.path);
+            const absPath = resolveSourcePath(m.path);
             if (fs.existsSync(absPath)) {
                 try { size = fs.statSync(absPath).size; } catch { /* ignore */ }
             }
@@ -601,7 +623,7 @@ app.get('/api/threshold/list', readLimiter, (req, res) => {
             const stats = fs.statSync(path.join(thresholdDir, f));
             return {
                 filename:    f,
-                path:        'data/threshold/' + f,
+                path:        'threshold/' + f,
                 size:        stats.size,
                 created:     (stats.birthtime || stats.mtime).toISOString(),
                 sourceId:    null,
@@ -811,8 +833,8 @@ app.post('/api/user-cartridges', writeLimiter, (req, res) => {
     if (!title) return res.status(400).json({ error: 'title is required' });
     const id         = 'cartridge-' + crypto.randomUUID();
     const now        = new Date().toISOString();
-    const cartridge  = { id, title, description, sources, notes, createdAt: now, updatedAt: now };
-    ensureUserCartridgesDir();
+    const cartridge  = { id, title, description, sources, notes, createdAt: now, updatedAt: now, ownership: 'user' };
+    // USER_CARTRIDGES_DIR is guaranteed to exist — ensureDataRoot() creates it at startup
     fs.writeFileSync(path.join(USER_CARTRIDGES_DIR, id + '.json'), JSON.stringify(cartridge, null, 2), 'utf8');
     res.json({ success: true, cartridge });
 });
@@ -839,18 +861,33 @@ app.get('/api/status', (req, res) => {
     const embeddings   = loadEmbeddings();
     const manifests    = loadManifests();
 
+    // Cartridge counts: bundled (shipped with app) vs user (stored in data root)
+    const bundledCartridgeCount = listCartridges().length;
+    const userCartridgeCount    = fs.existsSync(USER_CARTRIDGES_DIR)
+        ? fs.readdirSync(USER_CARTRIDGES_DIR).filter(f => f.endsWith('.json')).length
+        : 0;
+
     res.json({
-        model:               MODEL,
-        ollamaBaseUrl:       OLLAMA_BASE_URL,
-        port:                PORT,
-        cartridgeCount:      listCartridges().length,
-        indexedChunks:       chunks.length,
-        indexedSources:      Object.keys(manifests).length,
-        embeddingCount:      Object.keys(embeddings).length,
-        embeddingsActive:    embStatus.working,
-        embeddingEndpoint:   embStatus.activeEndpoint,
-        embeddingModel:      embStatus.model,
-        retrievalMode:       embStatus.working ? 'semantic' : 'keyword-fallback',
+        model:                MODEL,
+        ollamaBaseUrl:        OLLAMA_BASE_URL,
+        port:                 PORT,
+        // Total bundled cartridges (backward-compatible field)
+        cartridgeCount:       bundledCartridgeCount,
+        // Cartridge ownership breakdown
+        cartridges: {
+            bundled:          bundledCartridgeCount,
+            user:             userCartridgeCount,
+        },
+        indexedChunks:        chunks.length,
+        indexedSources:       Object.keys(manifests).length,
+        embeddingCount:       Object.keys(embeddings).length,
+        embeddingsActive:     embStatus.working,
+        embeddingEndpoint:    embStatus.activeEndpoint,
+        embeddingModel:       embStatus.model,
+        retrievalMode:        embStatus.working ? 'semantic' : 'keyword-fallback',
+        // Storage root info — useful for confirming portability setup
+        storageRoot:          DATA_ROOT,
+        storageRootSource:    process.env.EMBER_DATA_ROOT ? 'EMBER_DATA_ROOT' : 'default',
     });
 });
 
@@ -867,23 +904,40 @@ app.get('/api/ollama-status', async (req, res) => {
 
 /**
  * GET /api/storage-info
- * Returns the active data root path and the layout of all subdirectories.
- * Useful for verifying which data root is in use and diagnosing path issues.
+ * Returns the active data root path, directory layout, migration state, and
+ * cartridge ownership summary.  Use this endpoint to confirm portability setup
+ * and diagnose storage path issues.
  */
 app.get('/api/storage-info', readLimiter, (req, res) => {
+    const userCartridgeCount = fs.existsSync(USER_CARTRIDGES_DIR)
+        ? fs.readdirSync(USER_CARTRIDGES_DIR).filter(f => f.endsWith('.json')).length
+        : 0;
+
     res.json({
-        dataRoot:          DATA_ROOT,
-        configuredBy:      process.env.EMBER_DATA_ROOT ? 'EMBER_DATA_ROOT' : 'default',
+        dataRoot:     DATA_ROOT,
+        configuredBy: process.env.EMBER_DATA_ROOT ? 'EMBER_DATA_ROOT' : 'default',
         directories: {
-            hearth:         ROOM_DIRS.hearth,
-            workshop:       ROOM_DIRS.workshop,
-            threshold:      ROOM_DIRS.threshold,
-            indexes:        INDEXES_DIR,
-            projects:       PROJECTS_DIR,
-            threads:        THREADS_DIR,
-            cartridges:     USER_CARTRIDGES_DIR,
-            system:         SYSTEM_DIR,
-            exports:        EXPORTS_DIR,
+            hearth:    ROOM_DIRS.hearth,
+            workshop:  ROOM_DIRS.workshop,
+            threshold: ROOM_DIRS.threshold,
+            indexes:   INDEXES_DIR,
+            projects:  PROJECTS_DIR,
+            threads:   THREADS_DIR,
+            cartridges: USER_CARTRIDGES_DIR,
+            system:    SYSTEM_DIR,
+            exports:   EXPORTS_DIR,
+        },
+        // Legacy migration result — available since startup
+        migration: {
+            detected:  MIGRATION_RESULT.detected,
+            performed: MIGRATION_RESULT.performed,
+            mode:      MIGRATION_RESULT.mode,
+            errors:    MIGRATION_RESULT.errors,
+        },
+        // Cartridge ownership summary
+        cartridges: {
+            bundled: listCartridges().length,
+            user:    userCartridgeCount,
         },
     });
 });
