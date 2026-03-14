@@ -716,17 +716,28 @@ let activeProjectId = null;
                 const statusEl   = document.getElementById('project-status');
                 const title      = titleInput ? titleInput.value.trim() : '';
                 const notes      = notesInput ? notesInput.value : '';
-                if (!title) { if (statusEl) { statusEl.textContent = 'Title required.'; setTimeout(() => { statusEl.textContent = ''; }, 2000); } return; }
+
+                function setProjectStatus(msg, duration) {
+                    if (!statusEl) return;
+                    statusEl.textContent = msg;
+                    if (duration) setTimeout(() => { statusEl.textContent = ''; }, duration);
+                }
+
+                if (!title) {
+                    setProjectStatus('Title required.', 2000);
+                    return;
+                }
+
                 try {
                     await fetch('/api/projects/' + encodeURIComponent(activeProjectId), {
                         method:  'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body:    JSON.stringify({ title, notes }),
                     });
-                    if (statusEl) { statusEl.textContent = 'Saved.'; setTimeout(() => { statusEl.textContent = ''; }, 2000); }
+                    setProjectStatus('Saved.', 2000);
                     loadProjects();
                 } catch {
-                    if (statusEl) { statusEl.textContent = 'Save failed.'; setTimeout(() => { statusEl.textContent = ''; }, 2000); }
+                    setProjectStatus('Save failed.', 2000);
                 }
             });
         }
@@ -806,8 +817,12 @@ let _pendingFile = null;
         const titleEl = document.getElementById('meta-title');
         const descEl  = document.getElementById('meta-description');
         const shelfEl = document.getElementById('meta-shelf');
-        // Pre-fill title from filename (without extension)
-        if (titleEl) titleEl.value = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+        // Pre-fill title from filename: strip last extension only, handle hidden files gracefully
+        const nameParts = file.name.split('.');
+        const baseName  = nameParts.length > 1 && nameParts[0] !== ''
+            ? nameParts.slice(0, -1).join('.')
+            : file.name;
+        if (titleEl) titleEl.value = baseName.replace(/[_-]+/g, ' ').trim();
         if (descEl)  descEl.value  = '';
         if (shelfEl) shelfEl.value = '';
         if (metaStatusEl) metaStatusEl.textContent = '';
@@ -830,10 +845,9 @@ let _pendingFile = null;
                 let encoding = 'utf8';
 
                 if (isBinary) {
-                    // Convert ArrayBuffer to base64
+                    // Convert ArrayBuffer to base64 efficiently using Array.from
                     const bytes  = new Uint8Array(e.target.result);
-                    let binary   = '';
-                    bytes.forEach(b => { binary += String.fromCharCode(b); });
+                    const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
                     content  = btoa(binary);
                     encoding = 'base64';
                 }

@@ -19,6 +19,7 @@
 
 'use strict';
 
+const crypto    = require('crypto');
 const express   = require('express');
 const path      = require('path');
 const fs        = require('fs');
@@ -225,8 +226,13 @@ app.post('/api/ingest', writeLimiter, async (req, res) => {
 
         if (!ALLOWED_EXTENSIONS.includes(ext)) {
             // Unsupported type — store metadata only, no text extraction
+            const safeId = [room, cartridgeId, safeName.replace(/[^a-z0-9]/gi, '-').toLowerCase()]
+                .filter(Boolean)
+                .join('-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
             const metaRecord = {
-                id:               [room, cartridgeId, safeName.replace(/[^a-z0-9]/gi, '-').toLowerCase()].filter(Boolean).join('-'),
+                id:               safeId,
                 room,
                 file:             safeName,
                 path:             'data/' + room + '/' + safeName,
@@ -656,7 +662,7 @@ app.post('/api/threads', writeLimiter, (req, res) => {
     if (!validRooms.includes(room)) {
         return res.status(400).json({ error: 'Invalid room "' + room + '"' });
     }
-    const id     = 'thread-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const id     = 'thread-' + crypto.randomUUID();
     const now    = new Date().toISOString();
     const thread = { id, title, room, createdAt: now, updatedAt: now, messages: [] };
     saveThread(thread);
@@ -742,7 +748,7 @@ app.get('/api/projects', readLimiter, (req, res) => {
  */
 app.post('/api/projects', writeLimiter, (req, res) => {
     const { title = 'Untitled Project', notes = '', linkedSources = [] } = req.body || {};
-    const id      = 'project-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const id      = 'project-' + crypto.randomUUID();
     const now     = new Date().toISOString();
     const project = { id, title, notes, linkedSources, createdAt: now, updatedAt: now, threadId: null };
     saveProject(project);
@@ -805,7 +811,7 @@ app.get('/api/user-cartridges', readLimiter, (req, res) => {
 app.post('/api/user-cartridges', writeLimiter, (req, res) => {
     const { title, description = '', sources = [], notes = '' } = req.body || {};
     if (!title) return res.status(400).json({ error: 'title is required' });
-    const id         = 'cartridge-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const id         = 'cartridge-' + crypto.randomUUID();
     const now        = new Date().toISOString();
     const cartridge  = { id, title, description, sources, notes, createdAt: now, updatedAt: now };
     ensureUserCartridgesDir();
