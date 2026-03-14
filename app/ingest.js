@@ -101,7 +101,10 @@ async function extractTextAsync(filePath) {
 function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = null, title = null, description = null, shelf = null }) {
     const fileName = path.basename(filePath);
     const ext      = path.extname(filePath).toLowerCase().slice(1);
-    const relPath  = path.relative(path.join(__dirname, '..'), filePath);
+
+    // Path relative to the storage root — storage-root-native, no app-folder assumptions.
+    // e.g. 'workshop/file.md' rather than 'data/workshop/file.md'.
+    const relPath  = path.relative(DATA_DIR, filePath).replace(/\\/g, '/');
 
     // Deterministic ID: stable across re-ingestion of the same file.
     // Uses room + cartridgeId + normalised relative path — no timestamps.
