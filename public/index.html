@@ -82,6 +82,15 @@
                   <div class="signal-trace-sources" id="signal-trace-sources"></div>
                 </div>
 
+                <!-- Active Chat References Bar — shown when sources are attached to this thread -->
+                <div class="chat-refs-bar" id="chat-refs-bar" style="display:none;">
+                  <div class="chat-refs-header">
+                    <span class="chat-refs-label">Active References</span>
+                    <button class="secondary chat-refs-clear-btn" id="clear-chat-refs" title="Clear all references">✕ Clear</button>
+                  </div>
+                  <div class="chat-refs-chips" id="chat-refs-chips"></div>
+                </div>
+
                 <div class="chat-input-row" style="padding: 0.75rem 1rem;">
                   <input
                     type="text"
@@ -302,6 +311,13 @@
                     <button class="primary" id="save-project-btn">Save</button>
                     <span class="workshop-status" id="project-status"></span>
                   </div>
+                  <!-- Linked Sources Section -->
+                  <div class="project-sources-section">
+                    <div class="workshop-section-title" style="margin-top:0.25rem; margin-bottom:0.5rem;">Linked Sources</div>
+                    <div class="project-sources-list" id="project-sources-list">
+                      <span class="message-system" id="project-sources-empty">No sources attached.</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -417,6 +433,40 @@
       </section>
 
     </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SOURCE INSPECTOR MODAL
+       Shown when the user clicks "Inspect" on any source card.
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="source-inspector-overlay" id="source-inspector-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Source Inspector">
+    <div class="source-inspector-panel">
+      <div class="source-inspector-header">
+        <span class="source-inspector-title" id="insp-title">Source Inspector</span>
+        <button class="source-inspector-close" id="insp-close" aria-label="Close inspector">✕</button>
+      </div>
+      <div class="source-inspector-body">
+        <div class="insp-meta-grid">
+          <div class="insp-meta-row"><span class="trace-key">Status</span><span id="insp-status"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Room</span><span id="insp-room"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Shelf</span><span id="insp-shelf"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">File</span><span id="insp-file" class="source-card-filename"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Description</span><span id="insp-desc" class="source-card-description"></span></div>
+        </div>
+        <details class="insp-path-details">
+          <summary class="insp-path-summary">Path &amp; Storage</summary>
+          <div class="insp-path-content">
+            <div class="insp-meta-row"><span class="trace-key">Path</span><span id="insp-path" class="source-card-filename"></span></div>
+            <div class="insp-meta-row"><span class="trace-key">Source ID</span><span id="insp-id" class="source-card-filename"></span></div>
+          </div>
+        </details>
+        <div class="insp-preview-section">
+          <div class="insp-section-title">Preview</div>
+          <pre class="insp-preview" id="insp-preview">No preview available.</pre>
+        </div>
+        <div class="insp-actions" id="insp-actions"></div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
