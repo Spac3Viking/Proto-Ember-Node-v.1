@@ -14,6 +14,7 @@
  *   PUT  /api/projects/:id   — update a project
  *   GET  /api/user-cartridges      — list user-created cartridges
  *   POST /api/user-cartridges      — create a user cartridge
+ *   GET  /api/storage-info         — current data root and subdirectory layout
  * Plus all Phase 3 endpoints.
  */
 
@@ -26,8 +27,14 @@ const fs        = require('fs');
 const axios     = require('axios');
 const rateLimit = require('express-rate-limit');
 
+const {
+    DATA_ROOT, ROOM_DIRS,
+    INDEXES_DIR, PROJECTS_DIR, THREADS_DIR,
+    USER_CARTRIDGES_DIR, SYSTEM_DIR, EXPORTS_DIR,
+    ensureDataRoot,
+}                                            = require('./storageConfig');
 const { listCartridges, loadCartridge }      = require('./cartridgeLoader');
-const { ingestFile, ingestCartridge, DATA_DIR, extractText, extractTextAsync } = require('./ingest');
+const { ingestFile, ingestCartridge, extractText, extractTextAsync } = require('./ingest');
 const { chunkText }                          = require('./chunker');
 const { generateEmbedding, getEmbeddingStatus }              = require('./embeddings');
 const {
@@ -37,6 +44,9 @@ const {
 }                                            = require('./indexStore');
 const { retrieve, buildGroundedPrompt }      = require('./retrieval');
 const { buildSignalTrace, formatSignalTraceSummary } = require('./signalTrace');
+
+// DATA_DIR is now the resolved data root from storageConfig
+const DATA_DIR = DATA_ROOT;
 
 const app  = express();
 const PORT = 3477;
@@ -107,6 +117,11 @@ const chatLimiter = rateLimit({
     legacyHeaders:     false,
     message:           { error: 'Too many chat requests. Please slow down.' },
 });
+
+// ── Phase 5: Ensure data root exists on every load ────────────────────────────
+// This guarantees all storage directories exist whether the server is started
+// directly or required in a test context.
+ensureDataRoot();
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
@@ -607,11 +622,7 @@ app.get('/api/threshold/list', readLimiter, (req, res) => {
 
 // ── Phase 4: Chat Threads ─────────────────────────────────────────────────────
 
-const THREADS_DIR = path.join(DATA_DIR, 'threads');
-
-function ensureThreadsDir() {
-    if (!fs.existsSync(THREADS_DIR)) fs.mkdirSync(THREADS_DIR, { recursive: true });
-}
+// THREADS_DIR is resolved from storageConfig (ensureDataRoot() creates it at startup)
 
 function loadThread(id) {
     const file = path.join(THREADS_DIR, id + '.json');
@@ -620,7 +631,6 @@ function loadThread(id) {
 }
 
 function saveThread(thread) {
-    ensureThreadsDir();
     fs.writeFileSync(path.join(THREADS_DIR, thread.id + '.json'), JSON.stringify(thread, null, 2), 'utf8');
 }
 
@@ -629,7 +639,6 @@ function saveThread(thread) {
  * Returns all thread summaries (id, title, room, createdAt, messageCount).
  */
 app.get('/api/threads', readLimiter, (req, res) => {
-    ensureThreadsDir();
     const { room } = req.query;
     const threads = fs.readdirSync(THREADS_DIR)
         .filter(f => f.endsWith('.json'))
@@ -710,11 +719,7 @@ app.put('/api/threads/:id', writeLimiter, (req, res) => {
 
 // ── Phase 4: Workshop Projects ────────────────────────────────────────────────
 
-const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
-
-function ensureProjectsDir() {
-    if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-}
+// PROJECTS_DIR is resolved from storageConfig (ensureDataRoot() creates it at startup)
 
 function loadProject(id) {
     const file = path.join(PROJECTS_DIR, id + '.json');
@@ -723,7 +728,6 @@ function loadProject(id) {
 }
 
 function saveProject(project) {
-    ensureProjectsDir();
     fs.writeFileSync(path.join(PROJECTS_DIR, project.id + '.json'), JSON.stringify(project, null, 2), 'utf8');
 }
 
@@ -731,7 +735,6 @@ function saveProject(project) {
  * GET /api/projects
  */
 app.get('/api/projects', readLimiter, (req, res) => {
-    ensureProjectsDir();
     const projects = fs.readdirSync(PROJECTS_DIR)
         .filter(f => f.endsWith('.json'))
         .map(f => {
@@ -783,17 +786,12 @@ app.put('/api/projects/:id', writeLimiter, (req, res) => {
 
 // ── Phase 4: User Cartridges ──────────────────────────────────────────────────
 
-const USER_CARTRIDGES_DIR = path.join(DATA_DIR, 'cartridges');
-
-function ensureUserCartridgesDir() {
-    if (!fs.existsSync(USER_CARTRIDGES_DIR)) fs.mkdirSync(USER_CARTRIDGES_DIR, { recursive: true });
-}
+// USER_CARTRIDGES_DIR is resolved from storageConfig (ensureDataRoot() creates it at startup)
 
 /**
  * GET /api/user-cartridges
  */
 app.get('/api/user-cartridges', readLimiter, (req, res) => {
-    ensureUserCartridgesDir();
     const cartridges = fs.readdirSync(USER_CARTRIDGES_DIR)
         .filter(f => f.endsWith('.json'))
         .map(f => {
@@ -865,6 +863,31 @@ app.get('/api/ollama-status', async (req, res) => {
     }
 });
 
+// ── Phase 5: Storage info ─────────────────────────────────────────────────────
+
+/**
+ * GET /api/storage-info
+ * Returns the active data root path and the layout of all subdirectories.
+ * Useful for verifying which data root is in use and diagnosing path issues.
+ */
+app.get('/api/storage-info', readLimiter, (req, res) => {
+    res.json({
+        dataRoot:          DATA_ROOT,
+        configuredBy:      process.env.EMBER_DATA_ROOT ? 'EMBER_DATA_ROOT' : 'default',
+        directories: {
+            hearth:         ROOM_DIRS.hearth,
+            workshop:       ROOM_DIRS.workshop,
+            threshold:      ROOM_DIRS.threshold,
+            indexes:        INDEXES_DIR,
+            projects:       PROJECTS_DIR,
+            threads:        THREADS_DIR,
+            cartridges:     USER_CARTRIDGES_DIR,
+            system:         SYSTEM_DIR,
+            exports:        EXPORTS_DIR,
+        },
+    });
+});
+
 // ── Model check & startup ─────────────────────────────────────────────────────
 
 async function checkModel() {
@@ -889,6 +912,7 @@ async function checkModel() {
 }
 
 if (require.main === module) {
+    console.log('Data root: ' + DATA_ROOT);
     checkModel().then(function() {
         app.listen(PORT, function() {
             console.log('Server is running on http://localhost:' + PORT);

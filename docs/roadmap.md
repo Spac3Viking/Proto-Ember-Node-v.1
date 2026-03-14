@@ -35,7 +35,16 @@
 - Archive management — browse, annotate, retire
 - Workshop snapshot persistence
 
-## Phase 5 — Offline Cartridge Engine + Export
+## Phase 5 — Local Storage Root + Data Separation
+- `app/storageConfig.js` — configurable data root module
+- `EMBER_DATA_ROOT` environment variable for custom data locations
+- OS-appropriate default: `~/.ember-node` (Linux/macOS/Windows)
+- First-run `ensureDataRoot()` creates the full directory tree automatically
+- App code and user data fully separated — updates never touch user data
+- `GET /api/storage-info` endpoint — inspect active data root at runtime
+- `ingest.js`, `indexStore.js`, and `server.js` all resolve paths via storageConfig
+
+## Phase 6 — Offline Cartridge Engine + Export
 - True offline cartridge engine
 - Portable export/import for cartridges and remembered signal
 - Export packaging via Threshold
