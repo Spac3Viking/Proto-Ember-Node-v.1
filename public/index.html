@@ -192,12 +192,31 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Active Heart Assignment -->
+              <div class="ember-card system-block">
+                <div class="system-block-title">Active Heart</div>
+                <p style="font-size:0.8rem; opacity:0.65; margin:0 0 0.75rem;">
+                  Select which trusted tool acts as the Heart for chat. Only one tool can be active at a time.
+                  Switching does not remove previous tools.
+                </p>
+                <div id="sys-heart-list" style="display:flex; flex-direction:column; gap:0.5rem;">
+                  <span class="message-system" id="sys-heart-empty">No trusted tools available. Trust tools in Threshold → AI first.</span>
+                </div>
+                <div class="system-row" style="margin-top:0.75rem;">
+                  <span class="system-key">Active Heart</span>
+                  <span class="system-val" id="sys-active-heart">—</span>
+                </div>
+              </div>
+
               <div class="ember-card system-block">
                 <div class="system-block-title">Phase Roadmap</div>
                 <p class="system-future-note">
                   Phase 3 ✓ — document ingestion, chunking, embeddings, retrieval, signal trace<br>
                   Phase 4 ✓ — sub-tab navigation, file lifecycle, thread system, PDF/DOCX support<br>
-                  Phase 5 — true offline cartridge engine, portable export/import, desktop shell packaging
+                  Phase 5 ✓ — external data root, portability, cartridge ownership<br>
+                  Phase 6 ✓ — source actions, cross-room mobility, Hearth Chat references<br>
+                  Phase 7 ✓ — AI/tool discovery, trust flow, role assignment, Heart selection
                 </p>
               </div>
             </div>
@@ -220,6 +239,7 @@
               <button class="sub-tab"        data-subtab="ws-index"      aria-selected="false">Index</button>
               <button class="sub-tab"        data-subtab="ws-cartridges" aria-selected="false">Cartridges</button>
               <button class="sub-tab"        data-subtab="ws-projects"   aria-selected="false">Projects</button>
+              <button class="sub-tab"        data-subtab="ws-tools"      aria-selected="false">Tools</button>
             </nav>
           </div>
 
@@ -324,12 +344,28 @@
             </div>
           </div>
 
+          <!-- Workshop / Tools — trusted AI tools for classification -->
+          <div class="sub-panel" id="ws-tools">
+            <div class="ember-card" style="padding: 1rem 1.25rem;">
+              <p class="threshold-notice">
+                Trusted tools appear here for classification. Assign each a role:
+                <strong>Mythic Mirror</strong> (generative / reflective) or <strong>Forge Node</strong> (processing / execution).
+              </p>
+            </div>
+            <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
+              <div class="workshop-section-title">Trusted Tools</div>
+              <div id="ws-tool-list" class="ws-sources-list">
+                <span class="message-system">No trusted tools. Trust tools in Threshold → AI.</span>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
       <!-- ═══════════════════════════════════════════════════════════
            THRESHOLD — Waiting Files
-           Sub-tabs: Imports | Exports (placeholder)
+           Sub-tabs: Imports | AI | Exports (placeholder)
            ═══════════════════════════════════════════════════════════ -->
       <section class="room-panel" id="room-threshold" role="tabpanel">
         <div class="room-panel-inner threshold-layout">
@@ -338,6 +374,7 @@
             <h2 class="room-heading"><span class="room-rune">ᚦ</span> Threshold <span class="lifecycle-pill waiting">Waiting</span></h2>
             <nav class="sub-tabs" role="tablist" aria-label="Threshold tabs">
               <button class="sub-tab active" data-subtab="th-imports" aria-selected="true">Imports</button>
+              <button class="sub-tab"        data-subtab="th-ai"      aria-selected="false">AI</button>
               <button class="sub-tab"        data-subtab="th-exports" aria-selected="false">Exports</button>
             </nav>
           </div>
@@ -416,6 +453,25 @@
             </div>
           </div>
 
+          <!-- Threshold / AI — detected but untrusted tools -->
+          <div class="sub-panel" id="th-ai">
+            <div class="ember-card" style="padding: 1rem 1.25rem;">
+              <p class="threshold-notice">
+                AI runtimes and tools detected on this machine appear here as <strong>AI (Waiting)</strong>.
+                Inspect each tool before trusting it. Trusted tools move to Workshop for classification.
+              </p>
+            </div>
+            <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="workshop-section-title" style="margin:0;">Detected AI &amp; Tools</div>
+                <button class="secondary" id="tool-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
+              </div>
+              <div id="th-tool-list" class="threshold-file-list">
+                <span class="message-system">No tools detected. Click Scan to search.</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Threshold / Exports (placeholder) -->
           <div class="sub-panel" id="th-exports">
             <div class="ember-card" style="padding: 1.5rem 1.25rem; text-align: center;">
@@ -463,6 +519,31 @@
           <pre class="insp-preview" id="insp-preview">No preview available.</pre>
         </div>
         <div class="insp-actions" id="insp-actions"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TOOL INSPECTOR MODAL
+       Shown when the user clicks "Inspect" on any tool card.
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="source-inspector-overlay" id="tool-inspector-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Tool Inspector">
+    <div class="source-inspector-panel">
+      <div class="source-inspector-header">
+        <span class="source-inspector-title" id="tool-insp-title">Tool Inspector</span>
+        <button class="source-inspector-close" id="tool-insp-close" aria-label="Close tool inspector">✕</button>
+      </div>
+      <div class="source-inspector-body">
+        <div class="insp-meta-grid">
+          <div class="insp-meta-row"><span class="trace-key">Status</span><span id="tool-insp-status"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Type</span><span id="tool-insp-type"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Interface</span><span id="tool-insp-interface"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Endpoint</span><span id="tool-insp-endpoint" class="source-card-filename"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Role</span><span id="tool-insp-role"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Trust</span><span id="tool-insp-trust"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Last Seen</span><span id="tool-insp-lastseen" class="source-card-filename"></span></div>
+        </div>
+        <div class="insp-actions" id="tool-insp-actions"></div>
       </div>
     </div>
   </div>

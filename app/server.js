@@ -1,15 +1,20 @@
 /**
- * Ember Node v.ᚠ — Phase 5 server
+ * Ember Node v.ᚠ — Phase 7 server
  *
- * Extends Phase 4 with:
- *   Legacy migration     — copies in-project data/ into the external data root
- *   Storage-root paths   — all source paths are stored relative to DATA_ROOT
- *   Cartridge ownership  — bundled vs user cartridges clearly distinguished
- *   Portability          — data root reported in status; no app-relative path assumptions
- *   GET  /api/user-cartridges      — list user-created cartridges
- *   POST /api/user-cartridges      — create a user cartridge
- *   GET  /api/storage-info         — current data root, migration state, and subdirectory layout
- * Plus all Phase 3 / Phase 4 endpoints.
+ * Extends Phase 5/6 with:
+ *   Tool Discovery       — detects local AI runtimes (Ollama, HTTP endpoints)
+ *   Tool Registry        — persists tools.json in DATA_ROOT/system/
+ *   Trust Flow           — user inspects and trusts tools; untrusted = Threshold
+ *   Role Assignment      — Mythic Mirror / Forge Node classification in Workshop
+ *   Heart Assignment     — user selects active Heart in Hearth System tab
+ *   Chat Integration     — /api/chat routes through the active Heart tool
+ *   GET  /api/tools                — list all tools in registry
+ *   POST /api/tools/scan           — trigger discovery scan
+ *   POST /api/tools/:id/trust      — trust a detected tool
+ *   POST /api/tools/:id/role       — assign a role (mirror / forge)
+ *   POST /api/tools/active         — set active Heart
+ *   GET  /api/tools/active         — get active assignments
+ * Plus all Phase 3–6 endpoints.
  */
 
 'use strict';
@@ -38,6 +43,7 @@ const {
 }                                            = require('./indexStore');
 const { retrieve, buildGroundedPrompt }      = require('./retrieval');
 const { buildSignalTrace, formatSignalTraceSummary } = require('./signalTrace');
+const { discoverTools }                      = require('./toolDiscovery');
 
 // DATA_DIR is now the resolved data root from storageConfig
 const DATA_DIR = DATA_ROOT;
@@ -149,6 +155,111 @@ const chatLimiter = rateLimit({
 ensureDataRoot();
 const MIGRATION_RESULT = migrateLegacyData();
 
+// ── Phase 7: Tool Registry ────────────────────────────────────────────────────
+
+/** Path to the tool registry JSON file. */
+const TOOLS_REGISTRY_PATH = path.join(SYSTEM_DIR, 'tools.json');
+
+/**
+ * Load the tool registry from disk.
+ * Returns a default empty registry if the file does not exist.
+ *
+ * @returns {{ tools: object[], active: object }}
+ */
+function loadToolRegistry() {
+    if (!fs.existsSync(TOOLS_REGISTRY_PATH)) {
+        return { tools: [], active: {} };
+    }
+    try {
+        return JSON.parse(fs.readFileSync(TOOLS_REGISTRY_PATH, 'utf8'));
+    } catch {
+        return { tools: [], active: {} };
+    }
+}
+
+/**
+ * Persist the tool registry to disk.
+ *
+ * @param {{ tools: object[], active: object }} registry
+ */
+function saveToolRegistry(registry) {
+    fs.writeFileSync(TOOLS_REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf8');
+}
+
+/**
+ * Merge a freshly discovered list of tools into the registry.
+ *
+ * Rules:
+ *   - New tools (id not in registry) are added with trusted=false.
+ *   - Existing tools keep their trust status, role, and active selection.
+ *   - lastSeen is updated for all detected tools.
+ *   - Tools no longer detected are kept with status='not_detected'.
+ *
+ * @param {object[]} detected  Array of tool records from discoverTools()
+ * @returns {object[]}         Merged tools list
+ */
+function mergeDetectedTools(detected) {
+    const registry = loadToolRegistry();
+    const byId     = {};
+    registry.tools.forEach(t => { byId[t.id] = t; });
+
+    const now = new Date().toISOString();
+
+    // Update or insert detected tools
+    detected.forEach(d => {
+        if (byId[d.id]) {
+            // Preserve trust, role, and description; update detection fields
+            byId[d.id].status   = d.status;
+            byId[d.id].lastSeen = d.status === 'detected' ? now : byId[d.id].lastSeen;
+            // Update endpoint in case it changed
+            if (d.endpoint !== undefined) byId[d.id].endpoint = d.endpoint;
+        } else {
+            // New tool — untrusted by default
+            byId[d.id] = {
+                ...d,
+                trusted:  false,
+                role:     null,
+                lastSeen: d.status === 'detected' ? now : null,
+            };
+        }
+    });
+
+    // Mark tools that are no longer detected
+    const detectedIds = new Set(detected.map(d => d.id));
+    Object.values(byId).forEach(t => {
+        if (!detectedIds.has(t.id)) {
+            t.status = 'not_detected';
+        }
+    });
+
+    const merged = Object.values(byId);
+    saveToolRegistry({ tools: merged, active: registry.active });
+    return merged;
+}
+
+/**
+ * Return the active Heart's chat URL and model name, falling back to the
+ * built-in Ollama defaults when no Heart is assigned or the assigned tool
+ * is unavailable.
+ *
+ * @returns {{ chatUrl: string, model: string, toolId: string|null }}
+ */
+function resolveActiveHeart() {
+    const registry = loadToolRegistry();
+    const heartId  = registry.active && registry.active.heart;
+    if (heartId) {
+        const tool = (registry.tools || []).find(t => t.id === heartId && t.trusted);
+        if (tool && tool.interface === 'http' && tool.endpoint) {
+            return {
+                chatUrl: tool.endpoint.replace(/\/$/, '') + '/api/chat',
+                model:   MODEL,
+                toolId:  tool.id,
+            };
+        }
+    }
+    return { chatUrl: OLLAMA_CHAT_URL, model: MODEL, toolId: null };
+}
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -209,8 +320,11 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
         // Build prompt (grounded when local chunks were found)
         const userContent = buildGroundedPrompt({ query, retrievedChunks: retrieved });
 
+        // Resolve which Heart tool to use (falls back to built-in Ollama)
+        const heart = resolveActiveHeart();
+
         const payload = {
-            model:    MODEL,
+            model:    heart.model,
             stream:   false,
             messages: [
                 { role: 'system', content: HEART_SYSTEM_PROMPT },
@@ -218,7 +332,7 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
             ],
         };
 
-        const response = await axios.post(OLLAMA_CHAT_URL, payload);
+        const response = await axios.post(heart.chatUrl, payload);
         const answer   = response.data && response.data.message
             ? response.data.message.content
             : '';
@@ -1262,6 +1376,125 @@ app.get('/api/storage-info', readLimiter, (req, res) => {
     });
 });
 
+// ── Phase 7: Tool Registry API ────────────────────────────────────────────────
+
+/**
+ * GET /api/tools
+ * Returns all tools in the registry with their current status.
+ */
+app.get('/api/tools', readLimiter, (req, res) => {
+    const registry = loadToolRegistry();
+    res.json({ tools: registry.tools || [], active: registry.active || {} });
+});
+
+/**
+ * POST /api/tools/scan
+ * Triggers a discovery scan and merges results into the registry.
+ * New tools appear as untrusted (status: 'detected', trusted: false).
+ * Does NOT auto-trust anything.
+ */
+app.post('/api/tools/scan', writeLimiter, async (req, res) => {
+    try {
+        const detected = await discoverTools();
+        const tools    = mergeDetectedTools(detected);
+        const registry = loadToolRegistry();
+        res.json({ success: true, tools, active: registry.active || {} });
+    } catch (err) {
+        console.error('[/api/tools/scan]', err.message);
+        res.status(500).json({ error: 'Scan failed: ' + err.message });
+    }
+});
+
+/**
+ * POST /api/tools/:id/trust
+ * Body: { trusted: boolean }
+ * Marks a tool as trusted (or revokes trust).
+ * Trusted tools move from Threshold → Workshop.
+ * Does NOT auto-assign a role or make it the Heart.
+ */
+app.post('/api/tools/:id/trust', writeLimiter, (req, res) => {
+    const toolId  = req.params.id;
+    const trusted = req.body && typeof req.body.trusted === 'boolean' ? req.body.trusted : true;
+
+    const registry = loadToolRegistry();
+    const tool     = (registry.tools || []).find(t => t.id === toolId);
+    if (!tool) return res.status(404).json({ error: 'Tool not found: ' + toolId });
+
+    tool.trusted = trusted;
+    // If trust is revoked, clear the role
+    if (!trusted) {
+        tool.role = null;
+        // If this tool was the active Heart, clear that assignment
+        if (registry.active && registry.active.heart === toolId) {
+            delete registry.active.heart;
+        }
+    }
+    saveToolRegistry(registry);
+    res.json({ success: true, tool });
+});
+
+/**
+ * POST /api/tools/:id/role
+ * Body: { role: 'mirror' | 'forge' | null }
+ * Assigns a classification role to a trusted tool.
+ * Tool must be trusted before a role can be assigned.
+ */
+app.post('/api/tools/:id/role', writeLimiter, (req, res) => {
+    const toolId = req.params.id;
+    const role   = req.body && req.body.role !== undefined ? req.body.role : null;
+
+    const VALID_ROLES = new Set(['mirror', 'forge', null]);
+    if (!VALID_ROLES.has(role)) {
+        return res.status(400).json({ error: 'role must be "mirror", "forge", or null' });
+    }
+
+    const registry = loadToolRegistry();
+    const tool     = (registry.tools || []).find(t => t.id === toolId);
+    if (!tool)         return res.status(404).json({ error: 'Tool not found: ' + toolId });
+    if (!tool.trusted) return res.status(400).json({ error: 'Tool must be trusted before assigning a role.' });
+
+    tool.role = role;
+    saveToolRegistry(registry);
+    res.json({ success: true, tool });
+});
+
+/**
+ * GET /api/tools/active
+ * Returns the current active assignments (e.g. which tool is the Heart).
+ */
+app.get('/api/tools/active', readLimiter, (req, res) => {
+    const registry = loadToolRegistry();
+    res.json({ active: registry.active || {} });
+});
+
+/**
+ * POST /api/tools/active
+ * Body: { heart: 'tool-id' | null }
+ * Sets the active Heart.  Only one tool can be the Heart at a time.
+ * Setting to null clears the Heart assignment.
+ * The selected tool must be trusted.
+ */
+app.post('/api/tools/active', writeLimiter, (req, res) => {
+    const heartId = req.body && req.body.heart !== undefined ? req.body.heart : null;
+
+    const registry = loadToolRegistry();
+
+    if (heartId !== null) {
+        const tool = (registry.tools || []).find(t => t.id === heartId);
+        if (!tool)         return res.status(404).json({ error: 'Tool not found: ' + heartId });
+        if (!tool.trusted) return res.status(400).json({ error: 'Tool must be trusted before it can become the Heart.' });
+    }
+
+    if (!registry.active) registry.active = {};
+    if (heartId === null) {
+        delete registry.active.heart;
+    } else {
+        registry.active.heart = heartId;
+    }
+    saveToolRegistry(registry);
+    res.json({ success: true, active: registry.active });
+});
+
 // ── Model check & startup ─────────────────────────────────────────────────────
 
 async function checkModel() {
@@ -1287,6 +1520,18 @@ async function checkModel() {
 
 if (require.main === module) {
     console.log('Data root: ' + DATA_ROOT);
+
+    // Phase 7: Non-blocking startup tool scan
+    discoverTools().then(function(detected) {
+        const tools = mergeDetectedTools(detected);
+        const newTools = tools.filter(t => t.status === 'detected');
+        if (newTools.length > 0) {
+            console.log('[tools] Detected ' + newTools.length + ' tool(s): ' + newTools.map(t => t.name).join(', '));
+        }
+    }).catch(function(err) {
+        console.warn('[tools] Startup scan failed:', err.message);
+    });
+
     checkModel().then(function() {
         app.listen(PORT, function() {
             console.log('Server is running on http://localhost:' + PORT);
@@ -1301,4 +1546,7 @@ module.exports = {
     OLLAMA_BASE_URL,
     listCartridges,
     loadCartridge,
+    loadToolRegistry,
+    saveToolRegistry,
+    resolveActiveHeart,
 };
