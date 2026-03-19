@@ -2009,3 +2009,27 @@ button.secondary:disabled {
 .status-badge.importing{ border: 1px solid hsla(140, 100%, 70%, 0.2); color: var(--gf-wire-green); }
 
 
+
+/* ================================================================
+   Phase 7 — Tool Registry UI
+   ================================================================ */
+
+/* Heart tool row in Hearth System tab */
+.heart-tool-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid hsla(140,100%,70%,0.06);
+}
+
+.heart-tool-row:last-child {
+  border-bottom: none;
+}
+
+/* Tool status badges */
+.status-badge.warn {
+  border: 1px solid hsla(38,100%,70%,0.3);
+  color: var(--gf-wire-amber);
+}

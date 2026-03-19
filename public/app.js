@@ -94,11 +94,18 @@ function escapeHtml(str) {
                 if (panelId === 'ws-projects') {
                     loadProjects();
                 }
+                if (panelId === 'ws-tools') {
+                    loadWorkshopTools();
+                }
                 if (panelId === 'hearth-archive') {
                     loadHearthArchive();
                 }
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
+                    loadHearthToolRegistry();
+                }
+                if (panelId === 'th-ai') {
+                    loadThresholdTools();
                 }
             });
         });
@@ -1652,8 +1659,484 @@ function updateHeaderStatus() {
 }
 
 /* ================================================================
-   Phase 6 — Source Actions: Remember, Send To, Inspect, Attach
+   Phase 7 — Tool Registry: Discovery, Trust, Role, Heart
    ================================================================ */
+
+/**
+ * Fetch all tools from the registry.
+ * @returns {Promise<{ tools: object[], active: object }>}
+ */
+async function fetchToolRegistry() {
+    const res  = await fetch('/api/tools');
+    const data = await res.json();
+    return { tools: data.tools || [], active: data.active || {} };
+}
+
+/**
+ * Trigger a discovery scan.
+ * @returns {Promise<{ tools: object[], active: object }>}
+ */
+async function scanTools() {
+    const res  = await fetch('/api/tools/scan', { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Scan failed');
+    return { tools: data.tools || [], active: data.active || {} };
+}
+
+/** Status label for a tool lifecycle state */
+function toolStatusLabel(tool) {
+    if (tool.trusted && tool.role) return 'Assigned';
+    if (tool.trusted)              return 'Trusted';
+    if (tool.status === 'detected') return 'Waiting';
+    return tool.status || 'Unknown';
+}
+
+/** CSS class for tool status badge */
+function toolStatusClass(tool) {
+    if (tool.trusted && tool.role) return 'indexed';
+    if (tool.trusted)              return 'indexed';
+    if (tool.status === 'detected') return 'waiting';
+    return 'warn';
+}
+
+/** Human-readable role label */
+function roleLabel(role) {
+    if (role === 'mirror') return 'Mythic Mirror';
+    if (role === 'forge')  return 'Forge Node';
+    return 'Unclassified';
+}
+
+/* ── Threshold / AI tab ─────────────────────────────────────── */
+
+/**
+ * Load and render the Threshold → AI tool list.
+ * Shows detected tools that are not yet trusted.
+ */
+async function loadThresholdTools() {
+    const listEl = document.getElementById('th-tool-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<span class="message-system">Loading…</span>';
+
+    try {
+        const { tools, active } = await fetchToolRegistry();
+
+        // Show all non-trusted detected tools (+ not_detected as dim)
+        const visible = tools.filter(t => !t.trusted);
+
+        if (visible.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No untrusted tools. All detected tools have been admitted.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        visible.forEach(tool => renderThresholdToolRow(tool, active, listEl));
+    } catch {
+        listEl.innerHTML = '<span class="message-system threshold-error">Could not load tools.</span>';
+    }
+}
+
+function renderThresholdToolRow(tool, active, container) {
+    const row = document.createElement('div');
+    row.className = 'threshold-file-row';
+    row.dataset.toolId = tool.id;
+
+    const nameEl = document.createElement('div');
+    nameEl.style.cssText = 'flex:1; min-width:0;';
+    nameEl.innerHTML =
+        '<div class="threshold-file-name">' + escapeHtml(tool.name) +
+            ' <span class="status-badge ' + toolStatusClass(tool) + '">' +
+            escapeHtml(toolStatusLabel(tool)) + '</span></div>' +
+        '<div class="source-card-filename">' + escapeHtml(tool.type) + ' · ' + escapeHtml(tool.interface) + '</div>' +
+        (tool.endpoint ? '<div class="source-card-filename">' + escapeHtml(tool.endpoint) + '</div>' : '') +
+        (tool.note ? '<div class="source-card-description">' + escapeHtml(tool.note) + '</div>' : '');
+
+    const actions = document.createElement('span');
+    actions.className = 'threshold-file-actions';
+
+    // Inspect button
+    const inspBtn = document.createElement('button');
+    inspBtn.className = 'secondary threshold-action-btn';
+    inspBtn.textContent = 'Inspect';
+    inspBtn.addEventListener('click', () => openToolInspector(tool, active));
+
+    // Trust button (only for detected tools)
+    if (tool.status === 'detected') {
+        const trustBtn = document.createElement('button');
+        trustBtn.className = 'primary threshold-action-btn';
+        trustBtn.textContent = 'Trust';
+        trustBtn.addEventListener('click', async () => {
+            trustBtn.disabled = true;
+            trustBtn.textContent = 'Trusting…';
+            try {
+                const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ trusted: true }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Workshop → Tools');
+                    loadThresholdTools();
+                    loadWorkshopTools();
+                    loadHearthToolRegistry();
+                } else {
+                    showFlashMessage('Trust failed: ' + (data.error || 'unknown'));
+                    trustBtn.disabled = false;
+                    trustBtn.textContent = 'Trust';
+                }
+            } catch {
+                showFlashMessage('Could not reach server.');
+                trustBtn.disabled = false;
+                trustBtn.textContent = 'Trust';
+            }
+        });
+        actions.appendChild(trustBtn);
+    }
+
+    actions.appendChild(inspBtn);
+    row.appendChild(nameEl);
+    row.appendChild(actions);
+    container.appendChild(row);
+}
+
+/* Scan button in Threshold → AI */
+(function initToolScanBtn() {
+    document.addEventListener('click', async e => {
+        if (e.target && e.target.id === 'tool-scan-btn') {
+            const btn = e.target;
+            btn.disabled = true;
+            btn.textContent = '↺ Scanning…';
+            try {
+                await scanTools();
+                showFlashMessage('Scan complete.');
+                loadThresholdTools();
+            } catch (err) {
+                showFlashMessage('Scan failed: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '↺ Scan';
+            }
+        }
+    });
+})();
+
+/* ── Workshop / Tools tab ───────────────────────────────────── */
+
+/**
+ * Load and render the Workshop → Tools panel.
+ * Shows only trusted tools.
+ */
+async function loadWorkshopTools() {
+    const listEl = document.getElementById('ws-tool-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<span class="message-system">Loading…</span>';
+
+    try {
+        const { tools, active } = await fetchToolRegistry();
+        const trusted = tools.filter(t => t.trusted);
+
+        if (trusted.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No trusted tools. Trust tools in Threshold → AI.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        trusted.forEach(tool => renderWorkshopToolRow(tool, active, listEl));
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load trusted tools.</span>';
+    }
+}
+
+function renderWorkshopToolRow(tool, active, container) {
+    const row = document.createElement('div');
+    row.className = 'threshold-file-row';
+    row.dataset.toolId = tool.id;
+
+    const isHeart = active && active.heart === tool.id;
+
+    const nameEl = document.createElement('div');
+    nameEl.style.cssText = 'flex:1; min-width:0;';
+    nameEl.innerHTML =
+        '<div class="threshold-file-name">' + escapeHtml(tool.name) +
+            (isHeart ? ' <span class="status-badge remembered">Heart</span>' : '') +
+            ' <span class="status-badge ' + toolStatusClass(tool) + '">' + escapeHtml(toolStatusLabel(tool)) + '</span></div>' +
+        '<div class="source-card-filename">' + escapeHtml(tool.type) + ' · ' + escapeHtml(tool.interface) + '</div>' +
+        (tool.role ? '<div class="source-card-description">' + escapeHtml(roleLabel(tool.role)) + '</div>' : '');
+
+    const actions = document.createElement('span');
+    actions.className = 'threshold-file-actions';
+
+    // Role selector
+    const roleSelect = document.createElement('select');
+    roleSelect.className = 'secondary';
+    roleSelect.style.cssText = 'font-size:0.78rem; padding:0.2rem 0.4rem; background:var(--surface-2,#111); color:var(--fg,#ccc); border:1px solid hsla(140,80%,60%,0.25); border-radius:4px;';
+    roleSelect.setAttribute('aria-label', 'Assign role for ' + tool.name);
+    [
+        { value: '', label: 'No role' },
+        { value: 'mirror', label: 'Mythic Mirror' },
+        { value: 'forge',  label: 'Forge Node' },
+    ].forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.label;
+        if ((tool.role || '') === opt.value) o.selected = true;
+        roleSelect.appendChild(o);
+    });
+    roleSelect.addEventListener('change', async () => {
+        const role = roleSelect.value || null;
+        try {
+            const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/role', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ role }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                showFlashMessage(escapeHtml(tool.name) + ' role updated ✓');
+                loadWorkshopTools();
+                loadHearthToolRegistry();
+            } else {
+                showFlashMessage('Role update failed: ' + (data.error || 'unknown'));
+            }
+        } catch {
+            showFlashMessage('Could not reach server.');
+        }
+    });
+
+    // Inspect button
+    const inspBtn = document.createElement('button');
+    inspBtn.className = 'secondary threshold-action-btn';
+    inspBtn.textContent = 'Inspect';
+    inspBtn.addEventListener('click', () => openToolInspector(tool, active));
+
+    // Revoke trust button
+    const revokeBtn = document.createElement('button');
+    revokeBtn.className = 'secondary threshold-action-btn';
+    revokeBtn.textContent = 'Revoke';
+    revokeBtn.title = 'Revoke trust — returns tool to Threshold';
+    revokeBtn.addEventListener('click', async () => {
+        if (!confirm('Revoke trust for "' + tool.name + '"? It will return to Threshold.')) return;
+        try {
+            const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ trusted: false }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                showFlashMessage(escapeHtml(tool.name) + ' trust revoked.');
+                loadWorkshopTools();
+                loadThresholdTools();
+                loadHearthToolRegistry();
+            }
+        } catch {
+            showFlashMessage('Could not reach server.');
+        }
+    });
+
+    actions.appendChild(roleSelect);
+    actions.appendChild(inspBtn);
+    actions.appendChild(revokeBtn);
+    row.appendChild(nameEl);
+    row.appendChild(actions);
+    container.appendChild(row);
+}
+
+/* ── Hearth / System: Heart Assignment ──────────────────────── */
+
+/**
+ * Load the Heart assignment UI in Hearth → System tab.
+ */
+async function loadHearthToolRegistry() {
+    const listEl   = document.getElementById('sys-heart-list');
+    const emptyEl  = document.getElementById('sys-heart-empty');
+    const activeEl = document.getElementById('sys-active-heart');
+    if (!listEl) return;
+
+    try {
+        const { tools, active } = await fetchToolRegistry();
+        const trusted = tools.filter(t => t.trusted);
+
+        if (emptyEl) emptyEl.style.display = trusted.length === 0 ? '' : 'none';
+
+        // Remove previous tool rows
+        listEl.querySelectorAll('.heart-tool-row').forEach(el => el.remove());
+
+        const currentHeart = active && active.heart;
+        if (activeEl) activeEl.textContent = currentHeart
+            ? (tools.find(t => t.id === currentHeart) || {}).name || currentHeart
+            : '—';
+
+        trusted.forEach(tool => {
+            const row = document.createElement('div');
+            row.className = 'heart-tool-row system-row';
+            row.style.cssText = 'justify-content:space-between; align-items:center; gap:0.5rem;';
+
+            const isHeart = currentHeart === tool.id;
+
+            const label = document.createElement('span');
+            label.className = 'system-val';
+            label.innerHTML =
+                escapeHtml(tool.name) +
+                (tool.role ? ' <span class="status-badge indexed" style="font-size:0.68rem;">' + escapeHtml(roleLabel(tool.role)) + '</span>' : '') +
+                (isHeart ? ' <span class="status-badge remembered" style="font-size:0.68rem;">Active Heart</span>' : '');
+
+            const btn = document.createElement('button');
+            btn.className = isHeart ? 'secondary' : 'primary';
+            btn.style.cssText = 'font-size:0.75rem; padding:0.2rem 0.6rem;';
+            btn.textContent = isHeart ? 'Clear' : 'Set as Heart';
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                try {
+                    const heartId = isHeart ? null : tool.id;
+                    const res  = await fetch('/api/tools/active', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ heart: heartId }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showFlashMessage(heartId
+                            ? escapeHtml(tool.name) + ' is now the active Heart ✓'
+                            : 'Heart assignment cleared.');
+                        loadHearthToolRegistry();
+                    } else {
+                        showFlashMessage('Heart update failed: ' + (data.error || 'unknown'));
+                        btn.disabled = false;
+                    }
+                } catch {
+                    showFlashMessage('Could not reach server.');
+                    btn.disabled = false;
+                }
+            });
+
+            row.appendChild(label);
+            row.appendChild(btn);
+            listEl.insertBefore(row, emptyEl);
+        });
+    } catch {
+        if (listEl) listEl.innerHTML += '<span class="message-system">Could not load tool registry.</span>';
+    }
+}
+
+/* ── Tool Inspector Modal ────────────────────────────────────── */
+
+function closeToolInspector() {
+    const overlay = document.getElementById('tool-inspector-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+function openToolInspector(tool, active) {
+    const overlay = document.getElementById('tool-inspector-overlay');
+    if (!overlay) return;
+
+    const isHeart = active && active.heart === tool.id;
+
+    const set = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text || '—';
+    };
+
+    const titleEl = document.getElementById('tool-insp-title');
+    if (titleEl) titleEl.textContent = tool.name || 'Tool Inspector';
+
+    const statusEl = document.getElementById('tool-insp-status');
+    if (statusEl) {
+        statusEl.innerHTML =
+            '<span class="status-badge ' + toolStatusClass(tool) + '">' +
+            escapeHtml(toolStatusLabel(tool)) + '</span>' +
+            (isHeart ? ' <span class="status-badge remembered">Active Heart</span>' : '');
+    }
+
+    set('tool-insp-type',      tool.type);
+    set('tool-insp-interface', tool.interface);
+    set('tool-insp-endpoint',  tool.endpoint || '(none)');
+    set('tool-insp-role',      tool.role ? roleLabel(tool.role) : 'None');
+    set('tool-insp-trust',     tool.trusted ? 'Trusted' : 'Untrusted');
+    set('tool-insp-lastseen',  tool.lastSeen || '—');
+
+    const actEl = document.getElementById('tool-insp-actions');
+    if (actEl) {
+        actEl.innerHTML = '';
+        const actions = [];
+
+        if (!tool.trusted && tool.status === 'detected') {
+            actions.push({
+                label: 'Trust Tool',
+                primary: true,
+                fn: async () => {
+                    try {
+                        const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
+                            method:  'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body:    JSON.stringify({ trusted: true }),
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            closeToolInspector();
+                            showFlashMessage(escapeHtml(tool.name) + ' trusted ✓');
+                            loadThresholdTools();
+                            loadWorkshopTools();
+                            loadHearthToolRegistry();
+                        } else {
+                            showFlashMessage('Trust failed: ' + (data.error || 'unknown'));
+                        }
+                    } catch {
+                        showFlashMessage('Could not reach server.');
+                    }
+                },
+            });
+        }
+
+        if (tool.trusted && !isHeart) {
+            actions.push({
+                label: 'Set as Heart',
+                primary: true,
+                fn: async () => {
+                    try {
+                        const res  = await fetch('/api/tools/active', {
+                            method:  'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body:    JSON.stringify({ heart: tool.id }),
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            closeToolInspector();
+                            showFlashMessage(escapeHtml(tool.name) + ' is now the active Heart ✓');
+                            loadHearthToolRegistry();
+                        }
+                    } catch {
+                        showFlashMessage('Could not reach server.');
+                    }
+                },
+            });
+        }
+
+        actions.push({ label: 'Close', primary: false, fn: closeToolInspector });
+
+        actions.forEach(a => {
+            const btn = document.createElement('button');
+            btn.className = a.primary ? 'primary' : 'secondary';
+            btn.textContent = a.label;
+            btn.addEventListener('click', a.fn);
+            actEl.appendChild(btn);
+        });
+    }
+
+    overlay.style.display = 'flex';
+}
+
+// Close tool inspector on overlay click or close button
+(function initToolInspector() {
+    const closeBtn = document.getElementById('tool-insp-close');
+    const overlay  = document.getElementById('tool-inspector-overlay');
+    if (closeBtn) closeBtn.addEventListener('click', closeToolInspector);
+    if (overlay) {
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) closeToolInspector();
+        });
+    }
+})();
 
 /** Active chat reference context — array of { sourceId, title } objects. */
 let _chatRefs = [];
