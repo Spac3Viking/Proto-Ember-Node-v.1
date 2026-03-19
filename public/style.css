@@ -802,10 +802,32 @@ input:focus, textarea:focus {
   min-height: 2.4rem;
 }
 
+.signal-trace-panel.collapsed .signal-trace-sources {
+  display: none;
+}
+
 .signal-trace-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.signal-trace-toggle {
+  background: none;
+  border: none;
+  color: hsla(140, 100%, 70%, 0.45);
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 0 0.15rem;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  margin-left: auto;
+}
+
+.signal-trace-toggle:hover {
+  opacity: 1;
+  color: var(--gf-wire-green);
 }
 
 .signal-trace-label {
@@ -1139,25 +1161,25 @@ button.secondary:disabled {
 .status-badge.indexed   { border: 1px solid hsla(140,100%,70%,0.3); color: var(--gf-wire-green); }
 .status-badge.remembered{ border: 1px solid hsla(45,100%,65%,0.3);  color: var(--gf-wire-gold); }
 
-/* ── Phase 4 — Loading Rune Animation ────────────────────────────────────────── */
+/* ── Phase 4 — Loading Rune Animation (JS-driven) ───────────────────────────── */
 
-@keyframes runeRotate {
-  0%   { content: "ᚠ"; }
-  16%  { content: "ᚢ"; }
-  33%  { content: "ᚦ"; }
-  50%  { content: "ᚨ"; }
-  66%  { content: "ᚱ"; }
-  83%  { content: "ᚲ"; }
-  100% { content: "ᚠ"; }
+/* CSS keyframe removed — animation is now driven by JS startRuneAnimation().
+   The .loading-rune class is still used for the indicator container. */
+
+.loading-rune {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
 }
 
-.loading-rune::after {
+.loading-rune .rune-symbol {
   display: inline-block;
-  content: "ᚠ";
-  animation: runeRotate 1.8s steps(1) infinite;
-  margin-left: 0.35em;
-  opacity: 0.6;
+  min-width: 1.4em;
+  text-align: center;
+  opacity: 0.75;
   color: var(--gf-wire-green);
+  font-size: 1.1em;
+  line-height: 1;
 }
 
 /* ── Phase 4 — Chat Threads ──────────────────────────────────────────────────── */
@@ -1783,4 +1805,207 @@ button.secondary:disabled {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ── Phase 6 — Detected Files Notice ────────────────────────────────────────── */
+
+.detected-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  background: hsla(38, 100%, 50%, 0.08);
+  border: 1px solid hsla(38, 100%, 70%, 0.25);
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  color: var(--gf-wire-amber);
+  flex-wrap: wrap;
+}
+
+.detected-notice-icon {
+  font-size: 1rem;
+  opacity: 0.7;
+}
+
+.detected-notice-text {
+  flex: 1;
+  min-width: 120px;
+  letter-spacing: 0.03em;
+}
+
+.detected-dismiss-btn {
+  background: none;
+  border: none;
+  color: var(--archive-muted);
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.3rem;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.detected-dismiss-btn:hover {
+  opacity: 1;
+  color: var(--gf-ember-orange);
+}
+
+/* ── Phase 6 — Threshold Intake Queue ───────────────────────────────────────── */
+
+.threshold-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.threshold-queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.threshold-batch-progress {
+  font-size: 0.72rem;
+  color: var(--archive-muted);
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+.threshold-intake-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.threshold-queue-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.65rem 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  background: hsla(120, 15%, 5%, 0.5);
+  transition: border-color 0.2s ease;
+}
+
+.threshold-queue-entry.status-imported {
+  border-color: hsla(140, 100%, 70%, 0.2);
+  background: hsla(120, 15%, 6%, 0.6);
+  opacity: 0.75;
+}
+
+.threshold-queue-entry.status-failed {
+  border-color: hsla(25, 100%, 60%, 0.3);
+  background: hsla(25, 20%, 5%, 0.6);
+}
+
+.threshold-queue-entry.status-importing {
+  border-color: hsla(38, 100%, 70%, 0.25);
+  background: hsla(38, 15%, 6%, 0.6);
+}
+
+.threshold-queue-entry.status-detected {
+  border-color: hsla(200, 100%, 70%, 0.2);
+}
+
+.threshold-queue-entry.status-changed {
+  border-color: hsla(38, 100%, 70%, 0.3);
+  background: hsla(38, 10%, 5%, 0.6);
+}
+
+.tq-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tq-filename {
+  font-size: 0.78rem;
+  color: var(--archive-text);
+  font-family: monospace;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tq-changed-note {
+  font-size: 0.68rem;
+  color: var(--gf-wire-amber);
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.tq-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.tq-input {
+  width: 100%;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.55rem;
+  background: hsla(120, 15%, 4%, 0.7);
+  border: 1px solid hsla(140, 100%, 70%, 0.12);
+  border-radius: var(--radius-sm);
+  color: var(--archive-text);
+  transition: border-color 0.2s ease;
+}
+
+.tq-input:focus {
+  outline: none;
+  border-color: hsla(140, 100%, 70%, 0.3);
+}
+
+.tq-input-shelf {
+  max-width: 240px;
+}
+
+.tq-error {
+  font-size: 0.7rem;
+  color: var(--gf-ember-orange);
+  letter-spacing: 0.03em;
+}
+
+.tq-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
+.tq-action-btn {
+  font-size: 0.72rem;
+  padding: 0.22rem 0.6rem;
+  white-space: nowrap;
+}
+
+.tq-remove-btn {
+  color: var(--archive-muted);
+  opacity: 0.6;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.tq-remove-btn:hover {
+  opacity: 1;
+  color: var(--gf-ember-orange);
+}
+
+/* Extra status badges for detected/changed queue entries */
+.status-badge.detected { border: 1px solid hsla(200, 100%, 70%, 0.3); color: hsla(200, 100%, 75%, 0.9); }
+.status-badge.changed  { border: 1px solid hsla(38,  100%, 70%, 0.3); color: var(--gf-wire-amber); }
+.status-badge.importing{ border: 1px solid hsla(140, 100%, 70%, 0.2); color: var(--gf-wire-green); }
+
 

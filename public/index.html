@@ -74,10 +74,11 @@
                 <div class="chat-window" id="messages" aria-live="polite" aria-label="Conversation"></div>
 
                 <!-- Signal Trace Panel -->
-                <div class="signal-trace-panel" id="signal-trace-panel">
+                <div class="signal-trace-panel collapsed" id="signal-trace-panel">
                   <div class="signal-trace-header">
                     <span class="signal-trace-label">Signal Trace</span>
                     <span class="signal-trace-status" id="signal-trace-status">awaiting exchange</span>
+                    <button class="signal-trace-toggle" id="signal-trace-toggle" aria-label="Toggle signal trace" aria-expanded="false" title="Expand signal trace">▸</button>
                   </div>
                   <div class="signal-trace-sources" id="signal-trace-sources"></div>
                 </div>
@@ -351,6 +352,14 @@
               </p>
             </div>
 
+            <!-- Detected Files Notice (shown when unmanaged/changed files are found) -->
+            <div id="detected-notice" class="detected-notice" style="display:none;">
+              <span class="detected-notice-icon">ᚦ</span>
+              <span class="detected-notice-text" id="detected-notice-text">New files detected in local storage.</span>
+              <button class="secondary" id="detected-review-btn">Review detected files</button>
+              <button class="detected-dismiss-btn" id="detected-dismiss-btn" title="Dismiss">✕</button>
+            </div>
+
             <!-- Drop Zone -->
             <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.875rem;">
               <div
@@ -371,40 +380,29 @@
                   style="display:none;"
                   aria-label="Choose files to ingest"
                 >
-                <span style="font-size:0.72rem; opacity:0.55;">Files land here for inspection before any Hearth access.</span>
+                <span style="font-size:0.72rem; opacity:0.55;">Select multiple files — each will appear in the queue below for review before import.</span>
               </div>
 
-              <!-- File Metadata Form (shown after file drop) -->
-              <div id="threshold-meta-form" class="threshold-meta-form" style="display:none;">
-                <div class="workshop-section-title">Tag this file</div>
-                <div class="meta-form-fields">
-                  <div class="meta-form-row">
-                    <label class="meta-form-label" for="meta-title">Title</label>
-                    <input type="text" id="meta-title" placeholder="e.g. Green Fire Philosophy" />
-                  </div>
-                  <div class="meta-form-row">
-                    <label class="meta-form-label" for="meta-description">Description</label>
-                    <input type="text" id="meta-description" placeholder="Short description of the content" />
-                  </div>
-                  <div class="meta-form-row">
-                    <label class="meta-form-label" for="meta-shelf">Shelf / Category</label>
-                    <input type="text" id="meta-shelf" placeholder="e.g. Philosophy" />
-                  </div>
-                  <div style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem;">
-                    <button class="primary" id="meta-confirm-btn">Import File</button>
-                    <button class="secondary" id="meta-cancel-btn">Cancel</button>
-                    <span class="workshop-status" id="threshold-meta-status"></span>
+              <!-- Intake Queue (multi-file) -->
+              <div class="threshold-file-section" id="threshold-queue-section" style="display:none;">
+                <div class="threshold-queue-header">
+                  <div class="workshop-section-title" style="margin:0;">Intake Queue</div>
+                  <div class="threshold-queue-actions">
+                    <span class="threshold-batch-progress" id="threshold-batch-progress"></span>
+                    <button class="primary" id="threshold-import-all-btn">Import All</button>
+                    <button class="secondary" id="threshold-clear-queue-btn">Clear Queue</button>
                   </div>
                 </div>
+                <div id="threshold-intake-queue" class="threshold-intake-queue"></div>
+                <div id="threshold-status" class="threshold-status"></div>
               </div>
 
-              <!-- File List -->
+              <!-- Indexed File List -->
               <div class="threshold-file-section">
-                <div class="workshop-section-title">Intake Queue</div>
+                <div class="workshop-section-title">Threshold Files</div>
                 <div id="threshold-file-list" class="threshold-file-list">
                   <span class="message-system">No files in Threshold.</span>
                 </div>
-                <div id="threshold-status" class="threshold-status"></div>
               </div>
 
               <!-- Scratch Notes -->

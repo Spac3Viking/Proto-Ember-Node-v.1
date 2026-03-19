@@ -92,3 +92,58 @@ describe('GET /api/ollama-status', () => {
         expect(res.body.status).toBe('unreachable');
     });
 });
+
+/* ─────────────────────────────────────────────────────────────────
+   Phase 6 — Detected Files Endpoints
+   ─────────────────────────────────────────────────────────────── */
+
+describe('GET /api/detected-files', () => {
+    test('returns 200 with unmanaged and changed arrays', async () => {
+        const res = await request(app).get('/api/detected-files');
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body.unmanaged)).toBe(true);
+        expect(Array.isArray(res.body.changed)).toBe(true);
+    });
+});
+
+describe('POST /api/detected-files/import', () => {
+    test('returns 400 when filename is missing', async () => {
+        const res = await request(app)
+            .post('/api/detected-files/import')
+            .send({ room: 'threshold' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/filename/i);
+    });
+
+    test('returns 400 when room is invalid', async () => {
+        const res = await request(app)
+            .post('/api/detected-files/import')
+            .send({ filename: 'test.txt', room: 'invalid-room' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/room/i);
+    });
+
+    test('returns 404 when file does not exist on disk', async () => {
+        const res = await request(app)
+            .post('/api/detected-files/import')
+            .send({ filename: 'nonexistent-file-xyz.txt', room: 'threshold' });
+        expect(res.status).toBe(404);
+    });
+});
+
+describe('POST /api/detected-files/acknowledge', () => {
+    test('returns 400 when sourceId is missing', async () => {
+        const res = await request(app)
+            .post('/api/detected-files/acknowledge')
+            .send({});
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/sourceId/i);
+    });
+
+    test('returns 404 when source is not in manifest', async () => {
+        const res = await request(app)
+            .post('/api/detected-files/acknowledge')
+            .send({ sourceId: 'nonexistent-source-id-xyz' });
+        expect(res.status).toBe(404);
+    });
+});
