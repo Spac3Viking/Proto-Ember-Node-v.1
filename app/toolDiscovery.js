@@ -138,14 +138,14 @@ function placeholderTools() {
  * @returns {Promise<object[]>}
  */
 async function discoverTools() {
-    const [ollama, ...httpEndpoints] = await Promise.all([
+    const [ollama, httpEndpoints] = await Promise.all([
         detectOllama(),
         detectConfiguredEndpoints(),
     ]);
 
     const detected = [];
     if (ollama)              detected.push(ollama);
-    if (httpEndpoints[0])    detected.push(...httpEndpoints[0]);
+    if (httpEndpoints.length > 0) detected.push(...httpEndpoints);
 
     // Append placeholders for undetected future tools
     detected.push(...placeholderTools());
