@@ -67,6 +67,7 @@ async function detectOllama() {
         interface: 'http',
         endpoint,
         status:    'detected',
+        running:   true,
         trusted:   false,
     };
 }
@@ -102,6 +103,7 @@ async function detectConfiguredEndpoints() {
                 interface: 'http',
                 endpoint:  url,
                 status:    'detected',
+                running:   true,
                 trusted:   false,
             });
         }

@@ -26,6 +26,27 @@
       </div>
     </header>
 
+    <!-- Startup Summary Banner — loaded on app init, dismissible -->
+    <div id="startup-banner" class="startup-banner" style="display:none;" role="status" aria-live="polite">
+      <div class="startup-banner-header">
+        <span class="startup-banner-rune">ᚠ</span>
+        <span class="startup-banner-title">System Awareness</span>
+        <div class="startup-banner-actions">
+          <button class="secondary startup-banner-toggle" id="startup-banner-toggle" aria-label="Collapse summary" title="Collapse">▾</button>
+          <button class="startup-banner-dismiss" id="startup-banner-dismiss" aria-label="Dismiss summary" title="Dismiss">✕</button>
+        </div>
+      </div>
+      <div class="startup-banner-body" id="startup-banner-body">
+        <div class="startup-banner-stats" id="startup-banner-stats"></div>
+        <div class="startup-banner-warnings" id="startup-banner-warnings" style="display:none;"></div>
+        <div class="startup-banner-links">
+          <button class="secondary startup-banner-link" id="sb-review-threshold">ᚦ Review Threshold</button>
+          <button class="secondary startup-banner-link" id="sb-review-tools">ᚹ Review Tools</button>
+          <button class="secondary startup-banner-link" id="sb-open-system">ᚺ System</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Room Tab Row — 3 rooms only -->
     <nav class="room-tabs" role="tablist" aria-label="Rooms">
       <button class="room-tab active" role="tab" aria-selected="true"  data-room="hearth"    aria-controls="room-hearth">ᚺ Hearth</button>
@@ -216,8 +237,17 @@
                   Phase 4 ✓ — sub-tab navigation, file lifecycle, thread system, PDF/DOCX support<br>
                   Phase 5 ✓ — external data root, portability, cartridge ownership<br>
                   Phase 6 ✓ — source actions, cross-room mobility, Hearth Chat references<br>
-                  Phase 7 ✓ — AI/tool discovery, trust flow, role assignment, Heart selection
+                  Phase 7 ✓ — AI/tool discovery, trust flow, role assignment, Heart selection<br>
+                  Phase 8 ✓ — startup checklist, airlock discipline, tool readiness
                 </p>
+              </div>
+
+              <!-- Startup Check Summary (System tab) -->
+              <div class="ember-card system-block">
+                <div class="system-block-title">Last Startup Check</div>
+                <div id="sys-startup-summary">
+                  <span class="message-system">Loading…</span>
+                </div>
               </div>
             </div>
           </div>
@@ -434,7 +464,7 @@
                 <div id="threshold-status" class="threshold-status"></div>
               </div>
 
-              <!-- Indexed File List -->
+              <!-- Indexed File List — sectioned: Waiting / Flagged / (Changed handled by intake queue) -->
               <div class="threshold-file-section">
                 <div class="workshop-section-title">Threshold Files</div>
                 <div id="threshold-file-list" class="threshold-file-list">
@@ -469,6 +499,25 @@
               <div id="th-tool-list" class="threshold-file-list">
                 <span class="message-system">No tools detected. Click Scan to search.</span>
               </div>
+            </div>
+            <!-- Guided setup — shown when no AI is running -->
+            <div class="ember-card" id="th-ai-setup-guide" style="padding: 1rem 1.25rem; display:none; gap:0.5rem; flex-direction:column;">
+              <div class="workshop-section-title">No Local AI Detected</div>
+              <p style="font-size:0.82rem; opacity:0.75; margin:0;">
+                Ember Node works best with a local AI model host. The recommended option is <strong>Ollama</strong>.
+              </p>
+              <details style="font-size:0.82rem;">
+                <summary style="cursor:pointer; opacity:0.8; margin-bottom:0.4rem;">Setup steps for Ollama</summary>
+                <ol style="margin:0.4rem 0 0 1.2rem; opacity:0.75; line-height:1.6;">
+                  <li>Visit <strong>ollama.com</strong> and download Ollama for your OS.</li>
+                  <li>Install and run: <code>ollama serve</code></li>
+                  <li>Pull a model: <code>ollama pull gemma3:4b</code></li>
+                  <li>Return here and click <strong>↺ Scan</strong> to detect Ollama.</li>
+                </ol>
+              </details>
+              <p style="font-size:0.78rem; opacity:0.55; margin:0;">
+                Ember Node will never auto-install tools. All setup is manual and under your control.
+              </p>
             </div>
           </div>
 
@@ -536,6 +585,7 @@
       <div class="source-inspector-body">
         <div class="insp-meta-grid">
           <div class="insp-meta-row"><span class="trace-key">Status</span><span id="tool-insp-status"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Running</span><span id="tool-insp-running"></span></div>
           <div class="insp-meta-row"><span class="trace-key">Type</span><span id="tool-insp-type"></span></div>
           <div class="insp-meta-row"><span class="trace-key">Interface</span><span id="tool-insp-interface"></span></div>
           <div class="insp-meta-row"><span class="trace-key">Endpoint</span><span id="tool-insp-endpoint" class="source-card-filename"></span></div>
