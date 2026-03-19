@@ -1493,106 +1493,174 @@ async function loadThresholdList() {
     const listEl = document.getElementById('threshold-file-list');
     if (!listEl) return;
 
+    let files     = [];
+    let changedPaths = new Set();
+
     try {
-        const res   = await fetch('/api/threshold/list');
-        const data  = await res.json();
-        const files = data.files || [];
-
-        if (files.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No files in Threshold.</span>';
-            return;
-        }
-
-        listEl.innerHTML = '';
-        files.forEach(f => {
-            const row = document.createElement('div');
-            row.className = 'threshold-file-row';
-
-            const titleText = f.title || f.filename;
-            const desc      = f.description ? (' — ' + f.description) : '';
-
-            const nameEl = document.createElement('div');
-            nameEl.style.cssText = 'flex:1; min-width:0;';
-            nameEl.innerHTML =
-                '<div class="threshold-file-name">' + escapeHtml(titleText) + '</div>' +
-                (f.shelf ? '<div class="source-card-filename">Shelf: ' + escapeHtml(f.shelf) + '</div>' : '') +
-                (f.description ? '<div class="source-card-description">' + escapeHtml(f.description) + '</div>' : '') +
-                '<div class="source-card-filename">' + escapeHtml(f.filename) + '</div>';
-
-            const actions = document.createElement('span');
-            actions.className = 'threshold-file-actions';
-
-            // Status badge
-            const statusBadge = document.createElement('span');
-            statusBadge.className = 'status-badge ' + (f.status || 'waiting');
-            statusBadge.textContent = (f.status || 'waiting').charAt(0).toUpperCase() + (f.status || 'waiting').slice(1);
-            actions.appendChild(statusBadge);
-
-            if (!f.metaOnly) {
-                const indexBtn = document.createElement('button');
-                indexBtn.className = 'secondary threshold-action-btn';
-                indexBtn.textContent = 'Index';
-                indexBtn.addEventListener('click', async () => {
-                    if (!f.sourceId) { alert('File not yet registered — drop it again.'); return; }
-                    indexBtn.disabled = true;
-                    indexBtn.textContent = 'Indexing…';
-                    try {
-                        const r    = await fetch('/api/index/file', {
-                            method:  'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body:    JSON.stringify({ sourceId: f.sourceId }),
-                        });
-                        const d = await r.json();
-                        if (d.success) {
-                            indexBtn.textContent = 'Indexed';
-                            refreshSystemStatus();
-                            loadThresholdList();
-                        } else {
-                            indexBtn.textContent = 'Failed';
-                            indexBtn.title = d.error || 'Indexing failed';
-                            indexBtn.disabled = false;
-                        }
-                    } catch {
-                        indexBtn.textContent = 'Error';
-                        indexBtn.disabled = false;
-                    }
-                });
-
-                const moveBtn = document.createElement('button');
-                moveBtn.className = 'secondary threshold-action-btn';
-                moveBtn.textContent = '→ Workshop';
-                moveBtn.addEventListener('click', async () => {
-                    if (!f.sourceId) return;
-                    moveBtn.disabled = true;
-                    try {
-                        const r = await fetch('/api/index/file', {
-                            method:  'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body:    JSON.stringify({ sourceId: f.sourceId, targetRoom: 'workshop' }),
-                        });
-                        const d = await r.json();
-                        if (d.success) {
-                            moveBtn.textContent = '✓ Workshop';
-                            loadThresholdList();
-                        } else {
-                            moveBtn.disabled = false;
-                        }
-                    } catch {
-                        moveBtn.disabled = false;
-                    }
-                });
-
-                actions.appendChild(indexBtn);
-                actions.appendChild(moveBtn);
-            }
-
-            row.appendChild(nameEl);
-            row.appendChild(actions);
-            listEl.appendChild(row);
-        });
+        const [listRes, detectedRes] = await Promise.all([
+            fetch('/api/threshold/list'),
+            fetch('/api/detected-files'),
+        ]);
+        const listData     = await listRes.json();
+        const detectedData = await detectedRes.json();
+        files = listData.files || [];
+        (detectedData.changed || []).forEach(f => changedPaths.add(f.path));
     } catch {
         listEl.innerHTML = '<span class="message-system threshold-error">Could not load Threshold files.</span>';
+        return;
     }
+
+    if (files.length === 0) {
+        listEl.innerHTML = '<span class="message-system">No files in Threshold.</span>';
+        return;
+    }
+
+    listEl.innerHTML = '';
+
+    // Split into sections
+    const flaggedFiles  = files.filter(f => f.status === 'flagged');
+    const changedFiles  = files.filter(f => changedPaths.has(f.path));
+    const waitingFiles  = files.filter(f =>
+        (!f.status || f.status === 'waiting') && !changedPaths.has(f.path)
+    );
+    const otherFiles    = files.filter(f =>
+        f.status && f.status !== 'waiting' && f.status !== 'flagged' && !changedPaths.has(f.path)
+    );
+
+    function renderSection(title, items) {
+        if (items.length === 0) return;
+
+        const header = document.createElement('div');
+        header.className = 'threshold-section-header';
+        header.textContent = title + ' (' + items.length + ')';
+        listEl.appendChild(header);
+
+        items.forEach(f => listEl.appendChild(buildThresholdFileRow(f, changedPaths.has(f.path))));
+    }
+
+    renderSection('Flagged', flaggedFiles);
+    renderSection('Changed', changedFiles);
+    renderSection('Waiting', waitingFiles);
+    if (otherFiles.length > 0) {
+        renderSection('Other', otherFiles);
+    }
+}
+
+/** Build a single threshold file row with flag/unflag and action buttons. */
+function buildThresholdFileRow(f, isChanged) {
+    const row = document.createElement('div');
+    row.className = 'threshold-file-row';
+
+    const titleText = f.title || f.filename;
+
+    const nameEl = document.createElement('div');
+    nameEl.style.cssText = 'flex:1; min-width:0;';
+
+    let nameHtml = '<div class="threshold-file-name">' + escapeHtml(titleText);
+    if (f.status === 'flagged') {
+        nameHtml += ' <span class="status-badge flagged">Flagged</span>';
+    } else if (isChanged) {
+        nameHtml += ' <span class="status-badge changed">Changed</span>';
+    }
+    nameHtml += '</div>';
+
+    if (f.shelf) {
+        nameHtml += '<div class="source-card-filename">Shelf: ' + escapeHtml(f.shelf) + '</div>';
+    }
+    if (f.description) {
+        nameHtml += '<div class="source-card-description">' + escapeHtml(f.description) + '</div>';
+    }
+    nameHtml += '<div class="source-card-filename">' + escapeHtml(f.filename) + '</div>';
+    nameEl.innerHTML = nameHtml;
+
+    const actions = document.createElement('span');
+    actions.className = 'threshold-file-actions';
+
+    // Status badge (for non-flagged files)
+    if (f.status && f.status !== 'flagged') {
+        const statusBadge = document.createElement('span');
+        statusBadge.className = 'status-badge ' + (f.status || 'waiting');
+        statusBadge.textContent = (f.status || 'waiting').charAt(0).toUpperCase() + (f.status || 'waiting').slice(1);
+        actions.appendChild(statusBadge);
+    }
+
+    // Flag / Unflag button (only for threshold files with a sourceId)
+    if (f.sourceId) {
+        const flagBtn = document.createElement('button');
+        flagBtn.className = 'secondary threshold-action-btn';
+        if (f.status === 'flagged') {
+            flagBtn.textContent = 'Unflag';
+            flagBtn.title = 'Remove flag — return to Waiting';
+            flagBtn.addEventListener('click', () => flagSource(f.sourceId, false));
+        } else {
+            flagBtn.textContent = 'Flag';
+            flagBtn.title = 'Flag for review';
+            flagBtn.addEventListener('click', () => flagSource(f.sourceId, true));
+        }
+        actions.appendChild(flagBtn);
+    }
+
+    // Index and move buttons (only for non-metaOnly files with a sourceId)
+    if (!f.metaOnly && f.sourceId) {
+        const indexBtn = document.createElement('button');
+        indexBtn.className = 'secondary threshold-action-btn';
+        indexBtn.textContent = 'Index';
+        indexBtn.addEventListener('click', async () => {
+            indexBtn.disabled = true;
+            indexBtn.textContent = 'Indexing…';
+            try {
+                const r    = await fetch('/api/index/file', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ sourceId: f.sourceId }),
+                });
+                const d = await r.json();
+                if (d.success) {
+                    indexBtn.textContent = 'Indexed';
+                    refreshSystemStatus();
+                    loadThresholdList();
+                } else {
+                    indexBtn.textContent = 'Failed';
+                    indexBtn.title = d.error || 'Indexing failed';
+                    indexBtn.disabled = false;
+                }
+            } catch {
+                indexBtn.textContent = 'Error';
+                indexBtn.disabled = false;
+            }
+        });
+
+        const moveBtn = document.createElement('button');
+        moveBtn.className = 'secondary threshold-action-btn';
+        moveBtn.textContent = '→ Workshop';
+        moveBtn.addEventListener('click', async () => {
+            if (!f.sourceId) return;
+            moveBtn.disabled = true;
+            try {
+                const r = await fetch('/api/index/file', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ sourceId: f.sourceId, targetRoom: 'workshop' }),
+                });
+                const d = await r.json();
+                if (d.success) {
+                    moveBtn.textContent = '✓ Workshop';
+                    loadThresholdList();
+                } else {
+                    moveBtn.disabled = false;
+                }
+            } catch {
+                moveBtn.disabled = false;
+            }
+        });
+
+        actions.appendChild(indexBtn);
+        actions.appendChild(moveBtn);
+    }
+
+    row.appendChild(nameEl);
+    row.appendChild(actions);
+    return row;
 }
 
 /* ================================================================
@@ -1699,6 +1767,14 @@ function toolStatusClass(tool) {
     return 'warn';
 }
 
+/** Running/offline badge HTML for a tool */
+function toolRunningBadge(tool) {
+    if (tool.status === 'not_detected' || tool.status === 'unknown') return '';
+    if (tool.running === true)  return ' <span class="status-badge running">Running</span>';
+    if (tool.running === false) return ' <span class="status-badge offline">Offline</span>';
+    return '';
+}
+
 /** Human-readable role label */
 function roleLabel(role) {
     if (role === 'mirror') return 'Mythic Mirror';
@@ -1713,7 +1789,8 @@ function roleLabel(role) {
  * Shows detected tools that are not yet trusted.
  */
 async function loadThresholdTools() {
-    const listEl = document.getElementById('th-tool-list');
+    const listEl   = document.getElementById('th-tool-list');
+    const guideEl  = document.getElementById('th-ai-setup-guide');
     if (!listEl) return;
     listEl.innerHTML = '<span class="message-system">Loading…</span>';
 
@@ -1722,6 +1799,10 @@ async function loadThresholdTools() {
 
         // Show all non-trusted detected tools (+ not_detected as dim)
         const visible = tools.filter(t => !t.trusted);
+
+        // Show guided setup if no running tools
+        const anyRunning = tools.some(t => t.running === true);
+        if (guideEl) guideEl.style.display = anyRunning ? 'none' : 'flex';
 
         if (visible.length === 0) {
             listEl.innerHTML = '<span class="message-system">No untrusted tools. All detected tools have been admitted.</span>';
@@ -1745,7 +1826,9 @@ function renderThresholdToolRow(tool, active, container) {
     nameEl.innerHTML =
         '<div class="threshold-file-name">' + escapeHtml(tool.name) +
             ' <span class="status-badge ' + toolStatusClass(tool) + '">' +
-            escapeHtml(toolStatusLabel(tool)) + '</span></div>' +
+            escapeHtml(toolStatusLabel(tool)) + '</span>' +
+            toolRunningBadge(tool) +
+            '</div>' +
         '<div class="source-card-filename">' + escapeHtml(tool.type) + ' · ' + escapeHtml(tool.interface) + '</div>' +
         (tool.endpoint ? '<div class="source-card-filename">' + escapeHtml(tool.endpoint) + '</div>' : '') +
         (tool.note ? '<div class="source-card-description">' + escapeHtml(tool.note) + '</div>' : '');
@@ -1791,6 +1874,22 @@ function renderThresholdToolRow(tool, active, container) {
             }
         });
         actions.appendChild(trustBtn);
+    }
+
+    // Launch button — only for Ollama when it is detected but not running
+    if (tool.id === 'ollama-local' && tool.status === 'detected' && !tool.running) {
+        const launchBtn = document.createElement('button');
+        launchBtn.className = 'secondary threshold-action-btn';
+        launchBtn.textContent = '▶ Launch';
+        launchBtn.title = 'Attempt to start Ollama';
+        launchBtn.addEventListener('click', async () => {
+            launchBtn.disabled = true;
+            launchBtn.textContent = 'Launching…';
+            await launchOllama(tool.id);
+            launchBtn.disabled = false;
+            launchBtn.textContent = '▶ Launch';
+        });
+        actions.appendChild(launchBtn);
     }
 
     actions.appendChild(inspBtn);
@@ -1859,7 +1958,9 @@ function renderWorkshopToolRow(tool, active, container) {
     nameEl.innerHTML =
         '<div class="threshold-file-name">' + escapeHtml(tool.name) +
             (isHeart ? ' <span class="status-badge remembered">Heart</span>' : '') +
-            ' <span class="status-badge ' + toolStatusClass(tool) + '">' + escapeHtml(toolStatusLabel(tool)) + '</span></div>' +
+            ' <span class="status-badge ' + toolStatusClass(tool) + '">' + escapeHtml(toolStatusLabel(tool)) + '</span>' +
+            toolRunningBadge(tool) +
+            '</div>' +
         '<div class="source-card-filename">' + escapeHtml(tool.type) + ' · ' + escapeHtml(tool.interface) + '</div>' +
         (tool.role ? '<div class="source-card-description">' + escapeHtml(roleLabel(tool.role)) + '</div>' : '');
 
@@ -2055,6 +2156,17 @@ function openToolInspector(tool, active) {
     set('tool-insp-trust',     tool.trusted ? 'Trusted' : 'Untrusted');
     set('tool-insp-lastseen',  tool.lastSeen || '—');
 
+    const runningEl = document.getElementById('tool-insp-running');
+    if (runningEl) {
+        if (tool.status === 'not_detected' || tool.status === 'unknown') {
+            runningEl.textContent = '—';
+        } else if (tool.running === true) {
+            runningEl.innerHTML = '<span class="status-badge running">Running</span>';
+        } else {
+            runningEl.innerHTML = '<span class="status-badge offline">Offline</span>';
+        }
+    }
+
     const actEl = document.getElementById('tool-insp-actions');
     if (actEl) {
         actEl.innerHTML = '';
@@ -2105,6 +2217,38 @@ function openToolInspector(tool, active) {
                             showFlashMessage(escapeHtml(tool.name) + ' is now the active Heart ✓');
                             loadHearthToolRegistry();
                         }
+                    } catch {
+                        showFlashMessage('Could not reach server.');
+                    }
+                },
+            });
+        }
+
+        // Launch action — Ollama only, when detected but offline
+        if (tool.id === 'ollama-local' && tool.status === 'detected' && !tool.running) {
+            actions.push({
+                label: '▶ Launch Ollama',
+                primary: true,
+                fn: async () => {
+                    closeToolInspector();
+                    await launchOllama(tool.id);
+                },
+            });
+        }
+
+        // Test connection action for detected tools with an endpoint
+        if (tool.status === 'detected' && tool.endpoint) {
+            actions.push({
+                label: 'Test Connection',
+                primary: false,
+                fn: async () => {
+                    showFlashMessage('Testing connection to ' + tool.name + '…');
+                    try {
+                        await fetch('/api/tools/scan', { method: 'POST' });
+                        showFlashMessage('Scan complete — check tool status.');
+                        closeToolInspector();
+                        loadThresholdTools();
+                        loadWorkshopTools();
                     } catch {
                         showFlashMessage('Could not reach server.');
                     }
@@ -2458,6 +2602,240 @@ function showFlashMessage(msg) {
 }
 
 /* ================================================================
+   Phase 8 — Startup Checklist, Airlock UI, Tool Readiness
+   ================================================================ */
+
+/**
+ * Fetch the startup check summary and render the launch banner.
+ * Dismissible for the session; collapses on toggle.
+ */
+async function loadStartupCheck() {
+    let data;
+    try {
+        const res = await fetch('/api/startup-check');
+        if (!res.ok) return;
+        data = await res.json();
+    } catch {
+        return; // server unreachable — fail silently
+    }
+
+    const banner = document.getElementById('startup-banner');
+    if (!banner) return;
+
+    // Build stats list
+    const statsEl    = document.getElementById('startup-banner-stats');
+    const warningsEl = document.getElementById('startup-banner-warnings');
+
+    if (statsEl) {
+        const stats = [];
+
+        // Files
+        const totalFiles = (data.waitingFiles || 0) + (data.changedFiles || 0) + (data.flaggedFiles || 0);
+        if (totalFiles > 0) {
+            if (data.waitingFiles > 0) {
+                stats.push({ label: 'waiting files', value: data.waitingFiles, style: 'warn' });
+            }
+            if (data.changedFiles > 0) {
+                stats.push({ label: 'changed files', value: data.changedFiles, style: 'warn' });
+            }
+            if (data.flaggedFiles > 0) {
+                stats.push({ label: 'flagged files', value: data.flaggedFiles, style: 'error' });
+            }
+        } else {
+            stats.push({ label: 'threshold clear', value: '✓', style: 'ok' });
+        }
+
+        // Tools
+        if (data.runningTools > 0) {
+            stats.push({ label: 'tools running', value: data.runningTools, style: 'ok' });
+        }
+        if (data.offlineTools > 0) {
+            stats.push({ label: 'tools offline', value: data.offlineTools, style: 'error' });
+        }
+        if (data.newTools > 0) {
+            stats.push({ label: 'new tools detected', value: data.newTools, style: 'warn' });
+        }
+
+        // Active Heart
+        if (data.activeHeart) {
+            stats.push({
+                label: 'heart',
+                value: data.activeHeart + (data.activeHeartAvailable ? ' ✓' : ' (offline)'),
+                style: data.activeHeartAvailable ? 'ok' : 'error',
+            });
+        } else {
+            stats.push({ label: 'heart', value: 'none set', style: 'zero' });
+        }
+
+        statsEl.innerHTML = stats.map(s =>
+            '<span class="startup-stat">' +
+            '<span class="startup-stat-value ' + escapeHtml(s.style || '') + '">' + escapeHtml(String(s.value)) + '</span>' +
+            ' <span>' + escapeHtml(s.label) + '</span>' +
+            '</span>'
+        ).join('');
+    }
+
+    // Warnings
+    if (warningsEl) {
+        const warnings = data.warnings || [];
+        if (warnings.length > 0) {
+            warningsEl.style.display = '';
+            warningsEl.innerHTML = warnings.map(w =>
+                '<div class="startup-warning-item">' + escapeHtml(w) + '</div>'
+            ).join('');
+        } else {
+            warningsEl.style.display = 'none';
+        }
+    }
+
+    // Show banner only if there is something to surface
+    const hasItems = (data.waitingFiles + data.changedFiles + data.flaggedFiles + data.newTools + data.offlineTools) > 0
+        || (data.warnings && data.warnings.length > 0);
+
+    if (hasItems) {
+        banner.style.display = '';
+    }
+
+    // Also populate the System tab summary
+    renderSystemStartupSummary(data);
+}
+
+/** Render startup check data in the Hearth → System tab */
+function renderSystemStartupSummary(data) {
+    const el = document.getElementById('sys-startup-summary');
+    if (!el) return;
+
+    const rows = [
+        { key: 'Waiting files',    val: data.waitingFiles  || 0 },
+        { key: 'Changed files',    val: data.changedFiles  || 0 },
+        { key: 'Flagged files',    val: data.flaggedFiles  || 0 },
+        { key: 'New tools',        val: data.newTools      || 0 },
+        { key: 'Running tools',    val: data.runningTools  || 0 },
+        { key: 'Offline tools',    val: data.offlineTools  || 0 },
+        { key: 'Active Heart',     val: data.activeHeart   || '—' },
+        { key: 'Heart available',  val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
+        { key: 'Migration',        val: data.migrationState || 'none' },
+        { key: 'Last scan',        val: data.lastScan ? new Date(data.lastScan).toLocaleTimeString() : '—' },
+    ];
+
+    el.innerHTML = rows.map(r =>
+        '<div class="system-row">' +
+        '<span class="system-key">' + escapeHtml(r.key) + '</span>' +
+        '<span class="system-val">' + escapeHtml(String(r.val)) + '</span>' +
+        '</div>'
+    ).join('');
+}
+
+/* ── Startup banner controls ─────────────────────────────────── */
+
+(function initStartupBanner() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const banner   = document.getElementById('startup-banner');
+        const body     = document.getElementById('startup-banner-body');
+        const toggle   = document.getElementById('startup-banner-toggle');
+        const dismiss  = document.getElementById('startup-banner-dismiss');
+
+        const reviewThresholdBtn = document.getElementById('sb-review-threshold');
+        const reviewToolsBtn     = document.getElementById('sb-review-tools');
+        const openSystemBtn      = document.getElementById('sb-open-system');
+
+        if (toggle && body) {
+            toggle.addEventListener('click', () => {
+                const isCollapsed = body.classList.toggle('collapsed');
+                toggle.textContent = isCollapsed ? '▸' : '▾';
+                toggle.title       = isCollapsed ? 'Expand' : 'Collapse';
+            });
+        }
+
+        if (dismiss && banner) {
+            dismiss.addEventListener('click', () => {
+                banner.style.display = 'none';
+            });
+        }
+
+        if (reviewThresholdBtn) {
+            reviewThresholdBtn.addEventListener('click', () => {
+                const tab = document.querySelector('.room-tab[data-room="threshold"]');
+                if (tab) tab.click();
+                if (banner) banner.style.display = 'none';
+            });
+        }
+
+        if (reviewToolsBtn) {
+            reviewToolsBtn.addEventListener('click', () => {
+                const thTab = document.querySelector('.room-tab[data-room="threshold"]');
+                if (thTab) thTab.click();
+                setTimeout(() => {
+                    const aiTab = document.querySelector('.sub-tab[data-subtab="th-ai"]');
+                    if (aiTab) aiTab.click();
+                }, 50);
+                if (banner) banner.style.display = 'none';
+            });
+        }
+
+        if (openSystemBtn) {
+            openSystemBtn.addEventListener('click', () => {
+                const hearthTab = document.querySelector('.room-tab[data-room="hearth"]');
+                if (hearthTab) hearthTab.click();
+                setTimeout(() => {
+                    const sysTab = document.querySelector('.sub-tab[data-subtab="hearth-system"]');
+                    if (sysTab) sysTab.click();
+                }, 50);
+                if (banner) banner.style.display = 'none';
+            });
+        }
+    });
+})();
+
+/**
+ * Flag or unflag a Threshold source.
+ * @param {string} sourceId
+ * @param {boolean} flagged
+ */
+async function flagSource(sourceId, flagged) {
+    try {
+        const res  = await fetch('/api/sources/' + encodeURIComponent(sourceId) + '/flag', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ flagged }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showFlashMessage(flagged ? 'File flagged for review.' : 'Flag removed.');
+            loadThresholdList();
+        } else {
+            showFlashMessage('Could not update flag: ' + (data.error || 'unknown'));
+        }
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+/**
+ * Attempt to launch Ollama from within Ember Node.
+ * Shows progress feedback and re-loads tool list on completion.
+ */
+async function launchOllama(toolId) {
+    showFlashMessage('Attempting to launch Ollama…');
+    try {
+        const res  = await fetch('/api/tools/' + encodeURIComponent(toolId) + '/launch', {
+            method: 'POST',
+        });
+        const data = await res.json();
+        if (data.success) {
+            showFlashMessage(data.message || 'Ollama started ✓');
+        } else {
+            showFlashMessage(data.message || 'Launch failed — try: ollama serve');
+        }
+        loadThresholdTools();
+        loadWorkshopTools();
+        loadHearthToolRegistry();
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+/* ================================================================
    Initialisation
    ================================================================ */
 
@@ -2465,6 +2843,7 @@ function showFlashMessage(msg) {
     updateHeaderStatus();
     refreshSystemStatus();
     loadHearthThreads();
+    loadStartupCheck();
 
     // Close all source action dropdown menus when clicking outside
     document.addEventListener('click', () => {

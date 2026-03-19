@@ -2007,12 +2007,186 @@ button.secondary:disabled {
 .status-badge.detected { border: 1px solid hsla(200, 100%, 70%, 0.3); color: hsla(200, 100%, 75%, 0.9); }
 .status-badge.changed  { border: 1px solid hsla(38,  100%, 70%, 0.3); color: var(--gf-wire-amber); }
 .status-badge.importing{ border: 1px solid hsla(140, 100%, 70%, 0.2); color: var(--gf-wire-green); }
+.status-badge.flagged  { border: 1px solid hsla(0,   80%,  65%, 0.4); color: hsla(0, 80%, 70%, 0.9); }
+.status-badge.running  { border: 1px solid hsla(140, 80%,  65%, 0.4); color: var(--gf-wire-green); }
+.status-badge.offline  { border: 1px solid hsla(0,   60%,  55%, 0.4); color: hsla(0, 65%, 65%, 0.85); }
 
 
 
 /* ================================================================
-   Phase 7 — Tool Registry UI
+   Phase 8 — Startup Banner & Airlock UI
    ================================================================ */
+
+/* Startup summary banner — shown just below the app header */
+.startup-banner {
+  margin: 0 1rem 0.5rem;
+  border: 1px solid hsla(45, 100%, 65%, 0.18);
+  border-radius: var(--radius-md);
+  background: hsla(120, 20%, 7%, 0.85);
+  font-size: 0.82rem;
+  overflow: hidden;
+}
+
+.startup-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid hsla(45, 100%, 65%, 0.1);
+  cursor: default;
+}
+
+.startup-banner-rune {
+  font-size: 1rem;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.startup-banner-title {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  flex: 1;
+}
+
+.startup-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.startup-banner-toggle,
+.startup-banner-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--archive-muted);
+  font-size: 0.8rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.startup-banner-toggle:hover,
+.startup-banner-dismiss:hover {
+  opacity: 1;
+  color: var(--archive-text);
+}
+
+.startup-banner-body {
+  padding: 0.6rem 0.85rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.startup-banner-body.collapsed {
+  display: none;
+}
+
+.startup-banner-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+}
+
+.startup-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+.startup-stat-value {
+  font-weight: 600;
+  color: var(--gf-wire-green);
+}
+
+.startup-stat-value.zero {
+  color: var(--archive-muted);
+  font-weight: 400;
+}
+
+.startup-stat-value.warn {
+  color: var(--gf-wire-amber);
+}
+
+.startup-stat-value.error {
+  color: hsla(0, 80%, 70%, 0.9);
+}
+
+.startup-banner-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.startup-warning-item {
+  font-size: 0.76rem;
+  color: var(--gf-wire-amber);
+  padding: 0.25rem 0.5rem;
+  background: hsla(38, 100%, 65%, 0.06);
+  border-left: 2px solid hsla(38, 100%, 65%, 0.3);
+  border-radius: 0 4px 4px 0;
+}
+
+.startup-banner-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+}
+
+.startup-banner-link {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.6rem;
+}
+
+/* Threshold file section headers */
+.threshold-section-header {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  opacity: 0.5;
+  padding: 0.4rem 0 0.25rem;
+  margin-top: 0.25rem;
+  border-top: 1px solid hsla(140,100%,70%,0.06);
+}
+
+.threshold-section-header:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+
+/* Flag badge for risky files */
+.triage-badge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  border: 1px solid hsla(0, 80%, 65%, 0.35);
+  color: hsla(0, 80%, 70%, 0.85);
+  margin-left: 0.3rem;
+}
+
+.triage-badge.archive {
+  border-color: hsla(38, 100%, 65%, 0.35);
+  color: var(--gf-wire-amber);
+}
+
+.triage-badge.script,
+.triage-badge.binary,
+.triage-badge.unknown {
+  border-color: hsla(0, 80%, 65%, 0.35);
+  color: hsla(0, 80%, 70%, 0.85);
+}
+
+
 
 /* Heart tool row in Hearth System tab */
 .heart-tool-row {

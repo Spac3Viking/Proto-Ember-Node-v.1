@@ -25,6 +25,7 @@ const path      = require('path');
 const fs        = require('fs');
 const axios     = require('axios');
 const rateLimit = require('express-rate-limit');
+const { spawn } = require('child_process');
 
 const {
     DATA_ROOT, ROOM_DIRS,
@@ -43,7 +44,7 @@ const {
 }                                            = require('./indexStore');
 const { retrieve, buildGroundedPrompt }      = require('./retrieval');
 const { buildSignalTrace, formatSignalTraceSummary } = require('./signalTrace');
-const { discoverTools }                      = require('./toolDiscovery');
+const { discoverTools, httpProbe }               = require('./toolDiscovery');
 
 // DATA_DIR is now the resolved data root from storageConfig
 const DATA_DIR = DATA_ROOT;
@@ -210,6 +211,7 @@ function mergeDetectedTools(detected) {
         if (byId[d.id]) {
             // Preserve trust, role, and description; update detection fields
             byId[d.id].status   = d.status;
+            byId[d.id].running  = (d.running === true);
             byId[d.id].lastSeen = d.status === 'detected' ? now : byId[d.id].lastSeen;
             // Update endpoint in case it changed
             if (d.endpoint !== undefined) byId[d.id].endpoint = d.endpoint;
@@ -219,6 +221,7 @@ function mergeDetectedTools(detected) {
                 ...d,
                 trusted:  false,
                 role:     null,
+                running:  (d.running === true),
                 lastSeen: d.status === 'detected' ? now : null,
             };
         }
@@ -228,7 +231,8 @@ function mergeDetectedTools(detected) {
     const detectedIds = new Set(detected.map(d => d.id));
     Object.values(byId).forEach(t => {
         if (!detectedIds.has(t.id)) {
-            t.status = 'not_detected';
+            t.status  = 'not_detected';
+            t.running = false;
         }
     });
 
@@ -1495,7 +1499,224 @@ app.post('/api/tools/active', writeLimiter, (req, res) => {
     res.json({ success: true, active: registry.active });
 });
 
-// ── Model check & startup ─────────────────────────────────────────────────────
+// ── Phase 8: Startup Checklist + Airlock + Tool Readiness ─────────────────────
+
+/**
+ * Classify a file by its extension for basic triage.
+ * Returns a category string and a boolean indicating whether to flag the file.
+ *
+ * @param {string} filename
+ * @returns {{ category: string, flag: boolean }}
+ */
+function triageFile(filename) {
+    const ext = path.extname(filename).toLowerCase();
+    const TEXT_DOCS = new Set(['.txt', '.md', '.pdf', '.docx', '.doc', '.odt', '.rtf', '.csv']);
+    const ARCHIVES  = new Set(['.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.tgz']);
+    const SCRIPTS   = new Set(['.sh', '.bat', '.cmd', '.ps1', '.bash', '.zsh', '.fish', '.py', '.js', '.rb', '.pl']);
+    const BINARIES  = new Set(['.exe', '.dll', '.so', '.dylib', '.bin', '.app', '.deb', '.rpm']);
+
+    if (TEXT_DOCS.has(ext))  return { category: 'document', flag: false };
+    if (ARCHIVES.has(ext))   return { category: 'archive',  flag: true  };
+    if (SCRIPTS.has(ext))    return { category: 'script',   flag: true  };
+    if (BINARIES.has(ext))   return { category: 'binary',   flag: true  };
+    return { category: 'unknown', flag: true };
+}
+
+/**
+ * Collect changed files by comparing mtime against ingestTimestamp.
+ * Extracted as a helper so it can be reused by the startup check.
+ *
+ * @param {object} manifests
+ * @returns {{ changed: object[] }}
+ */
+function getChangedFilesSummary(manifests) {
+    const byPath = {};
+    Object.values(manifests).forEach(m => {
+        if (m.path) byPath[m.path.replace(/\\/g, '/')] = m;
+    });
+
+    const changed = [];
+    const DETECT_SUPPORTED_EXTS_SET = new Set(['.txt', '.md', '.pdf', '.docx']);
+    const DETECT_IGNORE_SET         = new Set(['.gitkeep', '.DS_Store', 'Thumbs.db']);
+
+    for (const room of ['threshold', 'workshop', 'hearth']) {
+        const roomDir = path.join(DATA_DIR, room);
+        if (!fs.existsSync(roomDir)) continue;
+
+        let entries;
+        try { entries = fs.readdirSync(roomDir, { withFileTypes: true }); }
+        catch { continue; }
+
+        for (const entry of entries) {
+            if (!entry.isFile()) continue;
+            if (DETECT_IGNORE_SET.has(entry.name)) continue;
+            const ext = path.extname(entry.name).toLowerCase();
+            if (!DETECT_SUPPORTED_EXTS_SET.has(ext)) continue;
+
+            const relPath = room + '/' + entry.name;
+            const absPath = path.join(roomDir, entry.name);
+            let stats;
+            try { stats = fs.statSync(absPath); }
+            catch { continue; }
+
+            const manifest = byPath[relPath];
+            if (!manifest || !manifest.ingestTimestamp) continue;
+
+            const ingestMs = new Date(manifest.ingestTimestamp).getTime();
+            const mtimeMs  = stats.mtime.getTime();
+            if (mtimeMs > ingestMs + 2000) {
+                changed.push({ filename: entry.name, path: relPath, room, sourceId: manifest.id });
+            }
+        }
+    }
+
+    return { changed };
+}
+
+/**
+ * GET /api/startup-check
+ * Returns a structured summary of the system state for the launch banner.
+ */
+app.get('/api/startup-check', readLimiter, (req, res) => {
+    const manifests = loadManifests();
+    const registry  = loadToolRegistry();
+
+    // File counts — Threshold intake states
+    const allSources   = Object.values(manifests);
+    const thFiles      = allSources.filter(m => m.room === 'threshold');
+    const waitingFiles = thFiles.filter(m => !m.status || m.status === 'waiting').length;
+    const flaggedFiles = thFiles.filter(m => m.status === 'flagged').length;
+
+    // Changed files
+    const { changed } = getChangedFilesSummary(manifests);
+    const changedFiles = changed.length;
+
+    // Tool counts
+    const tools       = registry.tools || [];
+    const trustedTools = tools.filter(t => t.trusted).length;
+    const runningTools = tools.filter(t => t.running === true).length;
+    const offlineTools = tools.filter(t => t.trusted && t.running === false).length;
+    const newTools     = tools.filter(t => t.status === 'detected' && !t.trusted).length;
+
+    // Active Heart
+    const heartId              = registry.active && registry.active.heart;
+    const heartTool            = heartId ? tools.find(t => t.id === heartId) : null;
+    const activeHeartAvailable = heartTool ? (heartTool.running === true) : false;
+
+    // Migration state
+    const migrationState = MIGRATION_RESULT.performed ? 'migrated' : 'none';
+
+    // Warnings
+    const warnings = [];
+    if (heartId && heartTool && !activeHeartAvailable) {
+        warnings.push('Active Heart "' + (heartTool.name || heartId) + '" is offline');
+    }
+    if (tools.length > 0 && runningTools === 0) {
+        warnings.push('No running tools detected');
+    }
+
+    res.json({
+        waitingFiles,
+        changedFiles,
+        flaggedFiles,
+        newTools,
+        trustedTools,
+        runningTools,
+        offlineTools,
+        activeHeart:           heartId || null,
+        activeHeartAvailable,
+        migrationState,
+        warnings,
+        lastScan:              new Date().toISOString(),
+    });
+});
+
+/**
+ * POST /api/sources/:id/flag
+ * Body: { flagged: boolean }  (default true)
+ * Sets or clears the 'flagged' status on a source manifest record.
+ */
+app.post('/api/sources/:id/flag', writeLimiter, (req, res) => {
+    const { id }               = req.params;
+    const { flagged = true }   = req.body || {};
+
+    const manifests = loadManifests();
+    const source    = manifests[id];
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+
+    // Preserve non-waiting statuses (indexed, remembered) — only toggle on waiting/flagged
+    const currentStatus = source.status || 'waiting';
+    if (flagged) {
+        source.status = 'flagged';
+    } else {
+        // Unflag: revert to waiting unless the file has moved rooms
+        source.status = currentStatus === 'flagged' ? 'waiting' : currentStatus;
+    }
+    upsertManifest(id, source);
+    res.json({ success: true, source });
+});
+
+/**
+ * POST /api/tools/:id/launch
+ * Attempt to start a known local tool.  Only ollama-local is supported.
+ * Never runs silently — always user-initiated, no privilege escalation.
+ */
+app.post('/api/tools/:id/launch', writeLimiter, async (req, res) => {
+    const toolId = req.params.id;
+
+    const registry = loadToolRegistry();
+    const tool     = (registry.tools || []).find(t => t.id === toolId);
+    if (!tool) return res.status(404).json({ error: 'Tool not found: ' + toolId });
+
+    // Only Ollama launch is supported at this time
+    if (toolId !== 'ollama-local') {
+        return res.status(400).json({
+            error: 'Launch is only supported for ollama-local at this time.',
+        });
+    }
+
+    // Check if already running
+    const preProbe = await httpProbe(tool.endpoint + '/api/tags');
+    if (preProbe.ok) {
+        tool.running  = true;
+        tool.lastSeen = new Date().toISOString();
+        saveToolRegistry(registry);
+        return res.json({ success: true, status: 'already_running', message: 'Ollama is already running.' });
+    }
+
+    // Attempt to spawn `ollama serve`
+    try {
+        const proc = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' });
+        // Absorb spawn errors so they don't become unhandled events;
+        // we detect Ollama availability via the HTTP probe below.
+        proc.on('error', () => {});
+        proc.unref();
+    } catch (err) {
+        return res.json({
+            success: false,
+            status:  'error',
+            message: 'Could not start Ollama: ' + err.message + '. Try: ollama serve',
+        });
+    }
+
+    // Re-probe after a short delay
+    await new Promise(r => setTimeout(r, 2500));
+    const postProbe = await httpProbe(tool.endpoint + '/api/tags');
+
+    if (postProbe.ok) {
+        tool.running  = true;
+        tool.lastSeen = new Date().toISOString();
+        saveToolRegistry(registry);
+        return res.json({ success: true, status: 'launched', message: 'Ollama started successfully.' });
+    }
+
+    return res.json({
+        success: false,
+        status:  'launch_failed',
+        message: 'Ollama was launched but did not respond in time. Try: ollama serve',
+    });
+});
+
 
 async function checkModel() {
     try {
@@ -1549,4 +1770,5 @@ module.exports = {
     loadToolRegistry,
     saveToolRegistry,
     resolveActiveHeart,
+    triageFile,
 };
