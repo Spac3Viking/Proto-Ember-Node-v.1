@@ -45,6 +45,7 @@ function escapeHtml(str) {
         }
         if (roomId === 'threshold') {
             loadThresholdList();
+            checkDetectedFiles();
         }
         if (roomId === 'hearth') {
             loadHearthThreads();
@@ -211,6 +212,39 @@ function displayMessage(container, text, className) {
     container.appendChild(el);
 }
 
+/* ================================================================
+   Heart Loading Animation — JS-driven 29-symbol cycle
+   24 Elder Futhark runes + 5 elemental symbols
+   ================================================================ */
+
+const HEART_SYMBOLS = [
+    'ᚠ','ᚢ','ᚦ','ᚨ','ᚱ','ᚲ','ᚷ','ᚹ','ᚺ','ᚾ',
+    'ᛁ','ᛃ','ᛈ','ᛇ','ᛉ','ᛋ','ᛏ','ᛒ','ᛖ','ᛗ',
+    'ᛚ','ᛜ','ᛞ','ᛟ',
+    '🜂','🜄','🜁','🜃','Æ',
+];
+
+/**
+ * Start a JS-driven symbol cycle on the given element's text content.
+ * Cycles through all 29 symbols at 120 ms per frame:
+ *   - 24 Elder Futhark runes (ᚠ through ᛟ)
+ *   - 5 elemental symbols (🜂 🜄 🜁 🜃 Æ)
+ * Returns a cancel function — call it to stop the animation and avoid leaks.
+ *
+ * @param {HTMLElement} el  Element whose textContent will be cycled
+ * @returns {() => void}    Cancel function — clears the interval
+ */
+function startRuneAnimation(el) {
+    let idx = 0;
+    el.textContent = HEART_SYMBOLS[0];
+    const id = setInterval(() => {
+        idx = (idx + 1) % HEART_SYMBOLS.length;
+        el.textContent = HEART_SYMBOLS[idx];
+    }, 120);
+    return () => clearInterval(id);
+}
+
+
 function setTraceStatus(text) {
     const el = document.getElementById('signal-trace-status');
     if (el) el.textContent = text;
@@ -226,7 +260,8 @@ function renderSignalTrace(sources) {
         return;
     }
 
-    setTraceStatus(sources.length + ' source' + (sources.length === 1 ? '' : 's'));
+    const count = sources.length;
+    setTraceStatus(count + ' source' + (count === 1 ? '' : 's'));
 
     sources.forEach(s => {
         const item = document.createElement('div');
@@ -254,7 +289,31 @@ function renderSignalTrace(sources) {
 
         traceSources.appendChild(item);
     });
+
+    // Auto-expand when there are sources so user can see them
+    const panel  = document.getElementById('signal-trace-panel');
+    const toggle = document.getElementById('signal-trace-toggle');
+    if (panel && count > 0) {
+        panel.classList.remove('collapsed');
+        if (toggle) {
+            toggle.textContent = '▾';
+            toggle.setAttribute('aria-expanded', 'true');
+        }
+    }
 }
+
+/* Signal Trace collapse / expand toggle */
+(function initSignalTraceToggle() {
+    const toggle = document.getElementById('signal-trace-toggle');
+    const panel  = document.getElementById('signal-trace-panel');
+    if (!toggle || !panel) return;
+
+    toggle.addEventListener('click', () => {
+        const isCollapsed = panel.classList.toggle('collapsed');
+        toggle.textContent = isCollapsed ? '▸' : '▾';
+        toggle.setAttribute('aria-expanded', String(!isCollapsed));
+    });
+})();
 
 async function sendMessage() {
     const chatContainer = document.getElementById('messages');
@@ -269,10 +328,13 @@ async function sendMessage() {
     messageInput.value = '';
     chatContainer.scrollTop = chatContainer.scrollHeight;
 
-    // Rune loading indicator
+    // Rune loading indicator — JS-driven symbol cycle
     const thinking = document.createElement('div');
     thinking.className = 'message-heart loading-rune';
-    thinking.textContent = 'The Heart stirs ';
+    const runeSpan = document.createElement('span');
+    runeSpan.className = 'rune-symbol';
+    thinking.appendChild(runeSpan);
+    const cancelAnim = startRuneAnimation(runeSpan);
     chatContainer.appendChild(thinking);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 
@@ -292,6 +354,7 @@ async function sendMessage() {
         });
 
         chatContainer.removeChild(thinking);
+        cancelAnim();
 
         const data = await response.json();
 
@@ -312,7 +375,10 @@ async function sendMessage() {
             setTraceStatus('unexpected response');
         }
     } catch {
-        if (chatContainer.contains(thinking)) chatContainer.removeChild(thinking);
+        if (chatContainer.contains(thinking)) {
+            chatContainer.removeChild(thinking);
+            cancelAnim();
+        }
         displayMessage(chatContainer, 'Error: could not reach the Heart.', 'message-heart');
         setTraceStatus('connection lost');
     } finally {
@@ -854,181 +920,404 @@ function openProject(project) {
 }
 
 /* ================================================================
-   Threshold — File Intake with Metadata Form
+   Threshold — Multi-file Intake Queue
    ================================================================ */
 
-let _pendingFile = null;
+/**
+ * In-memory intake queue.  Each entry:
+ *   { file, name, status, error, title, description, shelf }
+ * status: 'pending' | 'importing' | 'imported' | 'failed'
+ */
+let _intakeQueue = [];
+let _importingAll = false;
 
-(function initThreshold() {
-    const dropZone  = document.getElementById('threshold-drop-zone');
-    const fileInput = document.getElementById('threshold-file-input');
-    const statusEl  = document.getElementById('threshold-status');
-    const metaForm  = document.getElementById('threshold-meta-form');
-    const metaConfirmBtn = document.getElementById('meta-confirm-btn');
-    const metaCancelBtn  = document.getElementById('meta-cancel-btn');
-    const metaStatusEl   = document.getElementById('threshold-meta-status');
+const INTAKE_SUPPORTED = new Set(['.txt', '.md', '.pdf', '.docx']);
 
-    function setThresholdStatus(msg, isError, duration) {
-        if (!statusEl) return;
-        statusEl.textContent = msg;
-        statusEl.className = 'threshold-status' + (isError ? ' threshold-error' : '');
-        if (duration) setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'threshold-status'; }, duration);
+/** Derive a readable title from a filename. */
+function fileBaseName(name) {
+    const parts = name.split('.');
+    const base  = parts.length > 1 && parts[0] !== '' ? parts.slice(0, -1).join('.') : name;
+    return base.replace(/[_-]+/g, ' ').trim();
+}
+
+/** Read a File into a base64 or UTF-8 string suitable for /api/ingest. */
+function readFileForIngest(file) {
+    return new Promise((resolve) => {
+        const ext      = file.name.split('.').pop().toLowerCase();
+        const isBinary = ext === 'pdf' || ext === 'docx';
+        const reader   = new FileReader();
+
+        reader.onload = (e) => {
+            if (isBinary) {
+                const bytes  = new Uint8Array(e.target.result);
+                const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
+                resolve({ content: btoa(binary), encoding: 'base64' });
+            } else {
+                resolve({ content: e.target.result, encoding: 'utf8' });
+            }
+        };
+        reader.onerror = () => resolve(null);
+
+        if (isBinary) {
+            reader.readAsArrayBuffer(file);
+        } else {
+            reader.readAsText(file);
+        }
+    });
+}
+
+/** POST a single queue entry to /api/ingest.  Updates entry.status in place. */
+async function ingestQueueEntry(entry) {
+    entry.status = 'importing';
+    renderIntakeQueue();
+
+    const read = await readFileForIngest(entry.file);
+    if (!read) {
+        entry.status = 'failed';
+        entry.error  = 'Could not read file';
+        renderIntakeQueue();
+        return;
     }
 
-    function showMetaForm(file) {
-        _pendingFile = file;
-        const titleEl = document.getElementById('meta-title');
-        const descEl  = document.getElementById('meta-description');
-        const shelfEl = document.getElementById('meta-shelf');
-        // Pre-fill title from filename: strip last extension only, handle hidden files gracefully
-        const nameParts = file.name.split('.');
-        const baseName  = nameParts.length > 1 && nameParts[0] !== ''
-            ? nameParts.slice(0, -1).join('.')
-            : file.name;
-        if (titleEl) titleEl.value = baseName.replace(/[_-]+/g, ' ').trim();
-        if (descEl)  descEl.value  = '';
-        if (shelfEl) shelfEl.value = '';
-        if (metaStatusEl) metaStatusEl.textContent = '';
-        if (metaForm)  metaForm.style.display = 'flex';
+    try {
+        const res  = await fetch('/api/ingest', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                filename:    entry.file.name,
+                content:     read.content,
+                room:        'threshold',
+                title:       entry.title,
+                description: entry.description,
+                shelf:       entry.shelf,
+                encoding:    read.encoding,
+            }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            entry.status = 'imported';
+            entry.error  = null;
+        } else {
+            entry.status = 'failed';
+            entry.error  = data.error || 'Ingestion failed';
+        }
+    } catch {
+        entry.status = 'failed';
+        entry.error  = 'Server unreachable';
+    }
+    renderIntakeQueue();
+}
+
+/** Render the intake queue UI from _intakeQueue state. Handles all entry statuses. */
+function renderIntakeQueue() {
+    const queueSection  = document.getElementById('threshold-queue-section');
+    const queueEl       = document.getElementById('threshold-intake-queue');
+    const progressEl    = document.getElementById('threshold-batch-progress');
+    const importAllBtn  = document.getElementById('threshold-import-all-btn');
+    const clearQueueBtn = document.getElementById('threshold-clear-queue-btn');
+
+    if (!queueEl) return;
+
+    if (_intakeQueue.length === 0) {
+        if (queueSection) queueSection.style.display = 'none';
+        return;
     }
 
-    function hideMetaForm() {
-        _pendingFile = null;
-        if (metaForm) metaForm.style.display = 'none';
+    if (queueSection) queueSection.style.display = '';
+
+    // Batch progress (only count file-upload entries, not server-detected ones)
+    const uploadEntries = _intakeQueue.filter(e => e.file !== null);
+    const total    = uploadEntries.length;
+    const imported = _intakeQueue.filter(e => e.status === 'imported').length;
+    const failed   = _intakeQueue.filter(e => e.status === 'failed').length;
+    const active   = _intakeQueue.filter(e => e.status === 'importing').length;
+    const allTotal = _intakeQueue.length;
+
+    if (progressEl) {
+        if (active > 0) {
+            progressEl.textContent = (imported + failed) + ' of ' + allTotal + ' processing…';
+        } else if (total > 0 && imported + failed === allTotal) {
+            const msg = failed > 0
+                ? imported + ' imported, ' + failed + ' failed'
+                : imported + ' imported';
+            progressEl.textContent = msg;
+        } else {
+            progressEl.textContent = allTotal + ' file' + (allTotal === 1 ? '' : 's') + ' queued';
+        }
     }
 
-    async function ingestFileWithMeta(file, title, description, shelf) {
-        return new Promise((resolve) => {
-            const ext = file.name.split('.').pop().toLowerCase();
-            const isBinary = ext === 'pdf' || ext === 'docx';
-            const reader = new FileReader();
+    // Disable controls while importing
+    if (importAllBtn)  importAllBtn.disabled  = _importingAll;
+    if (clearQueueBtn) clearQueueBtn.disabled = _importingAll;
 
-            reader.onload = async (e) => {
-                let content  = e.target.result;
-                let encoding = 'utf8';
+    const BADGE_LABELS = {
+        pending:   'Pending',
+        importing: 'Importing…',
+        imported:  'Imported',
+        failed:    'Failed',
+        detected:  'Detected',
+        changed:   'Changed',
+    };
 
-                if (isBinary) {
-                    // Convert ArrayBuffer to base64 efficiently using Array.from
-                    const bytes  = new Uint8Array(e.target.result);
-                    const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
-                    content  = btoa(binary);
-                    encoding = 'base64';
-                }
+    // Render rows
+    queueEl.innerHTML = '';
+    _intakeQueue.forEach((entry, idx) => {
+        const row = document.createElement('div');
+        row.className = 'threshold-queue-entry status-' + entry.status;
 
+        // Left: filename + note + editable fields
+        const meta = document.createElement('div');
+        meta.className = 'tq-meta';
+
+        const fname = document.createElement('div');
+        fname.className = 'tq-filename';
+        fname.textContent = entry.name;
+        if (entry.room && entry.room !== 'threshold') {
+            const roomBadge = document.createElement('span');
+            roomBadge.className   = 'trace-badge';
+            roomBadge.textContent = entry.room;
+            fname.appendChild(document.createTextNode(' '));
+            fname.appendChild(roomBadge);
+        }
+        meta.appendChild(fname);
+
+        if (entry.status === 'changed') {
+            const note = document.createElement('div');
+            note.className   = 'tq-changed-note';
+            note.textContent = 'Changed since last import';
+            meta.appendChild(note);
+        }
+
+        // Show editable fields for pending and detected entries
+        if (entry.status === 'pending' || entry.status === 'detected') {
+            const fields = document.createElement('div');
+            fields.className = 'tq-fields';
+
+            const titleInput = document.createElement('input');
+            titleInput.type        = 'text';
+            titleInput.className   = 'tq-input';
+            titleInput.placeholder = 'Title';
+            titleInput.value       = entry.title;
+            titleInput.setAttribute('aria-label', 'Title for ' + entry.name);
+            titleInput.addEventListener('input', () => { entry.title = titleInput.value; });
+
+            const descInput = document.createElement('input');
+            descInput.type        = 'text';
+            descInput.className   = 'tq-input';
+            descInput.placeholder = 'Description (optional)';
+            descInput.value       = entry.description;
+            descInput.setAttribute('aria-label', 'Description for ' + entry.name);
+            descInput.addEventListener('input', () => { entry.description = descInput.value; });
+
+            const shelfInput = document.createElement('input');
+            shelfInput.type        = 'text';
+            shelfInput.className   = 'tq-input tq-input-shelf';
+            shelfInput.placeholder = 'Shelf / Category (optional)';
+            shelfInput.value       = entry.shelf;
+            shelfInput.setAttribute('aria-label', 'Shelf for ' + entry.name);
+            shelfInput.addEventListener('input', () => { entry.shelf = shelfInput.value; });
+
+            fields.appendChild(titleInput);
+            fields.appendChild(descInput);
+            fields.appendChild(shelfInput);
+            meta.appendChild(fields);
+        }
+
+        if (entry.error) {
+            const errEl = document.createElement('div');
+            errEl.className   = 'tq-error';
+            errEl.textContent = entry.error;
+            meta.appendChild(errEl);
+        }
+
+        // Right: status badge + action buttons
+        const aside = document.createElement('div');
+        aside.className = 'tq-aside';
+
+        const badge = document.createElement('span');
+        badge.className   = 'status-badge ' + entry.status;
+        badge.textContent = BADGE_LABELS[entry.status] || entry.status;
+        aside.appendChild(badge);
+
+        // Action: import a single pending (from file drop)
+        if (entry.status === 'pending' && entry.file && !_importingAll) {
+            const importOneBtn = document.createElement('button');
+            importOneBtn.className   = 'secondary tq-action-btn';
+            importOneBtn.textContent = 'Import';
+            importOneBtn.addEventListener('click', async () => {
+                await ingestQueueEntry(entry);
+                loadThresholdList();
+            });
+            aside.appendChild(importOneBtn);
+        }
+
+        // Action: import a detected (server-side) file
+        if (entry.status === 'detected' && !_importingAll) {
+            const importBtn = document.createElement('button');
+            importBtn.className   = 'secondary tq-action-btn';
+            importBtn.textContent = 'Import';
+            importBtn.addEventListener('click', async () => {
+                entry.status = 'importing';
+                renderIntakeQueue();
                 try {
-                    const res  = await fetch('/api/ingest', {
+                    const r = await fetch('/api/detected-files/import', {
                         method:  'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body:    JSON.stringify({
-                            filename: file.name,
-                            content,
-                            room: 'threshold',
-                            title,
-                            description,
-                            shelf,
-                            encoding,
+                            filename:    entry.name,
+                            room:        entry.room,
+                            title:       entry.title,
+                            description: entry.description,
+                            shelf:       entry.shelf,
                         }),
                     });
-                    const data = await res.json();
-                    if (data.success) {
-                        resolve({ ok: true, name: file.name });
-                    } else {
-                        resolve({ ok: false, name: file.name, error: data.error || 'Ingestion failed' });
-                    }
-                } catch (err) {
-                    resolve({ ok: false, name: file.name, error: 'Server unreachable' });
+                    const d = await r.json();
+                    entry.status = d.success ? 'imported' : 'failed';
+                    entry.error  = d.success ? null : (d.error || 'Import failed');
+                } catch {
+                    entry.status = 'failed';
+                    entry.error  = 'Server unreachable';
                 }
-            };
-
-            reader.onerror = () => resolve({ ok: false, name: file.name, error: 'Could not read file' });
-
-            if (isBinary) {
-                reader.readAsArrayBuffer(file);
-            } else {
-                reader.readAsText(file);
-            }
-        });
-    }
-
-    async function handleFiles(files) {
-        const SUPPORTED = ['.txt', '.md', '.pdf', '.docx'];
-        const supported = Array.from(files).filter(f => {
-            const ext = '.' + f.name.split('.').pop().toLowerCase();
-            return SUPPORTED.includes(ext);
-        });
-        const unsupported = Array.from(files).filter(f => {
-            const ext = '.' + f.name.split('.').pop().toLowerCase();
-            return !SUPPORTED.includes(ext);
-        });
-
-        if (unsupported.length > 0) {
-            setThresholdStatus(
-                'Unsupported file type(s): ' + unsupported.map(f => f.name).join(', ') +
-                '. Supported: .txt .md .pdf .docx',
-                true, 5000
-            );
+                renderIntakeQueue();
+                loadThresholdList();
+            });
+            aside.appendChild(importBtn);
         }
 
-        if (supported.length === 0) return;
-
-        // Show meta form for the first file; queue the rest
-        showMetaForm(supported[0]);
-        window._pendingFileQueue = supported.slice(1);
-    }
-
-    if (metaConfirmBtn) {
-        metaConfirmBtn.addEventListener('click', async () => {
-            if (!_pendingFile) return;
-            const title       = (document.getElementById('meta-title')?.value || '').trim();
-            const description = (document.getElementById('meta-description')?.value || '').trim();
-            const shelf       = (document.getElementById('meta-shelf')?.value || '').trim();
-
-            metaConfirmBtn.disabled = true;
-            if (metaStatusEl) metaStatusEl.textContent = 'Importing…';
-
-            const result = await ingestFileWithMeta(_pendingFile, title, description, shelf);
-
-            if (result.ok) {
-                if (metaStatusEl) metaStatusEl.textContent = '';
-                hideMetaForm();
+        // Actions: re-import or keep current for changed files
+        if (entry.status === 'changed' && !_importingAll) {
+            const reImportBtn = document.createElement('button');
+            reImportBtn.className   = 'secondary tq-action-btn';
+            reImportBtn.textContent = 'Re-import';
+            reImportBtn.title       = 'Re-index with updated file content';
+            reImportBtn.addEventListener('click', async () => {
+                if (!entry.sourceId) return;
+                reImportBtn.disabled = true;
+                entry.status = 'importing';
+                renderIntakeQueue();
+                try {
+                    const r = await fetch('/api/index/file', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ sourceId: entry.sourceId }),
+                    });
+                    const d = await r.json();
+                    entry.status = d.success ? 'imported' : 'failed';
+                    entry.error  = d.success ? null : (d.error || 'Re-import failed');
+                } catch {
+                    entry.status = 'failed';
+                    entry.error  = 'Server unreachable';
+                }
+                renderIntakeQueue();
                 loadThresholdList();
-                setThresholdStatus(_pendingFile.name + ' imported.', false, 3000);
+            });
 
-                // Process next in queue
-                const queue = window._pendingFileQueue || [];
-                if (queue.length > 0) {
-                    window._pendingFileQueue = queue.slice(1);
-                    showMetaForm(queue[0]);
-                }
-            } else {
-                if (metaStatusEl) {
-                    metaStatusEl.textContent = 'Import failed: ' + (result.error || 'Unknown error');
-                    metaStatusEl.className = 'workshop-status threshold-error';
-                }
-            }
-            metaConfirmBtn.disabled = false;
+            const keepBtn = document.createElement('button');
+            keepBtn.className   = 'secondary tq-action-btn';
+            keepBtn.textContent = 'Keep current';
+            keepBtn.title       = 'Mark as reviewed — keep existing indexed version';
+            keepBtn.addEventListener('click', async () => {
+                keepBtn.disabled = true;
+                try {
+                    await fetch('/api/detected-files/acknowledge', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ sourceId: entry.sourceId }),
+                    });
+                } catch { /* ignore */ }
+                _intakeQueue = _intakeQueue.filter(e => e !== entry);
+                renderIntakeQueue();
+            });
+
+            aside.appendChild(reImportBtn);
+            aside.appendChild(keepBtn);
+        }
+
+        // Action: retry failed entries
+        if (entry.status === 'failed' && !_importingAll) {
+            const retryBtn = document.createElement('button');
+            retryBtn.className   = 'secondary tq-action-btn';
+            retryBtn.textContent = 'Retry';
+            retryBtn.addEventListener('click', () => {
+                entry.status = 'pending';
+                entry.error  = null;
+                renderIntakeQueue();
+            });
+            aside.appendChild(retryBtn);
+        }
+
+        // Action: remove any non-importing entry from the queue
+        if (['pending', 'detected', 'changed', 'failed', 'imported'].includes(entry.status) && !_importingAll) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className   = 'secondary tq-action-btn tq-remove-btn';
+            removeBtn.textContent = '✕';
+            removeBtn.title       = 'Remove from queue';
+            removeBtn.addEventListener('click', () => {
+                _intakeQueue = _intakeQueue.filter(e => e !== entry);
+                renderIntakeQueue();
+            });
+            aside.appendChild(removeBtn);
+        }
+
+        row.appendChild(meta);
+        row.appendChild(aside);
+        queueEl.appendChild(row);
+    });
+}
+
+
+/** Add files to the intake queue (deduplicated by name). */
+function enqueueFiles(files) {
+    const statusEl = document.getElementById('threshold-status');
+    const unsupported = [];
+
+    Array.from(files).forEach(f => {
+        const ext = '.' + f.name.split('.').pop().toLowerCase();
+        if (!INTAKE_SUPPORTED.has(ext)) {
+            unsupported.push(f.name);
+            return;
+        }
+        // Deduplicate by filename
+        if (_intakeQueue.some(e => e.name === f.name)) return;
+        _intakeQueue.push({
+            file:        f,
+            name:        f.name,
+            status:      'pending',
+            error:       null,
+            title:       fileBaseName(f.name),
+            description: '',
+            shelf:       '',
         });
+    });
+
+    if (unsupported.length > 0 && statusEl) {
+        statusEl.textContent = 'Unsupported: ' + unsupported.join(', ');
+        statusEl.className   = 'threshold-status threshold-error';
+        setTimeout(() => {
+            statusEl.textContent = '';
+            statusEl.className   = 'threshold-status';
+        }, 5000);
     }
 
-    if (metaCancelBtn) {
-        metaCancelBtn.addEventListener('click', () => {
-            hideMetaForm();
-            window._pendingFileQueue = [];
-        });
-    }
+    renderIntakeQueue();
+}
+
+(function initThreshold() {
+    const dropZone      = document.getElementById('threshold-drop-zone');
+    const fileInput     = document.getElementById('threshold-file-input');
+    const importAllBtn  = document.getElementById('threshold-import-all-btn');
+    const clearQueueBtn = document.getElementById('threshold-clear-queue-btn');
 
     if (dropZone) {
         dropZone.addEventListener('dragover', e => {
             e.preventDefault();
             dropZone.classList.add('drag-over');
         });
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('drag-over');
-        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
         dropZone.addEventListener('drop', e => {
             e.preventDefault();
             dropZone.classList.remove('drag-over');
-            handleFiles(e.dataTransfer.files);
+            enqueueFiles(e.dataTransfer.files);
         });
         dropZone.addEventListener('click', e => {
             if (e.target !== fileInput && !e.target.htmlFor) {
@@ -1042,11 +1331,156 @@ let _pendingFile = null;
 
     if (fileInput) {
         fileInput.addEventListener('change', () => {
-            if (fileInput.files.length) handleFiles(fileInput.files);
+            if (fileInput.files.length) enqueueFiles(fileInput.files);
             fileInput.value = '';
         });
     }
+
+    if (importAllBtn) {
+        importAllBtn.addEventListener('click', async () => {
+            if (_importingAll) return;
+            const pending = _intakeQueue.filter(e => e.status === 'pending');
+            if (pending.length === 0) return;
+
+            _importingAll = true;
+            renderIntakeQueue();
+
+            // Process sequentially for clarity and responsiveness
+            for (const entry of pending) {
+                if (entry.status !== 'pending') continue;
+                await ingestQueueEntry(entry);
+            }
+
+            _importingAll = false;
+            renderIntakeQueue();
+            loadThresholdList();
+        });
+    }
+
+    if (clearQueueBtn) {
+        clearQueueBtn.addEventListener('click', () => {
+            if (_importingAll) return;
+            _intakeQueue = [];
+            renderIntakeQueue();
+        });
+    }
 })();
+
+/* ================================================================
+   Detected Files — Local File Detection
+   ================================================================ */
+
+/** Session-dismissed detected-file paths (so repeated notices aren't annoying). */
+let _dismissedDetected = new Set();
+
+/**
+ * Check for locally-detected files (unmanaged or changed).
+ * Shows a notice banner if any are found.
+ */
+async function checkDetectedFiles() {
+    try {
+        const res  = await fetch('/api/detected-files');
+        const data = await res.json();
+
+        const unmanaged = (data.unmanaged || []).filter(f => !_dismissedDetected.has(f.path));
+        const changed   = (data.changed   || []).filter(f => !_dismissedDetected.has(f.path));
+        const total     = unmanaged.length + changed.length;
+
+        const notice     = document.getElementById('detected-notice');
+        const noticeText = document.getElementById('detected-notice-text');
+        const reviewBtn  = document.getElementById('detected-review-btn');
+        const dismissBtn = document.getElementById('detected-dismiss-btn');
+
+        if (!notice) return;
+
+        if (total === 0) {
+            notice.style.display = 'none';
+            return;
+        }
+
+        const parts = [];
+        if (unmanaged.length > 0) {
+            parts.push(unmanaged.length + ' new file' + (unmanaged.length === 1 ? '' : 's') + ' detected in local storage');
+        }
+        if (changed.length > 0) {
+            parts.push(changed.length + ' file' + (changed.length === 1 ? '' : 's') + ' changed since last import');
+        }
+        if (noticeText) noticeText.textContent = parts.join(' · ');
+
+        notice.style.display = 'flex';
+
+        // Review: load detected files into the intake queue
+        if (reviewBtn) {
+            // Clone button to remove old listeners
+            const newBtn = reviewBtn.cloneNode(true);
+            reviewBtn.parentNode.replaceChild(newBtn, reviewBtn);
+            newBtn.addEventListener('click', () => {
+                loadDetectedIntoQueue(unmanaged, changed);
+                notice.style.display = 'none';
+            });
+        }
+
+        // Dismiss: hide for this session
+        if (dismissBtn) {
+            const newDismiss = dismissBtn.cloneNode(true);
+            dismissBtn.parentNode.replaceChild(newDismiss, dismissBtn);
+            newDismiss.addEventListener('click', () => {
+                [...unmanaged, ...changed].forEach(f => _dismissedDetected.add(f.path));
+                notice.style.display = 'none';
+            });
+        }
+    } catch { /* server unreachable — fail silently */ }
+}
+
+/**
+ * Load detected files into the intake queue section.
+ * Unmanaged files get a full queue entry.
+ * Changed files get a "changed" queue entry with options.
+ */
+function loadDetectedIntoQueue(unmanaged, changed) {
+    // Scroll to queue section
+    const queueSection = document.getElementById('threshold-queue-section');
+
+    // Add unmanaged as pending queue entries (no File object — server-side import)
+    unmanaged.forEach(f => {
+        if (_intakeQueue.some(e => e.name === f.filename)) return;
+        _intakeQueue.push({
+            file:        null,   // no File object — already on disk
+            name:        f.filename,
+            path:        f.path,
+            room:        f.room,
+            status:      'detected',
+            error:       null,
+            title:       fileBaseName(f.filename),
+            description: '',
+            shelf:       '',
+        });
+    });
+
+    // Add changed files as 'changed' entries with context
+    changed.forEach(f => {
+        if (_intakeQueue.some(e => e.name === f.filename)) return;
+        _intakeQueue.push({
+            file:        null,
+            name:        f.filename,
+            path:        f.path,
+            room:        f.room,
+            sourceId:    f.sourceId,
+            status:      'changed',
+            error:       null,
+            title:       f.title       || fileBaseName(f.filename),
+            description: f.description || '',
+            shelf:       f.shelf       || '',
+        });
+    });
+
+    renderIntakeQueue();
+
+    if (queueSection) {
+        queueSection.style.display = '';
+        queueSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
 
 async function loadThresholdList() {
     const listEl = document.getElementById('threshold-file-list');
