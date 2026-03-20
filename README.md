@@ -341,6 +341,29 @@ Use `GET /api/storage-info` to confirm which data root is active and see migrati
 | `GET`  | `/api/user-cartridges` | List user-owned cartridges |
 | `POST` | `/api/user-cartridges` | Create a user cartridge |
 
+### Phase 7 (new)
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/api/tools`                   | List all tools in the registry |
+| `POST` | `/api/tools/scan`              | Trigger a discovery scan |
+| `POST` | `/api/tools/:id/trust`         | Trust or revoke a tool |
+| `POST` | `/api/tools/:id/role`          | Assign a role (mirror / forge) |
+| `GET`  | `/api/tools/active`            | Get current Heart assignment |
+| `POST` | `/api/tools/active`            | Set the active Heart |
+| `POST` | `/api/tools/:id/launch`        | Attempt to start Ollama (ollama-local only) |
+
+### Phase 8 / 8.5 (new)
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/api/startup-check`               | Launch summary: intake counts, tool state, Heart status |
+| `POST` | `/api/sources/:id/flag`            | Flag or unflag a Threshold source |
+| `GET`  | `/api/intake-state`                | Full persistent intake state (files + tools) |
+| `POST` | `/api/sources/:id/inspect`         | Mark a source as inspected in intake state |
+| `POST` | `/api/sources/:id/reject`          | Persistently reject a source |
+| `POST` | `/api/tools/:id/inspect`           | Mark a tool as inspected |
+| `POST` | `/api/tools/:id/reject`            | Persistently reject a tool |
+| `POST` | `/api/detected-files/acknowledge`  | Acknowledge a changed file (keep current version) |
+
 ---
 
 ## Signal Trace
@@ -381,6 +404,10 @@ Trace indicates: *base model — no local sources*.
 | Phase 4 ✓ | Threads, projects, user cartridges, Threshold intake, PDF/DOCX support |
 | Phase 5 ✓ | Storage stabilization: external data root, legacy migration, storage-root-native paths, cartridge ownership clarity, portability readiness |
 | Phase 6 ✓ | Mobility layer: actionable source cards, source inspector, Remember to Hearth, Send To (Chat/Notepad/Project), project linked sources, path visibility, cross-room reference flow |
+| Phase 7 ✓ | AI/tool discovery, trust flow, role assignment, Heart selection, tool registry |
+| Phase 8 ✓ | Startup checklist, airlock discipline, tool readiness, changed-file detection |
+| Phase 8.5 ✓ | Intake persistence, durable reject, changed-file flow, tool setup polish |
+| Phase 8.75 ✓ | Cleanup pass: redundancy removal, DATA_DIR alias eliminated, path consolidation, duplicate constant consolidation, documentation update |
 
 ---
 

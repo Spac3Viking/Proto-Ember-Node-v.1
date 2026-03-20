@@ -1,20 +1,31 @@
 /**
- * Ember Node v.ᚠ — Phase 7 server
+ * Ember Node v.ᚠ — Phase 8.75 server
  *
- * Extends Phase 5/6 with:
- *   Tool Discovery       — detects local AI runtimes (Ollama, HTTP endpoints)
- *   Tool Registry        — persists tools.json in DATA_ROOT/system/
- *   Trust Flow           — user inspects and trusts tools; untrusted = Threshold
- *   Role Assignment      — Mythic Mirror / Forge Node classification in Workshop
- *   Heart Assignment     — user selects active Heart in Hearth System tab
+ * Current active architecture:
+ *   Storage Root         — all user data under DATA_ROOT (storageConfig.js)
+ *   Threshold / Workshop / Hearth — three-room model with lifecycle states
+ *   Intake Discipline    — files and tools land in Threshold, explicit admission required
+ *   Source Lifecycle     — waiting → indexed → remembered (manifest/source metadata)
+ *   Intake State         — waiting / inspected / flagged / admitted / rejected (intake.json)
+ *   Tool Registry        — discovery, trust, role assignment, active Heart selection
  *   Chat Integration     — /api/chat routes through the active Heart tool
- *   GET  /api/tools                — list all tools in registry
- *   POST /api/tools/scan           — trigger discovery scan
- *   POST /api/tools/:id/trust      — trust a detected tool
- *   POST /api/tools/:id/role       — assign a role (mirror / forge)
- *   POST /api/tools/active         — set active Heart
- *   GET  /api/tools/active         — get active assignments
- * Plus all Phase 3–6 endpoints.
+ *   Startup Checklist    — /api/startup-check summarises system state at launch
+ *
+ * Key API groups:
+ *   /api/chat            — grounded Heart chat (resolves active Heart automatically)
+ *   /api/sources         — source manifest CRUD + lifecycle transitions
+ *   /api/threshold/*     — Threshold intake queue
+ *   /api/detected-files  — local file scanner (unmanaged + changed)
+ *   /api/tools           — tool registry, trust flow, Heart assignment
+ *   /api/threads         — chat thread persistence
+ *   /api/projects        — Workshop projects with linked sources
+ *   /api/startup-check   — launch summary (centralised, single source of truth)
+ *   /api/storage-info    — data root, directories, migration state
+ *   /api/intake-state    — persistent intake decisions (files + tools)
+ *
+ * Legacy compatibility:
+ *   POST /chat           — Phase 2 direct-Ollama endpoint; kept for backward compatibility
+ *   resolveSourcePath()  — strips legacy data/ prefix from stored paths after migration
  */
 
 'use strict';
@@ -46,8 +57,6 @@ const { retrieve, buildGroundedPrompt }      = require('./retrieval');
 const { buildSignalTrace, formatSignalTraceSummary } = require('./signalTrace');
 const { discoverTools, httpProbe }               = require('./toolDiscovery');
 
-// DATA_DIR is now the resolved data root from storageConfig
-const DATA_DIR = DATA_ROOT;
 
 // ── Path resolution helper ────────────────────────────────────────────────────
 
@@ -66,7 +75,7 @@ function resolveSourcePath(storedPath) {
     if (!storedPath) return null;
     // Strip legacy 'data/' prefix — after migration, files live directly under DATA_ROOT
     const normalized = storedPath.replace(/^data[\\/]/, '');
-    return path.join(DATA_DIR, normalized);
+    return path.join(DATA_ROOT, normalized);
 }
 
 const app  = express();
@@ -358,6 +367,9 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(express.json({ limit: '10mb' }));
 
 // ── Phase 2: original chat endpoint (kept for backward compatibility) ─────────
+// This endpoint bypasses retrieval and goes directly to Ollama.
+// New code should use POST /api/chat which routes through the active Heart tool
+// with grounded retrieval.  Kept to avoid breaking any existing integrations.
 
 app.post('/chat', async (req, res) => {
     try {
@@ -477,7 +489,7 @@ app.post('/api/ingest', writeLimiter, async (req, res) => {
         }
 
         // Ensure room directory exists
-        const roomDir = path.join(DATA_DIR, room);
+        const roomDir = path.join(DATA_ROOT, room);
         if (!fs.existsSync(roomDir)) {
             fs.mkdirSync(roomDir, { recursive: true });
         }
@@ -622,7 +634,7 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
 
             if (source.room !== targetRoom) {
                 const oldAbsPath = resolveSourcePath(source.path);
-                const newRoomDir = path.join(DATA_DIR, targetRoom);
+                const newRoomDir = path.join(DATA_ROOT, targetRoom);
 
                 if (!fs.existsSync(newRoomDir)) {
                     fs.mkdirSync(newRoomDir, { recursive: true });
@@ -630,10 +642,10 @@ app.post('/api/index/file', indexLimiter, async (req, res) => {
 
                 const newAbsPath = path.join(newRoomDir, path.basename(source.path));
                 // Storage-root-relative new path (e.g. 'hearth/file.md')
-                const newRelPath = path.relative(DATA_DIR, newAbsPath).replace(/\\/g, '/');
+                const newRelPath = path.relative(DATA_ROOT, newAbsPath).replace(/\\/g, '/');
 
                 // Only move files that live inside the data root
-                const dataRoot = path.resolve(DATA_DIR);
+                const dataRoot = path.resolve(DATA_ROOT);
                 if (oldAbsPath && path.resolve(oldAbsPath).startsWith(dataRoot)) {
                     try {
                         fs.renameSync(oldAbsPath, newAbsPath);
@@ -772,7 +784,7 @@ app.post('/api/sources/:id/remember', writeLimiter, async (req, res) => {
         }
 
         const oldAbsPath = resolveSourcePath(source.path);
-        const hearthDir  = path.join(DATA_DIR, 'hearth');
+        const hearthDir  = path.join(DATA_ROOT, 'hearth');
         if (!fs.existsSync(hearthDir)) fs.mkdirSync(hearthDir, { recursive: true });
 
         const baseName    = path.basename(source.file || source.path);
@@ -831,7 +843,7 @@ app.post('/api/notes', writeLimiter, (req, res) => {
             return res.status(400).json({ error: 'content is required' });
         }
 
-        const workshopDir = path.join(DATA_DIR, 'workshop');
+        const workshopDir = path.join(DATA_ROOT, 'workshop');
         if (!fs.existsSync(workshopDir)) {
             fs.mkdirSync(workshopDir, { recursive: true });
         }
@@ -867,7 +879,7 @@ app.post('/api/notes', writeLimiter, (req, res) => {
  * GET /api/notes
  */
 app.get('/api/notes', readLimiter, (req, res) => {
-    const workshopDir = path.join(DATA_DIR, 'workshop');
+    const workshopDir = path.join(DATA_ROOT, 'workshop');
     if (!fs.existsSync(workshopDir)) return res.json({ notes: [] });
 
     const notes = fs.readdirSync(workshopDir)
@@ -894,7 +906,7 @@ app.get('/api/notes', readLimiter, (req, res) => {
  * Augments each file record with its persistent intake state.
  */
 app.get('/api/threshold/list', readLimiter, (req, res) => {
-    const thresholdDir = path.join(DATA_DIR, 'threshold');
+    const thresholdDir = path.join(DATA_ROOT, 'threshold');
     if (!fs.existsSync(thresholdDir)) return res.json({ files: [] });
 
     const manifests   = loadManifests();
@@ -990,7 +1002,7 @@ app.get('/api/detected-files', readLimiter, (req, res) => {
 
     const rooms = ['threshold', 'workshop', 'hearth'];
     for (const room of rooms) {
-        const roomDir = path.join(DATA_DIR, room);
+        const roomDir = path.join(DATA_ROOT, room);
         if (!fs.existsSync(roomDir)) continue;
 
         let entries;
@@ -1090,7 +1102,7 @@ app.post('/api/detected-files/import', writeLimiter, (req, res) => {
         }
 
         const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const filePath = path.join(DATA_DIR, room, safeName);
+        const filePath = path.join(DATA_ROOT, room, safeName);
 
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ error: 'File not found on disk: ' + safeName });
@@ -1672,11 +1684,9 @@ function getChangedFilesSummary(manifests) {
     });
 
     const changed = [];
-    const DETECT_SUPPORTED_EXTS_SET = new Set(['.txt', '.md', '.pdf', '.docx']);
-    const DETECT_IGNORE_SET         = new Set(['.gitkeep', '.DS_Store', 'Thumbs.db']);
 
     for (const room of ['threshold', 'workshop', 'hearth']) {
-        const roomDir = path.join(DATA_DIR, room);
+        const roomDir = path.join(DATA_ROOT, room);
         if (!fs.existsSync(roomDir)) continue;
 
         let entries;
@@ -1685,9 +1695,9 @@ function getChangedFilesSummary(manifests) {
 
         for (const entry of entries) {
             if (!entry.isFile()) continue;
-            if (DETECT_IGNORE_SET.has(entry.name)) continue;
+            if (DETECT_IGNORE_FILES.has(entry.name)) continue;
             const ext = path.extname(entry.name).toLowerCase();
-            if (!DETECT_SUPPORTED_EXTS_SET.has(ext)) continue;
+            if (!DETECT_SUPPORTED_EXTS.has(ext)) continue;
 
             const relPath = room + '/' + entry.name;
             const absPath = path.join(roomDir, entry.name);
