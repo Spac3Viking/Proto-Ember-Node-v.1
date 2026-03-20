@@ -1,8 +1,10 @@
 /**
- * Ember Node v.ᚠ — Phase 4 app shell
+ * Ember Node v.ᚠ — Phase 8.75 app shell
  *
- * Phase 4: Sub-tab navigation, file lifecycle (Waiting/Indexed/Remembered),
- * multiple chat threads, file tagging, PDF/DOCX support, Projects, user Cartridges.
+ * Covers all three rooms (Hearth / Workshop / Threshold) with sub-tab navigation,
+ * file lifecycle (Waiting/Indexed/Remembered), intake discipline (Threshold airlock),
+ * chat threads, source inspector, tool registry, startup checklist, and project
+ * management.  All UI logic communicates only with the local Express server.
  */
 
 /** Model name — kept in sync with app/server.js MODEL constant. */
