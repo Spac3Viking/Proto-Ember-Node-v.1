@@ -161,6 +161,94 @@ const MIGRATION_RESULT = migrateLegacyData();
 /** Path to the tool registry JSON file. */
 const TOOLS_REGISTRY_PATH = path.join(SYSTEM_DIR, 'tools.json');
 
+// ── Phase 8.5: Intake State Persistence ──────────────────────────────────────
+
+/**
+ * Path to the intake state JSON file.
+ * Tracks user decisions (rejected, inspected, admitted, etc.) across restarts.
+ */
+const INTAKE_STATE_PATH = path.join(SYSTEM_DIR, 'intake.json');
+
+/**
+ * Load the persistent intake state from disk.
+ *
+ * Schema:
+ *   {
+ *     files: {
+ *       "room/file.txt": {
+ *         path, state, lastReviewed, lastKnownMtime, notes
+ *       }
+ *     },
+ *     tools: {
+ *       "tool-id": {
+ *         id, state, lastReviewed
+ *       }
+ *     }
+ *   }
+ *
+ * @returns {{ files: object, tools: object }}
+ */
+function loadIntakeState() {
+    if (!fs.existsSync(INTAKE_STATE_PATH)) {
+        return { files: {}, tools: {} };
+    }
+    try {
+        return JSON.parse(fs.readFileSync(INTAKE_STATE_PATH, 'utf8'));
+    } catch {
+        return { files: {}, tools: {} };
+    }
+}
+
+/**
+ * Persist the intake state to disk.
+ *
+ * @param {{ files: object, tools: object }} state
+ */
+function saveIntakeState(state) {
+    fs.writeFileSync(INTAKE_STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
+}
+
+/**
+ * Update (or create) a file entry in the intake state and save immediately.
+ *
+ * @param {string} filePath  Storage-root-relative path (e.g. 'threshold/file.txt')
+ * @param {object} updates   Fields to merge into the entry
+ * @returns {object}         The updated entry
+ */
+function upsertIntakeFile(filePath, updates) {
+    const state = loadIntakeState();
+    const key   = filePath.replace(/\\/g, '/');
+    const now   = new Date().toISOString();
+    state.files[key] = Object.assign(
+        { path: key },
+        state.files[key] || {},
+        updates,
+        { lastReviewed: now },
+    );
+    saveIntakeState(state);
+    return state.files[key];
+}
+
+/**
+ * Update (or create) a tool entry in the intake state and save immediately.
+ *
+ * @param {string} toolId
+ * @param {object} updates
+ * @returns {object}       The updated entry
+ */
+function upsertIntakeTool(toolId, updates) {
+    const state = loadIntakeState();
+    const now   = new Date().toISOString();
+    state.tools[toolId] = Object.assign(
+        { id: toolId },
+        state.tools[toolId] || {},
+        updates,
+        { lastReviewed: now },
+    );
+    saveIntakeState(state);
+    return state.tools[toolId];
+}
+
 /**
  * Load the tool registry from disk.
  * Returns a default empty registry if the file does not exist.
@@ -803,12 +891,14 @@ app.get('/api/notes', readLimiter, (req, res) => {
 /**
  * GET /api/threshold/list
  * Returns files in the Threshold intake queue, including metadata.
+ * Augments each file record with its persistent intake state.
  */
 app.get('/api/threshold/list', readLimiter, (req, res) => {
     const thresholdDir = path.join(DATA_DIR, 'threshold');
     if (!fs.existsSync(thresholdDir)) return res.json({ files: [] });
 
-    const manifests = loadManifests();
+    const manifests   = loadManifests();
+    const intakeState = loadIntakeState();
 
     // Include all manifest entries for threshold room (covers files not on disk yet)
     const onDisk = new Set(fs.readdirSync(thresholdDir));
@@ -822,6 +912,8 @@ app.get('/api/threshold/list', readLimiter, (req, res) => {
             if (fs.existsSync(absPath)) {
                 try { size = fs.statSync(absPath).size; } catch { /* ignore */ }
             }
+            const relPath = (m.path || '').replace(/\\/g, '/');
+            const intake  = (intakeState.files && intakeState.files[relPath]) || null;
             return {
                 filename:    m.file,
                 path:        m.path,
@@ -834,6 +926,7 @@ app.get('/api/threshold/list', readLimiter, (req, res) => {
                 status:      m.status      || 'waiting',
                 sourceType:  m.sourceType  || null,
                 metaOnly:    m.metaOnly    || false,
+                intake,
             };
         });
 
@@ -843,10 +936,12 @@ app.get('/api/threshold/list', readLimiter, (req, res) => {
     const extra = fs.readdirSync(thresholdDir)
         .filter(f => SUPPORTED_EXTS.has(path.extname(f).toLowerCase()) && !manifestFiles.has(f))
         .map(f => {
-            const stats = fs.statSync(path.join(thresholdDir, f));
+            const stats   = fs.statSync(path.join(thresholdDir, f));
+            const relPath = 'threshold/' + f;
+            const intake  = (intakeState.files && intakeState.files[relPath]) || null;
             return {
                 filename:    f,
-                path:        'threshold/' + f,
+                path:        relPath,
                 size:        stats.size,
                 created:     (stats.birthtime || stats.mtime).toISOString(),
                 sourceId:    null,
@@ -856,6 +951,7 @@ app.get('/api/threshold/list', readLimiter, (req, res) => {
                 status:      'waiting',
                 sourceType:  path.extname(f).toLowerCase().slice(1),
                 metaOnly:    false,
+                intake,
             };
         });
 
@@ -880,7 +976,8 @@ const DETECT_IGNORE_FILES   = new Set(['.gitkeep', '.DS_Store', 'Thumbs.db']);
  * Returns { unmanaged: [...], changed: [...] }
  */
 app.get('/api/detected-files', readLimiter, (req, res) => {
-    const manifests = loadManifests();
+    const manifests    = loadManifests();
+    const intakeState  = loadIntakeState();
 
     // Build lookup: storage-root-relative path → manifest record
     const byPath = {};
@@ -913,9 +1010,17 @@ app.get('/api/detected-files', readLimiter, (req, res) => {
             try { stats = fs.statSync(absPath); }
             catch { continue; }
 
-            const manifest = byPath[relPath];
+            const manifest    = byPath[relPath];
+            const fileIntake  = intakeState.files && intakeState.files[relPath];
+            const mtimeMs     = stats.mtime.getTime();
 
             if (!manifest) {
+                // Unmanaged file — skip if persistently rejected and not changed since rejection
+                if (fileIntake && fileIntake.state === 'rejected') {
+                    const rejectedAt = new Date(fileIntake.lastReviewed).getTime();
+                    if (mtimeMs <= rejectedAt + 2000) continue;
+                }
+
                 unmanaged.push({
                     filename:   entry.name,
                     path:       relPath,
@@ -933,9 +1038,16 @@ app.get('/api/detected-files', readLimiter, (req, res) => {
                 if (!manifest.ingestTimestamp) continue;
 
                 const ingestMs = new Date(manifest.ingestTimestamp).getTime();
-                const mtimeMs  = stats.mtime.getTime();
 
                 if (mtimeMs > ingestMs + 2000) {
+                    // Skip if user rejected this update and file hasn't changed since rejection
+                    if (fileIntake && fileIntake.state === 'rejected') {
+                        const lastKnown = fileIntake.lastKnownMtime
+                            ? new Date(fileIntake.lastKnownMtime).getTime()
+                            : 0;
+                        if (mtimeMs <= lastKnown + 2000) continue;
+                    }
+
                     changed.push({
                         filename:        entry.name,
                         path:            relPath,
@@ -1000,6 +1112,8 @@ app.post('/api/detected-files/import', writeLimiter, (req, res) => {
  *
  * Marks a changed file as "reviewed" by updating its ingestTimestamp to now.
  * The current indexed version is kept — no re-import occurs.
+ * Also records the lastKnownMtime in the persistent intake state so the
+ * file is not re-surfaced until it changes again.
  */
 app.post('/api/detected-files/acknowledge', writeLimiter, (req, res) => {
     try {
@@ -1014,8 +1128,24 @@ app.post('/api/detected-files/acknowledge', writeLimiter, (req, res) => {
             return res.status(404).json({ error: 'Source not found in manifest' });
         }
 
-        source.ingestTimestamp = new Date().toISOString();
+        const now = new Date().toISOString();
+        source.ingestTimestamp = now;
         upsertManifest(sourceId, source);
+
+        // Persist lastKnownMtime so the file is not flagged as changed again
+        // until it is actually modified after this point.
+        if (source.path) {
+            const absPath = resolveSourcePath(source.path);
+            let mtime = now;
+            if (absPath && fs.existsSync(absPath)) {
+                try { mtime = fs.statSync(absPath).mtime.toISOString(); }
+                catch { /* fall back to now */ }
+            }
+            upsertIntakeFile(source.path, {
+                state:          'inspected',
+                lastKnownMtime: mtime,
+            });
+        }
 
         res.json({ success: true });
     } catch (error) {
@@ -1385,10 +1515,16 @@ app.get('/api/storage-info', readLimiter, (req, res) => {
 /**
  * GET /api/tools
  * Returns all tools in the registry with their current status.
+ * Augments each tool record with its persistent intake state (if any).
  */
 app.get('/api/tools', readLimiter, (req, res) => {
-    const registry = loadToolRegistry();
-    res.json({ tools: registry.tools || [], active: registry.active || {} });
+    const registry    = loadToolRegistry();
+    const intakeState = loadIntakeState();
+    const tools = (registry.tools || []).map(t => {
+        const intake = (intakeState.tools && intakeState.tools[t.id]) || null;
+        return Object.assign({}, t, { intake });
+    });
+    res.json({ tools, active: registry.active || {} });
 });
 
 /**
@@ -1718,6 +1854,110 @@ app.post('/api/tools/:id/launch', writeLimiter, async (req, res) => {
 });
 
 
+// ── Phase 8.5: Intake State API ───────────────────────────────────────────────
+
+/**
+ * GET /api/intake-state
+ * Returns the full persistent intake state (files and tools).
+ */
+app.get('/api/intake-state', readLimiter, (req, res) => {
+    res.json(loadIntakeState());
+});
+
+/**
+ * POST /api/sources/:id/inspect
+ * Marks a source as inspected in the persistent intake state.
+ * The file remains in the Threshold queue but is noted as seen.
+ */
+app.post('/api/sources/:id/inspect', writeLimiter, (req, res) => {
+    const { id }    = req.params;
+    const manifests = loadManifests();
+    const source    = manifests[id];
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+
+    const filePath = source.path;
+    if (!filePath) return res.status(400).json({ error: 'Source has no stored path' });
+
+    const entry = upsertIntakeFile(filePath, { state: 'inspected' });
+    res.json({ success: true, intake: entry });
+});
+
+/**
+ * POST /api/sources/:id/reject
+ * Persistently rejects a source.
+ *
+ * The source is removed from the active intake queue and will not be
+ * surfaced again unless the file changes on disk after this rejection.
+ * Body: { notes? }  (optional note stored with the rejection)
+ */
+app.post('/api/sources/:id/reject', writeLimiter, (req, res) => {
+    const { id }              = req.params;
+    const { notes = null }    = req.body || {};
+    const manifests           = loadManifests();
+    const source              = manifests[id];
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+
+    const filePath = source.path;
+    if (!filePath) return res.status(400).json({ error: 'Source has no stored path' });
+
+    // Record the file's current mtime so we can detect future changes
+    const absPath = resolveSourcePath(filePath);
+    let lastKnownMtime = null;
+    if (absPath && fs.existsSync(absPath)) {
+        try { lastKnownMtime = fs.statSync(absPath).mtime.toISOString(); }
+        catch { /* ignore */ }
+    }
+
+    const entry = upsertIntakeFile(filePath, {
+        state:          'rejected',
+        lastKnownMtime,
+        notes:          notes || undefined,
+    });
+
+    // Also reflect rejection in manifest status
+    source.status = 'rejected';
+    upsertManifest(id, source);
+
+    res.json({ success: true, intake: entry });
+});
+
+/**
+ * POST /api/tools/:id/inspect
+ * Marks a tool as inspected in the persistent intake state.
+ */
+app.post('/api/tools/:id/inspect', writeLimiter, (req, res) => {
+    const toolId   = req.params.id;
+    const registry = loadToolRegistry();
+    const tool     = (registry.tools || []).find(t => t.id === toolId);
+    if (!tool) return res.status(404).json({ error: 'Tool not found: ' + toolId });
+
+    const entry = upsertIntakeTool(toolId, { state: 'inspected' });
+    res.json({ success: true, intake: entry });
+});
+
+/**
+ * POST /api/tools/:id/reject
+ * Persistently rejects a tool from the intake queue.
+ *
+ * The tool remains in the registry but is removed from the Threshold AI list.
+ * It will resurface only if the tool's detection state changes.
+ * Body: { notes? }
+ */
+app.post('/api/tools/:id/reject', writeLimiter, (req, res) => {
+    const toolId           = req.params.id;
+    const { notes = null } = req.body || {};
+    const registry         = loadToolRegistry();
+    const tool             = (registry.tools || []).find(t => t.id === toolId);
+    if (!tool) return res.status(404).json({ error: 'Tool not found: ' + toolId });
+
+    const entry = upsertIntakeTool(toolId, {
+        state: 'rejected',
+        notes: notes || undefined,
+    });
+    res.json({ success: true, intake: entry });
+});
+
+
 async function checkModel() {
     try {
         const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
@@ -1769,6 +2009,10 @@ module.exports = {
     loadCartridge,
     loadToolRegistry,
     saveToolRegistry,
+    loadIntakeState,
+    saveIntakeState,
+    upsertIntakeFile,
+    upsertIntakeTool,
     resolveActiveHeart,
     triageFile,
 };
