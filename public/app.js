@@ -1093,6 +1093,20 @@ function renderIntakeQueue() {
             note.className   = 'tq-changed-note';
             note.textContent = 'Changed since last import';
             meta.appendChild(note);
+
+            // Show timestamps for changed files
+            if (entry.ingestTimestamp) {
+                const ts1 = document.createElement('div');
+                ts1.className   = 'tq-changed-note';
+                ts1.textContent = 'Last indexed: ' + new Date(entry.ingestTimestamp).toLocaleString();
+                meta.appendChild(ts1);
+            }
+            if (entry.mtime) {
+                const ts2 = document.createElement('div');
+                ts2.className   = 'tq-changed-note';
+                ts2.textContent = 'Last modified: ' + new Date(entry.mtime).toLocaleString();
+                meta.appendChild(ts2);
+            }
         }
 
         // Show editable fields for pending and detected entries
@@ -1236,8 +1250,31 @@ function renderIntakeQueue() {
                 renderIntakeQueue();
             });
 
+            const rejectUpdateBtn = document.createElement('button');
+            rejectUpdateBtn.className   = 'secondary tq-action-btn threshold-reject-btn';
+            rejectUpdateBtn.textContent = 'Reject update';
+            rejectUpdateBtn.title       = 'Reject this file change — will not resurface until changed again';
+            rejectUpdateBtn.addEventListener('click', async () => {
+                if (!entry.sourceId) {
+                    _intakeQueue = _intakeQueue.filter(e => e !== entry);
+                    renderIntakeQueue();
+                    return;
+                }
+                rejectUpdateBtn.disabled = true;
+                try {
+                    await fetch('/api/sources/' + encodeURIComponent(entry.sourceId) + '/reject', {
+                        method: 'POST',
+                    });
+                    showFlashMessage('Update rejected — file will not resurface until changed again.');
+                } catch { /* ignore */ }
+                _intakeQueue = _intakeQueue.filter(e => e !== entry);
+                renderIntakeQueue();
+                loadThresholdList();
+            });
+
             aside.appendChild(reImportBtn);
             aside.appendChild(keepBtn);
+            aside.appendChild(rejectUpdateBtn);
         }
 
         // Action: retry failed entries
@@ -1478,6 +1515,8 @@ function loadDetectedIntoQueue(unmanaged, changed) {
             title:       f.title       || fileBaseName(f.filename),
             description: f.description || '',
             shelf:       f.shelf       || '',
+            mtime:           f.mtime           || null,
+            ingestTimestamp: f.ingestTimestamp  || null,
         });
     });
 
@@ -1551,6 +1590,12 @@ function buildThresholdFileRow(f, isChanged) {
     const row = document.createElement('div');
     row.className = 'threshold-file-row';
 
+    // Dim rejected rows
+    const intakeState = f.intake && f.intake.state;
+    if (intakeState === 'rejected') {
+        row.className += ' intake-rejected';
+    }
+
     const titleText = f.title || f.filename;
 
     const nameEl = document.createElement('div');
@@ -1562,6 +1607,11 @@ function buildThresholdFileRow(f, isChanged) {
     } else if (isChanged) {
         nameHtml += ' <span class="status-badge changed">Changed</span>';
     }
+    if (intakeState === 'rejected') {
+        nameHtml += ' <span class="status-badge rejected">Rejected</span>';
+    } else if (intakeState === 'inspected') {
+        nameHtml += ' <span class="status-badge inspected">Inspected</span>';
+    }
     nameHtml += '</div>';
 
     if (f.shelf) {
@@ -1571,97 +1621,177 @@ function buildThresholdFileRow(f, isChanged) {
         nameHtml += '<div class="source-card-description">' + escapeHtml(f.description) + '</div>';
     }
     nameHtml += '<div class="source-card-filename">' + escapeHtml(f.filename) + '</div>';
+
+    // Show timestamps for changed files
+    if (isChanged) {
+        if (f.ingestTimestamp) {
+            nameHtml += '<div class="source-card-filename tq-changed-note">Last indexed: ' +
+                escapeHtml(new Date(f.ingestTimestamp).toLocaleString()) + '</div>';
+        }
+        if (f.mtime) {
+            nameHtml += '<div class="source-card-filename tq-changed-note">Last modified: ' +
+                escapeHtml(new Date(f.mtime).toLocaleString()) + '</div>';
+        }
+    }
+
     nameEl.innerHTML = nameHtml;
 
     const actions = document.createElement('span');
     actions.className = 'threshold-file-actions';
 
-    // Status badge (for non-flagged files)
-    if (f.status && f.status !== 'flagged') {
+    // Status badge (for non-flagged files without an explicit intake badge)
+    if (f.status && f.status !== 'flagged' && intakeState !== 'rejected' && intakeState !== 'inspected') {
         const statusBadge = document.createElement('span');
         statusBadge.className = 'status-badge ' + (f.status || 'waiting');
         statusBadge.textContent = (f.status || 'waiting').charAt(0).toUpperCase() + (f.status || 'waiting').slice(1);
         actions.appendChild(statusBadge);
     }
 
-    // Flag / Unflag button (only for threshold files with a sourceId)
-    if (f.sourceId) {
-        const flagBtn = document.createElement('button');
-        flagBtn.className = 'secondary threshold-action-btn';
-        if (f.status === 'flagged') {
-            flagBtn.textContent = 'Unflag';
-            flagBtn.title = 'Remove flag — return to Waiting';
-            flagBtn.addEventListener('click', () => flagSource(f.sourceId, false));
-        } else {
-            flagBtn.textContent = 'Flag';
-            flagBtn.title = 'Flag for review';
-            flagBtn.addEventListener('click', () => flagSource(f.sourceId, true));
-        }
-        actions.appendChild(flagBtn);
-    }
-
-    // Index and move buttons (only for non-metaOnly files with a sourceId)
-    if (!f.metaOnly && f.sourceId) {
-        const indexBtn = document.createElement('button');
-        indexBtn.className = 'secondary threshold-action-btn';
-        indexBtn.textContent = 'Index';
-        indexBtn.addEventListener('click', async () => {
-            indexBtn.disabled = true;
-            indexBtn.textContent = 'Indexing…';
-            try {
-                const r    = await fetch('/api/index/file', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ sourceId: f.sourceId }),
-                });
-                const d = await r.json();
-                if (d.success) {
-                    indexBtn.textContent = 'Indexed';
-                    refreshSystemStatus();
+    // Only show action buttons when source is not rejected
+    if (intakeState !== 'rejected') {
+        // Inspect button — marks as inspected in persistent intake state
+        if (f.sourceId) {
+            const inspBtn = document.createElement('button');
+            inspBtn.className = 'secondary threshold-action-btn';
+            inspBtn.textContent = intakeState === 'inspected' ? 'Re-inspect' : 'Inspect';
+            inspBtn.title = 'Mark as inspected';
+            inspBtn.addEventListener('click', async () => {
+                inspBtn.disabled = true;
+                try {
+                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/inspect', {
+                        method: 'POST',
+                    });
+                    showFlashMessage('File marked as inspected.');
                     loadThresholdList();
-                } else {
-                    indexBtn.textContent = 'Failed';
-                    indexBtn.title = d.error || 'Indexing failed';
+                } catch {
+                    inspBtn.disabled = false;
+                }
+            });
+            actions.appendChild(inspBtn);
+        }
+
+        // Flag / Unflag button
+        if (f.sourceId) {
+            const flagBtn = document.createElement('button');
+            flagBtn.className = 'secondary threshold-action-btn';
+            if (f.status === 'flagged') {
+                flagBtn.textContent = 'Unflag';
+                flagBtn.title = 'Remove flag — return to Waiting';
+                flagBtn.addEventListener('click', () => flagSource(f.sourceId, false));
+            } else {
+                flagBtn.textContent = 'Flag';
+                flagBtn.title = 'Flag for review';
+                flagBtn.addEventListener('click', () => flagSource(f.sourceId, true));
+            }
+            actions.appendChild(flagBtn);
+        }
+
+        // Index and move buttons (only for non-metaOnly files with a sourceId)
+        if (!f.metaOnly && f.sourceId) {
+            const indexBtn = document.createElement('button');
+            indexBtn.className = 'secondary threshold-action-btn';
+            indexBtn.textContent = 'Index';
+            indexBtn.addEventListener('click', async () => {
+                indexBtn.disabled = true;
+                indexBtn.textContent = 'Indexing…';
+                try {
+                    const r    = await fetch('/api/index/file', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ sourceId: f.sourceId }),
+                    });
+                    const d = await r.json();
+                    if (d.success) {
+                        indexBtn.textContent = 'Indexed';
+                        refreshSystemStatus();
+                        loadThresholdList();
+                    } else {
+                        indexBtn.textContent = 'Failed';
+                        indexBtn.title = d.error || 'Indexing failed';
+                        indexBtn.disabled = false;
+                    }
+                } catch {
+                    indexBtn.textContent = 'Error';
                     indexBtn.disabled = false;
                 }
-            } catch {
-                indexBtn.textContent = 'Error';
-                indexBtn.disabled = false;
-            }
-        });
+            });
 
-        const moveBtn = document.createElement('button');
-        moveBtn.className = 'secondary threshold-action-btn';
-        moveBtn.textContent = '→ Workshop';
-        moveBtn.addEventListener('click', async () => {
-            if (!f.sourceId) return;
-            moveBtn.disabled = true;
-            try {
-                const r = await fetch('/api/index/file', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ sourceId: f.sourceId, targetRoom: 'workshop' }),
-                });
-                const d = await r.json();
-                if (d.success) {
-                    moveBtn.textContent = '✓ Workshop';
-                    loadThresholdList();
-                } else {
+            const moveBtn = document.createElement('button');
+            moveBtn.className = 'secondary threshold-action-btn';
+            moveBtn.textContent = '→ Workshop';
+            moveBtn.addEventListener('click', async () => {
+                if (!f.sourceId) return;
+                moveBtn.disabled = true;
+                try {
+                    const r = await fetch('/api/index/file', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ sourceId: f.sourceId, targetRoom: 'workshop' }),
+                    });
+                    const d = await r.json();
+                    if (d.success) {
+                        moveBtn.textContent = '✓ Workshop';
+                        loadThresholdList();
+                    } else {
+                        moveBtn.disabled = false;
+                    }
+                } catch {
                     moveBtn.disabled = false;
                 }
-            } catch {
-                moveBtn.disabled = false;
-            }
-        });
+            });
 
-        actions.appendChild(indexBtn);
-        actions.appendChild(moveBtn);
+            actions.appendChild(indexBtn);
+            actions.appendChild(moveBtn);
+        }
+
+        // Reject button — persistent rejection
+        if (f.sourceId) {
+            const rejectBtn = document.createElement('button');
+            rejectBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
+            rejectBtn.textContent = 'Reject';
+            rejectBtn.title = 'Persistently reject — removes from intake queue until file changes';
+            rejectBtn.addEventListener('click', async () => {
+                rejectBtn.disabled = true;
+                try {
+                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/reject', {
+                        method: 'POST',
+                    });
+                    showFlashMessage('File rejected — will not resurface unless changed.');
+                    loadThresholdList();
+                } catch {
+                    rejectBtn.disabled = false;
+                }
+            });
+            actions.appendChild(rejectBtn);
+        }
+    } else {
+        // Rejected — offer an "Undo reject" button via re-inspect
+        if (f.sourceId) {
+            const undoBtn = document.createElement('button');
+            undoBtn.className = 'secondary threshold-action-btn';
+            undoBtn.textContent = 'Undo Reject';
+            undoBtn.title = 'Return to Waiting state';
+            undoBtn.addEventListener('click', async () => {
+                undoBtn.disabled = true;
+                try {
+                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/inspect', {
+                        method: 'POST',
+                    });
+                    showFlashMessage('Rejection cleared — file returned to intake.');
+                    loadThresholdList();
+                } catch {
+                    undoBtn.disabled = false;
+                }
+            });
+            actions.appendChild(undoBtn);
+        }
     }
 
     row.appendChild(nameEl);
     row.appendChild(actions);
     return row;
 }
+
 
 /* ================================================================
    System Status
@@ -1786,7 +1916,7 @@ function roleLabel(role) {
 
 /**
  * Load and render the Threshold → AI tool list.
- * Shows detected tools that are not yet trusted.
+ * Shows detected tools that are not yet trusted (excluding persistently rejected ones).
  */
 async function loadThresholdTools() {
     const listEl   = document.getElementById('th-tool-list');
@@ -1798,19 +1928,29 @@ async function loadThresholdTools() {
         const { tools, active } = await fetchToolRegistry();
 
         // Show all non-trusted detected tools (+ not_detected as dim)
-        const visible = tools.filter(t => !t.trusted);
+        // Persistently rejected tools are shown as a separate dim section
+        const visible  = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
+        const rejected = tools.filter(t => !t.trusted && t.intake && t.intake.state === 'rejected');
 
-        // Show guided setup if no running tools
+        // Show guided setup if no running tools at all
         const anyRunning = tools.some(t => t.running === true);
         if (guideEl) guideEl.style.display = anyRunning ? 'none' : 'flex';
 
-        if (visible.length === 0) {
+        if (visible.length === 0 && rejected.length === 0) {
             listEl.innerHTML = '<span class="message-system">No untrusted tools. All detected tools have been admitted.</span>';
             return;
         }
 
         listEl.innerHTML = '';
         visible.forEach(tool => renderThresholdToolRow(tool, active, listEl));
+
+        if (rejected.length > 0) {
+            const sep = document.createElement('div');
+            sep.className   = 'threshold-section-header';
+            sep.textContent = 'Rejected (' + rejected.length + ')';
+            listEl.appendChild(sep);
+            rejected.forEach(tool => renderThresholdToolRow(tool, active, listEl));
+        }
     } catch {
         listEl.innerHTML = '<span class="message-system threshold-error">Could not load tools.</span>';
     }
@@ -1821,6 +1961,12 @@ function renderThresholdToolRow(tool, active, container) {
     row.className = 'threshold-file-row';
     row.dataset.toolId = tool.id;
 
+    const intakeState = tool.intake && tool.intake.state;
+    if (intakeState === 'rejected') row.className += ' intake-rejected';
+
+    // Tool last-seen timestamp
+    const lastSeen = tool.lastSeen ? ' · last seen ' + new Date(tool.lastSeen).toLocaleString() : '';
+
     const nameEl = document.createElement('div');
     nameEl.style.cssText = 'flex:1; min-width:0;';
     nameEl.innerHTML =
@@ -1828,71 +1974,112 @@ function renderThresholdToolRow(tool, active, container) {
             ' <span class="status-badge ' + toolStatusClass(tool) + '">' +
             escapeHtml(toolStatusLabel(tool)) + '</span>' +
             toolRunningBadge(tool) +
+            (intakeState === 'rejected' ? ' <span class="status-badge rejected">Rejected</span>' : '') +
+            (intakeState === 'inspected' ? ' <span class="status-badge inspected">Inspected</span>' : '') +
             '</div>' +
-        '<div class="source-card-filename">' + escapeHtml(tool.type) + ' · ' + escapeHtml(tool.interface) + '</div>' +
+        '<div class="source-card-filename">' + escapeHtml(tool.type || '') + ' · ' + escapeHtml(tool.interface || '') + escapeHtml(lastSeen) + '</div>' +
         (tool.endpoint ? '<div class="source-card-filename">' + escapeHtml(tool.endpoint) + '</div>' : '') +
         (tool.note ? '<div class="source-card-description">' + escapeHtml(tool.note) + '</div>' : '');
 
     const actions = document.createElement('span');
     actions.className = 'threshold-file-actions';
 
-    // Inspect button
-    const inspBtn = document.createElement('button');
-    inspBtn.className = 'secondary threshold-action-btn';
-    inspBtn.textContent = 'Inspect';
-    inspBtn.addEventListener('click', () => openToolInspector(tool, active));
-
-    // Trust button (only for detected tools)
-    if (tool.status === 'detected') {
-        const trustBtn = document.createElement('button');
-        trustBtn.className = 'primary threshold-action-btn';
-        trustBtn.textContent = 'Trust';
-        trustBtn.addEventListener('click', async () => {
-            trustBtn.disabled = true;
-            trustBtn.textContent = 'Trusting…';
+    if (intakeState !== 'rejected') {
+        // Inspect button — marks as inspected in persistent state
+        const inspBtn = document.createElement('button');
+        inspBtn.className = 'secondary threshold-action-btn';
+        inspBtn.textContent = intakeState === 'inspected' ? 'Re-inspect' : 'Inspect';
+        inspBtn.addEventListener('click', async () => {
+            inspBtn.disabled = true;
             try {
-                const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ trusted: true }),
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Workshop → Tools');
-                    loadThresholdTools();
-                    loadWorkshopTools();
-                    loadHearthToolRegistry();
-                } else {
-                    showFlashMessage('Trust failed: ' + (data.error || 'unknown'));
+                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
+            } catch { /* ignore */ }
+            openToolInspector(tool, active);
+            loadThresholdTools();
+        });
+        actions.appendChild(inspBtn);
+
+        // Trust button (only for detected tools)
+        if (tool.status === 'detected') {
+            const trustBtn = document.createElement('button');
+            trustBtn.className = 'primary threshold-action-btn';
+            trustBtn.textContent = 'Trust';
+            trustBtn.addEventListener('click', async () => {
+                trustBtn.disabled = true;
+                trustBtn.textContent = 'Trusting…';
+                try {
+                    const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ trusted: true }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Workshop → Tools');
+                        loadThresholdTools();
+                        loadWorkshopTools();
+                        loadHearthToolRegistry();
+                    } else {
+                        showFlashMessage('Trust failed: ' + (data.error || 'unknown'));
+                        trustBtn.disabled = false;
+                        trustBtn.textContent = 'Trust';
+                    }
+                } catch {
+                    showFlashMessage('Could not reach server.');
                     trustBtn.disabled = false;
                     trustBtn.textContent = 'Trust';
                 }
-            } catch {
-                showFlashMessage('Could not reach server.');
-                trustBtn.disabled = false;
-                trustBtn.textContent = 'Trust';
-            }
-        });
-        actions.appendChild(trustBtn);
-    }
+            });
+            actions.appendChild(trustBtn);
+        }
 
-    // Launch button — only for Ollama when it is detected but not running
-    if (tool.id === 'ollama-local' && tool.status === 'detected' && !tool.running) {
-        const launchBtn = document.createElement('button');
-        launchBtn.className = 'secondary threshold-action-btn';
-        launchBtn.textContent = '▶ Launch';
-        launchBtn.title = 'Attempt to start Ollama';
-        launchBtn.addEventListener('click', async () => {
-            launchBtn.disabled = true;
-            launchBtn.textContent = 'Launching…';
-            await launchOllama(tool.id);
-            launchBtn.disabled = false;
+        // Launch button — only for Ollama when detected but not running
+        if (tool.id === 'ollama-local' && tool.status === 'detected' && !tool.running) {
+            const launchBtn = document.createElement('button');
+            launchBtn.className = 'secondary threshold-action-btn';
             launchBtn.textContent = '▶ Launch';
+            launchBtn.title = 'Attempt to start Ollama';
+            launchBtn.addEventListener('click', async () => {
+                launchBtn.disabled = true;
+                launchBtn.textContent = 'Launching…';
+                await launchOllama(tool.id);
+                launchBtn.disabled = false;
+                launchBtn.textContent = '▶ Launch';
+            });
+            actions.appendChild(launchBtn);
+        }
+
+        // Reject button — persistent rejection
+        const rejectBtn = document.createElement('button');
+        rejectBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
+        rejectBtn.textContent = 'Reject';
+        rejectBtn.title = 'Persistently reject — hides tool from intake queue';
+        rejectBtn.addEventListener('click', async () => {
+            rejectBtn.disabled = true;
+            try {
+                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/reject', { method: 'POST' });
+                showFlashMessage(escapeHtml(tool.name) + ' rejected.');
+            } catch { /* ignore */ }
+            loadThresholdTools();
         });
-        actions.appendChild(launchBtn);
+        actions.appendChild(rejectBtn);
+    } else {
+        // Rejected — offer undo
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'secondary threshold-action-btn';
+        undoBtn.textContent = 'Undo Reject';
+        undoBtn.title = 'Restore tool to intake queue';
+        undoBtn.addEventListener('click', async () => {
+            undoBtn.disabled = true;
+            try {
+                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
+                showFlashMessage(escapeHtml(tool.name) + ' restored to intake.');
+            } catch { /* ignore */ }
+            loadThresholdTools();
+        });
+        actions.appendChild(undoBtn);
     }
 
-    actions.appendChild(inspBtn);
     row.appendChild(nameEl);
     row.appendChild(actions);
     container.appendChild(row);
@@ -2627,33 +2814,47 @@ async function loadStartupCheck() {
     const warningsEl = document.getElementById('startup-banner-warnings');
 
     if (statsEl) {
+        // ── Top-line summary ────────────────────────────────────────
+        const summaryParts = [];
+        const totalIntake  = (data.waitingFiles || 0) + (data.changedFiles || 0) + (data.flaggedFiles || 0);
+        if (totalIntake > 0) summaryParts.push(totalIntake + ' file' + (totalIntake === 1 ? '' : 's') + ' need review');
+        if (data.offlineTools > 0) summaryParts.push(data.offlineTools + ' AI offline');
+        if (data.newTools > 0) summaryParts.push(data.newTools + ' new tool' + (data.newTools === 1 ? '' : 's') + ' detected');
+        if (data.activeHeart && data.activeHeartAvailable) summaryParts.push('Heart ready');
+
+        const summaryEl = document.getElementById('startup-banner-summary');
+        if (summaryEl) {
+            summaryEl.textContent = summaryParts.length > 0 ? summaryParts.join(' · ') : 'System clear';
+            summaryEl.style.display = '';
+        }
+
         const stats = [];
 
-        // Files
+        // ── Intake group ─────────────────────────────────────────────
         const totalFiles = (data.waitingFiles || 0) + (data.changedFiles || 0) + (data.flaggedFiles || 0);
         if (totalFiles > 0) {
             if (data.waitingFiles > 0) {
-                stats.push({ label: 'waiting files', value: data.waitingFiles, style: 'warn' });
+                stats.push({ label: 'waiting files', value: data.waitingFiles, style: 'warn', group: 'Intake' });
             }
             if (data.changedFiles > 0) {
-                stats.push({ label: 'changed files', value: data.changedFiles, style: 'warn' });
+                stats.push({ label: 'changed files', value: data.changedFiles, style: 'warn', group: 'Intake' });
             }
             if (data.flaggedFiles > 0) {
-                stats.push({ label: 'flagged files', value: data.flaggedFiles, style: 'error' });
+                stats.push({ label: 'flagged files', value: data.flaggedFiles, style: 'error', group: 'Intake' });
             }
         } else {
-            stats.push({ label: 'threshold clear', value: '✓', style: 'ok' });
+            stats.push({ label: 'threshold clear', value: '✓', style: 'ok', group: 'Intake' });
         }
 
-        // Tools
+        // ── Tools group ──────────────────────────────────────────────
         if (data.runningTools > 0) {
-            stats.push({ label: 'tools running', value: data.runningTools, style: 'ok' });
+            stats.push({ label: 'tools running', value: data.runningTools, style: 'ok', group: 'Tools' });
         }
         if (data.offlineTools > 0) {
-            stats.push({ label: 'tools offline', value: data.offlineTools, style: 'error' });
+            stats.push({ label: 'tools offline', value: data.offlineTools, style: 'error', group: 'Tools' });
         }
         if (data.newTools > 0) {
-            stats.push({ label: 'new tools detected', value: data.newTools, style: 'warn' });
+            stats.push({ label: 'new tools detected', value: data.newTools, style: 'warn', group: 'Tools' });
         }
 
         // Active Heart
@@ -2662,17 +2863,27 @@ async function loadStartupCheck() {
                 label: 'heart',
                 value: data.activeHeart + (data.activeHeartAvailable ? ' ✓' : ' (offline)'),
                 style: data.activeHeartAvailable ? 'ok' : 'error',
+                group: 'Tools',
             });
         } else {
-            stats.push({ label: 'heart', value: 'none set', style: 'zero' });
+            stats.push({ label: 'heart', value: 'none set', style: 'zero', group: 'Tools' });
         }
 
-        statsEl.innerHTML = stats.map(s =>
-            '<span class="startup-stat">' +
-            '<span class="startup-stat-value ' + escapeHtml(s.style || '') + '">' + escapeHtml(String(s.value)) + '</span>' +
-            ' <span>' + escapeHtml(s.label) + '</span>' +
-            '</span>'
-        ).join('');
+        // ── Render grouped stats ─────────────────────────────────────
+        let lastGroup = null;
+        statsEl.innerHTML = stats.map(s => {
+            let html = '';
+            if (s.group !== lastGroup) {
+                lastGroup = s.group;
+                html += '<span class="startup-stat-group">' + escapeHtml(s.group) + '</span>';
+            }
+            html +=
+                '<span class="startup-stat">' +
+                '<span class="startup-stat-value ' + escapeHtml(s.style || '') + '">' + escapeHtml(String(s.value)) + '</span>' +
+                ' <span>' + escapeHtml(s.label) + '</span>' +
+                '</span>';
+            return html;
+        }).join('');
     }
 
     // Warnings
@@ -2705,23 +2916,43 @@ function renderSystemStartupSummary(data) {
     const el = document.getElementById('sys-startup-summary');
     if (!el) return;
 
-    const rows = [
-        { key: 'Waiting files',    val: data.waitingFiles  || 0 },
-        { key: 'Changed files',    val: data.changedFiles  || 0 },
-        { key: 'Flagged files',    val: data.flaggedFiles  || 0 },
-        { key: 'New tools',        val: data.newTools      || 0 },
-        { key: 'Running tools',    val: data.runningTools  || 0 },
-        { key: 'Offline tools',    val: data.offlineTools  || 0 },
-        { key: 'Active Heart',     val: data.activeHeart   || '—' },
-        { key: 'Heart available',  val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
-        { key: 'Migration',        val: data.migrationState || 'none' },
-        { key: 'Last scan',        val: data.lastScan ? new Date(data.lastScan).toLocaleTimeString() : '—' },
+    const sections = [
+        {
+            title: 'Intake',
+            rows: [
+                { key: 'Waiting files',  val: data.waitingFiles  || 0 },
+                { key: 'Changed files',  val: data.changedFiles  || 0 },
+                { key: 'Flagged files',  val: data.flaggedFiles  || 0 },
+            ],
+        },
+        {
+            title: 'Tools',
+            rows: [
+                { key: 'New tools',      val: data.newTools      || 0 },
+                { key: 'Running tools',  val: data.runningTools  || 0 },
+                { key: 'Offline tools',  val: data.offlineTools  || 0 },
+                { key: 'Active Heart',   val: data.activeHeart   || '—' },
+                { key: 'Heart ready',    val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
+            ],
+        },
+        {
+            title: 'System',
+            rows: [
+                { key: 'Migration',  val: data.migrationState || 'none' },
+                { key: 'Last scan',  val: data.lastScan ? new Date(data.lastScan).toLocaleTimeString() : '—' },
+            ],
+        },
     ];
 
-    el.innerHTML = rows.map(r =>
-        '<div class="system-row">' +
-        '<span class="system-key">' + escapeHtml(r.key) + '</span>' +
-        '<span class="system-val">' + escapeHtml(String(r.val)) + '</span>' +
+    el.innerHTML = sections.map(section =>
+        '<div class="sys-startup-section">' +
+        '<div class="sys-startup-section-title">' + escapeHtml(section.title) + '</div>' +
+        section.rows.map(r =>
+            '<div class="system-row">' +
+            '<span class="system-key">' + escapeHtml(r.key) + '</span>' +
+            '<span class="system-val">' + escapeHtml(String(r.val)) + '</span>' +
+            '</div>'
+        ).join('') +
         '</div>'
     ).join('');
 }
