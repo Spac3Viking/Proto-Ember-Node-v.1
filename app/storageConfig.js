@@ -207,6 +207,28 @@ function migrateLegacyData(legacyDir) {
     return result;
 }
 
+// ── Path resolution helper ────────────────────────────────────────────────────
+
+/**
+ * Resolve a stored source path to an absolute filesystem path.
+ *
+ * Handles two formats:
+ *   New (storage-root-relative): 'workshop/file.md'  → <DATA_ROOT>/workshop/file.md
+ *   Legacy (app-root-relative):  'data/workshop/file.md' → <DATA_ROOT>/workshop/file.md
+ *
+ * The legacy format was used by older Ember Node versions that stored data
+ * inside the app folder.  The data/ prefix is stripped so both formats
+ * resolve correctly against the external data root after migration.
+ *
+ * @param {string} storedPath
+ * @returns {string|null}
+ */
+function resolveSourcePath(storedPath) {
+    if (!storedPath) return null;
+    const normalized = storedPath.replace(/^data[\\/]/, '');
+    return path.join(DATA_ROOT, normalized);
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -221,4 +243,5 @@ module.exports = {
     LEGACY_DATA_DIR,
     ensureDataRoot,
     migrateLegacyData,
+    resolveSourcePath,
 };

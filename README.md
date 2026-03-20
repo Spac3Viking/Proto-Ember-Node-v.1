@@ -408,6 +408,37 @@ Trace indicates: *base model — no local sources*.
 | Phase 8 ✓ | Startup checklist, airlock discipline, tool readiness, changed-file detection |
 | Phase 8.5 ✓ | Intake persistence, durable reject, changed-file flow, tool setup polish |
 | Phase 8.75 ✓ | Cleanup pass: redundancy removal, DATA_DIR alias eliminated, path consolidation, duplicate constant consolidation, documentation update |
+| Phase 8.95 ✓ | Backend modularization: `server.js` reduced to ~140 lines; routes split by domain into `app/routes/`; intake state extracted to `app/intakeState.js`; startup summary to `app/startupCheck.js`; tool registry to `app/toolRegistry.js` |
+
+---
+
+## Backend Structure (Phase 8.95+)
+
+`app/server.js` is now a **bootstrap-only** file (~140 lines).  It sets up
+Express, mounts route modules, and starts the server.  All business logic lives
+in dedicated modules:
+
+### Service modules
+
+| Module | Responsibility |
+|---|---|
+| `app/intakeState.js` | Threshold intake state: load, save, upsert file/tool entries |
+| `app/toolRegistry.js` | Tool registry: load, save, merge discovered tools, resolve active Heart |
+| `app/startupCheck.js` | Startup summary: triageFile, changed-file scan, launch summary generator |
+| `app/rateLimiters.js` | Shared rate limiter instances (read / write / index / chat) |
+
+### Route modules (`app/routes/`)
+
+| Module | Routes |
+|---|---|
+| `startup.js` | `GET /api/startup-check` |
+| `sources.js` | `/api/ingest`, `/api/index/*`, `/api/sources/*`, `/api/notes` |
+| `threshold.js` | `/api/threshold/list`, `/api/detected-files*` |
+| `tools.js` | `/api/tools/*` |
+| `chat.js` | `POST /chat` (legacy), `POST /api/chat` |
+| `projects.js` | `/api/projects/*`, `/api/user-cartridges`, `/cartridges*` |
+| `threads.js` | `/api/threads/*` |
+| `system.js` | `/api/status`, `/api/ollama-status`, `/api/storage-info`, `/api/intake-state` |
 
 ---
 
