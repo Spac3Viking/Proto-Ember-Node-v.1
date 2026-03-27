@@ -3123,14 +3123,21 @@ async function loadStartupCheck() {
         // ── Top-line summary ────────────────────────────────────────
         const summaryParts = [];
         const totalIntake  = (data.waitingFiles || 0) + (data.changedFiles || 0) + (data.flaggedFiles || 0);
-        if (totalIntake > 0) summaryParts.push(totalIntake + ' file' + (totalIntake === 1 ? '' : 's') + ' need review');
+        summaryParts.push('Node awakened');
+        if (data.activeHeart && data.activeHeartAvailable) {
+            summaryParts.push('Heart ready');
+        } else if (data.activeHeart && !data.activeHeartAvailable) {
+            summaryParts.push('Heart offline');
+        } else {
+            summaryParts.push('no Heart set');
+        }
+        if (totalIntake > 0) summaryParts.push(totalIntake + ' file' + (totalIntake === 1 ? '' : 's') + ' awaiting review');
         if (data.offlineTools > 0) summaryParts.push(data.offlineTools + ' AI offline');
         if (data.newTools > 0) summaryParts.push(data.newTools + ' new tool' + (data.newTools === 1 ? '' : 's') + ' detected');
-        if (data.activeHeart && data.activeHeartAvailable) summaryParts.push('Heart ready');
 
         const summaryEl = document.getElementById('startup-banner-summary');
         if (summaryEl) {
-            summaryEl.textContent = summaryParts.length > 0 ? summaryParts.join(' · ') : 'System clear';
+            summaryEl.textContent = summaryParts.join(' • ');
             summaryEl.style.display = '';
         }
 
@@ -3164,6 +3171,7 @@ async function loadStartupCheck() {
         }
 
         // Active Heart
+        const noHeart = !data.activeHeart;
         if (data.activeHeart) {
             stats.push({
                 label: 'heart',
@@ -3190,11 +3198,16 @@ async function loadStartupCheck() {
                 '</span>';
             return html;
         }).join('');
+
+        // Show/hide "View Setup Guide" button in banner links
+        const setupGuideBtn = document.getElementById('sb-setup-guide');
+        if (setupGuideBtn) setupGuideBtn.style.display = noHeart ? '' : 'none';
     }
 
-    // Warnings
+    // Warnings — merge server warnings with local no-Heart notice
     if (warningsEl) {
-        const warnings = data.warnings || [];
+        const warnings = [...(data.warnings || [])];
+        if (!data.activeHeart) warnings.unshift('No active Heart detected — Recommended local AI: Ollama');
         if (warnings.length > 0) {
             warningsEl.style.display = '';
             warningsEl.innerHTML = warnings.map(w =>
@@ -3205,13 +3218,8 @@ async function loadStartupCheck() {
         }
     }
 
-    // Show banner only if there is something to surface
-    const hasItems = (data.waitingFiles + data.changedFiles + data.flaggedFiles + data.newTools + data.offlineTools) > 0
-        || (data.warnings && data.warnings.length > 0);
-
-    if (hasItems) {
-        banner.style.display = '';
-    }
+    // Always show banner — startup ritual is always surfaced
+    banner.style.display = '';
 
     // Also populate the System tab summary
     renderSystemStartupSummary(data);
@@ -3319,6 +3327,26 @@ function renderSystemStartupSummary(data) {
                     if (sysTab) sysTab.click();
                 }, 50);
                 if (banner) banner.style.display = 'none';
+            });
+        }
+
+        const setupGuideBtn  = document.getElementById('sb-setup-guide');
+        const setupOverlay   = document.getElementById('setup-guide-overlay');
+        const setupCloseBtn  = document.getElementById('setup-guide-close');
+
+        if (setupGuideBtn && setupOverlay) {
+            setupGuideBtn.addEventListener('click', () => {
+                setupOverlay.style.display = '';
+            });
+        }
+        if (setupCloseBtn && setupOverlay) {
+            setupCloseBtn.addEventListener('click', () => {
+                setupOverlay.style.display = 'none';
+            });
+        }
+        if (setupOverlay) {
+            setupOverlay.addEventListener('click', e => {
+                if (e.target === setupOverlay) setupOverlay.style.display = 'none';
             });
         }
     });
