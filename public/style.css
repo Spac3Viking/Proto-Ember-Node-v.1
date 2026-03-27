@@ -2297,7 +2297,7 @@ button.secondary:disabled {
   gap: 0.75rem;
   flex: 1;
   min-height: 0;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 200px); /* approx: header (~60px) + room-tabs (~40px) + room padding (~60px) + sub-tab row (~40px) */
 }
 
 /* Scribe sidebar (document list) */

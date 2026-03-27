@@ -706,9 +706,11 @@ async function sendDocumentToHeart() {
     if (sendBtn) sendBtn.disabled = true;
     if (insertBtn) insertBtn.style.display = 'none';
 
-    // Build the query: include title and full document text as context
+    // Build the query: include title and full document text as context.
+    // Escape double-quotes in the title so the prompt structure is preserved.
+    const safeTitle = title.replace(/"/g, '\u201c').replace(/'/g, '\u2018');
     const query =
-        'I am working on a document titled "' + title + '".\n\n' +
+        'I am working on a document titled "' + safeTitle + '".\n\n' +
         'Here is the current draft:\n\n' +
         content + '\n\n' +
         'Please help me refine, expand, or improve this writing. ' +
