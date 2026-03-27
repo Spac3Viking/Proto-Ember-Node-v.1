@@ -30,7 +30,7 @@
     <div id="startup-banner" class="startup-banner" style="display:none;" role="status" aria-live="polite">
       <div class="startup-banner-header">
         <span class="startup-banner-rune">ᚠ</span>
-        <span class="startup-banner-title">System Awareness</span>
+        <span class="startup-banner-title">Ember Node Awakened</span>
         <div class="startup-banner-actions">
           <button class="secondary startup-banner-toggle" id="startup-banner-toggle" aria-label="Collapse summary" title="Collapse">▾</button>
           <button class="startup-banner-dismiss" id="startup-banner-dismiss" aria-label="Dismiss summary" title="Dismiss">✕</button>
@@ -44,6 +44,7 @@
           <button class="secondary startup-banner-link" id="sb-review-threshold">ᚦ Review Threshold</button>
           <button class="secondary startup-banner-link" id="sb-review-tools">ᚹ Review Tools</button>
           <button class="secondary startup-banner-link" id="sb-open-system">ᚺ System</button>
+          <button class="secondary startup-banner-link" id="sb-setup-guide" style="display:none;">⬡ View Setup Guide</button>
         </div>
       </div>
     </div>
@@ -663,6 +664,49 @@
           <div class="insp-meta-row"><span class="trace-key">Last Seen</span><span id="tool-insp-lastseen" class="source-card-filename"></span></div>
         </div>
         <div class="insp-actions" id="tool-insp-actions"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Setup Guide Modal ──────────────────────────────────────────── -->
+  <div class="source-inspector-overlay" id="setup-guide-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Setup Guide">
+    <div class="source-inspector-panel" style="max-width:520px;">
+      <div class="source-inspector-header">
+        <span class="source-inspector-title">⬡ Local AI Setup Guide</span>
+        <button class="startup-banner-dismiss" id="setup-guide-close" aria-label="Close setup guide" title="Close">✕</button>
+      </div>
+      <div class="source-inspector-body" style="padding:1.2rem 1.3rem; overflow-y:auto; display:flex; flex-direction:column; gap:1rem;">
+        <p style="margin:0; font-size:0.85rem; opacity:0.8;">
+          No active Heart was detected. Ember Node works best with a local AI model host running on your machine.
+          The recommended option is <strong>Ollama</strong> — a free, local, offline-capable AI runtime.
+        </p>
+        <div>
+          <div class="workshop-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">What is Ollama?</div>
+          <p style="margin:0; font-size:0.82rem; opacity:0.75;">
+            Ollama lets you download and run open-source AI models entirely on your own machine.
+            No cloud account, no internet required after setup, no data leaves your device.
+          </p>
+        </div>
+        <div>
+          <div class="workshop-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">How to Install</div>
+          <ol style="margin:0 0 0 1.2rem; font-size:0.82rem; opacity:0.8; line-height:1.8;">
+            <li>Visit <strong>ollama.com</strong> and download the installer for your OS.</li>
+            <li>Run the installer (no admin required on most systems).</li>
+            <li>Open a terminal and start the server:<br><code style="font-size:0.8rem;">ollama serve</code></li>
+            <li>Pull a model to use as your Heart:<br><code style="font-size:0.8rem;">ollama pull gemma3:4b</code></li>
+            <li>Return to Ember Node and click <strong>ᚹ Review Tools</strong> → <strong>↺ Scan</strong> to detect it.</li>
+          </ol>
+        </div>
+        <div>
+          <div class="workshop-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">Windows Quick Start</div>
+          <p style="margin:0; font-size:0.82rem; opacity:0.75;">
+            After installing Ollama, you can use <strong>Awaken-Ember-Node.bat</strong> to start both
+            Ollama and Ember Node together with a single double-click.
+          </p>
+        </div>
+        <p style="margin:0; font-size:0.78rem; opacity:0.5;">
+          Ember Node will never auto-install tools or fetch installers. All setup is manual and under your control.
+        </p>
       </div>
     </div>
   </div>

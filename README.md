@@ -199,6 +199,57 @@ Open [http://localhost:3477](http://localhost:3477) in your browser.
 
 ---
 
+## Phase 10 — Launcher + Local Install Experience (Windows)
+
+### One-Click Launcher
+
+`Awaken-Ember-Node.bat` is located in the project root.  Double-clicking it:
+
+1. Navigates to the project directory automatically.
+2. Optionally starts Ollama in the background if it is installed but not already running.
+3. Starts the Ember Node backend (`npm run dev`) in a new terminal window.
+4. Waits briefly for the server to initialise.
+5. Opens `http://localhost:3477` in your default browser.
+
+No terminal commands are required.  No admin privileges are needed.  Nothing is installed
+silently.
+
+#### Requirements
+- [Node.js](https://nodejs.org/) 18+ installed and on the system PATH.
+- `npm` available (comes with Node.js).
+- Ollama is **optional** — the launcher works without it and will note its absence.
+
+---
+
+### Desktop Shortcut (Windows)
+
+To place a shortcut on your Desktop:
+
+1. Right-click `Awaken-Ember-Node.bat` in Explorer.
+2. Select **Create shortcut**.
+3. Move the new shortcut to your Desktop.
+4. Rename it to **Awaken Ember Node**.
+5. *(Optional)* Right-click the shortcut → **Properties** → **Change Icon** to assign the
+   Ember Node glyph icon when available.
+
+---
+
+### Future Installer Plan
+
+A full installer is not yet built.  The groundwork is in place:
+
+- The launcher lives in the project root with **no hardcoded paths** (all paths are relative).
+- The app runs correctly from any extracted folder.
+- The data root initialises automatically on first run.
+
+Planned future packaging:
+- **Windows installer** — NSIS or WiX bundle.
+- Bundled launcher with icon integration.
+- Optional Ollama setup helper (guided, never silent).
+- Icon: Ember Node glyph (ᚠ).
+
+---
+
 ## Architecture Principles
 
 - local-first sovereignty
@@ -409,6 +460,7 @@ Trace indicates: *base model — no local sources*.
 | Phase 8.5 ✓ | Intake persistence, durable reject, changed-file flow, tool setup polish |
 | Phase 8.75 ✓ | Cleanup pass: redundancy removal, DATA_DIR alias eliminated, path consolidation, duplicate constant consolidation, documentation update |
 | Phase 8.95 ✓ | Backend modularization: `server.js` reduced to ~140 lines; routes split by domain into `app/routes/`; intake state extracted to `app/intakeState.js`; startup summary to `app/startupCheck.js`; tool registry to `app/toolRegistry.js` |
+| Phase 10 ✓ | Launcher + local install experience: `Awaken-Ember-Node.bat` one-click launcher, optional Ollama auto-start, startup ritual banner, no-Heart setup guide, desktop shortcut docs, future installer groundwork |
 
 ---
 
