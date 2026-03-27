@@ -56,6 +56,7 @@ const thresholdRouter      = require('./routes/threshold');
 const toolsRouter          = require('./routes/tools');
 const threadsRouter        = require('./routes/threads');
 const projectsRouter       = require('./routes/projects');
+const documentsRouter      = require('./routes/documents');
 
 // ── Express setup ─────────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ app.use(thresholdRouter);
 app.use(toolsRouter);
 app.use(threadsRouter);
 app.use(projectsRouter);
+app.use(documentsRouter);
 
 // ── Server start ──────────────────────────────────────────────────────────────
 

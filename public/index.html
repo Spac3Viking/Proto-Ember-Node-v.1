@@ -241,7 +241,8 @@
                   Phase 7 ✓ — AI/tool discovery, trust flow, role assignment, Heart selection<br>
                   Phase 8 ✓ — startup checklist, airlock discipline, tool readiness<br>
                   Phase 8.5 ✓ — intake persistence, durable reject, changed-file flow, tool setup polish<br>
-                  Phase 8.75 ✓ — cleanup pass: redundancy removal, path consolidation, modular clarity
+                  Phase 8.75 ✓ — cleanup pass: redundancy removal, path consolidation, modular clarity<br>
+                  Phase 9 ✓ — Scribe Forge: document editor, Heart tuning, Green Fire UI
                 </p>
               </div>
 
@@ -268,7 +269,8 @@
           <div class="room-header-row">
             <h2 class="room-heading"><span class="room-rune">ᚹ</span> Workshop <span class="lifecycle-pill indexed">Indexed</span></h2>
             <nav class="sub-tabs" role="tablist" aria-label="Workshop tabs">
-              <button class="sub-tab active" data-subtab="ws-notepad"    aria-selected="true">Notepad</button>
+              <button class="sub-tab active" data-subtab="ws-scribe"     aria-selected="true">ᛋ Scribe</button>
+              <button class="sub-tab"        data-subtab="ws-notepad"    aria-selected="false">Notepad</button>
               <button class="sub-tab"        data-subtab="ws-index"      aria-selected="false">Index</button>
               <button class="sub-tab"        data-subtab="ws-cartridges" aria-selected="false">Cartridges</button>
               <button class="sub-tab"        data-subtab="ws-projects"   aria-selected="false">Projects</button>
@@ -276,8 +278,72 @@
             </nav>
           </div>
 
+          <!-- Workshop / Scribe — Document Editor (Phase 9) -->
+          <div class="sub-panel active" id="ws-scribe">
+            <div class="scribe-layout">
+
+              <!-- LEFT: Document list -->
+              <aside class="scribe-sidebar">
+                <div class="scribe-sidebar-header">
+                  <span class="scribe-sidebar-title">Documents</span>
+                  <button class="secondary scribe-btn-icon" id="scribe-new-doc-btn" title="New document">+</button>
+                </div>
+                <div class="scribe-doc-list" id="scribe-doc-list">
+                  <span class="message-system">No documents yet.</span>
+                </div>
+              </aside>
+
+              <!-- CENTER: Document editor -->
+              <div class="scribe-editor-area">
+                <div class="scribe-editor-toolbar">
+                  <input
+                    type="text"
+                    id="scribe-doc-title"
+                    class="scribe-title-input"
+                    placeholder="Document title…"
+                    autocomplete="off"
+                    aria-label="Document title"
+                  >
+                  <select id="scribe-doc-type" class="scribe-type-select" aria-label="Document type">
+                    <option value="note">Note</option>
+                    <option value="saga">Saga</option>
+                    <option value="codex">Codex</option>
+                    <option value="grimoire">Grimoire</option>
+                  </select>
+                  <button class="primary scribe-action-btn" id="scribe-save-btn" title="Save document">Save</button>
+                  <button class="secondary scribe-action-btn" id="scribe-delete-btn" title="Delete document" style="display:none;">Delete</button>
+                  <span class="scribe-save-status" id="scribe-save-status"></span>
+                </div>
+                <div class="scribe-editor-body">
+                  <textarea
+                    id="scribe-doc-content"
+                    class="scribe-content-area"
+                    placeholder="Begin writing here. Your work is yours alone — stored locally, never sent to the cloud."
+                    spellcheck="true"
+                    aria-label="Document content"
+                  ></textarea>
+                </div>
+              </div>
+
+              <!-- RIGHT: Heart companion panel -->
+              <aside class="scribe-heart-panel">
+                <div class="scribe-heart-header">
+                  <span class="scribe-sidebar-title">ᚺ Heart</span>
+                </div>
+                <div class="scribe-heart-actions">
+                  <button class="primary scribe-action-btn" id="scribe-send-to-heart-btn" title="Send current document to Heart">Send to Heart</button>
+                  <button class="secondary scribe-action-btn" id="scribe-insert-response-btn" title="Insert Heart response into document" style="display:none;">Insert Response</button>
+                </div>
+                <div class="scribe-heart-chat" id="scribe-heart-chat">
+                  <span class="message-system scribe-heart-hint">Send your writing to the Heart for reflection, expansion, or refinement.</span>
+                </div>
+              </aside>
+
+            </div>
+          </div>
+
           <!-- Workshop / Notepad -->
-          <div class="sub-panel active" id="ws-notepad">
+          <div class="sub-panel" id="ws-notepad">
             <div class="ember-card workshop-draft-card" style="padding: 1rem;">
               <div class="draft-area">
                 <label for="workshop-draft" class="visually-hidden">Draft area</label>

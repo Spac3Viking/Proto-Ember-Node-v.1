@@ -31,8 +31,8 @@
   /* Page/card backgrounds */
   --archive-bg: hsl(120, 30%, 6%);
   --archive-card: hsl(120, 25%, 10%);
-  --archive-text: hsl(140, 20%, 92%);
-  --archive-muted: hsl(120, 15%, 70%);
+  --archive-text: hsl(120, 55%, 68%);
+  --archive-muted: hsl(120, 25%, 50%);
 
   /* Shadow system */
   --shadow-inset: inset 0 0 20px hsla(140, 100%, 70%, 0.04);
@@ -2286,4 +2286,281 @@ button.secondary:disabled {
   color: hsla(0, 70%, 70%, 0.95) !important;
   border-color: hsla(0, 65%, 60%, 0.5) !important;
   background: hsla(0, 60%, 20%, 0.15) !important;
+}
+
+/* ── Phase 9: Scribe Forge — Document Editor ─────────────────────────────────── */
+
+/* Three-panel Scribe layout */
+.scribe-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr 260px;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  height: calc(100vh - 200px); /* approx: header (~60px) + room-tabs (~40px) + room padding (~60px) + sub-tab row (~40px) */
+}
+
+/* Scribe sidebar (document list) */
+.scribe-sidebar {
+  background: var(--gf-stone-face);
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scribe-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.875rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+  flex-shrink: 0;
+}
+
+.scribe-sidebar-title {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gf-wire-amber);
+}
+
+.scribe-btn-icon {
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid hsla(140, 100%, 70%, 0.2);
+  color: var(--gf-wire-green);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scribe-btn-icon:hover {
+  border-color: hsla(140, 100%, 70%, 0.45);
+  color: var(--gf-wire-amber);
+}
+
+.scribe-doc-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.25rem 0;
+}
+
+.scribe-doc-item {
+  padding: 0.55rem 0.875rem;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.05);
+}
+
+.scribe-doc-item:hover {
+  background: hsla(120, 15%, 7%, 0.8);
+  border-left-color: hsla(140, 100%, 70%, 0.2);
+}
+
+.scribe-doc-item.active {
+  background: hsla(120, 15%, 8%, 0.9);
+  border-left-color: var(--gf-wire-amber);
+}
+
+.scribe-doc-item-title {
+  font-size: 0.82rem;
+  color: var(--archive-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.scribe-doc-item.active .scribe-doc-item-title {
+  color: var(--gf-wire-amber);
+}
+
+.scribe-doc-item-date {
+  font-size: 0.68rem;
+  color: var(--archive-muted);
+  margin-top: 0.1rem;
+}
+
+.scribe-type-badge {
+  font-size: 0.6rem;
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid hsla(38, 100%, 70%, 0.25);
+  color: var(--gf-wire-amber);
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+/* Center editor area */
+.scribe-editor-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  background: hsl(120, 20%, 3%);
+  border: 1px solid hsla(140, 100%, 70%, 0.12);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.scribe-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--gf-stone-face);
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.scribe-title-input {
+  flex: 1;
+  min-width: 120px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.88rem;
+  color: var(--gf-wire-amber);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.15);
+  border-radius: 0;
+  padding: 0.2rem 0.25rem;
+}
+
+.scribe-title-input:focus {
+  border-bottom-color: hsla(38, 100%, 70%, 0.45);
+  box-shadow: none;
+  outline: none;
+}
+
+.scribe-type-select {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--gf-stone-recess);
+  border: 1px solid hsla(140, 100%, 70%, 0.18);
+  color: var(--archive-muted);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.scribe-action-btn {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.875rem;
+  white-space: nowrap;
+}
+
+.scribe-save-status {
+  font-size: 0.72rem;
+  color: var(--archive-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.scribe-editor-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* The main writing area — terminal green on black */
+.scribe-content-area {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  background: hsl(120, 20%, 3%);
+  color: hsl(120, 55%, 68%);
+  border: none;
+  border-radius: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  padding: 1.25rem 1.5rem;
+  outline: none;
+}
+
+.scribe-content-area:focus {
+  box-shadow: none;
+  border: none;
+}
+
+.scribe-content-area::placeholder {
+  color: hsla(120, 30%, 40%, 0.55);
+  font-style: italic;
+}
+
+/* Right panel — Heart companion */
+.scribe-heart-panel {
+  background: var(--gf-stone-face);
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scribe-heart-header {
+  padding: 0.6rem 0.875rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+  flex-shrink: 0;
+}
+
+.scribe-heart-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.07);
+  flex-shrink: 0;
+}
+
+.scribe-heart-chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.scribe-heart-hint {
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.scribe-heart-response {
+  font-size: 0.82rem;
+  line-height: 1.65;
+  border-left: 2px solid hsla(140, 100%, 70%, 0.35);
+  padding-left: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Responsive: collapse to single column on narrow viewports */
+@media (max-width: 900px) {
+  .scribe-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    height: auto;
+  }
+  .scribe-editor-body {
+    min-height: 300px;
+  }
 }

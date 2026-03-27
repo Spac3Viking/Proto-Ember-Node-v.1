@@ -86,6 +86,9 @@ function escapeHtml(str) {
                 });
 
                 // Lazy-load on sub-tab activation
+                if (panelId === 'ws-scribe') {
+                    loadDocuments();
+                }
                 if (panelId === 'ws-index') {
                     loadWorkshopSources();
                     loadWorkshopNotes();
@@ -481,8 +484,309 @@ async function loadHearthArchive() {
 
 function loadWorkshopPanel() {
     window._workshopLoaded = true;
-    // Nothing to eagerly load — panels load on sub-tab activation
+    // Scribe is the default Workshop sub-tab — load documents on panel open
+    loadDocuments();
 }
+
+/* ================================================================
+   Phase 9 — Scribe Forge: Document Editor
+   ================================================================ */
+
+/** Currently open document ID (null when no document is open). */
+let _activeDocId       = null;
+/** Last Heart response text, for Insert Response action. */
+let _lastHeartResponse = null;
+/** Autosave debounce timer handle. */
+let _autosaveTimer     = null;
+
+/**
+ * Load and render the document list in the Scribe sidebar.
+ */
+async function loadDocuments() {
+    const listEl = document.getElementById('scribe-doc-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<span class="message-system">Loading…</span>';
+
+    try {
+        const res  = await fetch('/api/documents');
+        const data = await res.json();
+        const docs = data.documents || [];
+
+        if (docs.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No documents yet. Create one to begin.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        docs.forEach(doc => {
+            const item = document.createElement('div');
+            item.className = 'scribe-doc-item' + (doc.id === _activeDocId ? ' active' : '');
+            item.dataset.docId = doc.id;
+
+            const typeBadge = doc.type && doc.type !== 'note'
+                ? '<span class="scribe-type-badge">' + escapeHtml(doc.type) + '</span>'
+                : '';
+            item.innerHTML =
+                '<div class="scribe-doc-item-title">' + escapeHtml(doc.title || 'Untitled') + typeBadge + '</div>' +
+                '<div class="scribe-doc-item-date">' + escapeHtml(new Date(doc.updatedAt).toLocaleDateString()) + '</div>';
+
+            item.addEventListener('click', () => openDocument(doc.id));
+            listEl.appendChild(item);
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load documents.</span>';
+    }
+}
+
+/**
+ * Open a document in the editor panel.
+ * @param {string} id  Document ID
+ */
+async function openDocument(id) {
+    try {
+        const res  = await fetch('/api/documents/' + encodeURIComponent(id));
+        const data = await res.json();
+        const doc  = data.document;
+        if (!doc) { showFlashMessage('Document not found.'); return; }
+
+        _activeDocId = doc.id;
+
+        const titleEl   = document.getElementById('scribe-doc-title');
+        const contentEl = document.getElementById('scribe-doc-content');
+        const typeEl    = document.getElementById('scribe-doc-type');
+        const deleteBtn = document.getElementById('scribe-delete-btn');
+
+        if (titleEl)   titleEl.value   = doc.title   || '';
+        if (contentEl) contentEl.value = doc.content || '';
+        if (typeEl)    typeEl.value    = doc.type    || 'note';
+        if (deleteBtn) deleteBtn.style.display = '';
+
+        setScribeSaveStatus('');
+
+        // Highlight active item in list
+        document.querySelectorAll('.scribe-doc-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.docId === id);
+        });
+    } catch {
+        showFlashMessage('Could not open document.');
+    }
+}
+
+/**
+ * Create a new blank document and open it.
+ */
+async function newDocument() {
+    try {
+        const res  = await fetch('/api/documents', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ title: 'Untitled', content: '', type: 'note' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            await loadDocuments();
+            openDocument(data.document.id);
+        }
+    } catch {
+        showFlashMessage('Could not create document.');
+    }
+}
+
+/**
+ * Save the currently open document.
+ */
+async function saveDocument() {
+    if (!_activeDocId) return;
+
+    const titleEl   = document.getElementById('scribe-doc-title');
+    const contentEl = document.getElementById('scribe-doc-content');
+    const typeEl    = document.getElementById('scribe-doc-type');
+
+    const title   = titleEl   ? titleEl.value   : '';
+    const content = contentEl ? contentEl.value : '';
+    const type    = typeEl    ? typeEl.value    : 'note';
+
+    setScribeSaveStatus('Saving…');
+    try {
+        const res  = await fetch('/api/documents/' + encodeURIComponent(_activeDocId), {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ title, content, type }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            setScribeSaveStatus('Saved ✓');
+            setTimeout(() => setScribeSaveStatus(''), 2000);
+            // Refresh document list title
+            loadDocuments();
+        } else {
+            setScribeSaveStatus('Save failed');
+        }
+    } catch {
+        setScribeSaveStatus('Save failed');
+    }
+}
+
+/**
+ * Delete the currently open document after confirmation.
+ */
+async function deleteActiveDocument() {
+    if (!_activeDocId) return;
+    if (!confirm('Delete this document? This cannot be undone.')) return;
+
+    try {
+        const res = await fetch('/api/documents/' + encodeURIComponent(_activeDocId), {
+            method: 'DELETE',
+        });
+        const data = await res.json();
+        if (data.success) {
+            _activeDocId = null;
+            const titleEl   = document.getElementById('scribe-doc-title');
+            const contentEl = document.getElementById('scribe-doc-content');
+            const typeEl    = document.getElementById('scribe-doc-type');
+            const deleteBtn = document.getElementById('scribe-delete-btn');
+            if (titleEl)   titleEl.value   = '';
+            if (contentEl) contentEl.value = '';
+            if (typeEl)    typeEl.value    = 'note';
+            if (deleteBtn) deleteBtn.style.display = 'none';
+            setScribeSaveStatus('');
+            showFlashMessage('Document deleted.');
+            loadDocuments();
+        }
+    } catch {
+        showFlashMessage('Could not delete document.');
+    }
+}
+
+/**
+ * Set the save-status indicator text.
+ * @param {string} text
+ */
+function setScribeSaveStatus(text) {
+    const el = document.getElementById('scribe-save-status');
+    if (el) el.textContent = text;
+}
+
+/**
+ * Schedule an autosave 2 seconds after the user stops typing.
+ */
+function scheduleAutosave() {
+    clearTimeout(_autosaveTimer);
+    setScribeSaveStatus('Unsaved…');
+    _autosaveTimer = setTimeout(saveDocument, 2000);
+}
+
+/**
+ * Send the current document content to the Heart for scribe assistance.
+ * Renders the response in the Scribe Heart panel.
+ */
+async function sendDocumentToHeart() {
+    if (!_activeDocId) {
+        showFlashMessage('Open or create a document first.');
+        return;
+    }
+
+    const titleEl   = document.getElementById('scribe-doc-title');
+    const contentEl = document.getElementById('scribe-doc-content');
+    const chatEl    = document.getElementById('scribe-heart-chat');
+    const sendBtn   = document.getElementById('scribe-send-to-heart-btn');
+    const insertBtn = document.getElementById('scribe-insert-response-btn');
+
+    const title   = titleEl   ? titleEl.value.trim()   : '';
+    const content = contentEl ? contentEl.value.trim() : '';
+
+    if (!content) {
+        showFlashMessage('Write something in the editor first.');
+        return;
+    }
+
+    if (chatEl) {
+        chatEl.innerHTML = '<span class="message-system">Sending to Heart…</span>';
+    }
+    if (sendBtn) sendBtn.disabled = true;
+    if (insertBtn) insertBtn.style.display = 'none';
+
+    // Build the query: include title and full document text as context.
+    // Escape double-quotes in the title so the prompt structure is preserved.
+    const safeTitle = title.replace(/"/g, '\u201c').replace(/'/g, '\u2018');
+    const query =
+        'I am working on a document titled "' + safeTitle + '".\n\n' +
+        'Here is the current draft:\n\n' +
+        content + '\n\n' +
+        'Please help me refine, expand, or improve this writing. ' +
+        'Suggest structural improvements, identify key themes, and help strengthen the work.';
+
+    try {
+        const cancelAnim = chatEl ? startRuneAnimation(
+            (() => { const el = document.createElement('span'); chatEl.innerHTML = ''; chatEl.appendChild(el); return el; })()
+        ) : null;
+
+        const res  = await fetch('/api/chat', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ query }),
+        });
+        if (cancelAnim) cancelAnim();
+
+        const data = await res.json();
+        const answer = (data && data.answer) ? data.answer : '(no response)';
+        _lastHeartResponse = answer;
+
+        if (chatEl) {
+            chatEl.innerHTML = '';
+            const responseEl = document.createElement('div');
+            responseEl.className = 'message-heart scribe-heart-response';
+            responseEl.textContent = answer;
+            chatEl.appendChild(responseEl);
+        }
+
+        if (insertBtn) insertBtn.style.display = '';
+    } catch {
+        if (chatEl) chatEl.innerHTML = '<span class="message-system">Could not reach Heart.</span>';
+        showFlashMessage('Could not reach Heart.');
+    } finally {
+        if (sendBtn) sendBtn.disabled = false;
+    }
+}
+
+/**
+ * Insert the last Heart response into the current document (appended).
+ */
+function insertHeartResponse() {
+    if (!_lastHeartResponse) return;
+    const contentEl = document.getElementById('scribe-doc-content');
+    if (!contentEl) return;
+
+    const separator = '\n\n---\n\n';
+    contentEl.value = (contentEl.value || '') + separator + _lastHeartResponse;
+    contentEl.scrollTop = contentEl.scrollHeight;
+    contentEl.focus();
+    scheduleAutosave();
+    showFlashMessage('Heart response inserted ✓');
+}
+
+/** Initialize Scribe panel event listeners. */
+(function initScribe() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const newDocBtn   = document.getElementById('scribe-new-doc-btn');
+        const saveBtn     = document.getElementById('scribe-save-btn');
+        const deleteBtn   = document.getElementById('scribe-delete-btn');
+        const sendBtn     = document.getElementById('scribe-send-to-heart-btn');
+        const insertBtn   = document.getElementById('scribe-insert-response-btn');
+        const contentEl   = document.getElementById('scribe-doc-content');
+        const titleEl     = document.getElementById('scribe-doc-title');
+
+        if (newDocBtn) newDocBtn.addEventListener('click', newDocument);
+        if (saveBtn)   saveBtn.addEventListener('click', saveDocument);
+        if (deleteBtn) deleteBtn.addEventListener('click', deleteActiveDocument);
+        if (sendBtn)   sendBtn.addEventListener('click', sendDocumentToHeart);
+        if (insertBtn) insertBtn.addEventListener('click', insertHeartResponse);
+
+        // Autosave on content change
+        if (contentEl) contentEl.addEventListener('input', scheduleAutosave);
+        if (titleEl)   titleEl.addEventListener('input', scheduleAutosave);
+    });
+})();
 
 /* ================================================================
    Workshop — Index sub-tab

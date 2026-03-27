@@ -71,6 +71,7 @@ const THREADS_DIR         = path.join(DATA_ROOT, 'threads');
 const USER_CARTRIDGES_DIR = path.join(DATA_ROOT, 'cartridges');
 const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
 const EXPORTS_DIR         = path.join(DATA_ROOT, 'exports');
+const DOCUMENTS_DIR       = path.join(DATA_ROOT, 'documents');
 
 // Placeholder files that should not be treated as real user content
 const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store']);
@@ -101,6 +102,7 @@ function ensureDataRoot() {
         USER_CARTRIDGES_DIR,
         SYSTEM_DIR,
         EXPORTS_DIR,
+        DOCUMENTS_DIR,
     ];
     for (const dir of dirs) {
         if (!fs.existsSync(dir)) {
@@ -240,6 +242,7 @@ module.exports = {
     USER_CARTRIDGES_DIR,
     SYSTEM_DIR,
     EXPORTS_DIR,
+    DOCUMENTS_DIR,
     LEGACY_DATA_DIR,
     ensureDataRoot,
     migrateLegacyData,
