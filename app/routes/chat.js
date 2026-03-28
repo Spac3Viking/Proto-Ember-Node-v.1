@@ -91,12 +91,16 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         // Prepend chunks from any user-pinned sources (deduped by chunk id)
         if (Array.isArray(sourceIds) && sourceIds.length > 0) {
-            const allChunks    = loadChunks();
-            const retrievedIds = new Set(retrieved.map(c => c.id));
-            const pinned       = allChunks
-                .filter(c => sourceIds.includes(c.sourceId) && !retrievedIds.has(c.id))
-                .slice(0, MAX_PINNED_CHUNKS);
-            retrieved = [...pinned, ...retrieved];
+            const validSourceIds = sourceIds.filter(id => id && typeof id === 'string');
+            if (validSourceIds.length > 0) {
+                const allChunks    = loadChunks();
+                const retrievedIds = new Set(retrieved.map(c => c.chunk.id));
+                const pinned       = allChunks
+                    .filter(c => validSourceIds.includes(c.sourceId) && !retrievedIds.has(c.id))
+                    .slice(0, MAX_PINNED_CHUNKS)
+                    .map(c => ({ chunk: c, score: 1.0 }));
+                retrieved = [...pinned, ...retrieved];
+            }
         }
 
         const sources = buildSignalTrace(retrieved);

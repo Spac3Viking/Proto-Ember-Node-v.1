@@ -23,6 +23,12 @@ const MIN_SCORE        = 0.05;
 const ROOM_PRIORITY    = ['hearth', 'workshop', 'threshold'];
 
 /**
+ * Maximum chunks selected per source in multi-source retrieval.
+ * Prevents a single large source from dominating the result set.
+ */
+const PER_SOURCE_TOP_K = 3;
+
+/**
  * Score a set of chunks against a query.
  *
  * @param {object}       opts
@@ -86,9 +92,24 @@ async function retrieve({ query, topK = DEFAULT_TOP_K, rooms = null, cartridgeId
 
     const scored = scoreChunks({ chunks: candidates, queryVector, queryText: query, embeddings });
 
+    // Per-source top-k: cap contribution from each individual source to
+    // PER_SOURCE_TOP_K chunks.  This prevents a single large document from
+    // monopolising all retrieval slots and ensures multi-source synthesis.
+    const bySource = {};
+    for (const entry of scored) {
+        const sid = entry.chunk.sourceId;
+        if (!bySource[sid]) bySource[sid] = [];
+        bySource[sid].push(entry);
+    }
+    const perSourceCapped = [];
+    for (const entries of Object.values(bySource)) {
+        entries.sort((a, b) => b.score - a.score);
+        perSourceCapped.push(...entries.slice(0, PER_SOURCE_TOP_K));
+    }
+
     // Hearth-priority deduplication: fill slots hearth-first, then workshop
     const byRoom = {};
-    for (const entry of scored) {
+    for (const entry of perSourceCapped) {
         const r = entry.chunk.room;
         if (!byRoom[r]) byRoom[r] = [];
         byRoom[r].push(entry);
@@ -147,4 +168,5 @@ module.exports = {
     scoreChunks,
     DEFAULT_TOP_K,
     MIN_SCORE,
+    PER_SOURCE_TOP_K,
 };

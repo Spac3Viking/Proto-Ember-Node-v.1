@@ -47,7 +47,7 @@ function escapeHtml(str) {
         }
         if (roomId === 'threshold') {
             loadThresholdList();
-            checkDetectedFiles();
+            checkDetectedFiles(true);   // auto-load into queue on room entry
         }
         if (roomId === 'hearth') {
             loadHearthThreads();
@@ -1726,8 +1726,11 @@ let _dismissedDetected = new Set();
 /**
  * Check for locally-detected files (unmanaged or changed).
  * Shows a notice banner if any are found.
+ *
+ * @param {boolean} [autoLoad=false]  When true, automatically loads unmanaged
+ *   threshold files into the intake queue without requiring a button click.
  */
-async function checkDetectedFiles() {
+async function checkDetectedFiles(autoLoad) {
     try {
         const res  = await fetch('/api/detected-files');
         const data = await res.json();
@@ -1735,6 +1738,59 @@ async function checkDetectedFiles() {
         const unmanaged = (data.unmanaged || []).filter(f => !_dismissedDetected.has(f.path));
         const changed   = (data.changed   || []).filter(f => !_dismissedDetected.has(f.path));
         const total     = unmanaged.length + changed.length;
+
+        // Auto-load unmanaged threshold files into the queue when entering
+        // the Threshold room — no button click required.
+        if (autoLoad) {
+            const thresholdUnmanaged = unmanaged.filter(f => f.room === 'threshold');
+            if (thresholdUnmanaged.length > 0) {
+                loadDetectedIntoQueue(thresholdUnmanaged, []);
+            }
+            // Still show changed-files notice for non-threshold or changed files
+            const nonAutoFiles = [
+                ...unmanaged.filter(f => f.room !== 'threshold'),
+                ...changed,
+            ];
+            if (nonAutoFiles.length === 0) return;
+            // Show notice only for the remaining items
+            const notice     = document.getElementById('detected-notice');
+            const noticeText = document.getElementById('detected-notice-text');
+            const reviewBtn  = document.getElementById('detected-review-btn');
+            const dismissBtn = document.getElementById('detected-dismiss-btn');
+            if (!notice) return;
+            const parts = [];
+            if (nonAutoFiles.filter(f => !changed.includes(f)).length > 0) {
+                const n = nonAutoFiles.filter(f => !changed.includes(f)).length;
+                parts.push(n + ' new file' + (n === 1 ? '' : 's') + ' detected in local storage');
+            }
+            if (changed.filter(f => !_dismissedDetected.has(f.path)).length > 0) {
+                const n = changed.filter(f => !_dismissedDetected.has(f.path)).length;
+                parts.push(n + ' file' + (n === 1 ? '' : 's') + ' changed since last import');
+            }
+            if (parts.length === 0) { notice.style.display = 'none'; return; }
+            if (noticeText) noticeText.textContent = parts.join(' · ');
+            notice.style.display = 'flex';
+            if (reviewBtn) {
+                const newBtn = reviewBtn.cloneNode(true);
+                reviewBtn.parentNode.replaceChild(newBtn, reviewBtn);
+                newBtn.addEventListener('click', () => {
+                    loadDetectedIntoQueue(
+                        unmanaged.filter(f => f.room !== 'threshold'),
+                        changed,
+                    );
+                    notice.style.display = 'none';
+                });
+            }
+            if (dismissBtn) {
+                const newDismiss = dismissBtn.cloneNode(true);
+                dismissBtn.parentNode.replaceChild(newDismiss, dismissBtn);
+                newDismiss.addEventListener('click', () => {
+                    [...unmanaged, ...changed].forEach(f => _dismissedDetected.add(f.path));
+                    notice.style.display = 'none';
+                });
+            }
+            return;
+        }
 
         const notice     = document.getElementById('detected-notice');
         const noticeText = document.getElementById('detected-notice-text');
@@ -1862,6 +1918,65 @@ async function loadThresholdList() {
 
     listEl.innerHTML = '';
 
+    // ── Batch action bar ─────────────────────────────────────────────────────
+    // Collect non-rejected, non-metaOnly files with sourceIds for batch ops
+    const batchable = files.filter(f =>
+        f.sourceId && !f.metaOnly && (!f.intake || f.intake.state !== 'rejected')
+    );
+
+    if (batchable.length > 1) {
+        const batchBar = document.createElement('div');
+        batchBar.className = 'threshold-batch-bar';
+
+        const admitAllBtn = document.createElement('button');
+        admitAllBtn.className = 'threshold-action-btn threshold-admit-btn';
+        admitAllBtn.textContent = 'Admit All (' + batchable.length + ')';
+        admitAllBtn.title = 'Admit all waiting files to Workshop';
+        admitAllBtn.addEventListener('click', async () => {
+            admitAllBtn.disabled = true;
+            admitAllBtn.textContent = 'Admitting…';
+            let successCount = 0;
+            let failCount    = 0;
+            for (const f of batchable) {
+                try {
+                    const r = await fetch('/api/threshold/admit', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ sourceId: f.sourceId }),
+                    });
+                    const d = await r.json();
+                    if (d.success) { successCount++; } else { failCount++; }
+                } catch { failCount++; }
+            }
+            const msg = successCount + ' admitted' + (failCount > 0 ? ', ' + failCount + ' failed' : '') + '.';
+            showFlashMessage(msg);
+            refreshSystemStatus();
+            loadThresholdList();
+        });
+
+        const rejectAllBtn = document.createElement('button');
+        rejectAllBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
+        rejectAllBtn.textContent = 'Reject All (' + batchable.length + ')';
+        rejectAllBtn.title = 'Persistently reject all waiting files';
+        rejectAllBtn.addEventListener('click', async () => {
+            rejectAllBtn.disabled = true;
+            rejectAllBtn.textContent = 'Rejecting…';
+            for (const f of batchable) {
+                try {
+                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/reject', {
+                        method: 'POST',
+                    });
+                } catch { /* ignore individual failures */ }
+            }
+            showFlashMessage(batchable.length + ' files rejected.');
+            loadThresholdList();
+        });
+
+        batchBar.appendChild(admitAllBtn);
+        batchBar.appendChild(rejectAllBtn);
+        listEl.appendChild(batchBar);
+    }
+
     // Split into sections
     const flaggedFiles  = files.filter(f => f.status === 'flagged');
     const changedFiles  = files.filter(f => changedPaths.has(f.path));
@@ -1955,19 +2070,61 @@ function buildThresholdFileRow(f, isChanged) {
 
     // Only show action buttons when source is not rejected
     if (intakeState !== 'rejected') {
-        // Inspect button — marks as inspected in persistent intake state
+        // ── PRIMARY ACTION: Admit to Workshop ────────────────────────────────
+        // Combines inspect + index + move into one click.  Shown for non-metaOnly
+        // files with a sourceId.  This is the main intake action.
+        if (!f.metaOnly && f.sourceId) {
+            const admitBtn = document.createElement('button');
+            admitBtn.className = 'threshold-action-btn threshold-admit-btn';
+            admitBtn.textContent = 'Admit to Workshop';
+            admitBtn.title = 'Inspect, index, and move to Workshop in one step';
+            admitBtn.addEventListener('click', async () => {
+                admitBtn.disabled = true;
+                admitBtn.textContent = 'Admitting…';
+                try {
+                    const r = await fetch('/api/threshold/admit', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ sourceId: f.sourceId }),
+                    });
+                    const d = await r.json();
+                    if (d.success) {
+                        showFlashMessage(
+                            d.indexWarning
+                                ? 'Admitted to Workshop (index skipped: ' + d.indexWarning + ')'
+                                : 'Admitted to Workshop ✓',
+                        );
+                        refreshSystemStatus();
+                        loadThresholdList();
+                    } else {
+                        admitBtn.textContent = 'Failed';
+                        admitBtn.title = d.error || 'Admit failed';
+                        admitBtn.disabled = false;
+                        showFlashMessage('Admit failed: ' + (d.error || 'Unknown error'));
+                    }
+                } catch {
+                    admitBtn.textContent = 'Error';
+                    admitBtn.disabled = false;
+                    showFlashMessage('Could not reach server — Admit failed.');
+                }
+            });
+            actions.appendChild(admitBtn);
+        }
+
+        // ── SECONDARY: Inspect (deep view, auto-marks inspected) ─────────────
         if (f.sourceId) {
             const inspBtn = document.createElement('button');
             inspBtn.className = 'secondary threshold-action-btn';
-            inspBtn.textContent = intakeState === 'inspected' ? 'Re-inspect' : 'Inspect';
-            inspBtn.title = 'Mark as inspected';
+            inspBtn.textContent = 'Inspect';
+            inspBtn.title = 'View file details (marks as inspected)';
             inspBtn.addEventListener('click', async () => {
                 inspBtn.disabled = true;
                 try {
+                    // Auto-mark inspected on preview open
                     await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/inspect', {
                         method: 'POST',
                     });
-                    showFlashMessage('File marked as inspected.');
+                    inspectSource(f.sourceId);
                     loadThresholdList();
                 } catch {
                     inspBtn.disabled = false;
@@ -1992,11 +2149,12 @@ function buildThresholdFileRow(f, isChanged) {
             actions.appendChild(flagBtn);
         }
 
-        // Index and move buttons (only for non-metaOnly files with a sourceId)
+        // Advanced: Index-only and Move-only (shown as secondary actions)
         if (!f.metaOnly && f.sourceId) {
             const indexBtn = document.createElement('button');
             indexBtn.className = 'secondary threshold-action-btn';
             indexBtn.textContent = 'Index';
+            indexBtn.title = 'Index file without moving';
             indexBtn.addEventListener('click', async () => {
                 indexBtn.disabled = true;
                 indexBtn.textContent = 'Indexing…';
@@ -2015,16 +2173,19 @@ function buildThresholdFileRow(f, isChanged) {
                         indexBtn.textContent = 'Failed';
                         indexBtn.title = d.error || 'Indexing failed';
                         indexBtn.disabled = false;
+                        showFlashMessage('Indexing failed: ' + (d.error || 'Unknown error'));
                     }
                 } catch {
                     indexBtn.textContent = 'Error';
                     indexBtn.disabled = false;
+                    showFlashMessage('Could not reach server — indexing failed.');
                 }
             });
 
             const moveBtn = document.createElement('button');
             moveBtn.className = 'secondary threshold-action-btn';
             moveBtn.textContent = '→ Workshop';
+            moveBtn.title = 'Move to Workshop without re-indexing';
             moveBtn.addEventListener('click', async () => {
                 if (!f.sourceId) return;
                 moveBtn.disabled = true;
@@ -2040,9 +2201,11 @@ function buildThresholdFileRow(f, isChanged) {
                         loadThresholdList();
                     } else {
                         moveBtn.disabled = false;
+                        showFlashMessage('Move failed: ' + (d.error || 'Unknown error'));
                     }
                 } catch {
                     moveBtn.disabled = false;
+                    showFlashMessage('Could not reach server — move failed.');
                 }
             });
 
@@ -2066,6 +2229,7 @@ function buildThresholdFileRow(f, isChanged) {
                     loadThresholdList();
                 } catch {
                     rejectBtn.disabled = false;
+                    showFlashMessage('Could not reach server — reject failed.');
                 }
             });
             actions.appendChild(rejectBtn);
@@ -2087,6 +2251,7 @@ function buildThresholdFileRow(f, isChanged) {
                     loadThresholdList();
                 } catch {
                     undoBtn.disabled = false;
+                    showFlashMessage('Could not reach server — undo failed.');
                 }
             });
             actions.appendChild(undoBtn);
