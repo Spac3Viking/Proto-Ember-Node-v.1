@@ -394,7 +394,7 @@ router.post('/api/threshold/admit', indexLimiter, async (req, res) => {
 
         source.room   = 'workshop';
         source.path   = newRelPath;
-        source.status = 'indexed';
+        source.status = 'admitted';   // intermediate: moved but not yet indexed
         upsertManifest(sourceId, source);
 
         // Step 3: index (extract text, chunk, embed)
@@ -407,6 +407,8 @@ router.post('/api/threshold/admit', indexLimiter, async (req, res) => {
         if (!text) {
             const reason = extractError || 'Could not extract text from file';
             console.warn('[admit] Indexing skipped for ' + sourceId + ': ' + reason);
+            source.status = 'waiting';   // admitted but not indexed
+            upsertManifest(sourceId, source);
             return res.json({
                 success:      true,
                 sourceId,
@@ -432,6 +434,10 @@ router.post('/api/threshold/admit', indexLimiter, async (req, res) => {
         if (Object.keys(embeddingMap).length > 0) {
             upsertEmbeddings(embeddingMap);
         }
+
+        // Update status to indexed only after successful indexing
+        source.status = 'indexed';
+        upsertManifest(sourceId, source);
 
         console.log('[admit] ' + sourceId + ' admitted to Workshop (' + chunks.length + ' chunks)');
         res.json({

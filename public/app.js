@@ -1759,13 +1759,13 @@ async function checkDetectedFiles(autoLoad) {
             const dismissBtn = document.getElementById('detected-dismiss-btn');
             if (!notice) return;
             const parts = [];
-            if (nonAutoFiles.filter(f => !changed.includes(f)).length > 0) {
-                const n = nonAutoFiles.filter(f => !changed.includes(f)).length;
-                parts.push(n + ' new file' + (n === 1 ? '' : 's') + ' detected in local storage');
+            const nonChangedNew = nonAutoFiles.filter(f => !changed.includes(f));
+            if (nonChangedNew.length > 0) {
+                parts.push(nonChangedNew.length + ' new file' + (nonChangedNew.length === 1 ? '' : 's') + ' detected in local storage');
             }
-            if (changed.filter(f => !_dismissedDetected.has(f.path)).length > 0) {
-                const n = changed.filter(f => !_dismissedDetected.has(f.path)).length;
-                parts.push(n + ' file' + (n === 1 ? '' : 's') + ' changed since last import');
+            const pendingChanged = changed.filter(f => !_dismissedDetected.has(f.path));
+            if (pendingChanged.length > 0) {
+                parts.push(pendingChanged.length + ' file' + (pendingChanged.length === 1 ? '' : 's') + ' changed since last import');
             }
             if (parts.length === 0) { notice.style.display = 'none'; return; }
             if (noticeText) noticeText.textContent = parts.join(' · ');
