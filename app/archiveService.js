@@ -18,7 +18,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { ARCHIVE_DIR, ARCHIVE_DIRS, DATA_ROOT } = require('./storageConfig');
+const { ARCHIVE_DIR, ARCHIVE_DIRS, ARCHIVE_CORE_DIR, ARCHIVE_CORE_DIRS, ARCHIVE_CACHES_DIR, ARCHIVE_CARTRIDGES_DIR, DATA_ROOT } = require('./storageConfig');
 const { buildSourceRecord, collectFiles }       = require('./ingest');
 const {
     upsertManifest, loadManifests,
@@ -29,8 +29,14 @@ const { chunkText }                             = require('./chunker');
 const { extractTextAsync }                      = require('./ingest');
 const { generateEmbedding }                     = require('./embeddings');
 
-/** Source class identifier for trusted archive sources */
+/** Source class identifier for trusted archive sources (core archive) */
 const SOURCE_CLASS_ARCHIVE = 'trusted-archive';
+
+/** Source class identifier for archive cache sources (downloadable expansions) */
+const SOURCE_CLASS_ARCHIVE_CACHE = 'archive-cache';
+
+/** Source class identifier for archive cartridge sources (modular modules) */
+const SOURCE_CLASS_ARCHIVE_CARTRIDGE = 'archive-cartridge';
 
 /**
  * Shelf name derived from the archive subdirectory name.
@@ -44,6 +50,7 @@ function shelfFromSubDir(subDir) {
         codices:      'codex',
         grimoires:    'grimoire',
         sagas:        'saga',
+        reference:    'reference',
         literature:   'literature',
         history:      'history',
         science:      'science',
@@ -65,22 +72,28 @@ function removeStaleEmbeddingsForSource(sourceId) {
 
 /**
  * Detect all supported files in the archive directory tree.
- * Returns an array of { filePath, shelf } objects.
+ * Scans:
+ *   - archive/core/*  (trusted-archive, core trusted knowledge)
+ *   - archive/*       (legacy flat shelves — backward compat)
+ *   - archive/caches/**  (archive-cache, downloadable expansions)
+ *   - archive/cartridges/**  (archive-cartridge, modular modules)
  *
- * @returns {Array<{ filePath: string, shelf: string }>}
+ * Returns an array of { filePath, shelf, sourceClass } objects.
+ *
+ * @returns {Array<{ filePath: string, shelf: string, sourceClass: string }>}
  */
 function detectArchiveFiles() {
     if (!fs.existsSync(ARCHIVE_DIR)) return [];
 
     const found = [];
 
-    // Scan each named sub-directory
+    // Scan each named sub-directory (ARCHIVE_DIRS now points core shelves to archive/core/*)
     for (const [subDirName, subDirPath] of Object.entries(ARCHIVE_DIRS)) {
         if (!fs.existsSync(subDirPath)) continue;
         const files = collectFiles(subDirPath);
         const shelf = shelfFromSubDir(subDirName);
         for (const filePath of files) {
-            found.push({ filePath, shelf });
+            found.push({ filePath, shelf, sourceClass: SOURCE_CLASS_ARCHIVE });
         }
     }
 
@@ -94,7 +107,40 @@ function detectArchiveFiles() {
         const ext = path.extname(entry.name).toLowerCase();
         const SUPPORTED = new Set(['.txt', '.md', '.pdf', '.docx']);
         if (!SUPPORTED.has(ext)) continue;
-        found.push({ filePath: path.join(ARCHIVE_DIR, entry.name), shelf: 'archive' });
+        found.push({ filePath: path.join(ARCHIVE_DIR, entry.name), shelf: 'archive', sourceClass: SOURCE_CLASS_ARCHIVE });
+    }
+
+    // Scan archive/caches/ — each cache is a sub-directory with its own content
+    if (fs.existsSync(ARCHIVE_CACHES_DIR)) {
+        let cacheEntries;
+        try { cacheEntries = fs.readdirSync(ARCHIVE_CACHES_DIR, { withFileTypes: true }); }
+        catch { cacheEntries = []; }
+        for (const cacheEntry of cacheEntries) {
+            if (!cacheEntry.isDirectory()) continue;
+            const cacheDir = path.join(ARCHIVE_CACHES_DIR, cacheEntry.name);
+            const files = collectFiles(cacheDir);
+            for (const filePath of files) {
+                // Skip manifest.json — it is metadata, not content
+                if (path.basename(filePath) === 'manifest.json') continue;
+                found.push({ filePath, shelf: cacheEntry.name, sourceClass: SOURCE_CLASS_ARCHIVE_CACHE });
+            }
+        }
+    }
+
+    // Scan archive/cartridges/ — each cartridge is a sub-directory with its own content
+    if (fs.existsSync(ARCHIVE_CARTRIDGES_DIR)) {
+        let cartridgeEntries;
+        try { cartridgeEntries = fs.readdirSync(ARCHIVE_CARTRIDGES_DIR, { withFileTypes: true }); }
+        catch { cartridgeEntries = []; }
+        for (const cartridgeEntry of cartridgeEntries) {
+            if (!cartridgeEntry.isDirectory()) continue;
+            const cartridgeDir = path.join(ARCHIVE_CARTRIDGES_DIR, cartridgeEntry.name);
+            const files = collectFiles(cartridgeDir);
+            for (const filePath of files) {
+                if (path.basename(filePath) === 'manifest.json') continue;
+                found.push({ filePath, shelf: cartridgeEntry.name, sourceClass: SOURCE_CLASS_ARCHIVE_CARTRIDGE });
+            }
+        }
     }
 
     return found;
@@ -104,19 +150,20 @@ function detectArchiveFiles() {
  * Register (but do not index) a single archive file in the manifest.
  * Idempotent — safe to call on already-registered files.
  *
- * @param {string} filePath  Absolute path
- * @param {string} shelf     Archive shelf name
- * @returns {object}         Source manifest record
+ * @param {string} filePath    Absolute path
+ * @param {string} shelf       Archive shelf name
+ * @param {string} [sourceClass]  Source class override (defaults to SOURCE_CLASS_ARCHIVE)
+ * @returns {object}           Source manifest record
  */
-function registerArchiveSource(filePath, shelf) {
+function registerArchiveSource(filePath, shelf, sourceClass) {
     const source = buildSourceRecord({
         filePath,
         room:  'hearth',
         shelf: shelf || 'archive',
     });
 
-    // Tag as trusted-archive so retrieval and context maps can distinguish it
-    source.sourceClass = SOURCE_CLASS_ARCHIVE;
+    // Tag with source class so retrieval and context maps can distinguish origin
+    source.sourceClass = sourceClass || SOURCE_CLASS_ARCHIVE;
     source.status      = 'remembered';
 
     upsertManifest(source.id, source);
@@ -147,15 +194,15 @@ async function bootstrapArchive() {
     let indexed    = 0;
     let skipped    = 0;
 
-    for (const { filePath, shelf } of files) {
+    for (const { filePath, shelf, sourceClass } of files) {
         const relPath = path.relative(DATA_ROOT, filePath).replace(/\\/g, '/');
         const existing = byPath[relPath];
 
-        if (existing && existing.sourceClass === SOURCE_CLASS_ARCHIVE) {
-            // Already registered — skip re-registration but re-index if needed
+        if (existing && existing.sourceClass === sourceClass) {
+            // Already registered with correct source class — skip re-registration
             skipped++;
         } else {
-            registerArchiveSource(filePath, shelf);
+            registerArchiveSource(filePath, shelf, sourceClass);
             registered++;
         }
 
@@ -208,16 +255,24 @@ async function bootstrapArchive() {
 
 /**
  * Return all archive source records from the manifest.
+ * Optionally filter by sourceClass.
  *
+ * @param {string} [sourceClass]  If provided, only return sources with this class
  * @returns {object[]}
  */
-function listArchiveSources() {
+function listArchiveSources(sourceClass) {
     const manifests = loadManifests();
-    return Object.values(manifests).filter(m => m.sourceClass === SOURCE_CLASS_ARCHIVE);
+    const ARCHIVE_CLASSES = new Set([SOURCE_CLASS_ARCHIVE, SOURCE_CLASS_ARCHIVE_CACHE, SOURCE_CLASS_ARCHIVE_CARTRIDGE]);
+    return Object.values(manifests).filter(m => {
+        if (sourceClass) return m.sourceClass === sourceClass;
+        return ARCHIVE_CLASSES.has(m.sourceClass);
+    });
 }
 
 module.exports = {
     SOURCE_CLASS_ARCHIVE,
+    SOURCE_CLASS_ARCHIVE_CACHE,
+    SOURCE_CLASS_ARCHIVE_CARTRIDGE,
     detectArchiveFiles,
     registerArchiveSource,
     bootstrapArchive,

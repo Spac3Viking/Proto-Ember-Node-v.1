@@ -25,10 +25,12 @@ const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
  * @enum {string}
  */
 const SOURCE_CLASSES = {
-    TRUSTED_ARCHIVE: 'trusted-archive',
-    WORKSHOP_DRAFT:  'workshop-draft',
-    HEARTH_REMEMBERED: 'hearth-remembered',
-    THRESHOLD_INTAKE:  'threshold-intake',
+    TRUSTED_ARCHIVE:    'trusted-archive',
+    ARCHIVE_CACHE:      'archive-cache',
+    ARCHIVE_CARTRIDGE:  'archive-cartridge',
+    WORKSHOP_DRAFT:     'workshop-draft',
+    HEARTH_REMEMBERED:  'hearth-remembered',
+    THRESHOLD_INTAKE:   'threshold-intake',
 };
 
 /**

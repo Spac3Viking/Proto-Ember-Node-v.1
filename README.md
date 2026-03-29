@@ -334,16 +334,52 @@ On first run, Ember Node creates the full directory tree automatically.
 
 ```
 <data-root>/
-  hearth/       — curated Hearth sources (remembered knowledge)
-  workshop/     — Workshop notes and active drafts
-  threshold/    — quarantined imports awaiting inspection
-  indexes/      — local knowledge index (chunks, embeddings, manifests)
-  projects/     — Workshop project files
-  threads/      — chat thread records
-  cartridges/   — user-created cartridge metadata
-  system/       — system state
-  exports/      — outbound packages
+  system/
+    forge/          — Forge identity layer (archetypes, forge-core.json)
+    bootstrap/      — Active bootstrap state
+    config/         — System configuration
+    prompts/        — System prompts
+    tools/          — Tool registry state
+  archive/
+    core/           — Default trusted archive (Green Fire Core)
+      codices/      — Green Fire Codices
+      grimoires/    — Green Fire Grimoires
+      sagas/        — Green Fire Sagas
+      reference/    — Reference materials
+      manifest.json — Core archive manifest (id, version, trusted, auto_load)
+    caches/         — Downloadable archive expansions (one sub-dir per cache)
+    cartridges/     — Modular functional/content modules (one sub-dir each)
+  hearth/           — Curated Hearth sources (remembered knowledge)
+    remembered-threads/
+    maps/
+  workshop/         — Workshop notes and active drafts
+    documents/
+    notes/
+    drafts/
+    maps/
+  threshold/        — Quarantined imports awaiting inspection
+    waiting/
+    changed/
+    flagged/
+    maps/
+  projects/         — Workshop project files
+  threads/          — Chat thread records (partitioned by room)
+    hearth/
+    workshop/
+    threshold/
+  indexes/          — Local knowledge index (chunks, embeddings, manifests)
+  cartridges/       — User-created cartridge metadata
+  exports/          — Outbound packages
 ```
+
+### Content Layer Distinctions
+
+| Layer | Path | Role |
+|-------|------|------|
+| **System identity** | `system/forge/` | Forge archetype and identity files. Not archive content. |
+| **Core trusted archive** | `archive/core/` | Default knowledge body for every new node. Trusted, archive-native, bypasses Threshold by default. |
+| **Archive caches** | `archive/caches/` | Future downloadable archive expansions. Each cache is a self-contained sub-directory with its own `manifest.json`. Use the term *cache* / *caches* — not *pack* / *packs*. |
+| **Archive cartridges** | `archive/cartridges/` | Future modular functional or content modules. Distinct from caches — may contain documents, prompts, assets, or specialised node modules. |
 
 The data root is entirely user-owned. Updating or reinstalling Ember Node never touches it.
 Use `GET /api/storage-info` to confirm which data root is active and see migration status.

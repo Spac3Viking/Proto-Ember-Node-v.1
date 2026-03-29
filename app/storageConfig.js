@@ -31,13 +31,17 @@
  *     threshold/               — quarantined imports awaiting inspection
  *       maps/                  — Threshold context maps
  *     archive/                 — Trusted Archive (privileged curated path)
- *       codices/               — Green Fire Codices
- *       grimoires/             — Green Fire Grimoires
- *       sagas/                 — Green Fire Sagas
- *       literature/            — curated literary sources
- *       history/               — curated historical sources
- *       science/               — curated scientific sources
- *       green-fire/            — Green Fire primary texts
+ *       core/                  — Default trusted archive (Green Fire Core)
+ *         codices/             — Green Fire Codices
+ *         grimoires/           — Green Fire Grimoires
+ *         sagas/               — Green Fire Sagas
+ *         reference/           — Reference materials
+ *       caches/                — Future downloadable archive expansions
+ *       cartridges/            — Future modular functional/content modules
+ *       literature/            — curated literary sources (legacy shelf)
+ *       history/               — curated historical sources (legacy shelf)
+ *       science/               — curated scientific sources (legacy shelf)
+ *       green-fire/            — Green Fire primary texts (legacy shelf)
  *     indexes/                 — local knowledge index (chunks, embeddings, manifests)
  *     projects/                — Workshop project files
  *     threads/                 — chat thread records
@@ -92,7 +96,7 @@ const ARCHIVE_DIR             = path.join(DATA_ROOT, 'archive');
 
 // ── Phase 11.5: Forge + Bootstrap ────────────────────────────────────────────
 
-/** Forge identity layer directory */
+/** Forge identity layer directory (system identity — not archive content) */
 const FORGE_DIR               = path.join(SYSTEM_DIR, 'forge');
 
 /** Archetype overlays directory (Ember Court) */
@@ -101,15 +105,62 @@ const ARCHETYPES_DIR          = path.join(FORGE_DIR, 'archetypes');
 /** Active Bootstrap storage directory */
 const BOOTSTRAP_DIR           = path.join(SYSTEM_DIR, 'bootstrap');
 
-/** Subdirectories within the Trusted Archive */
+/** System config, prompts, and tools directories */
+const SYSTEM_CONFIG_DIR       = path.join(SYSTEM_DIR, 'config');
+const SYSTEM_PROMPTS_DIR      = path.join(SYSTEM_DIR, 'prompts');
+const SYSTEM_TOOLS_DIR        = path.join(SYSTEM_DIR, 'tools');
+
+// ── Phase 11.7: Core Archive + Cache Structure ────────────────────────────────
+
+/**
+ * Core trusted archive — default knowledge body for every new node.
+ * Content here is trusted, archive-native, and bypasses Threshold by default.
+ */
+const ARCHIVE_CORE_DIR        = path.join(ARCHIVE_DIR, 'core');
+
+/** Subdirectories within the Core Trusted Archive */
+const ARCHIVE_CORE_DIRS = {
+    codices:   path.join(ARCHIVE_CORE_DIR, 'codices'),
+    grimoires: path.join(ARCHIVE_CORE_DIR, 'grimoires'),
+    sagas:     path.join(ARCHIVE_CORE_DIR, 'sagas'),
+    reference: path.join(ARCHIVE_CORE_DIR, 'reference'),
+};
+
+/**
+ * Downloadable archive expansions (caches).
+ * Each cache is a self-contained sub-directory with its own manifest.json.
+ * Use the term "cache" / "caches" — not "pack" / "packs".
+ */
+const ARCHIVE_CACHES_DIR      = path.join(ARCHIVE_DIR, 'caches');
+
+/**
+ * Modular functional/content cartridges.
+ * Distinct from caches — may contain documents, prompts, assets, or
+ * specialized node modules.
+ */
+const ARCHIVE_CARTRIDGES_DIR  = path.join(ARCHIVE_DIR, 'cartridges');
+
+/**
+ * Subdirectories within the Trusted Archive (legacy flat shelf layout).
+ * Kept for backward compatibility with Phase 11 routes and ingestion.
+ * Core Green Fire content now lives under ARCHIVE_CORE_DIRS.
+ */
 const ARCHIVE_DIRS = {
-    codices:    path.join(ARCHIVE_DIR, 'codices'),
-    grimoires:  path.join(ARCHIVE_DIR, 'grimoires'),
-    sagas:      path.join(ARCHIVE_DIR, 'sagas'),
-    literature: path.join(ARCHIVE_DIR, 'literature'),
-    history:    path.join(ARCHIVE_DIR, 'history'),
-    science:    path.join(ARCHIVE_DIR, 'science'),
+    codices:      ARCHIVE_CORE_DIRS.codices,
+    grimoires:    ARCHIVE_CORE_DIRS.grimoires,
+    sagas:        ARCHIVE_CORE_DIRS.sagas,
+    reference:    ARCHIVE_CORE_DIRS.reference,
+    literature:   path.join(ARCHIVE_DIR, 'literature'),
+    history:      path.join(ARCHIVE_DIR, 'history'),
+    science:      path.join(ARCHIVE_DIR, 'science'),
     'green-fire': path.join(ARCHIVE_DIR, 'green-fire'),
+};
+
+/** Room-partitioned thread sub-directories */
+const THREADS_ROOM_DIRS = {
+    hearth:    path.join(DATA_ROOT, 'threads', 'hearth'),
+    workshop:  path.join(DATA_ROOT, 'threads', 'workshop'),
+    threshold: path.join(DATA_ROOT, 'threads', 'threshold'),
 };
 
 /** Hearth sub-directories for Phase 11 features */
@@ -166,6 +217,16 @@ function ensureDataRoot() {
         FORGE_DIR,
         ARCHETYPES_DIR,
         BOOTSTRAP_DIR,
+        // Phase 11.7: Core Archive + Cache Structure
+        ARCHIVE_CORE_DIR,
+        ARCHIVE_CACHES_DIR,
+        ARCHIVE_CARTRIDGES_DIR,
+        SYSTEM_CONFIG_DIR,
+        SYSTEM_PROMPTS_DIR,
+        SYSTEM_TOOLS_DIR,
+        THREADS_ROOM_DIRS.hearth,
+        THREADS_ROOM_DIRS.workshop,
+        THREADS_ROOM_DIRS.threshold,
     ];
     for (const dir of dirs) {
         if (!fs.existsSync(dir)) {
@@ -317,6 +378,15 @@ module.exports = {
     FORGE_DIR,
     ARCHETYPES_DIR,
     BOOTSTRAP_DIR,
+    // Phase 11.7: Core Archive + Cache Structure
+    ARCHIVE_CORE_DIR,
+    ARCHIVE_CORE_DIRS,
+    ARCHIVE_CACHES_DIR,
+    ARCHIVE_CARTRIDGES_DIR,
+    SYSTEM_CONFIG_DIR,
+    SYSTEM_PROMPTS_DIR,
+    SYSTEM_TOOLS_DIR,
+    THREADS_ROOM_DIRS,
     ensureDataRoot,
     migrateLegacyData,
     resolveSourcePath,
