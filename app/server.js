@@ -59,6 +59,7 @@ const projectsRouter       = require('./routes/projects');
 const documentsRouter      = require('./routes/documents');
 const contextMapsRouter    = require('./routes/contextMaps');
 const archiveRouter        = require('./routes/archive');
+const bootstrapRouter      = require('./routes/bootstrap');
 
 // ── Express setup ─────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ app.use(projectsRouter);
 app.use(documentsRouter);
 app.use(contextMapsRouter);
 app.use(archiveRouter);
+app.use(bootstrapRouter);
 
 // ── Server start ──────────────────────────────────────────────────────────────
 
@@ -123,6 +125,15 @@ if (require.main === module) {
     require('./archiveService').bootstrapArchive().catch(function(err) {
         console.warn('[archive] Bootstrap failed:', err.message);
     });
+
+    // Phase 11.5: Seed Forge identity files and initial bootstrap
+    try {
+        const { seedForgeFiles, refreshBootstrap } = require('./bootstrap');
+        seedForgeFiles();
+        refreshBootstrap();
+    } catch (err) {
+        console.warn('[forge] Forge seed failed:', err.message);
+    }
 
     // Non-blocking startup tool scan
     discoverTools().then(function(detected) {

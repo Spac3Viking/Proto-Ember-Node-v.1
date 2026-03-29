@@ -16,13 +16,18 @@ const {
     DATA_ROOT, ROOM_DIRS,
     INDEXES_DIR, PROJECTS_DIR, THREADS_DIR,
     USER_CARTRIDGES_DIR, SYSTEM_DIR, EXPORTS_DIR,
+    FORGE_DIR,
 } = require('../storageConfig');
 const { MODEL, OLLAMA_BASE_URL } = require('../toolRegistry');
 const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
 const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCartridges }                            = require('../cartridgeLoader');
 const { loadIntakeState }                           = require('../intakeState');
+const { loadBootstrap }                             = require('../bootstrap');
 const fs = require('fs');
+const path = require('path');
+
+const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 
 /**
  * Create the system router.
@@ -47,6 +52,13 @@ function createSystemRouter({ migrationResult }) {
             ? fs.readdirSync(USER_CARTRIDGES_DIR).filter(f => f.endsWith('.json')).length
             : 0;
 
+        // Phase 11.5: Forge + Bootstrap status
+        const forgeLoaded   = fs.existsSync(FORGE_CORE_PATH);
+        const bootstrap     = loadBootstrap();
+        const bootstrapStatus = bootstrap ? 'ready' : 'not generated';
+        const lastRefresh     = bootstrap ? (bootstrap.nodeState || {}).lastRefresh || null : null;
+        const activeArchetype = bootstrap ? (bootstrap.nodeState || {}).activeArchetype || null : null;
+
         res.json({
             model:             MODEL,
             ollamaBaseUrl:     OLLAMA_BASE_URL,
@@ -65,6 +77,11 @@ function createSystemRouter({ migrationResult }) {
             retrievalMode:     embStatus.working ? 'semantic' : 'keyword-fallback',
             storageRoot:       DATA_ROOT,
             storageRootSource: process.env.EMBER_DATA_ROOT ? 'EMBER_DATA_ROOT' : 'default',
+            // Phase 11.5
+            forgeLoaded,
+            bootstrapStatus,
+            lastBootstrapRefresh: lastRefresh,
+            activeArchetype,
         });
     });
 
