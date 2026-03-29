@@ -1,0 +1,15 @@
+{
+  "id": "green-fire-core",
+  "title": "Green Fire Core Archive",
+  "version": "1.0",
+  "type": "core-archive",
+  "trusted": true,
+  "auto_load": true,
+  "description": "Default trusted archive for new Ember Nodes.",
+  "contents": {
+    "codices": [],
+    "grimoires": [],
+    "sagas": [],
+    "reference": []
+  }
+}
