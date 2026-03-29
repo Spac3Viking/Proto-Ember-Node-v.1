@@ -1227,8 +1227,77 @@ button.secondary:disabled {
   transition: all 0.2s ease;
   background: hsla(120, 15%, 5%, 0.3);
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.thread-item-title {
+  flex: 1;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.thread-item-actions {
+  display: none;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.thread-item:hover .thread-item-actions {
+  display: flex;
+}
+
+.thread-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--archive-muted);
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.25rem;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.thread-action-btn:hover {
+  opacity: 1;
+  color: var(--gf-wire-amber);
+}
+
+.thread-delete-btn:hover {
+  color: #e05c5c;
+}
+
+.thread-status-badge {
+  font-size: 0.65rem;
+  opacity: 0.7;
+  margin-left: 0.2rem;
+}
+
+.thread-status-badge.remembered {
+  color: var(--gf-wire-amber);
+  opacity: 1;
+}
+
+.thread-status-badge.archived {
+  opacity: 0.4;
+}
+
+.thread-item.thread-archived {
+  opacity: 0.55;
+}
+
+.thread-item.thread-remembered .thread-item-title {
+  color: var(--gf-wire-amber);
+  opacity: 0.85;
 }
 
 .thread-item:hover {

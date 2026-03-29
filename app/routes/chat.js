@@ -1,10 +1,14 @@
 'use strict';
 
 /**
- * Ember Node v.ᚠ — Chat Routes
+ * Ember Node v.ᚠ — Chat Routes (Phase 11: room-bounded context)
  *
  * POST /chat          (legacy Phase 2 direct-Ollama endpoint)
  * POST /api/chat      (grounded Heart chat with retrieval)
+ *
+ * Phase 11: Chat context is now room-bounded.  Each room sees its own
+ * source pool plus imported context maps from other rooms as appropriate.
+ * System prompts are tailored per room.
  */
 
 const express = require('express');
@@ -14,6 +18,7 @@ const { OLLAMA_CHAT_URL, MODEL, resolveActiveHeart } = require('../toolRegistry'
 const { loadChunks }                                  = require('../indexStore');
 const { retrieve, buildGroundedPrompt }               = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
+const { assembleRoomContext }                         = require('../contextMaps');
 
 const router = express.Router();
 
@@ -38,6 +43,83 @@ const HEART_SYSTEM_PROMPT = (
     'local documents. When you do not know something, you say: "That signal has not reached ' +
     'this hearth." You are grounded, patient, and devoted to the work.'
 );
+
+/** Room-specific system prompts for Phase 11 room-bounded context */
+const ROOM_SYSTEM_PROMPTS = {
+    hearth: HEART_SYSTEM_PROMPT,
+    workshop: (
+        'You are The Heart operating in Workshop mode — a focused drafting and weaving ' +
+        'companion. Your current context is the active Workshop: notes, projects, drafts, ' +
+        'and documents under construction. ' +
+        '\n\n' +
+        'In Workshop mode you:\n' +
+        '- assist with drafting, restructuring, and expanding documents\n' +
+        '- help connect fragments into coherent structure\n' +
+        '- reference indexed workshop materials and project files\n' +
+        '- maintain focus on active work rather than archive reflection\n' +
+        '\n' +
+        'You speak with practical precision. You are a craftsman\'s companion.'
+    ),
+    threshold: (
+        'You are The Heart operating in Threshold mode — an inspection and triage companion. ' +
+        'Your current context is the Threshold: files waiting for review, classification, ' +
+        'and admission. ' +
+        '\n\n' +
+        'In Threshold mode you:\n' +
+        '- help assess incoming materials\n' +
+        '- describe and classify content\n' +
+        '- suggest appropriate rooms or shelves for admission\n' +
+        '- maintain careful intake discipline\n' +
+        '\n' +
+        'You speak with careful discernment. Nothing passes unexamined.'
+    ),
+};
+
+/**
+ * Build the room context preamble to prepend to grounded prompts.
+ * Includes imported context map summaries if available.
+ *
+ * @param {string} room
+ * @returns {string}
+ */
+function buildRoomContextPreamble(room) {
+    let context;
+    try {
+        context = assembleRoomContext(room);
+    } catch {
+        return '';
+    }
+
+    const lines = [];
+
+    if (context.imported && context.imported.length > 0) {
+        lines.push('=== Cross-Room Context Maps ===');
+        for (const map of context.imported) {
+            lines.push('\n[' + map.title + ']');
+            if (map.content) {
+                const c = map.content;
+                if (c.rememberedThreads && c.rememberedThreads.length > 0) {
+                    lines.push('Remembered threads: ' + c.rememberedThreads.map(t => t.title).join(', '));
+                }
+                if (c.archiveByShelf) {
+                    const shelves = Object.entries(c.archiveByShelf)
+                        .map(([s, n]) => s + ' (' + n + ')')
+                        .join(', ');
+                    if (shelves) lines.push('Archive shelves: ' + shelves);
+                }
+                if (c.recentSources && c.recentSources.length > 0) {
+                    lines.push('Recent sources: ' + c.recentSources.map(s => s.title || s.id).join(', '));
+                }
+                if (c.totalSources !== undefined) {
+                    lines.push('Total sources: ' + c.totalSources);
+                }
+            }
+        }
+        lines.push('\n==============================\n');
+    }
+
+    return lines.join('\n');
+}
 
 /**
  * Maximum number of pinned-source chunks prepended to retrieval results
@@ -72,22 +154,34 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, rooms?, cartridgeId?, sourceIds? }
+ * Body: { query, room?, rooms?, cartridgeId?, sourceIds? }
  * Response: { answer, sources, grounded }
  *
+ * room (optional)    — active room for context-bounded chat ('hearth' | 'workshop' | 'threshold')
+ * rooms (optional)   — explicit room filter array (overrides room's default pool)
  * sourceIds (optional) — array of source IDs whose chunks are pinned into the
  * retrieved context regardless of semantic relevance.  This enables the
  * "Send to Hearth Chat" reference attachment feature.
  */
 router.post('/api/chat', chatLimiter, async (req, res) => {
     try {
-        const { query, rooms = null, cartridgeId = null, sourceIds = null } = req.body;
+        const { query, room = null, rooms = null, cartridgeId = null, sourceIds = null } = req.body;
         if (!query || typeof query !== 'string') {
             return res.status(400).json({ error: 'query is required' });
         }
 
+        // Determine active room for context pools and system prompt
+        const activeRoom = (room && ['hearth', 'workshop', 'threshold'].includes(room))
+            ? room
+            : 'hearth';
+
+        // Determine retrieval room scope:
+        // - If caller passes explicit rooms array, use that
+        // - Otherwise, default to room-native pool (retrieval.js handles archive inclusion for hearth)
+        const retrievalRooms = rooms || [activeRoom];
+
         // Retrieve relevant local chunks via semantic / keyword search
-        let retrieved = await retrieve({ query, rooms, cartridgeId });
+        let retrieved = await retrieve({ query, rooms: retrievalRooms, cartridgeId });
 
         // Prepend chunks from any user-pinned sources (deduped by chunk id)
         if (Array.isArray(sourceIds) && sourceIds.length > 0) {
@@ -105,8 +199,19 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const sources = buildSignalTrace(retrieved);
 
-        // Build prompt (grounded when local chunks were found)
-        const userContent = buildGroundedPrompt({ query, retrievedChunks: retrieved });
+        // Build room context preamble (imported context maps)
+        const roomPreamble = buildRoomContextPreamble(activeRoom);
+
+        // Build grounded prompt (adds retrieved source blocks)
+        let userContent = buildGroundedPrompt({ query, retrievedChunks: retrieved });
+
+        // Prepend room context maps if available
+        if (roomPreamble) {
+            userContent = roomPreamble + userContent;
+        }
+
+        // Select room-appropriate system prompt
+        const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
         // Resolve which Heart tool to use (falls back to built-in Ollama)
         const heart = resolveActiveHeart();
@@ -115,7 +220,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             model:    heart.model,
             stream:   false,
             messages: [
-                { role: 'system', content: HEART_SYSTEM_PROMPT },
+                { role: 'system', content: systemPrompt },
                 { role: 'user',   content: userContent },
             ],
         };
@@ -125,8 +230,8 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             ? response.data.message.content
             : '';
 
-        console.log('[/api/chat] grounded=' + (sources.length > 0) + ' sources=' + formatSignalTraceSummary(sources));
-        res.json({ answer, sources, grounded: sources.length > 0 });
+        console.log('[/api/chat] room=' + activeRoom + ' grounded=' + (sources.length > 0) + ' sources=' + formatSignalTraceSummary(sources));
+        res.json({ answer, sources, grounded: sources.length > 0, room: activeRoom });
     } catch (error) {
         console.error('Error in grounded chat:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });

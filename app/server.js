@@ -57,6 +57,8 @@ const toolsRouter          = require('./routes/tools');
 const threadsRouter        = require('./routes/threads');
 const projectsRouter       = require('./routes/projects');
 const documentsRouter      = require('./routes/documents');
+const contextMapsRouter    = require('./routes/contextMaps');
+const archiveRouter        = require('./routes/archive');
 
 // ── Express setup ─────────────────────────────────────────────────────────────
 
@@ -79,6 +81,8 @@ app.use(toolsRouter);
 app.use(threadsRouter);
 app.use(projectsRouter);
 app.use(documentsRouter);
+app.use(contextMapsRouter);
+app.use(archiveRouter);
 
 // ── Server start ──────────────────────────────────────────────────────────────
 
@@ -114,6 +118,11 @@ if (require.main === module) {
             autoRegisterThresholdFiles();
         }
     } catch { /* non-critical — threshold route handles this on first list call */ }
+
+    // Phase 11: Bootstrap trusted archive sources (non-blocking)
+    require('./archiveService').bootstrapArchive().catch(function(err) {
+        console.warn('[archive] Bootstrap failed:', err.message);
+    });
 
     // Non-blocking startup tool scan
     discoverTools().then(function(detected) {

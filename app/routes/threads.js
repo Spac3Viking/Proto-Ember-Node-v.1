@@ -3,11 +3,17 @@
 /**
  * Ember Node v.ᚠ — Thread Routes
  *
- * GET  /api/threads
- * POST /api/threads
- * GET  /api/threads/:id
- * POST /api/threads/:id/messages
- * PUT  /api/threads/:id
+ * GET    /api/threads
+ * POST   /api/threads
+ * GET    /api/threads/:id
+ * POST   /api/threads/:id/messages
+ * PUT    /api/threads/:id
+ * POST   /api/threads/:id/archive
+ * POST   /api/threads/:id/remember
+ * DELETE /api/threads/:id
+ *
+ * Phase 11: Thread states — 'active' | 'archived' | 'remembered'
+ * Remembering a thread generates a durable summarized memory object.
  */
 
 const crypto  = require('crypto');
@@ -16,6 +22,7 @@ const fs      = require('fs');
 const path    = require('path');
 const { readLimiter, writeLimiter } = require('../rateLimiters');
 const { THREADS_DIR } = require('../storageConfig');
+const { rememberThread, deleteThreadSummary } = require('../threadMemory');
 
 const router = express.Router();
 
@@ -39,10 +46,10 @@ function saveThread(thread) {
 
 /**
  * GET /api/threads
- * Returns all thread summaries (id, title, room, createdAt, messageCount).
+ * Returns all thread summaries (id, title, room, status, createdAt, messageCount).
  */
 router.get('/api/threads', readLimiter, (req, res) => {
-    const { room } = req.query;
+    const { room, status } = req.query;
     const threads = fs.readdirSync(THREADS_DIR)
         .filter(f => f.endsWith('.json'))
         .map(f => {
@@ -52,6 +59,7 @@ router.get('/api/threads', readLimiter, (req, res) => {
                     id:           t.id,
                     title:        t.title,
                     room:         t.room,
+                    status:       t.status || 'active',
                     createdAt:    t.createdAt,
                     updatedAt:    t.updatedAt,
                     messageCount: (t.messages || []).length,
@@ -59,7 +67,8 @@ router.get('/api/threads', readLimiter, (req, res) => {
             } catch { return null; }
         })
         .filter(Boolean)
-        .filter(t => !room || t.room === room)
+        .filter(t => !room   || t.room   === room)
+        .filter(t => !status || t.status === status)
         .sort(function(a, b) { return b.updatedAt.localeCompare(a.updatedAt); });
     res.json({ threads });
 });
@@ -76,7 +85,7 @@ router.post('/api/threads', writeLimiter, (req, res) => {
     }
     const id     = 'thread-' + crypto.randomUUID();
     const now    = new Date().toISOString();
-    const thread = { id, title, room, createdAt: now, updatedAt: now, messages: [] };
+    const thread = { id, title, room, status: 'active', createdAt: now, updatedAt: now, messages: [] };
     saveThread(thread);
     res.json({ success: true, thread });
 });
@@ -118,6 +127,66 @@ router.put('/api/threads/:id', writeLimiter, (req, res) => {
     thread.updatedAt = new Date().toISOString();
     saveThread(thread);
     res.json({ success: true, thread });
+});
+
+// ── Phase 11: Thread state actions ───────────────────────────────────────────
+
+/**
+ * POST /api/threads/:id/archive
+ * Moves a thread to 'archived' status.
+ */
+router.post('/api/threads/:id/archive', writeLimiter, (req, res) => {
+    const thread = loadThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    thread.status    = 'archived';
+    thread.updatedAt = new Date().toISOString();
+    saveThread(thread);
+    res.json({ success: true, thread });
+});
+
+/**
+ * POST /api/threads/:id/remember
+ * Promotes a thread to 'remembered' status and generates a durable
+ * memory summary object stored under hearth/remembered-threads/.
+ *
+ * Response: { success, thread, summary }
+ */
+router.post('/api/threads/:id/remember', writeLimiter, (req, res) => {
+    const thread = loadThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+
+    thread.status    = 'remembered';
+    thread.updatedAt = new Date().toISOString();
+    saveThread(thread);
+
+    let summary = null;
+    try {
+        summary = rememberThread(thread);
+    } catch (err) {
+        console.warn('[threads] Could not generate memory summary for ' + thread.id + ': ' + err.message);
+    }
+
+    res.json({ success: true, thread, summary });
+});
+
+/**
+ * DELETE /api/threads/:id
+ * Permanently deletes a thread and its memory summary if present.
+ */
+router.delete('/api/threads/:id', writeLimiter, (req, res) => {
+    const file = path.join(THREADS_DIR, req.params.id + '.json');
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Thread not found' });
+
+    try {
+        fs.unlinkSync(file);
+    } catch (err) {
+        return res.status(500).json({ error: 'Could not delete thread: ' + err.message });
+    }
+
+    // Also remove any remembered-thread summary
+    try { deleteThreadSummary(req.params.id); } catch { /* ignore */ }
+
+    res.json({ success: true });
 });
 
 module.exports = router;
