@@ -16,6 +16,36 @@ const path = require('path');
 const { DATA_ROOT: DATA_DIR, ROOM_DIRS } = require('./storageConfig');
 
 const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
+
+/**
+ * Source classes for Phase 11 context architecture.
+ * Used to distinguish source origin and context pool membership.
+ *
+ * @readonly
+ * @enum {string}
+ */
+const SOURCE_CLASSES = {
+    TRUSTED_ARCHIVE: 'trusted-archive',
+    WORKSHOP_DRAFT:  'workshop-draft',
+    HEARTH_REMEMBERED: 'hearth-remembered',
+    THRESHOLD_INTAKE:  'threshold-intake',
+};
+
+/**
+ * Derive the default source class for a room.
+ *
+ * @param {string} room
+ * @returns {string}
+ */
+function sourceClassForRoom(room) {
+    switch (room) {
+        case 'hearth':    return SOURCE_CLASSES.HEARTH_REMEMBERED;
+        case 'workshop':  return SOURCE_CLASSES.WORKSHOP_DRAFT;
+        case 'threshold': return SOURCE_CLASSES.THRESHOLD_INTAKE;
+        default:          return SOURCE_CLASSES.THRESHOLD_INTAKE;
+    }
+}
+
 const TEXT_EXTENSIONS       = new Set(['.txt', '.md']);
 
 /**
@@ -130,6 +160,8 @@ function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = nu
         title:            title        || null,
         description:      description  || null,
         shelf:            shelf        || null,
+        // Phase 11: source class for context pool membership
+        sourceClass:      sourceClassForRoom(room),
         // lifecycle status: 'waiting' | 'indexed' | 'remembered'
         status:           room === 'threshold' ? 'waiting'
                         : room === 'workshop'  ? 'indexed'
@@ -205,6 +237,8 @@ module.exports = {
     ingestFile,
     ingestCartridge,
     collectFiles,
+    SOURCE_CLASSES,
+    sourceClassForRoom,
     DATA_DIR,
     ROOM_DIRS,
     SUPPORTED_EXTENSIONS,

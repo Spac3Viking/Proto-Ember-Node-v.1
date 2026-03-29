@@ -1,12 +1,17 @@
 /**
- * Ember Node v.ᚠ — Phase 3 Retrieval
+ * Ember Node v.ᚠ — Phase 3 Retrieval (Phase 11: room-bounded + archive-aware)
  *
  * Room-aware local retrieval layer.
  *
  * Retrieval priority:
- *   1. Hearth (remembered, trusted material)
+ *   1. Hearth (remembered + trusted-archive material)
  *   2. Workshop (active, draft material)
  *   3. Threshold (only when explicitly included via the rooms parameter)
+ *
+ * Phase 11 retrieval pools by room:
+ *   hearth    — hearth-native sources + trusted-archive sources
+ *   workshop  — workshop-draft sources only
+ *   threshold — threshold-intake sources only
  *
  * Scoring strategy:
  *   - Uses cosine similarity when Ollama embeddings are available.
@@ -16,7 +21,8 @@
 'use strict';
 
 const { generateEmbedding, cosineSimilarity, keywordScore } = require('./embeddings');
-const { loadChunks, loadEmbeddings, loadExcluded }          = require('./indexStore');
+const { loadChunks, loadEmbeddings, loadExcluded, loadManifests }          = require('./indexStore');
+const { SOURCE_CLASS_ARCHIVE } = require('./archiveService');
 
 const DEFAULT_TOP_K    = 5;
 const MIN_SCORE        = 0.05;
@@ -60,24 +66,48 @@ function scoreChunks({ chunks, queryVector, queryText, embeddings }) {
  * @param {object}       opts
  * @param {string}       opts.query
  * @param {number}       [opts.topK=5]
- * @param {string[]|null} [opts.rooms=null]  - null → hearth + workshop only
+ * @param {string[]|null} [opts.rooms=null]  - null → hearth + archive + workshop
  * @param {string|null}  [opts.cartridgeId]
+ * @param {string|null}  [opts.sourceClass] - filter to a specific source class
  * @returns {Promise<Array<{ chunk: object, score: number }>>}
  */
-async function retrieve({ query, topK = DEFAULT_TOP_K, rooms = null, cartridgeId = null }) {
+async function retrieve({ query, topK = DEFAULT_TOP_K, rooms = null, cartridgeId = null, sourceClass = null }) {
     const allChunks  = loadChunks();
     const embeddings = loadEmbeddings();
     const excluded   = loadExcluded();
+    const manifests  = loadManifests();
+
+    // Build a lookup of sourceId → sourceClass from manifests
+    const sourceClassById = {};
+    Object.values(manifests).forEach(m => {
+        if (m.sourceClass) sourceClassById[m.id] = m.sourceClass;
+    });
 
     // Filter: exclude suppressed sources
     let candidates = allChunks.filter(c => !excluded.includes(c.sourceId));
 
+    // Filter: source class (optional explicit filter)
+    if (sourceClass) {
+        candidates = candidates.filter(c => sourceClassById[c.sourceId] === sourceClass);
+    }
+
     // Filter: room scope
     if (rooms !== null) {
-        candidates = candidates.filter(c => rooms.includes(c.room));
+        // When caller specifies rooms explicitly, include archive chunks for hearth
+        candidates = candidates.filter(c => {
+            if (rooms.includes(c.room)) return true;
+            // Include archive (trusted-archive) when hearth is in scope
+            if (rooms.includes('hearth') && sourceClassById[c.sourceId] === SOURCE_CLASS_ARCHIVE) return true;
+            return false;
+        });
     } else {
-        // Default: hearth + workshop (not threshold unless caller requests it)
-        candidates = candidates.filter(c => c.room === 'hearth' || c.room === 'workshop');
+        // Default: hearth + archive + workshop (not threshold unless caller requests it)
+        candidates = candidates.filter(c => {
+            if (c.room === 'hearth' || c.room === 'workshop') return true;
+            // Trusted archive sources are always available to the default pool
+            if (sourceClassById[c.sourceId] === SOURCE_CLASS_ARCHIVE) return true;
+            return false;
+        });
     }
 
     // Filter: specific cartridge

@@ -104,10 +104,13 @@ function escapeHtml(str) {
                 }
                 if (panelId === 'hearth-archive') {
                     loadHearthArchive();
+                    loadHearthTrustedArchive();
+                    loadHearthRememberedThreads();
                 }
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
                     loadHearthToolRegistry();
+                    loadContextMapsStatus();
                 }
                 if (panelId === 'th-ai') {
                     loadThresholdTools();
@@ -174,10 +177,74 @@ async function loadHearthThreads() {
         listEl.innerHTML = '';
         threads.forEach(t => {
             const item = document.createElement('div');
-            item.className = 'thread-item' + (t.id === hearthActiveThreadId ? ' active' : '');
-            item.textContent = t.title;
+            const status = t.status || 'active';
+            item.className = 'thread-item' + (t.id === hearthActiveThreadId ? ' active' : '') +
+                             (status === 'archived' ? ' thread-archived' : '') +
+                             (status === 'remembered' ? ' thread-remembered' : '');
             item.dataset.threadId    = t.id;
             item.dataset.threadTitle = t.title;
+
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'thread-item-title';
+            titleSpan.textContent = t.title;
+
+            // Status badge
+            if (status === 'remembered') {
+                const badge = document.createElement('span');
+                badge.className = 'thread-status-badge remembered';
+                badge.textContent = '★';
+                badge.title = 'Remembered';
+                titleSpan.appendChild(badge);
+            } else if (status === 'archived') {
+                const badge = document.createElement('span');
+                badge.className = 'thread-status-badge archived';
+                badge.textContent = '◾';
+                badge.title = 'Archived';
+                titleSpan.appendChild(badge);
+            }
+
+            item.appendChild(titleSpan);
+
+            // Action buttons
+            const actions = document.createElement('div');
+            actions.className = 'thread-item-actions';
+
+            if (status !== 'remembered') {
+                const remBtn = document.createElement('button');
+                remBtn.className = 'thread-action-btn';
+                remBtn.textContent = '★';
+                remBtn.title = 'Remember thread';
+                remBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    rememberHearthThread(t.id);
+                });
+                actions.appendChild(remBtn);
+            }
+
+            if (status === 'active') {
+                const archBtn = document.createElement('button');
+                archBtn.className = 'thread-action-btn';
+                archBtn.textContent = '◾';
+                archBtn.title = 'Archive thread';
+                archBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    archiveHearthThread(t.id);
+                });
+                actions.appendChild(archBtn);
+            }
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'thread-action-btn thread-delete-btn';
+            delBtn.textContent = '✕';
+            delBtn.title = 'Delete thread';
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteHearthThread(t.id);
+            });
+            actions.appendChild(delBtn);
+
+            item.appendChild(actions);
+
             item.addEventListener('click', () => {
                 hearthActiveThreadId = t.id;
                 document.querySelectorAll('#hearth-thread-list .thread-item').forEach(el => {
@@ -195,6 +262,56 @@ async function loadHearthThreads() {
         }
     } catch {
         listEl.innerHTML = '<span class="message-system">Could not load threads.</span>';
+    }
+}
+
+async function rememberHearthThread(threadId) {
+    try {
+        const res  = await fetch('/api/threads/' + encodeURIComponent(threadId) + '/remember', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            showFlashMessage('Thread remembered ★');
+            loadHearthThreads();
+        } else {
+            showFlashMessage('Could not remember thread.');
+        }
+    } catch {
+        showFlashMessage('Could not remember thread.');
+    }
+}
+
+async function archiveHearthThread(threadId) {
+    try {
+        const res  = await fetch('/api/threads/' + encodeURIComponent(threadId) + '/archive', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            showFlashMessage('Thread archived.');
+            if (hearthActiveThreadId === threadId) hearthActiveThreadId = null;
+            loadHearthThreads();
+        }
+    } catch {
+        showFlashMessage('Could not archive thread.');
+    }
+}
+
+async function deleteHearthThread(threadId) {
+    if (!confirm('Delete this thread permanently? This cannot be undone.')) return;
+    try {
+        const res  = await fetch('/api/threads/' + encodeURIComponent(threadId), { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            showFlashMessage('Thread deleted.');
+            if (hearthActiveThreadId === threadId) {
+                hearthActiveThreadId = null;
+                const chatEl = document.getElementById('messages');
+                const titleEl = document.getElementById('hearth-active-thread-title');
+                if (chatEl)  chatEl.innerHTML = '';
+                if (titleEl) titleEl.textContent = 'Select or create a thread';
+            }
+            loadHearthThreads();
+        }
+    } catch {
+        showFlashMessage('Could not delete thread.');
     }
 }
 
@@ -420,7 +537,7 @@ async function loadHearthArchive() {
     try {
         const res  = await fetch('/api/sources?room=hearth');
         const data = await res.json();
-        const sources = data.sources || [];
+        const sources = (data.sources || []).filter(s => s.sourceClass !== 'trusted-archive');
 
         if (sources.length === 0) {
             listEl.innerHTML = '<span class="message-system">No remembered sources.</span>';
@@ -435,6 +552,99 @@ async function loadHearthArchive() {
         listEl.innerHTML = '<span class="message-system">Could not load archive.</span>';
     }
 }
+
+/* ================================================================
+   Hearth — Trusted Archive (Phase 11)
+   ================================================================ */
+
+async function loadHearthTrustedArchive() {
+    const listEl = document.getElementById('hearth-trusted-archive-list');
+    if (!listEl) return;
+
+    try {
+        const res  = await fetch('/api/archive');
+        const data = await res.json();
+        const sources = data.sources || [];
+
+        if (sources.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No archive sources. Place files in <em>DATA_ROOT/archive/</em> and rescan.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        sources.forEach(s => {
+            const row = document.createElement('div');
+            row.className = 'ws-source-row';
+            const shelfBadge = s.shelf
+                ? '<span class="lifecycle-pill" style="font-size:0.7rem; padding:0.1rem 0.5rem;">' + escapeHtml(s.shelf) + '</span>'
+                : '';
+            row.innerHTML =
+                '<span class="ws-source-name">' + escapeHtml(s.title || s.file) + '</span>' +
+                shelfBadge +
+                '<span class="ws-source-type">' + escapeHtml(s.sourceType || '') + '</span>';
+            listEl.appendChild(row);
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load trusted archive.</span>';
+    }
+}
+
+async function loadHearthRememberedThreads() {
+    const listEl = document.getElementById('hearth-remembered-threads-list');
+    if (!listEl) return;
+
+    try {
+        const res  = await fetch('/api/remembered-threads');
+        const data = await res.json();
+        const summaries = data.summaries || [];
+
+        if (summaries.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No remembered threads yet. Use ★ in the Threads list to remember a thread.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        summaries.forEach(s => {
+            const row = document.createElement('div');
+            row.className = 'ws-source-row';
+            const themes = (s.themes || []).slice(0, 4).join(', ');
+            row.innerHTML =
+                '<div style="display:flex; flex-direction:column; gap:0.2rem;">' +
+                '<span class="ws-source-name" style="font-weight:500;">★ ' + escapeHtml(s.title) + '</span>' +
+                (themes ? '<span style="font-size:0.75rem; opacity:0.6;">' + escapeHtml(themes) + '</span>' : '') +
+                (s.excerpt ? '<span style="font-size:0.75rem; opacity:0.5; font-style:italic;">' + escapeHtml(s.excerpt.slice(0, 100)) + '…</span>' : '') +
+                '</div>';
+            listEl.appendChild(row);
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load remembered threads.</span>';
+    }
+}
+
+// Archive bootstrap button
+(function initArchiveBootstrap() {
+    const btn = document.getElementById('hearth-archive-bootstrap-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = '↻ Scanning…';
+        try {
+            const res  = await fetch('/api/archive/bootstrap', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                showFlashMessage('Archive scanned — ' + (data.registered || 0) + ' registered, ' + (data.indexed || 0) + ' indexed.');
+                loadHearthTrustedArchive();
+            } else {
+                showFlashMessage('Archive scan failed.');
+            }
+        } catch {
+            showFlashMessage('Could not reach server.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '↻ Rescan';
+        }
+    });
+})();
 
 /* ================================================================
    Workshop — Draft / Notepad
@@ -2315,6 +2525,73 @@ function updateSystemCartridgeCount(count) {
     const el = document.getElementById('sys-cartridge-count');
     if (el) el.textContent = String(count);
 }
+
+/* ================================================================
+   Context Maps Status (Phase 11)
+   ================================================================ */
+
+async function loadContextMapsStatus() {
+    const el = document.getElementById('sys-context-maps-status');
+    if (!el) return;
+
+    el.innerHTML = '<span class="message-system">Loading…</span>';
+
+    const rooms = ['hearth', 'workshop', 'threshold'];
+    const rows  = [];
+
+    for (const room of rooms) {
+        try {
+            const res  = await fetch('/api/context-maps/' + room + '/working');
+            if (res.ok) {
+                const data = await res.json();
+                const map  = data.map;
+                const updated = map.updatedAt ? new Date(map.updatedAt).toLocaleString() : '—';
+                rows.push(
+                    '<div class="system-row">' +
+                    '<span class="system-key">' + room.charAt(0).toUpperCase() + room.slice(1) + ' map</span>' +
+                    '<span class="system-val ok">updated ' + escapeHtml(updated) + '</span>' +
+                    '</div>',
+                );
+            } else {
+                rows.push(
+                    '<div class="system-row">' +
+                    '<span class="system-key">' + room.charAt(0).toUpperCase() + room.slice(1) + ' map</span>' +
+                    '<span class="system-val warn">not generated</span>' +
+                    '</div>',
+                );
+            }
+        } catch {
+            rows.push(
+                '<div class="system-row"><span class="system-key">' + room + '</span><span class="system-val error">error</span></div>',
+            );
+        }
+    }
+
+    el.innerHTML = rows.join('');
+}
+
+// Refresh all context maps button
+(function initRefreshMapsBtn() {
+    document.addEventListener('click', async (e) => {
+        if (e.target && e.target.id === 'sys-refresh-maps-btn') {
+            const btn = e.target;
+            btn.disabled = true;
+            btn.textContent = '↻ Refreshing…';
+            try {
+                await Promise.all(['hearth', 'workshop', 'threshold'].map(room =>
+                    fetch('/api/context-maps/' + room + '/refresh', { method: 'POST' }),
+                ));
+                showFlashMessage('Context maps refreshed.');
+                loadContextMapsStatus();
+            } catch {
+                showFlashMessage('Could not refresh maps.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '↻ Refresh All';
+            }
+        }
+    });
+})();
 
 /* ================================================================
    Header Status Pill

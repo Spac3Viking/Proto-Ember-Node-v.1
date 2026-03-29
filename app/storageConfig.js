@@ -23,15 +23,27 @@
  *
  * Data root layout:
  *   <data-root>/
- *     hearth/       — curated Hearth sources (remembered knowledge)
- *     workshop/     — Workshop notes and active drafts
- *     threshold/    — quarantined imports awaiting inspection
- *     indexes/      — local knowledge index (chunks, embeddings, manifests)
- *     projects/     — Workshop project files
- *     threads/      — chat thread records
- *     cartridges/   — user-created cartridge metadata (NOT bundled cartridges)
- *     system/       — system state
- *     exports/      — outbound packages
+ *     hearth/                  — curated Hearth sources (remembered knowledge)
+ *       remembered-threads/    — durable thread memory objects
+ *       maps/                  — Hearth working & remembered context maps
+ *     workshop/                — Workshop notes and active drafts
+ *       maps/                  — Workshop context maps
+ *     threshold/               — quarantined imports awaiting inspection
+ *       maps/                  — Threshold context maps
+ *     archive/                 — Trusted Archive (privileged curated path)
+ *       codices/               — Green Fire Codices
+ *       grimoires/             — Green Fire Grimoires
+ *       sagas/                 — Green Fire Sagas
+ *       literature/            — curated literary sources
+ *       history/               — curated historical sources
+ *       science/               — curated scientific sources
+ *       green-fire/            — Green Fire primary texts
+ *     indexes/                 — local knowledge index (chunks, embeddings, manifests)
+ *     projects/                — Workshop project files
+ *     threads/                 — chat thread records
+ *     cartridges/              — user-created cartridge metadata (NOT bundled cartridges)
+ *     system/                  — system state
+ *     exports/                 — outbound packages
  *
  * Legacy migration
  * ----------------
@@ -73,6 +85,33 @@ const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
 const EXPORTS_DIR         = path.join(DATA_ROOT, 'exports');
 const DOCUMENTS_DIR       = path.join(DATA_ROOT, 'documents');
 
+// ── Phase 11: Context Architecture ───────────────────────────────────────────
+
+/** Trusted Archive root — privileged curated path, bypasses Threshold workflow */
+const ARCHIVE_DIR             = path.join(DATA_ROOT, 'archive');
+
+/** Subdirectories within the Trusted Archive */
+const ARCHIVE_DIRS = {
+    codices:    path.join(ARCHIVE_DIR, 'codices'),
+    grimoires:  path.join(ARCHIVE_DIR, 'grimoires'),
+    sagas:      path.join(ARCHIVE_DIR, 'sagas'),
+    literature: path.join(ARCHIVE_DIR, 'literature'),
+    history:    path.join(ARCHIVE_DIR, 'history'),
+    science:    path.join(ARCHIVE_DIR, 'science'),
+    'green-fire': path.join(ARCHIVE_DIR, 'green-fire'),
+};
+
+/** Hearth sub-directories for Phase 11 features */
+const HEARTH_REMEMBERED_THREADS_DIR = path.join(ROOM_DIRS.hearth, 'remembered-threads');
+const HEARTH_MAPS_DIR               = path.join(ROOM_DIRS.hearth, 'maps');
+
+/** Context map directories for each room */
+const MAPS_DIRS = {
+    hearth:    HEARTH_MAPS_DIR,
+    workshop:  path.join(ROOM_DIRS.workshop, 'maps'),
+    threshold: path.join(ROOM_DIRS.threshold, 'maps'),
+};
+
 // Placeholder files that should not be treated as real user content
 const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store']);
 
@@ -103,6 +142,15 @@ function ensureDataRoot() {
         SYSTEM_DIR,
         EXPORTS_DIR,
         DOCUMENTS_DIR,
+        // Phase 11: Trusted Archive
+        ARCHIVE_DIR,
+        ...Object.values(ARCHIVE_DIRS),
+        // Phase 11: Hearth memory dirs
+        HEARTH_REMEMBERED_THREADS_DIR,
+        // Phase 11: Context map dirs
+        MAPS_DIRS.hearth,
+        MAPS_DIRS.workshop,
+        MAPS_DIRS.threshold,
     ];
     for (const dir of dirs) {
         if (!fs.existsSync(dir)) {
@@ -244,6 +292,12 @@ module.exports = {
     EXPORTS_DIR,
     DOCUMENTS_DIR,
     LEGACY_DATA_DIR,
+    // Phase 11
+    ARCHIVE_DIR,
+    ARCHIVE_DIRS,
+    HEARTH_REMEMBERED_THREADS_DIR,
+    HEARTH_MAPS_DIR,
+    MAPS_DIRS,
     ensureDataRoot,
     migrateLegacyData,
     resolveSourcePath,
