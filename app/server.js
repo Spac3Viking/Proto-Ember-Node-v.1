@@ -106,6 +106,15 @@ async function checkModel() {
 if (require.main === module) {
     console.log('Data root: ' + require('./storageConfig').DATA_ROOT);
 
+    // Auto-register any unmanaged files already present in the threshold folder
+    // so they appear in the intake queue without requiring manual re-upload.
+    try {
+        const { autoRegisterThresholdFiles } = require('./routes/threshold');
+        if (typeof autoRegisterThresholdFiles === 'function') {
+            autoRegisterThresholdFiles();
+        }
+    } catch { /* non-critical — threshold route handles this on first list call */ }
+
     // Non-blocking startup tool scan
     discoverTools().then(function(detected) {
         const tools    = mergeDetectedTools(detected);

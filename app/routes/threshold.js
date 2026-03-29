@@ -7,16 +7,23 @@
  * GET  /api/detected-files
  * POST /api/detected-files/import
  * POST /api/detected-files/acknowledge
+ * POST /api/threshold/admit
  */
 
 const express = require('express');
 const fs      = require('fs');
 const path    = require('path');
-const { readLimiter, writeLimiter }    = require('../rateLimiters');
+const { readLimiter, writeLimiter, indexLimiter } = require('../rateLimiters');
 const { DATA_ROOT, resolveSourcePath } = require('../storageConfig');
-const { buildSourceRecord }            = require('../ingest');
-const { upsertManifest, loadManifests } = require('../indexStore');
-const { loadIntakeState, upsertIntakeFile } = require('../intakeState');
+const { buildSourceRecord, extractTextAsync }      = require('../ingest');
+const {
+    upsertManifest, loadManifests,
+    upsertChunks, upsertEmbeddings, loadChunks,
+    removeEmbeddingsByChunkIds,
+}                                                  = require('../indexStore');
+const { loadIntakeState, upsertIntakeFile }        = require('../intakeState');
+const { chunkText }                                = require('../chunker');
+const { generateEmbedding }                        = require('../embeddings');
 const {
     DETECT_SUPPORTED_EXTS,
     DETECT_IGNORE_FILES,
@@ -24,14 +31,73 @@ const {
 
 const router = express.Router();
 
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Remove stale embeddings for a source before re-indexing.
+ * @param {string} sourceId
+ */
+function removeStaleEmbeddingsForSource(sourceId) {
+    const oldChunkIds = loadChunks()
+        .filter(c => c.sourceId === sourceId)
+        .map(c => c.id);
+    removeEmbeddingsByChunkIds(oldChunkIds);
+}
+
+/**
+ * Auto-register any unmanaged files found in the threshold directory.
+ * Creates manifest entries (without indexing) so files become actionable
+ * in the Threshold intake queue immediately — no manual re-upload required.
+ *
+ * Safe to call repeatedly: uses upsertManifest which is idempotent.
+ */
+function autoRegisterThresholdFiles() {
+    const thresholdDir = path.join(DATA_ROOT, 'threshold');
+    if (!fs.existsSync(thresholdDir)) return;
+
+    const manifests = loadManifests();
+    const byPath    = {};
+    Object.values(manifests).forEach(m => {
+        if (m.path) byPath[m.path.replace(/\\/g, '/')] = m;
+    });
+
+    let entries;
+    try { entries = fs.readdirSync(thresholdDir, { withFileTypes: true }); }
+    catch { return; }
+
+    for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (DETECT_IGNORE_FILES.has(entry.name)) continue;
+        const ext = path.extname(entry.name).toLowerCase();
+        if (!DETECT_SUPPORTED_EXTS.has(ext)) continue;
+
+        const relPath = 'threshold/' + entry.name;
+        if (byPath[relPath]) continue;   // already registered
+
+        const absPath = path.join(thresholdDir, entry.name);
+        try {
+            const source = buildSourceRecord({
+                filePath: absPath,
+                room:     'threshold',
+            });
+            upsertManifest(source.id, source);
+        } catch { /* skip files that cannot be read */ }
+    }
+}
+
 // ── Phase 4: Threshold intake ─────────────────────────────────────────────────
 
 /**
  * GET /api/threshold/list
  * Returns files in the Threshold intake queue, including metadata.
  * Augments each file record with its persistent intake state.
+ *
+ * Auto-registers any unmanaged files found in the threshold directory so
+ * files placed directly in the folder appear immediately with sourceIds.
  */
 router.get('/api/threshold/list', readLimiter, (req, res) => {
+    // Auto-register unmanaged threshold files so they surface with sourceIds
+    autoRegisterThresholdFiles();
     const thresholdDir = path.join(DATA_ROOT, 'threshold');
     if (!fs.existsSync(thresholdDir)) return res.json({ files: [] });
 
@@ -265,4 +331,128 @@ router.post('/api/detected-files/acknowledge', writeLimiter, (req, res) => {
     }
 });
 
+// ── Phase 10.5: One-step admit ────────────────────────────────────────────────
+
+/**
+ * POST /api/threshold/admit
+ * Body: { sourceId }
+ *
+ * Admits a Threshold file to Workshop in a single action:
+ *   1. Marks as inspected in intake state
+ *   2. Indexes the file (chunks + embeddings)
+ *   3. Moves to Workshop room
+ *
+ * This is the primary "Admit to Workshop" action — reduces the previous
+ * multi-step flow (inspect → index → move) to one click.
+ */
+router.post('/api/threshold/admit', indexLimiter, async (req, res) => {
+    try {
+        const { sourceId } = req.body;
+        if (!sourceId || typeof sourceId !== 'string') {
+            return res.status(400).json({ error: 'sourceId is required' });
+        }
+
+        const manifests = loadManifests();
+        const source    = manifests[sourceId];
+        if (!source) {
+            return res.status(404).json({ error: 'Source not found in manifest' });
+        }
+
+        if (source.room !== 'threshold') {
+            return res.status(400).json({ error: 'Source is not in Threshold' });
+        }
+
+        // Step 1: mark inspected
+        if (source.path) {
+            upsertIntakeFile(source.path, { state: 'inspected' });
+        }
+
+        // Step 2: move file to Workshop
+        const oldAbsPath = resolveSourcePath(source.path);
+        const workshopDir = path.join(DATA_ROOT, 'workshop');
+        if (!fs.existsSync(workshopDir)) {
+            fs.mkdirSync(workshopDir, { recursive: true });
+        }
+        const baseName    = path.basename(source.file || source.path);
+        const newAbsPath  = path.join(workshopDir, baseName);
+        const newRelPath  = 'workshop/' + baseName;
+
+        if (oldAbsPath && fs.existsSync(oldAbsPath)) {
+            try {
+                fs.renameSync(oldAbsPath, newAbsPath);
+            } catch {
+                try {
+                    fs.copyFileSync(oldAbsPath, newAbsPath);
+                    fs.unlinkSync(oldAbsPath);
+                } catch (copyErr) {
+                    return res.status(500).json({ error: 'Failed to move file: ' + copyErr.message });
+                }
+            }
+        } else if (!fs.existsSync(newAbsPath)) {
+            return res.status(404).json({ error: 'File not found on disk' });
+        }
+
+        source.room   = 'workshop';
+        source.path   = newRelPath;
+        source.status = 'admitted';   // intermediate: moved but not yet indexed
+        upsertManifest(sourceId, source);
+
+        // Step 3: index (extract text, chunk, embed)
+        const targetPath = resolveSourcePath(newRelPath);
+        if (!targetPath || !fs.existsSync(targetPath)) {
+            return res.status(404).json({ error: 'File not found after move' });
+        }
+
+        const { text, error: extractError } = await extractTextAsync(targetPath);
+        if (!text) {
+            const reason = extractError || 'Could not extract text from file';
+            console.warn('[admit] Indexing skipped for ' + sourceId + ': ' + reason);
+            source.status = 'waiting';   // admitted but not indexed
+            upsertManifest(sourceId, source);
+            return res.json({
+                success:      true,
+                sourceId,
+                room:         'workshop',
+                indexed:      false,
+                indexWarning: reason,
+            });
+        }
+
+        const chunks = chunkText({ text, sourceRecord: source });
+        removeStaleEmbeddingsForSource(sourceId);
+        upsertChunks(chunks);
+
+        let embeddingsGenerated = 0;
+        const embeddingMap      = {};
+        for (const chunk of chunks) {
+            const vector = await generateEmbedding(chunk.text);
+            if (vector) {
+                embeddingMap[chunk.id] = vector;
+                embeddingsGenerated++;
+            }
+        }
+        if (Object.keys(embeddingMap).length > 0) {
+            upsertEmbeddings(embeddingMap);
+        }
+
+        // Update status to indexed only after successful indexing
+        source.status = 'indexed';
+        upsertManifest(sourceId, source);
+
+        console.log('[admit] ' + sourceId + ' admitted to Workshop (' + chunks.length + ' chunks)');
+        res.json({
+            success:             true,
+            sourceId,
+            room:                'workshop',
+            indexed:             true,
+            chunksCreated:       chunks.length,
+            embeddingsGenerated,
+        });
+    } catch (error) {
+        console.error('Error admitting file:', error.message);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 module.exports = router;
+module.exports.autoRegisterThresholdFiles = autoRegisterThresholdFiles;

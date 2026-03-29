@@ -2564,3 +2564,36 @@ button.secondary:disabled {
     min-height: 300px;
   }
 }
+
+/* ── Phase 10.5: Admit-to-Workshop primary action + batch bar ─────────────── */
+
+/* Primary admit action — more prominent than secondary buttons */
+.threshold-admit-btn {
+  color: var(--gf-wire-green) !important;
+  border-color: hsla(140, 100%, 70%, 0.45) !important;
+  background: hsla(140, 100%, 20%, 0.12) !important;
+  font-weight: 500 !important;
+}
+
+.threshold-admit-btn:hover {
+  color: hsl(140, 100%, 80%) !important;
+  border-color: hsla(140, 100%, 70%, 0.7) !important;
+  background: hsla(140, 100%, 20%, 0.22) !important;
+}
+
+.threshold-admit-btn:disabled {
+  opacity: 0.5 !important;
+}
+
+/* Batch action bar above threshold list */
+.threshold-batch-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.5rem;
+  background: hsla(140, 100%, 70%, 0.04);
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: var(--radius-sm);
+}
+
