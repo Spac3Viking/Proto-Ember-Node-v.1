@@ -272,9 +272,9 @@ function buildThresholdMap() {
  */
 function refreshWorkingMap(room) {
     let map;
-    if (room === 'hearth')     map = buildHearthMap();
-    else if (room === 'workshop')  map = buildWorkshopMap();
-    else if (room === 'threshold') map = buildThresholdMap();
+    if (room === 'hearth')          map = buildHearthMap();
+    else if (room === 'workshop')   map = buildWorkshopMap();
+    else if (room === 'threshold')  map = buildThresholdMap();
     else throw new Error('Unknown room: ' + room);
 
     saveContextMap(room, map);
