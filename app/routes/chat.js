@@ -7,14 +7,13 @@
  * POST /api/chat      (grounded Heart chat with retrieval)
  *
  * Phase 11:   Chat context is room-bounded with cross-room context maps.
- * Phase 11.5: Chat assembly now includes identity (Forge) + bootstrap (current
- *             context state) + optional archetype overlay, before retrieval.
- *
- * New assembly order:
- *   1. Bootstrap  — current context state (maps + thread memory + node state)
- *   2. Forge Core — identity + epistemic rules
- *   3. Retrieval  — sources + chunks
- *   4. Archetype  — overlay if active (optional)
+ * Phase 11.5: Chat assembly includes identity (Forge) + bootstrap + retrieval +
+ *             optional archetype overlay.
+ * Phase 11.6: Enforced non-negotiable assembly order:
+ *   [1] Bootstrap  — current context state (maps + thread memory + node state)
+ *   [2] Forge Core — identity + epistemic rules
+ *   [3] Retrieval  — sources + chunks
+ *   [4] Archetype  — overlay modifier, last (optional)
  */
 
 const express = require('express');
@@ -219,42 +218,53 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const sources = buildSignalTrace(retrieved);
 
-        // ── Phase 11.5: Identity + Bootstrap assembly ─────────────────────────
+        // ── Phase 11.6: Enforced prompt assembly order ────────────────────────
+        // Non-negotiable order: [1] Bootstrap → [2] Forge Core → [3] Retrieval → [4] Archetype
 
-        // 1. Bootstrap — current context state
+        // [1] Bootstrap — must always load first; auto-regenerate if missing
         let bootstrap = loadBootstrap();
         if (!bootstrap) {
+            console.warn('[/api/chat] Bootstrap missing — regenerating now.');
             try { bootstrap = refreshBootstrap({ activeArchetype: archetype }); }
-            catch (err) { console.warn('[/api/chat] Bootstrap generation failed:', err.message); }
+            catch (err) { console.warn('[/api/chat] Bootstrap regeneration failed:', err.message); }
         }
+        console.log('[/api/chat] bootstrap=' + (bootstrap ? 'loaded' : 'unavailable'));
 
-        // 2. Forge Core — identity + epistemic rules
+        // [2] Forge Core — must always be included; never conditional
         const forgeCore = loadForgeCore();
+        console.log('[/api/chat] forge-core=' + (forgeCore ? 'injected' : 'unavailable'));
 
-        // 3. Retrieval — grounded source context
+        // [3] Retrieval — grounded source context (must follow identity, never precede it)
         const roomPreamble = buildRoomContextPreamble(activeRoom);
         let userContent    = buildGroundedPrompt({ query, retrievedChunks: retrieved });
         if (roomPreamble) {
             userContent = roomPreamble + userContent;
         }
+        console.log('[/api/chat] retrieval=' + (retrieved.length > 0 ? retrieved.length + ' chunks' : 'none'));
 
-        // 4. Archetype overlay (if requested and valid)
+        // [4] Archetype overlay — last modifier, appended after retrieval
         let archetypeObj = null;
         if (archetype && typeof archetype === 'string') {
             archetypeObj = loadArchetype(archetype);
         }
 
-        // Build final user content with identity preamble prepended
-        const forgePart     = formatForgeCoreForPrompt(forgeCore);
+        // Assemble final prompt in required order:
+        // Bootstrap → Forge Core prepended before retrieval; Archetype appended after
         const bootstrapPart = formatBootstrapForPrompt(bootstrap);
+        const forgePart     = formatForgeCoreForPrompt(forgeCore);
         const archetypePart = archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '';
 
-        const identityPreamble = [forgePart, bootstrapPart, archetypePart]
+        const identityPreamble = [bootstrapPart, forgePart]
             .filter(Boolean)
             .join('\n\n');
 
         if (identityPreamble) {
             userContent = identityPreamble + '\n\n' + userContent;
+        }
+
+        // Archetype is the last modifier — appended after retrieval content
+        if (archetypePart) {
+            userContent = userContent + '\n\n' + archetypePart;
         }
 
         // Select room-appropriate system prompt
