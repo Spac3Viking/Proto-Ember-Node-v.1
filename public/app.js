@@ -111,6 +111,7 @@ function escapeHtml(str) {
                     refreshSystemStatus();
                     loadHearthToolRegistry();
                     loadContextMapsStatus();
+                    loadBootstrapStatus();
                 }
                 if (panelId === 'th-ai') {
                     loadThresholdTools();
@@ -2588,6 +2589,82 @@ async function loadContextMapsStatus() {
             } finally {
                 btn.disabled = false;
                 btn.textContent = '↻ Refresh All';
+            }
+        }
+    });
+})();
+
+/* ================================================================
+   Bootstrap Status (Phase 11.5)
+   ================================================================ */
+
+async function loadBootstrapStatus() {
+    const el = document.getElementById('sys-bootstrap-status');
+    if (!el) return;
+
+    el.innerHTML = '<span class="message-system">Loading…</span>';
+
+    try {
+        const res  = await fetch('/api/status');
+        const data = await res.json();
+
+        const rows = [];
+
+        rows.push(
+            '<div class="system-row">' +
+            '<span class="system-key">Forge v1.3</span>' +
+            '<span class="system-val ' + (data.forgeLoaded ? 'ok' : 'warn') + '">' +
+            (data.forgeLoaded ? 'loaded' : 'not found') + '</span></div>',
+        );
+
+        rows.push(
+            '<div class="system-row">' +
+            '<span class="system-key">Bootstrap</span>' +
+            '<span class="system-val ' + (data.bootstrapStatus === 'ready' ? 'ok' : 'warn') + '">' +
+            escapeHtml(data.bootstrapStatus || '—') + '</span></div>',
+        );
+
+        if (data.lastBootstrapRefresh) {
+            const refreshed = new Date(data.lastBootstrapRefresh).toLocaleString();
+            rows.push(
+                '<div class="system-row">' +
+                '<span class="system-key">Last refresh</span>' +
+                '<span class="system-val">' + escapeHtml(refreshed) + '</span></div>',
+            );
+        }
+
+        rows.push(
+            '<div class="system-row">' +
+            '<span class="system-key">Active archetype</span>' +
+            '<span class="system-val">' + escapeHtml(data.activeArchetype || 'none') + '</span></div>',
+        );
+
+        el.innerHTML = rows.join('');
+    } catch {
+        el.innerHTML = '<span class="message-system error">Could not load bootstrap status.</span>';
+    }
+}
+
+// Refresh Bootstrap button
+(function initRefreshBootstrapBtn() {
+    document.addEventListener('click', async (e) => {
+        if (e.target && e.target.id === 'sys-refresh-bootstrap-btn') {
+            const btn = e.target;
+            btn.disabled = true;
+            btn.textContent = '↻ Refreshing…';
+            try {
+                const res = await fetch('/api/bootstrap/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                if (res.ok) {
+                    showFlashMessage('Bootstrap refreshed.');
+                    loadBootstrapStatus();
+                } else {
+                    showFlashMessage('Bootstrap refresh failed.');
+                }
+            } catch {
+                showFlashMessage('Could not reach server.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '↻ Refresh Bootstrap';
             }
         }
     });

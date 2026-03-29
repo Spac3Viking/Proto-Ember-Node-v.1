@@ -90,6 +90,17 @@ const DOCUMENTS_DIR       = path.join(DATA_ROOT, 'documents');
 /** Trusted Archive root — privileged curated path, bypasses Threshold workflow */
 const ARCHIVE_DIR             = path.join(DATA_ROOT, 'archive');
 
+// ── Phase 11.5: Forge + Bootstrap ────────────────────────────────────────────
+
+/** Forge identity layer directory */
+const FORGE_DIR               = path.join(SYSTEM_DIR, 'forge');
+
+/** Archetype overlays directory (Ember Court) */
+const ARCHETYPES_DIR          = path.join(FORGE_DIR, 'archetypes');
+
+/** Active Bootstrap storage directory */
+const BOOTSTRAP_DIR           = path.join(SYSTEM_DIR, 'bootstrap');
+
 /** Subdirectories within the Trusted Archive */
 const ARCHIVE_DIRS = {
     codices:    path.join(ARCHIVE_DIR, 'codices'),
@@ -151,6 +162,10 @@ function ensureDataRoot() {
         MAPS_DIRS.hearth,
         MAPS_DIRS.workshop,
         MAPS_DIRS.threshold,
+        // Phase 11.5: Forge + Bootstrap
+        FORGE_DIR,
+        ARCHETYPES_DIR,
+        BOOTSTRAP_DIR,
     ];
     for (const dir of dirs) {
         if (!fs.existsSync(dir)) {
@@ -298,6 +313,10 @@ module.exports = {
     HEARTH_REMEMBERED_THREADS_DIR,
     HEARTH_MAPS_DIR,
     MAPS_DIRS,
+    // Phase 11.5
+    FORGE_DIR,
+    ARCHETYPES_DIR,
+    BOOTSTRAP_DIR,
     ensureDataRoot,
     migrateLegacyData,
     resolveSourcePath,
