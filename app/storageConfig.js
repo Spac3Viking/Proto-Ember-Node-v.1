@@ -1,7 +1,7 @@
 /**
- * Ember Node v.ᚠ — Phase 5 Storage Configuration
+ * Ember Node v.ᚠ — Phase 11.8 Storage Configuration
  *
- * Separates app code from user data.
+ * Canonical Data Root + Update-Safe Architecture
  *
  * Portability model
  * -----------------
@@ -10,16 +10,17 @@
  * machines:
  *   1. Copy the DATA_ROOT directory tree to the new machine.
  *   2. Install (or update) Ember Node there.
- *   3. Point EMBER_DATA_ROOT at the copied directory and start the server.
+ *   3. Point EMBER_NODE_DATA_ROOT at the copied directory and start the server.
  * No app code or bundled assets need to travel with the archive.
  *
- * The data root is resolved in this priority order:
- *   1. EMBER_DATA_ROOT environment variable (set by user or wrapper script)
- *   2. OS-appropriate default in the user's home directory
+ * The data root is resolved via getDataRoot() in this priority order:
+ *   1. EMBER_NODE_DATA_ROOT environment variable (canonical override)
+ *   2. EMBER_DATA_ROOT environment variable (backward compatibility)
+ *   3. OS-appropriate default in the user's home directory
  *
  * Default locations:
+ *   Windows         →  ~/Documents/Ember-Node-Data
  *   Linux / macOS   →  ~/.ember-node
- *   Windows         →  C:\Users\<username>\.ember-node
  *
  * Data root layout:
  *   <data-root>/
@@ -27,8 +28,14 @@
  *       remembered-threads/    — durable thread memory objects
  *       maps/                  — Hearth working & remembered context maps
  *     workshop/                — Workshop notes and active drafts
+ *       documents/             — Workshop documents
+ *       notes/                 — Workshop notes
+ *       drafts/                — Workshop drafts
  *       maps/                  — Workshop context maps
  *     threshold/               — quarantined imports awaiting inspection
+ *       waiting/               — files pending review
+ *       changed/               — files changed since last ingest
+ *       flagged/               — flagged files
  *       maps/                  — Threshold context maps
  *     archive/                 — Trusted Archive (privileged curated path)
  *       core/                  — Default trusted archive (Green Fire Core)
@@ -66,12 +73,47 @@ const path = require('path');
 // ── Resolve data root ─────────────────────────────────────────────────────────
 
 /**
- * Absolute path to the active data root.
- * Override with the EMBER_DATA_ROOT environment variable.
+ * Determine the platform-appropriate default data root directory.
+ * Windows:  ~/Documents/Ember-Node-Data
+ * Others:   ~/.ember-node
+ *
+ * @returns {string}
  */
-const DATA_ROOT = process.env.EMBER_DATA_ROOT
-    ? path.resolve(process.env.EMBER_DATA_ROOT)
-    : path.join(os.homedir(), '.ember-node');
+function _platformDefault() {
+    if (process.platform === 'win32') {
+        return path.join(os.homedir(), 'Documents', 'Ember-Node-Data');
+    }
+    return path.join(os.homedir(), '.ember-node');
+}
+
+/**
+ * Return the absolute path to the active data root.
+ *
+ * Priority:
+ *   1. EMBER_NODE_DATA_ROOT environment variable (canonical Phase 11.8 name)
+ *   2. EMBER_DATA_ROOT environment variable (backward compatibility)
+ *   3. Platform default (~/Documents/Ember-Node-Data on Windows, ~/.ember-node elsewhere)
+ *
+ * All runtime paths must derive from this function.
+ *
+ * @returns {string}
+ */
+function getDataRoot() {
+    if (process.env.EMBER_NODE_DATA_ROOT) {
+        return path.resolve(process.env.EMBER_NODE_DATA_ROOT);
+    }
+    if (process.env.EMBER_DATA_ROOT) {
+        return path.resolve(process.env.EMBER_DATA_ROOT);
+    }
+    return _platformDefault();
+}
+
+/**
+ * Absolute path to the active data root.
+ * Computed once at module load from getDataRoot().
+ * All subdirectory constants below derive from this value.
+ */
+const DATA_ROOT = getDataRoot();
 
 // ── Subdirectory paths ────────────────────────────────────────────────────────
 
@@ -80,6 +122,20 @@ const ROOM_DIRS = {
     workshop:  path.join(DATA_ROOT, 'workshop'),
     threshold: path.join(DATA_ROOT, 'threshold'),
 };
+
+// ── Phase 11.8: Workshop subdirectories ──────────────────────────────────────
+
+/** Workshop sub-directories (documents, notes, drafts, maps) */
+const WORKSHOP_DOCUMENTS_DIR = path.join(DATA_ROOT, 'workshop', 'documents');
+const WORKSHOP_NOTES_DIR     = path.join(DATA_ROOT, 'workshop', 'notes');
+const WORKSHOP_DRAFTS_DIR    = path.join(DATA_ROOT, 'workshop', 'drafts');
+
+// ── Phase 11.8: Threshold subdirectories ─────────────────────────────────────
+
+/** Threshold sub-directories (waiting, changed, flagged, maps) */
+const THRESHOLD_WAITING_DIR  = path.join(DATA_ROOT, 'threshold', 'waiting');
+const THRESHOLD_CHANGED_DIR  = path.join(DATA_ROOT, 'threshold', 'changed');
+const THRESHOLD_FLAGGED_DIR  = path.join(DATA_ROOT, 'threshold', 'flagged');
 
 const INDEXES_DIR         = path.join(DATA_ROOT, 'indexes');
 const PROJECTS_DIR        = path.join(DATA_ROOT, 'projects');
@@ -227,6 +283,14 @@ function ensureDataRoot() {
         THREADS_ROOM_DIRS.hearth,
         THREADS_ROOM_DIRS.workshop,
         THREADS_ROOM_DIRS.threshold,
+        // Phase 11.8: Workshop subdirectories
+        WORKSHOP_DOCUMENTS_DIR,
+        WORKSHOP_NOTES_DIR,
+        WORKSHOP_DRAFTS_DIR,
+        // Phase 11.8: Threshold subdirectories
+        THRESHOLD_WAITING_DIR,
+        THRESHOLD_CHANGED_DIR,
+        THRESHOLD_FLAGGED_DIR,
     ];
     for (const dir of dirs) {
         if (!fs.existsSync(dir)) {
@@ -310,6 +374,7 @@ function migrateLegacyData(legacyDir) {
     if (!dirHasContent(srcDir)) return result;
 
     result.detected = true;
+    console.log('[migration] Legacy data folder detected at: ' + srcDir);
 
     // Step 2: Does the data root already have content? If so, skip to avoid overwrites.
     if (dirHasContent(DATA_ROOT)) {
@@ -328,6 +393,45 @@ function migrateLegacyData(legacyDir) {
     } catch (e) {
         result.errors.push('Migration failed: ' + e.message);
         console.error('[migration] Error during migration:', e.message);
+    }
+
+    return result;
+}
+
+// ── First-run seed copy (Phase 11.8) ─────────────────────────────────────────
+
+/**
+ * Seed the external data root with starter content from the bundled repo
+ * data/ folder on first run.
+ *
+ * Rules:
+ *   - Only runs if DATA_ROOT is empty (no real user content yet)
+ *   - Only copies if target folder does not exist (non-destructive)
+ *   - Safe to call multiple times (idempotent)
+ *   - The repo data/ folder becomes template/seed content only — never
+ *     overwritten by this function
+ *
+ * @param {string} [seedDir]  Override the seed source directory (for tests)
+ * @returns {{ performed: boolean, errors: string[] }}
+ */
+function seedDataRoot(seedDir) {
+    const src    = seedDir || LEGACY_DATA_DIR;
+    const result = { performed: false, errors: [] };
+
+    // Only seed if the source folder exists with real content
+    if (!dirHasContent(src)) return result;
+
+    // Only seed if DATA_ROOT is genuinely empty
+    if (dirHasContent(DATA_ROOT)) return result;
+
+    console.log('[seed] DATA_ROOT is empty — seeding starter content from ' + src + ' ...');
+    try {
+        copyDirSafe(src, DATA_ROOT);
+        result.performed = true;
+        console.log('[seed] Starter content seeded into ' + DATA_ROOT);
+    } catch (e) {
+        result.errors.push('Seed failed: ' + e.message);
+        console.error('[seed] Error during seed copy:', e.message);
     }
 
     return result;
@@ -359,6 +463,7 @@ function resolveSourcePath(storedPath) {
 
 module.exports = {
     DATA_ROOT,
+    getDataRoot,
     ROOM_DIRS,
     INDEXES_DIR,
     PROJECTS_DIR,
@@ -387,7 +492,15 @@ module.exports = {
     SYSTEM_PROMPTS_DIR,
     SYSTEM_TOOLS_DIR,
     THREADS_ROOM_DIRS,
+    // Phase 11.8: Workshop + Threshold subdirectories
+    WORKSHOP_DOCUMENTS_DIR,
+    WORKSHOP_NOTES_DIR,
+    WORKSHOP_DRAFTS_DIR,
+    THRESHOLD_WAITING_DIR,
+    THRESHOLD_CHANGED_DIR,
+    THRESHOLD_FLAGGED_DIR,
     ensureDataRoot,
     migrateLegacyData,
+    seedDataRoot,
     resolveSourcePath,
 };

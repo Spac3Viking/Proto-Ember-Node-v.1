@@ -76,7 +76,9 @@ function createSystemRouter({ migrationResult }) {
             embeddingModel:    embStatus.model,
             retrievalMode:     embStatus.working ? 'semantic' : 'keyword-fallback',
             storageRoot:       DATA_ROOT,
-            storageRootSource: process.env.EMBER_DATA_ROOT ? 'EMBER_DATA_ROOT' : 'default',
+            storageRootSource: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
+                             : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
+                             : 'default',
             // Phase 11.5
             forgeLoaded,
             bootstrapStatus,
@@ -107,7 +109,9 @@ function createSystemRouter({ migrationResult }) {
 
         res.json({
             dataRoot:     DATA_ROOT,
-            configuredBy: process.env.EMBER_DATA_ROOT ? 'EMBER_DATA_ROOT' : 'default',
+            configuredBy: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
+                        : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
+                        : 'default',
             directories: {
                 hearth:     ROOM_DIRS.hearth,
                 workshop:   ROOM_DIRS.workshop,
