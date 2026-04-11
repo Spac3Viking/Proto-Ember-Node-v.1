@@ -1,0 +1,5 @@
+{
+  "template": "ember-node-canonical-data-root",
+  "version": "11.9",
+  "purpose": "Bundled first-run scaffold for seedDataRoot; not user content."
+}

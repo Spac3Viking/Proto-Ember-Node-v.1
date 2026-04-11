@@ -231,7 +231,8 @@ const MAPS_DIRS = {
 };
 
 // Placeholder files that should not be treated as real user content
-const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store']);
+const SEED_TEMPLATE_MARKER = '.ember-seed-template.json';
+const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store', SEED_TEMPLATE_MARKER]);
 
 /**
  * Path to the in-project data/ folder used by older Ember Node versions.
@@ -239,6 +240,29 @@ const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store']);
  * architecture deliberately separates.
  */
 const LEGACY_DATA_DIR = path.join(__dirname, '..', 'data');
+const LEGACY_CORE_MANIFEST_REL_PATH = path.join('archive', 'core', 'manifest.json').replace(/\\/g, '/');
+const CORE_ARCHIVE_MANIFEST_PATH = path.join(ARCHIVE_CORE_DIR, 'manifest.json');
+const TOOLS_REGISTRY_PATH        = path.join(SYSTEM_DIR, 'tools.json');
+const INTAKE_STATE_PATH          = path.join(SYSTEM_DIR, 'intake.json');
+
+const DEFAULT_CORE_ARCHIVE_MANIFEST = {
+    id: 'green-fire-core',
+    title: 'Green Fire Core Archive',
+    version: '1.0',
+    type: 'core-archive',
+    trusted: true,
+    auto_load: true,
+    description: 'Default trusted archive for new Ember Nodes.',
+    contents: {
+        codices: [],
+        grimoires: [],
+        sagas: [],
+        reference: [],
+    },
+};
+
+const DEFAULT_TOOLS_REGISTRY = { tools: [], active: {} };
+const DEFAULT_INTAKE_STATE = { files: {}, tools: {} };
 
 // ── First-run initialisation ──────────────────────────────────────────────────
 
@@ -299,6 +323,28 @@ function ensureDataRoot() {
     }
 }
 
+/**
+ * Write a JSON file only if it does not already exist.
+ *
+ * @param {string} filePath
+ * @param {object} json
+ */
+function writeJsonIfMissing(filePath, json) {
+    if (fs.existsSync(filePath)) return;
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(json, null, 2), 'utf8');
+}
+
+/**
+ * Ensure canonical non-destructive baseline files exist in the data root.
+ * Safe to call multiple times.
+ */
+function ensureCanonicalDataFiles() {
+    writeJsonIfMissing(CORE_ARCHIVE_MANIFEST_PATH, DEFAULT_CORE_ARCHIVE_MANIFEST);
+    writeJsonIfMissing(TOOLS_REGISTRY_PATH, DEFAULT_TOOLS_REGISTRY);
+    writeJsonIfMissing(INTAKE_STATE_PATH, DEFAULT_INTAKE_STATE);
+}
+
 // ── Legacy migration ──────────────────────────────────────────────────────────
 
 /**
@@ -355,6 +401,47 @@ function dirHasContent(dir) {
 }
 
 /**
+ * Return true when the source directory is the bundled app scaffold and
+ * contains no real legacy user content beyond canonical seed files.
+ *
+ * @param {string} srcDir
+ * @returns {boolean}
+ */
+function isBundledSeedScaffoldOnly(srcDir) {
+    if (path.resolve(srcDir) !== path.resolve(LEGACY_DATA_DIR)) return false;
+    if (!fs.existsSync(srcDir)) return false;
+
+    const ALLOWED_FILES = new Set([
+        SEED_TEMPLATE_MARKER,
+        LEGACY_CORE_MANIFEST_REL_PATH,
+    ]);
+
+    const stack = [srcDir];
+    while (stack.length > 0) {
+        const current = stack.pop();
+        let entries = [];
+        try {
+            entries = fs.readdirSync(current, { withFileTypes: true });
+        } catch {
+            return false;
+        }
+
+        for (const entry of entries) {
+            if (IGNORE_FILES.has(entry.name)) continue;
+            const abs = path.join(current, entry.name);
+            if (entry.isDirectory()) {
+                stack.push(abs);
+                continue;
+            }
+            const rel = path.relative(srcDir, abs).replace(/\\/g, '/');
+            if (!ALLOWED_FILES.has(rel)) return false;
+        }
+    }
+
+    return true;
+}
+
+/**
  * Safe, idempotent, copy-based migration from the legacy in-project data/
  * folder to the current external storage root.
  *
@@ -372,6 +459,11 @@ function migrateLegacyData(legacyDir) {
 
     // Step 1: Does the legacy data/ folder exist with real content?
     if (!dirHasContent(srcDir)) return result;
+
+    // If this is just the bundled scaffold template, do not treat it as legacy user data.
+    if (isBundledSeedScaffoldOnly(srcDir)) {
+        return result;
+    }
 
     result.detected = true;
     console.log('[migration] Legacy data folder detected at: ' + srcDir);
@@ -499,7 +591,11 @@ module.exports = {
     THRESHOLD_WAITING_DIR,
     THRESHOLD_CHANGED_DIR,
     THRESHOLD_FLAGGED_DIR,
+    CORE_ARCHIVE_MANIFEST_PATH,
+    TOOLS_REGISTRY_PATH,
+    INTAKE_STATE_PATH,
     ensureDataRoot,
+    ensureCanonicalDataFiles,
     migrateLegacyData,
     seedDataRoot,
     resolveSourcePath,
