@@ -240,28 +240,29 @@ const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store', SEED_TEMPLATE_MARKER]);
  * architecture deliberately separates.
  */
 const LEGACY_DATA_DIR = path.join(__dirname, '..', 'data');
+const LEGACY_CORE_MANIFEST_REL_PATH = path.join('archive', 'core', 'manifest.json').replace(/\\/g, '/');
 const CORE_ARCHIVE_MANIFEST_PATH = path.join(ARCHIVE_CORE_DIR, 'manifest.json');
 const TOOLS_REGISTRY_PATH        = path.join(SYSTEM_DIR, 'tools.json');
 const INTAKE_STATE_PATH          = path.join(SYSTEM_DIR, 'intake.json');
 
 const DEFAULT_CORE_ARCHIVE_MANIFEST = {
-    id:          'green-fire-core',
-    title:       'Green Fire Core Archive',
-    version:     '1.0',
-    type:        'core-archive',
-    trusted:     true,
-    auto_load:   true,
+    id: 'green-fire-core',
+    title: 'Green Fire Core Archive',
+    version: '1.0',
+    type: 'core-archive',
+    trusted: true,
+    auto_load: true,
     description: 'Default trusted archive for new Ember Nodes.',
     contents: {
-        codices:   [],
+        codices: [],
         grimoires: [],
-        sagas:     [],
+        sagas: [],
         reference: [],
     },
 };
 
 const DEFAULT_TOOLS_REGISTRY = { tools: [], active: {} };
-const DEFAULT_INTAKE_STATE   = { files: {}, tools: {} };
+const DEFAULT_INTAKE_STATE = { files: {}, tools: {} };
 
 // ── First-run initialisation ──────────────────────────────────────────────────
 
@@ -330,6 +331,7 @@ function ensureDataRoot() {
  */
 function writeJsonIfMissing(filePath, json) {
     if (fs.existsSync(filePath)) return;
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(json, null, 2), 'utf8');
 }
 
@@ -411,7 +413,7 @@ function isBundledSeedScaffoldOnly(srcDir) {
 
     const ALLOWED_FILES = new Set([
         SEED_TEMPLATE_MARKER,
-        'archive/core/manifest.json',
+        LEGACY_CORE_MANIFEST_REL_PATH,
     ]);
 
     const stack = [srcDir];

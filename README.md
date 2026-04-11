@@ -314,7 +314,7 @@ Ember Node keeps **app code** and **user data** in separate locations.
 | Platform | Default path |
 |----------|-------------|
 | Linux / macOS | `~/.ember-node` |
-| Windows | `~/Documents/Ember-Node-Data` |
+| Windows | `%USERPROFILE%\\Documents\\Ember-Node-Data` |
 
 ### Custom location
 
