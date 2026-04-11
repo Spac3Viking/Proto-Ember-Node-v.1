@@ -314,18 +314,19 @@ Ember Node keeps **app code** and **user data** in separate locations.
 | Platform | Default path |
 |----------|-------------|
 | Linux / macOS | `~/.ember-node` |
-| Windows | `C:\Users\<you>\.ember-node` |
+| Windows | `~/Documents/Ember-Node-Data` |
 
 ### Custom location
 
-Set the `EMBER_DATA_ROOT` environment variable to any absolute path before starting the server:
+Set `EMBER_NODE_DATA_ROOT` to any absolute path before starting the server
+(`EMBER_DATA_ROOT` is still supported for backward compatibility):
 
 ```bash
 # Unix
-EMBER_DATA_ROOT=/my/custom/data npm start
+EMBER_NODE_DATA_ROOT=/my/custom/data npm start
 
 # Windows PowerShell
-$env:EMBER_DATA_ROOT = "D:\EmberData"; npm start
+$env:EMBER_NODE_DATA_ROOT = "D:\EmberData"; npm start
 ```
 
 On first run, Ember Node creates the full directory tree automatically.

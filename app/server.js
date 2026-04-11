@@ -27,7 +27,7 @@ const path    = require('path');
 const axios   = require('axios');
 
 const {
-    ensureDataRoot, migrateLegacyData,
+    ensureDataRoot, ensureCanonicalDataFiles, migrateLegacyData, seedDataRoot,
 } = require('./storageConfig');
 
 // Re-export legacy symbols for backward compatibility with tests
@@ -45,6 +45,8 @@ const { triageFile }                                   = require('./startupCheck
 
 ensureDataRoot();
 const MIGRATION_RESULT = migrateLegacyData();
+seedDataRoot();
+ensureCanonicalDataFiles();
 
 // ── Route modules ─────────────────────────────────────────────────────────────
 
