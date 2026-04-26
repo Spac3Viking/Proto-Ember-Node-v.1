@@ -650,6 +650,18 @@ function cacheStatusLabel(status, installed) {
     return 'Not installed';
 }
 
+function isBundledCorePackage(item) {
+    return item && item.packageId === 'green-fire-core';
+}
+
+function cacheSourceLabel(item) {
+    const source = (item && item.registry && item.registry.source) || '';
+    if (isBundledCorePackage(item)) {
+        return source === 'bundled' ? 'Bundled Core (seed memory)' : 'Bundled Core';
+    }
+    return 'Archive Cache';
+}
+
 function buildCacheConfirmMessage(mode, item, packageTitle, destination) {
     if (mode === 'update') {
         return [
@@ -663,7 +675,9 @@ function buildCacheConfirmMessage(mode, item, packageTitle, destination) {
         'Install this cache?',
         'Package: ' + packageTitle,
         'Destination: ' + destination,
-        'This will download and extract files locally.',
+        isBundledCorePackage(item)
+            ? 'This will extract the bundled core seed locally (no first-run download).'
+            : 'This will download and extract files locally.',
     ].join('\n');
 }
 
@@ -737,6 +751,7 @@ async function loadArchiveCacheManager() {
             const displayVersion = item.upstreamVersion || item.localVersion || registry.installedVersion || '—';
             const lastUpdated = upstream.lastUpdated || registry.lastUpdated || null;
             const sizeText = formatBytes(upstream.sizeBytes);
+            const sourceText = cacheSourceLabel(item);
 
             const row = document.createElement('div');
             row.className = 'ws-source-row cache-manager-row';
@@ -749,6 +764,7 @@ async function loadArchiveCacheManager() {
                     'ID: ' + escapeHtml(item.packageId) + ' · ' +
                     'Version: ' + escapeHtml(displayVersion) + ' · ' +
                     'Last updated: ' + escapeHtml(formatIsoDate(lastUpdated)) + ' · ' +
+                    'Type: ' + escapeHtml(sourceText) + ' · ' +
                     'Destination: ' + escapeHtml(destination) + ' · ' +
                     'Size: ' + escapeHtml(sizeText) +
                 '</div>';
@@ -758,7 +774,7 @@ async function loadArchiveCacheManager() {
 
             const installBtn = document.createElement('button');
             installBtn.className = 'secondary';
-            installBtn.textContent = 'Install';
+            installBtn.textContent = isBundledCorePackage(item) ? 'Install Bundled' : 'Install';
             installBtn.disabled = Boolean(item.installed);
             installBtn.addEventListener('click', () => {
                 installOrUpdateCache(item.packageId, 'install', installBtn, packageTitle, destination, item);
