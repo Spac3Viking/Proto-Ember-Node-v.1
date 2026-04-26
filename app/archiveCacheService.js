@@ -5,7 +5,7 @@ const path    = require('path');
 const axios   = require('axios');
 const AdmZip  = require('adm-zip');
 
-const { ARCHIVE_CORE_DIR, ARCHIVE_CACHES_DIR } = require('./storageConfig');
+const { ARCHIVE_CORE_DIR, ARCHIVE_CACHES_DIR, SYSTEM_DIR } = require('./storageConfig');
 
 const GREEN_FIRE_ARCHIVE_BASE_URL = 'https://greenfire-archive.replit.app';
 const ARCHIVE_ENDPOINTS = {
@@ -31,6 +31,8 @@ const CANONICAL_CACHE_PACKAGE_IDS = [
 
 const CANONICAL_CACHE_PACKAGE_ID_SET = new Set(CANONICAL_CACHE_PACKAGE_IDS);
 const ARCHIVE_CACHE_INDEX_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-upstream-index.json');
+const ARCHIVE_CACHE_REGISTRY_FILE = path.join(SYSTEM_DIR, 'archive-cache-registry.json');
+const ARCHIVE_SIGNAL_CACHE_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-signal.json');
 const CANONICAL_PACKAGE_DOWNLOAD_URLS = Object.fromEntries(
     CANONICAL_CACHE_PACKAGE_IDS.map(id => [id, GREEN_FIRE_ARCHIVE_BASE_URL + '/downloads/' + id + '.zip']),
 );
@@ -55,6 +57,40 @@ function _loadLocalIndexCache() {
     }
 }
 
+function _recommendedDestinationForPackage(packageId) {
+    return packageId === 'green-fire-core'
+        ? 'archive/core'
+        : 'archive/caches/' + packageId;
+}
+
+function _loadArchiveCacheRegistry() {
+    if (!fs.existsSync(ARCHIVE_CACHE_REGISTRY_FILE)) {
+        return { updatedAt: null, caches: {} };
+    }
+    try {
+        const parsed = JSON.parse(fs.readFileSync(ARCHIVE_CACHE_REGISTRY_FILE, 'utf8'));
+        return {
+            updatedAt: parsed && parsed.updatedAt ? parsed.updatedAt : null,
+            caches: parsed && parsed.caches && typeof parsed.caches === 'object' ? parsed.caches : {},
+        };
+    } catch {
+        return { updatedAt: null, caches: {} };
+    }
+}
+
+function _saveArchiveCacheRegistry(registry) {
+    fs.mkdirSync(path.dirname(ARCHIVE_CACHE_REGISTRY_FILE), { recursive: true });
+    fs.writeFileSync(
+        ARCHIVE_CACHE_REGISTRY_FILE,
+        JSON.stringify(registry, null, 2),
+        'utf8',
+    );
+}
+
+function loadArchiveCacheRegistry() {
+    return _loadArchiveCacheRegistry();
+}
+
 function _normalizeDownloadUrl(rawUrl) {
     if (!rawUrl || typeof rawUrl !== 'string') return null;
     if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
@@ -71,6 +107,10 @@ function _normalizeUpstreamPackage(pkg) {
         title:       String(pkg.title || pkg.name || packageId),
         description: typeof pkg.description === 'string' ? pkg.description : '',
         version:     String(pkg.version || pkg.release || '').trim(),
+        lastUpdated: String(pkg.updatedAt || pkg.updated_at || pkg.lastUpdated || pkg.last_updated || '').trim() || null,
+        sizeBytes:   Number.isFinite(Number(pkg.sizeBytes || pkg.size_bytes || pkg.size || pkg.bytes))
+            ? Number(pkg.sizeBytes || pkg.size_bytes || pkg.size || pkg.bytes)
+            : null,
         downloadUrl: _normalizeDownloadUrl(
             pkg.downloadUrl || pkg.download_url || pkg.url || pkg.zip || pkg.archive || pkg.file,
         ),
@@ -276,6 +316,7 @@ function _targetDirectoryForPackage(packageId) {
 
 function listInstalledArchiveCaches() {
     const installed = [];
+    const registry = _loadArchiveCacheRegistry();
 
     for (const packageId of CANONICAL_CACHE_PACKAGE_IDS) {
         const installPath = _targetDirectoryForPackage(packageId);
@@ -283,12 +324,15 @@ function listInstalledArchiveCaches() {
         const manifest = _readManifestIfPresent(manifestPath);
         const hasData = _dirHasContent(installPath);
         const isInstalled = Boolean(manifest || hasData);
+        const registryEntry = registry.caches[packageId] || null;
         installed.push({
             packageId,
             installPath,
+            recommendedDestination: _recommendedDestinationForPackage(packageId),
             installed: isInstalled,
             version:   manifest && manifest.version ? String(manifest.version) : null,
             manifest,
+            registry: registryEntry,
         });
     }
 
@@ -321,11 +365,13 @@ async function compareInstalledWithUpstream() {
             packageId: item.packageId,
             installed: item.installed,
             installPath: item.installPath,
+            recommendedDestination: item.recommendedDestination,
             localVersion,
             upstreamVersion,
             status,
             upstreamPackage: remote,
             manifest: item.manifest,
+            registry: item.registry,
         };
     });
 
@@ -373,6 +419,22 @@ async function installArchiveCachePackage({ packageId }) {
         : remote && remote.version
             ? remote.version
             : null;
+    const now = new Date().toISOString();
+    const registry = _loadArchiveCacheRegistry();
+    const existing = registry.caches[packageId] || {};
+    registry.caches[packageId] = {
+        packageId,
+        title: remote && remote.title ? remote.title : packageId,
+        installPath: targetDir,
+        destination: _recommendedDestinationForPackage(packageId),
+        installedVersion,
+        installedAt: existing.installedAt || now,
+        lastUpdated: now,
+        source: available.source,
+        downloadUrl: resolvedUrl,
+    };
+    registry.updatedAt = now;
+    _saveArchiveCacheRegistry(registry);
 
     return {
         packageId,
@@ -383,18 +445,65 @@ async function installArchiveCachePackage({ packageId }) {
         installedVersion,
         source: available.source,
         offline: available.offline,
+        registry: registry.caches[packageId],
     };
+}
+
+async function fetchArchiveSignal() {
+    try {
+        const response = await axios.get(ARCHIVE_ENDPOINTS.signal, { timeout: 12000 });
+        const payload = response.data && typeof response.data === 'object'
+            ? response.data
+            : { value: response.data };
+        const fetchedAt = new Date().toISOString();
+        _ensureCachesDir();
+        fs.writeFileSync(
+            ARCHIVE_SIGNAL_CACHE_FILE,
+            JSON.stringify({ fetchedAt, payload }, null, 2),
+            'utf8',
+        );
+        return {
+            source: 'upstream',
+            offline: false,
+            fetchedAt,
+            payload,
+        };
+    } catch (err) {
+        if (fs.existsSync(ARCHIVE_SIGNAL_CACHE_FILE)) {
+            try {
+                const cached = JSON.parse(fs.readFileSync(ARCHIVE_SIGNAL_CACHE_FILE, 'utf8'));
+                return {
+                    source: 'local-cache',
+                    offline: true,
+                    fetchedAt: cached.fetchedAt || null,
+                    payload: cached.payload || {},
+                    warning: err.message,
+                };
+            } catch { /* ignore local parse failure */ }
+        }
+        return {
+            source: 'offline-empty',
+            offline: true,
+            fetchedAt: null,
+            payload: {},
+            warning: err.message,
+        };
+    }
 }
 
 module.exports = {
     GREEN_FIRE_ARCHIVE_BASE_URL,
     ARCHIVE_ENDPOINTS,
     ARCHIVE_CACHE_INDEX_FILE,
+    ARCHIVE_CACHE_REGISTRY_FILE,
+    ARCHIVE_SIGNAL_CACHE_FILE,
     CANONICAL_CACHE_PACKAGE_IDS,
     CANONICAL_PACKAGE_DOWNLOAD_URLS,
     compareVersionStrings,
     normalizeUpstreamPackageIndex,
     fetchAvailableArchiveCachePackages,
+    fetchArchiveSignal,
+    loadArchiveCacheRegistry,
     listInstalledArchiveCaches,
     compareInstalledWithUpstream,
     installArchiveCachePackage,

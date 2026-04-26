@@ -30,6 +30,8 @@ const {
     ARCHIVE_ENDPOINTS,
     CANONICAL_CACHE_PACKAGE_IDS,
     fetchAvailableArchiveCachePackages,
+    fetchArchiveSignal,
+    loadArchiveCacheRegistry,
     listInstalledArchiveCaches,
     compareInstalledWithUpstream,
     installArchiveCachePackage,
@@ -190,6 +192,18 @@ router.get('/api/archive/caches/installed', readLimiter, (req, res) => {
 });
 
 /**
+ * GET /api/archive/caches/registry
+ * Return persistent cache install/update registry metadata.
+ */
+router.get('/api/archive/caches/registry', readLimiter, (req, res) => {
+    const registry = loadArchiveCacheRegistry();
+    res.json({
+        success: true,
+        registry,
+    });
+});
+
+/**
  * GET /api/archive/caches/updates
  * Compare local installed versions against upstream versions.
  */
@@ -239,6 +253,35 @@ router.post('/api/archive/caches/install', writeLimiter, async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: 'Archive cache install failed: ' + err.message });
     }
+});
+
+/**
+ * GET /api/archive/signal
+ * Return latest archive signal payload (dispatch/question) with offline fallback.
+ */
+router.get('/api/archive/signal', readLimiter, async (req, res) => {
+    try {
+        const signal = await fetchArchiveSignal();
+        res.json({
+            success: true,
+            endpoint: ARCHIVE_ENDPOINTS.signal,
+            ...signal,
+        });
+    } catch (err) {
+        console.error('[archive/signal] Error:', err.message);
+        res.status(500).json({ error: 'Could not load archive signal.' });
+    }
+});
+
+/**
+ * GET /api/archive/resources
+ * Return canonical external resource links (Forge / Mythic Seed / signal/index endpoints).
+ */
+router.get('/api/archive/resources', readLimiter, (req, res) => {
+    res.json({
+        success: true,
+        endpoints: ARCHIVE_ENDPOINTS,
+    });
 });
 
 module.exports = router;

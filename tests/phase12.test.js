@@ -18,6 +18,7 @@ const sc      = require('../app/storageConfig');
 const {
     ARCHIVE_ENDPOINTS,
     ARCHIVE_CACHE_INDEX_FILE,
+    ARCHIVE_CACHE_REGISTRY_FILE,
 } = require('../app/archiveCacheService');
 
 afterAll(() => {
@@ -195,5 +196,78 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
         expect(second.body.source).toBe('local-cache');
         expect(second.body.offline).toBe(true);
         expect(second.body.packages[0].packageId).toBe('green-fire-gallery-cache');
+    });
+
+    test('cache install updates persistent cache registry and registry API', async () => {
+        const cacheZip = new AdmZip();
+        cacheZip.addFile('green-fire-gallery-cache/manifest.json', Buffer.from(JSON.stringify({
+            id: 'green-fire-gallery-cache',
+            version: '3.1.0',
+            type: 'archive-cache',
+        })));
+        cacheZip.addFile('green-fire-gallery-cache/docs/gallery.md', Buffer.from('# Gallery Cache'));
+        const cacheZipBuffer = cacheZip.toBuffer();
+
+        axios.get.mockImplementation((url) => {
+            if (url === ARCHIVE_ENDPOINTS.downloadsIndex) {
+                return Promise.resolve({
+                    data: {
+                        packages: [
+                            {
+                                id: 'green-fire-gallery-cache',
+                                title: 'Green Fire Gallery Cache',
+                                version: '3.1.0',
+                                downloadUrl: 'https://greenfire-archive.replit.app/downloads/green-fire-gallery-cache.zip',
+                            },
+                        ],
+                    },
+                });
+            }
+            if (url === 'https://greenfire-archive.replit.app/downloads/green-fire-gallery-cache.zip') {
+                return Promise.resolve({ data: cacheZipBuffer });
+            }
+            return Promise.reject(new Error('unexpected url: ' + url));
+        });
+
+        const installRes = await request(app)
+            .post('/api/archive/caches/install')
+            .send({ packageId: 'green-fire-gallery-cache' });
+
+        expect(installRes.status).toBe(200);
+        expect(installRes.body.installed.registry).toBeDefined();
+        expect(fs.existsSync(ARCHIVE_CACHE_REGISTRY_FILE)).toBe(true);
+
+        const regRes = await request(app).get('/api/archive/caches/registry');
+        expect(regRes.status).toBe(200);
+        expect(regRes.body.success).toBe(true);
+        expect(regRes.body.registry.caches['green-fire-gallery-cache']).toBeDefined();
+        expect(regRes.body.registry.caches['green-fire-gallery-cache'].installedVersion).toBe('3.1.0');
+    });
+
+    test('archive signal and resources endpoints return expected payload', async () => {
+        axios.get.mockImplementation((url) => {
+            if (url === ARCHIVE_ENDPOINTS.signal) {
+                return Promise.resolve({
+                    data: {
+                        dispatch: 'Attend to the ember.',
+                        question: 'What are you forging today?',
+                    },
+                });
+            }
+            return Promise.reject(new Error('unexpected url: ' + url));
+        });
+
+        const signalRes = await request(app).get('/api/archive/signal');
+        expect(signalRes.status).toBe(200);
+        expect(signalRes.body.success).toBe(true);
+        expect(signalRes.body.payload.dispatch).toBe('Attend to the ember.');
+        expect(signalRes.body.payload.question).toBe('What are you forging today?');
+        expect(signalRes.body.endpoint).toBe(ARCHIVE_ENDPOINTS.signal);
+
+        const resourceRes = await request(app).get('/api/archive/resources');
+        expect(resourceRes.status).toBe(200);
+        expect(resourceRes.body.success).toBe(true);
+        expect(resourceRes.body.endpoints.forgeMd).toBe(ARCHIVE_ENDPOINTS.forgeMd);
+        expect(resourceRes.body.endpoints.mythicSeedMd).toBe(ARCHIVE_ENDPOINTS.mythicSeedMd);
     });
 });
