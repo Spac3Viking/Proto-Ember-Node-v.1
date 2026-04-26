@@ -83,11 +83,18 @@ set "OLLAMA_FOUND=0"
 where ollama >nul 2>&1
 if %errorlevel% equ 0 (
     set "OLLAMA_FOUND=1"
-    curl -s --max-time 2 http://localhost:11434/ >nul 2>&1
+    where curl >nul 2>&1
     if %errorlevel% equ 0 (
-        echo  Ollama already running.
+        curl -s --max-time 2 http://localhost:11434/ >nul 2>&1
+        if %errorlevel% equ 0 (
+            echo  Ollama already running.
+        ) else (
+            echo  Starting Ollama in background...
+            start "" /B ollama serve >nul 2>&1
+            timeout /t 3 >nul
+        )
     ) else (
-        echo  Starting Ollama in background...
+        echo  curl not found; attempting to start Ollama in background...
         start "" /B ollama serve >nul 2>&1
         timeout /t 3 >nul
     )
@@ -97,7 +104,7 @@ if %errorlevel% equ 0 (
 
 if "%IS_FIRST_RUN%"=="1" if "%OLLAMA_FOUND%"=="0" (
     echo.
-    set /p OPEN_OLLAMA=Open Ollama download page now? [Y/N]:
+    set /p OPEN_OLLAMA=Open Ollama download page now? [Y/N]: 
     if /I "%OPEN_OLLAMA%"=="Y" (
         start https://ollama.com/download/windows
     )
@@ -106,7 +113,7 @@ if "%IS_FIRST_RUN%"=="1" if "%OLLAMA_FOUND%"=="0" (
 :: ── Start Ember Node backend ──────────────────────────────────────────────────
 echo.
 echo  Starting Ember Node backend...
-start "Ember Node" cmd /k "set \"EMBER_NODE_DATA_ROOT=%DATA_ROOT%\" && npm run dev"
+start "Ember Node" cmd /c "set \"EMBER_NODE_DATA_ROOT=%DATA_ROOT%\" && node app/server.js"
 
 :: ── Brief pause to let the server initialise ──────────────────────────────────
 timeout /t 3 >nul
@@ -116,10 +123,9 @@ echo  Opening interface at http://localhost:3477
 start http://localhost:3477
 
 if "%IS_FIRST_RUN%"=="1" (
-    > "%SETUP_FLAG%" echo first-run-complete
+    echo first-run-complete>"%SETUP_FLAG%"
 )
 
 echo.
 echo  The Node is awake. You may close this window.
 timeout /t 4 >nul
-

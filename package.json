@@ -7,7 +7,7 @@
     "start": "node app/server.js",
     "dev": "nodemon app/server.js",
     "test": "jest",
-    "installer:windows": "makensis installer/windows/Ember-Node-Installer.nsi"
+    "installer:windows": "node -e \"const { execSync } = require('child_process'); const v = require('./package.json').version; execSync('makensis /DAPP_VERSION=' + v + ' installer/windows/Ember-Node-Installer.nsi', { stdio: 'inherit' });\""
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

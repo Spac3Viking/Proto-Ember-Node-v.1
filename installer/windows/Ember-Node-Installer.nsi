@@ -6,7 +6,9 @@ RequestExecutionLevel admin
 !include "x64.nsh"
 
 !define APP_NAME "Ember Node"
-!define APP_VERSION "1.0.0"
+!ifndef APP_VERSION
+  !define APP_VERSION "0.0.0"
+!endif
 !define COMPANY_NAME "Ember Node"
 !define REG_PATH "Software\${APP_NAME}"
 
@@ -45,15 +47,13 @@ Section "Install Ember Node" SEC_MAIN
     File /r "..\..\app"
     File /r "..\..\public"
     File /r "..\..\cartridges"
+    ; Bundled seed scaffold + canonical archive baseline for first-run initialization.
     File /r "..\..\data"
     File "..\..\package.json"
     File "..\..\package-lock.json"
     File "..\..\README.md"
     File "..\..\LICENSE"
     File /oname=Awaken-Ember-Node.bat "Awaken-Ember-Node-Installed.bat"
-
-    ; Keep tests and git metadata out of install footprint
-    Delete "$INSTDIR\data\**\.gitkeep"
 
     ; Desktop + Start Menu launcher
     CreateDirectory "$SMPROGRAMS\${APP_NAME}"
@@ -85,4 +85,3 @@ Section "Uninstall"
     DeleteRegKey HKLM "${REG_PATH}"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 SectionEnd
-
