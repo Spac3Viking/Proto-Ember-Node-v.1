@@ -208,7 +208,7 @@ router.get('/api/archive/caches/updates', readLimiter, async (req, res) => {
 
 /**
  * POST /api/archive/caches/install
- * Body: { packageId, downloadUrl? }
+ * Body: { packageId }
  *
  * Installs one canonical Green Fire cache zip package.
  * - green-fire-core merges into archive/core/
@@ -217,7 +217,6 @@ router.get('/api/archive/caches/updates', readLimiter, async (req, res) => {
 router.post('/api/archive/caches/install', writeLimiter, async (req, res) => {
     try {
         const packageId = typeof req.body.packageId === 'string' ? req.body.packageId.trim() : '';
-        const downloadUrl = typeof req.body.downloadUrl === 'string' ? req.body.downloadUrl.trim() : null;
 
         if (!packageId) {
             return res.status(400).json({ error: 'packageId is required' });
@@ -229,7 +228,7 @@ router.post('/api/archive/caches/install', writeLimiter, async (req, res) => {
             });
         }
 
-        const installed = await installArchiveCachePackage({ packageId, downloadUrl });
+        const installed = await installArchiveCachePackage({ packageId });
         const bootstrap = await bootstrapArchive();
 
         res.json({

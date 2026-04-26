@@ -31,6 +31,9 @@ const CANONICAL_CACHE_PACKAGE_IDS = [
 
 const CANONICAL_CACHE_PACKAGE_ID_SET = new Set(CANONICAL_CACHE_PACKAGE_IDS);
 const ARCHIVE_CACHE_INDEX_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-upstream-index.json');
+const CANONICAL_PACKAGE_DOWNLOAD_URLS = Object.fromEntries(
+    CANONICAL_CACHE_PACKAGE_IDS.map(id => [id, GREEN_FIRE_ARCHIVE_BASE_URL + '/downloads/' + id + '.zip']),
+);
 
 function _ensureCachesDir() {
     if (!fs.existsSync(ARCHIVE_CACHES_DIR)) {
@@ -335,17 +338,19 @@ async function compareInstalledWithUpstream() {
     };
 }
 
-async function installArchiveCachePackage({ packageId, downloadUrl }) {
+async function installArchiveCachePackage({ packageId }) {
     if (!CANONICAL_CACHE_PACKAGE_ID_SET.has(packageId)) {
         throw new Error('Unknown packageId: ' + packageId);
     }
 
     const available = await fetchAvailableArchiveCachePackages();
     const remote = available.packages.find(p => p.packageId === packageId) || null;
-    const resolvedUrl = _normalizeDownloadUrl(downloadUrl || (remote && remote.downloadUrl));
-
-    if (!resolvedUrl) {
-        throw new Error('No download URL available for package: ' + packageId);
+    const resolvedUrl = CANONICAL_PACKAGE_DOWNLOAD_URLS[packageId];
+    if (remote && remote.downloadUrl && remote.downloadUrl !== resolvedUrl) {
+        console.warn(
+            '[archive-cache] Upstream download URL mismatch for ' + packageId +
+            '. Using canonical URL: ' + resolvedUrl,
+        );
     }
 
     const targetDir = _targetDirectoryForPackage(packageId);
@@ -386,6 +391,7 @@ module.exports = {
     ARCHIVE_ENDPOINTS,
     ARCHIVE_CACHE_INDEX_FILE,
     CANONICAL_CACHE_PACKAGE_IDS,
+    CANONICAL_PACKAGE_DOWNLOAD_URLS,
     compareVersionStrings,
     normalizeUpstreamPackageIndex,
     fetchAvailableArchiveCachePackages,

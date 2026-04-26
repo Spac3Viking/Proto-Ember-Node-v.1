@@ -71,12 +71,12 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
                 return Promise.resolve({
                     data: {
                         packages: [
-                            { id: 'green-fire-core', version: '2.0.0', downloadUrl: 'https://example.local/green-fire-core.zip' },
+                            { id: 'green-fire-core', version: '2.0.0', downloadUrl: 'https://greenfire-archive.replit.app/downloads/green-fire-core.zip' },
                         ],
                     },
                 });
             }
-            if (url === 'https://example.local/green-fire-core.zip') {
+            if (url === 'https://greenfire-archive.replit.app/downloads/green-fire-core.zip') {
                 expect(options.responseType).toBe('arraybuffer');
                 return Promise.resolve({ data: coreZipBuffer });
             }
@@ -106,7 +106,7 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
         cacheZip.addFile('green-fire-codices-cache/docs/codex.md', Buffer.from('# Codex Cache'));
         const cacheZipBuffer = cacheZip.toBuffer();
 
-        axios.get.mockImplementation((url) => {
+        axios.get.mockImplementation((url, options) => {
             if (url === ARCHIVE_ENDPOINTS.downloadsIndex) {
                 return Promise.resolve({
                     data: {
@@ -114,13 +114,14 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
                             {
                                 id: 'green-fire-codices-cache',
                                 version: '1.5.0',
-                                downloadUrl: 'https://example.local/green-fire-codices-cache.zip',
+                                downloadUrl: 'https://greenfire-archive.replit.app/downloads/green-fire-codices-cache.zip',
                             },
                         ],
                     },
                 });
             }
-            if (url === 'https://example.local/green-fire-codices-cache.zip') {
+            if (url === 'https://greenfire-archive.replit.app/downloads/green-fire-codices-cache.zip') {
+                expect(options.responseType).toBe('arraybuffer');
                 return Promise.resolve({ data: cacheZipBuffer });
             }
             return Promise.reject(new Error('unexpected url: ' + url));
