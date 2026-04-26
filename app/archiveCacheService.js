@@ -507,5 +507,4 @@ module.exports = {
     listInstalledArchiveCaches,
     compareInstalledWithUpstream,
     installArchiveCachePackage,
-    recommendedDestinationForPackage: _recommendedDestinationForPackage,
 };

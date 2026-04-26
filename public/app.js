@@ -656,7 +656,7 @@ function buildCacheConfirmMessage(mode, item, packageTitle, destination) {
             'Update this cache?',
             'Package: ' + packageTitle,
             'This will replace the existing cache folder:',
-            item.packageId === 'green-fire-core' ? 'archive/core/' : 'archive/caches/',
+            item.packageId === 'green-fire-core' ? 'archive/core' : ('archive/caches/' + item.packageId),
         ].join('\n');
     }
     return [
@@ -676,7 +676,7 @@ async function installOrUpdateCache(packageId, mode, uiBtn, packageTitle, destin
     uiBtn.textContent = mode === 'update' ? 'Updating…' : 'Installing…';
     try {
         const res = await fetch('/api/archive/caches/install', {
-            method:  'POST',
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ packageId }),
         });
@@ -810,8 +810,8 @@ async function loadArchiveSignalPanel() {
             '<div class="cache-signal-links">' +
                 '<a href="' + escapeHtml(endpoints.forgeMd || '#') + '" target="_blank" rel="noopener noreferrer">Forge (MD)</a>' +
                 '<a href="' + escapeHtml(endpoints.forgePdf || '#') + '" target="_blank" rel="noopener noreferrer">Forge (PDF)</a>' +
-                '<a href="' + escapeHtml(endpoints.mythicSeedMd || '#') + '" target="_blank" rel="noopener noreferrer">Mirror Seed (MD)</a>' +
-                '<a href="' + escapeHtml(endpoints.mythicSeedTxt || '#') + '" target="_blank" rel="noopener noreferrer">Mirror Seed (TXT)</a>' +
+                '<a href="' + escapeHtml(endpoints.mythicSeedMd || '#') + '" target="_blank" rel="noopener noreferrer">Mythic Seed (MD)</a>' +
+                '<a href="' + escapeHtml(endpoints.mythicSeedTxt || '#') + '" target="_blank" rel="noopener noreferrer">Mythic Seed (TXT)</a>' +
             '</div>';
     } catch {
         panel.innerHTML = '<span class="message-system">Could not load archive signal.</span>';
@@ -839,7 +839,7 @@ async function loadArchiveSignalPanel() {
             showFlashMessage('Could not reach server.');
         } finally {
             btn.disabled = false;
-            btn.textContent = '↻ Rescan';
+            btn.textContent = '↻ Refresh';
         }
     });
 })();
@@ -855,7 +855,7 @@ async function loadArchiveSignalPanel() {
             await loadArchiveSignalPanel();
         } finally {
             btn.disabled = false;
-            btn.textContent = '↻ Rescan';
+            btn.textContent = '↻ Refresh';
         }
     });
 })();

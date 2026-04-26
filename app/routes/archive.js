@@ -268,13 +268,14 @@ router.get('/api/archive/signal', readLimiter, async (req, res) => {
             ...signal,
         });
     } catch (err) {
-        res.status(500).json({ error: 'Could not load archive signal: ' + err.message });
+        console.error('[archive/signal] Error:', err.message);
+        res.status(500).json({ error: 'Could not load archive signal.' });
     }
 });
 
 /**
  * GET /api/archive/resources
- * Return canonical external resource links (Forge / Mirror Seed / signal/index endpoints).
+ * Return canonical external resource links (Forge / Mythic Seed / signal/index endpoints).
  */
 router.get('/api/archive/resources', readLimiter, (req, res) => {
     res.json({
