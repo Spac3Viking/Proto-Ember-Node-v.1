@@ -26,6 +26,14 @@ const {
     upsertManifest, loadChunks,
     upsertChunks, upsertEmbeddings, removeEmbeddingsByChunkIds,
 }                                                  = require('../indexStore');
+const {
+    ARCHIVE_ENDPOINTS,
+    CANONICAL_CACHE_PACKAGE_IDS,
+    fetchAvailableArchiveCachePackages,
+    listInstalledArchiveCaches,
+    compareInstalledWithUpstream,
+    installArchiveCachePackage,
+}                                                  = require('../archiveCacheService');
 
 const router = express.Router();
 
@@ -146,6 +154,91 @@ router.post('/api/archive/ingest', writeLimiter, async (req, res) => {
     } catch (error) {
         console.error('[archive/ingest] Error:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * GET /api/archive/caches/available
+ * Fetch canonical cache package metadata from Green Fire Archive index.json.
+ * Falls back to local cached metadata when upstream is unavailable.
+ */
+router.get('/api/archive/caches/available', readLimiter, async (req, res) => {
+    try {
+        const result = await fetchAvailableArchiveCachePackages();
+        res.json({
+            success: true,
+            endpoints: ARCHIVE_ENDPOINTS,
+            canonicalPackageIds: CANONICAL_CACHE_PACKAGE_IDS,
+            ...result,
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Could not load archive cache index: ' + err.message });
+    }
+});
+
+/**
+ * GET /api/archive/caches/installed
+ * List canonical Green Fire cache packages installed in local data root.
+ */
+router.get('/api/archive/caches/installed', readLimiter, (req, res) => {
+    const caches = listInstalledArchiveCaches();
+    res.json({
+        success: true,
+        canonicalPackageIds: CANONICAL_CACHE_PACKAGE_IDS,
+        caches,
+    });
+});
+
+/**
+ * GET /api/archive/caches/updates
+ * Compare local installed versions against upstream versions.
+ */
+router.get('/api/archive/caches/updates', readLimiter, async (req, res) => {
+    try {
+        const result = await compareInstalledWithUpstream();
+        res.json({
+            success: true,
+            canonicalPackageIds: CANONICAL_CACHE_PACKAGE_IDS,
+            ...result,
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Could not compare archive cache versions: ' + err.message });
+    }
+});
+
+/**
+ * POST /api/archive/caches/install
+ * Body: { packageId, downloadUrl? }
+ *
+ * Installs one canonical Green Fire cache zip package.
+ * - green-fire-core merges into archive/core/
+ * - all other canonical packages install into archive/caches/<package-id>/
+ */
+router.post('/api/archive/caches/install', writeLimiter, async (req, res) => {
+    try {
+        const packageId = typeof req.body.packageId === 'string' ? req.body.packageId.trim() : '';
+        const downloadUrl = typeof req.body.downloadUrl === 'string' ? req.body.downloadUrl.trim() : null;
+
+        if (!packageId) {
+            return res.status(400).json({ error: 'packageId is required' });
+        }
+
+        if (!CANONICAL_CACHE_PACKAGE_IDS.includes(packageId)) {
+            return res.status(400).json({
+                error: 'Unknown packageId "' + packageId + '". Valid IDs: ' + CANONICAL_CACHE_PACKAGE_IDS.join(', '),
+            });
+        }
+
+        const installed = await installArchiveCachePackage({ packageId, downloadUrl });
+        const bootstrap = await bootstrapArchive();
+
+        res.json({
+            success: true,
+            installed,
+            bootstrap,
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Archive cache install failed: ' + err.message });
     }
 });
 

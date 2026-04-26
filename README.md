@@ -452,6 +452,17 @@ Use `GET /api/storage-info` to confirm which data root is active and see migrati
 | `POST` | `/api/tools/:id/reject`            | Persistently reject a tool |
 | `POST` | `/api/detected-files/acknowledge`  | Acknowledge a changed file (keep current version) |
 
+### Phase 11 / 12 (archive + cache integration)
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/api/archive` | List trusted archive sources |
+| `POST` | `/api/archive/bootstrap` | Re-scan and index trusted archive files |
+| `POST` | `/api/archive/ingest` | Directly ingest a file into the trusted archive |
+| `GET`  | `/api/archive/caches/available` | Detect canonical Green Fire cache packages from upstream downloads index (with offline fallback) |
+| `POST` | `/api/archive/caches/install` | Install a canonical cache zip (`green-fire-core` merges into `archive/core/`; others install into `archive/caches/<package-id>/`) |
+| `GET`  | `/api/archive/caches/installed` | List canonical cache install state + parsed local manifests |
+| `GET`  | `/api/archive/caches/updates` | Compare local cache versions against upstream versions |
+
 ---
 
 ## Signal Trace
@@ -528,6 +539,7 @@ in dedicated modules:
 | `projects.js` | `/api/projects/*`, `/api/user-cartridges`, `/cartridges*` |
 | `threads.js` | `/api/threads/*` |
 | `system.js` | `/api/status`, `/api/ollama-status`, `/api/storage-info`, `/api/intake-state` |
+| `archive.js` | `/api/archive*`, `/api/archive/caches*` |
 
 ---
 
