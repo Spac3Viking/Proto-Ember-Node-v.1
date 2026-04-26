@@ -250,10 +250,10 @@ function _readManifestIfPresent(manifestPath) {
 function _isCoreScaffoldFile(relPath) {
     return relPath === 'manifest.json' ||
         relPath === '.gitkeep' ||
-        relPath.startsWith('codices/.gitkeep') ||
-        relPath.startsWith('grimoires/.gitkeep') ||
-        relPath.startsWith('sagas/.gitkeep') ||
-        relPath.startsWith('reference/.gitkeep');
+        relPath === 'codices/.gitkeep' ||
+        relPath === 'grimoires/.gitkeep' ||
+        relPath === 'sagas/.gitkeep' ||
+        relPath === 'reference/.gitkeep';
 }
 
 function _coreDirHasUserContent(dir) {
@@ -325,7 +325,7 @@ function _resolveEntryRelativePath(entryName, packageId) {
 function _writeZipToTarget(buffer, packageId, targetDir, options = {}) {
     const zip = new AdmZip(Buffer.from(buffer));
     const base = path.resolve(targetDir);
-    const overwrite = options.overwrite !== false;
+    const overwrite = options.overwrite ?? true;
 
     for (const entry of zip.getEntries()) {
         const rel = _resolveEntryRelativePath(entry.entryName, packageId);
@@ -492,6 +492,7 @@ async function installArchiveCachePackage({ packageId }) {
 function installBundledCoreCache(options = {}) {
     const now = new Date().toISOString();
     const force = options.force === true;
+    const hasUserContent = _coreDirHasUserContent(ARCHIVE_CORE_DIR);
 
     if (!fs.existsSync(BUNDLED_CORE_CACHE_FILE)) {
         return {
@@ -504,7 +505,7 @@ function installBundledCoreCache(options = {}) {
         };
     }
 
-    if (!force && _coreDirHasUserContent(ARCHIVE_CORE_DIR)) {
+    if (!force && hasUserContent) {
         return {
             packageId: 'green-fire-core',
             installed: false,
@@ -516,9 +517,17 @@ function installBundledCoreCache(options = {}) {
     }
 
     fs.mkdirSync(ARCHIVE_CORE_DIR, { recursive: true });
-    const zipBuffer = fs.readFileSync(BUNDLED_CORE_CACHE_FILE);
+    let zipBuffer;
+    try {
+        zipBuffer = fs.readFileSync(BUNDLED_CORE_CACHE_FILE);
+    } catch (err) {
+        throw new Error('Could not read bundled core cache file: ' + err.message);
+    }
+    // For first-run polish we treat bundled core as additive seed memory:
+    // preserve user-authored files unless a forced reinstall is explicitly requested.
+    // overwrite=true only for explicit force installs or when no user-authored files exist.
     _writeZipToTarget(zipBuffer, 'green-fire-core', ARCHIVE_CORE_DIR, {
-        overwrite: !_coreDirHasUserContent(ARCHIVE_CORE_DIR),
+        overwrite: force || !hasUserContent,
     });
 
     const manifestPath = _findManifestPath(ARCHIVE_CORE_DIR);

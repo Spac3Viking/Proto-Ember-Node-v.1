@@ -24,7 +24,7 @@ const {
 } = require('../app/archiveCacheService');
 
 const BUNDLED_CORE_CACHE_DIR = path.dirname(BUNDLED_CORE_CACHE_FILE);
-let bundledCoreOriginal = null;
+let originalBundledCoreCache = null;
 
 afterAll(() => {
     delete process.env.EMBER_NODE_DATA_ROOT;
@@ -37,20 +37,17 @@ beforeEach(() => {
     axios.post.mockReset();
     axios.post.mockRejectedValue(new Error('offline'));
     fs.mkdirSync(BUNDLED_CORE_CACHE_DIR, { recursive: true });
-    if (bundledCoreOriginal === null && fs.existsSync(BUNDLED_CORE_CACHE_FILE)) {
-        bundledCoreOriginal = fs.readFileSync(BUNDLED_CORE_CACHE_FILE);
-    }
-    if (fs.existsSync(BUNDLED_CORE_CACHE_FILE) && bundledCoreOriginal === null) {
-        fs.rmSync(BUNDLED_CORE_CACHE_FILE, { force: true });
+    if (originalBundledCoreCache === null && fs.existsSync(BUNDLED_CORE_CACHE_FILE)) {
+        originalBundledCoreCache = fs.readFileSync(BUNDLED_CORE_CACHE_FILE);
     }
 });
 
 afterEach(() => {
-    if (bundledCoreOriginal) {
-        fs.writeFileSync(BUNDLED_CORE_CACHE_FILE, bundledCoreOriginal);
+    if (originalBundledCoreCache) {
+        fs.writeFileSync(BUNDLED_CORE_CACHE_FILE, originalBundledCoreCache);
         return;
     }
-    try { fs.rmSync(BUNDLED_CORE_CACHE_FILE, { force: true }); } catch { /* ignore */ }
+    try { fs.rmSync(BUNDLED_CORE_CACHE_FILE, { force: true }); } catch { /* File may not exist */ }
 });
 
 describe('Phase 12 — Green Fire Archive cache integration', () => {
