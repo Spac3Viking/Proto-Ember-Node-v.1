@@ -33,6 +33,8 @@ const CANONICAL_CACHE_PACKAGE_ID_SET = new Set(CANONICAL_CACHE_PACKAGE_IDS);
 const ARCHIVE_CACHE_INDEX_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-upstream-index.json');
 const ARCHIVE_CACHE_REGISTRY_FILE = path.join(SYSTEM_DIR, 'archive-cache-registry.json');
 const ARCHIVE_SIGNAL_CACHE_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-signal.json');
+const BUNDLED_CACHES_DIR = path.join(__dirname, 'bundled-caches');
+const BUNDLED_CORE_CACHE_FILE = path.join(BUNDLED_CACHES_DIR, 'green-fire-core-cache.zip');
 const CANONICAL_PACKAGE_DOWNLOAD_URLS = Object.fromEntries(
     CANONICAL_CACHE_PACKAGE_IDS.map(id => [id, GREEN_FIRE_ARCHIVE_BASE_URL + '/downloads/' + id + '.zip']),
 );
@@ -245,6 +247,42 @@ function _readManifestIfPresent(manifestPath) {
     }
 }
 
+function _isCoreScaffoldFile(relPath) {
+    return relPath === 'manifest.json' ||
+        relPath === '.gitkeep' ||
+        relPath.startsWith('codices/.gitkeep') ||
+        relPath.startsWith('grimoires/.gitkeep') ||
+        relPath.startsWith('sagas/.gitkeep') ||
+        relPath.startsWith('reference/.gitkeep');
+}
+
+function _coreDirHasUserContent(dir) {
+    if (!fs.existsSync(dir)) return false;
+    const stack = [{ abs: dir, rel: '' }];
+
+    while (stack.length > 0) {
+        const current = stack.pop();
+        let entries = [];
+        try {
+            entries = fs.readdirSync(current.abs, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+        for (const entry of entries) {
+            const abs = path.join(current.abs, entry.name);
+            const rel = current.rel ? (current.rel + '/' + entry.name) : entry.name;
+            if (entry.isDirectory()) {
+                stack.push({ abs, rel });
+                continue;
+            }
+            if (_isCoreScaffoldFile(rel)) continue;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function _safeRel(rel) {
     const clean = rel.replace(/\\/g, '/').replace(/^\/+/, '');
     if (!clean || clean === '.' || clean === '..') return null;
@@ -284,9 +322,10 @@ function _resolveEntryRelativePath(entryName, packageId) {
     return _safeRel(rel);
 }
 
-function _writeZipToTarget(buffer, packageId, targetDir) {
+function _writeZipToTarget(buffer, packageId, targetDir, options = {}) {
     const zip = new AdmZip(Buffer.from(buffer));
     const base = path.resolve(targetDir);
+    const overwrite = options.overwrite !== false;
 
     for (const entry of zip.getEntries()) {
         const rel = _resolveEntryRelativePath(entry.entryName, packageId);
@@ -303,6 +342,7 @@ function _writeZipToTarget(buffer, packageId, targetDir) {
         }
 
         fs.mkdirSync(path.dirname(destination), { recursive: true });
+        if (!overwrite && fs.existsSync(destination)) continue;
         fs.writeFileSync(destination, entry.getData());
     }
 }
@@ -449,6 +489,72 @@ async function installArchiveCachePackage({ packageId }) {
     };
 }
 
+function installBundledCoreCache(options = {}) {
+    const now = new Date().toISOString();
+    const force = options.force === true;
+
+    if (!fs.existsSync(BUNDLED_CORE_CACHE_FILE)) {
+        return {
+            packageId: 'green-fire-core',
+            installed: false,
+            skipped: true,
+            reason: 'bundled-core-cache-missing',
+            bundledPath: BUNDLED_CORE_CACHE_FILE,
+            installPath: ARCHIVE_CORE_DIR,
+        };
+    }
+
+    if (!force && _coreDirHasUserContent(ARCHIVE_CORE_DIR)) {
+        return {
+            packageId: 'green-fire-core',
+            installed: false,
+            skipped: true,
+            reason: 'core-has-user-content',
+            bundledPath: BUNDLED_CORE_CACHE_FILE,
+            installPath: ARCHIVE_CORE_DIR,
+        };
+    }
+
+    fs.mkdirSync(ARCHIVE_CORE_DIR, { recursive: true });
+    const zipBuffer = fs.readFileSync(BUNDLED_CORE_CACHE_FILE);
+    _writeZipToTarget(zipBuffer, 'green-fire-core', ARCHIVE_CORE_DIR, {
+        overwrite: !_coreDirHasUserContent(ARCHIVE_CORE_DIR),
+    });
+
+    const manifestPath = _findManifestPath(ARCHIVE_CORE_DIR);
+    const manifest = _readManifestIfPresent(manifestPath);
+    const installedVersion = manifest && manifest.version ? String(manifest.version) : null;
+
+    const registry = _loadArchiveCacheRegistry();
+    const existing = registry.caches['green-fire-core'] || {};
+    registry.caches['green-fire-core'] = {
+        packageId: 'green-fire-core',
+        title: manifest && manifest.title ? manifest.title : 'Green Fire Core Archive',
+        installPath: ARCHIVE_CORE_DIR,
+        destination: 'archive/core',
+        installedVersion,
+        installedAt: existing.installedAt || now,
+        lastUpdated: now,
+        source: 'bundled',
+        bundledPath: BUNDLED_CORE_CACHE_FILE,
+    };
+    registry.updatedAt = now;
+    _saveArchiveCacheRegistry(registry);
+
+    return {
+        packageId: 'green-fire-core',
+        installed: true,
+        skipped: false,
+        source: 'bundled',
+        bundledPath: BUNDLED_CORE_CACHE_FILE,
+        installPath: ARCHIVE_CORE_DIR,
+        manifestPath,
+        manifest,
+        installedVersion,
+        registry: registry.caches['green-fire-core'],
+    };
+}
+
 async function fetchArchiveSignal() {
     try {
         const response = await axios.get(ARCHIVE_ENDPOINTS.signal, { timeout: 12000 });
@@ -497,6 +603,8 @@ module.exports = {
     ARCHIVE_CACHE_INDEX_FILE,
     ARCHIVE_CACHE_REGISTRY_FILE,
     ARCHIVE_SIGNAL_CACHE_FILE,
+    BUNDLED_CACHES_DIR,
+    BUNDLED_CORE_CACHE_FILE,
     CANONICAL_CACHE_PACKAGE_IDS,
     CANONICAL_PACKAGE_DOWNLOAD_URLS,
     compareVersionStrings,
@@ -507,4 +615,5 @@ module.exports = {
     listInstalledArchiveCaches,
     compareInstalledWithUpstream,
     installArchiveCachePackage,
+    installBundledCoreCache,
 };

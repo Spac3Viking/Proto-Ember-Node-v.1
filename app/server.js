@@ -29,6 +29,7 @@ const axios   = require('axios');
 const {
     ensureDataRoot, ensureCanonicalDataFiles, migrateLegacyData, seedDataRoot,
 } = require('./storageConfig');
+const { installBundledCoreCache } = require('./archiveCacheService');
 
 // Re-export legacy symbols for backward compatibility with tests
 const { listCartridges, loadCartridge }               = require('./cartridgeLoader');
@@ -46,6 +47,7 @@ const { triageFile }                                   = require('./startupCheck
 ensureDataRoot();
 const MIGRATION_RESULT = migrateLegacyData();
 seedDataRoot();
+installBundledCoreCache();
 ensureCanonicalDataFiles();
 
 // ── Route modules ─────────────────────────────────────────────────────────────
