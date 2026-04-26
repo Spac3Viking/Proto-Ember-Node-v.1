@@ -292,6 +292,8 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
     });
 
     test('installBundledCoreCache installs local bundled core zip without network', () => {
+        fs.rmSync(sc.ARCHIVE_CORE_DIR, { recursive: true, force: true });
+
         const bundledZip = new AdmZip();
         bundledZip.addFile('archive/core/manifest.json', Buffer.from(JSON.stringify({
             id: 'green-fire-core',
@@ -311,6 +313,8 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
     });
 
     test('installBundledCoreCache skips install when archive/core has user content', () => {
+        fs.rmSync(sc.ARCHIVE_CORE_DIR, { recursive: true, force: true });
+
         const bundledZip = new AdmZip();
         bundledZip.addFile('archive/core/manifest.json', Buffer.from(JSON.stringify({
             id: 'green-fire-core',
