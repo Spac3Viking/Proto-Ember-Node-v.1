@@ -52,6 +52,10 @@ function escapeHtml(str) {
         if (roomId === 'hearth') {
             loadHearthThreads();
             loadHearthArchive();
+            loadHearthTrustedArchive();
+            loadHearthRememberedThreads();
+            loadArchiveCacheManager();
+            loadArchiveSignalPanel();
             refreshSystemStatus();
         }
     }
@@ -106,6 +110,8 @@ function escapeHtml(str) {
                     loadHearthArchive();
                     loadHearthTrustedArchive();
                     loadHearthRememberedThreads();
+                    loadArchiveCacheManager();
+                    loadArchiveSignalPanel();
                 }
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
@@ -622,6 +628,196 @@ async function loadHearthRememberedThreads() {
     }
 }
 
+function formatIsoDate(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString();
+}
+
+function formatBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return '—';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    return (n / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+}
+
+function cacheStatusLabel(status, installed) {
+    if (status === 'update-available') return 'Update available';
+    if (installed) return 'Installed';
+    return 'Not installed';
+}
+
+function buildCacheConfirmMessage(mode, item, packageTitle, destination) {
+    if (mode === 'update') {
+        return [
+            'Update this cache?',
+            'Package: ' + packageTitle,
+            'This will replace the existing cache folder:',
+            item.packageId === 'green-fire-core' ? 'archive/core/' : 'archive/caches/',
+        ].join('\n');
+    }
+    return [
+        'Install this cache?',
+        'Package: ' + packageTitle,
+        'Destination: ' + destination,
+        'This will download and extract files locally.',
+    ].join('\n');
+}
+
+async function installOrUpdateCache(packageId, mode, uiBtn, packageTitle, destination, item) {
+    const confirmed = confirm(buildCacheConfirmMessage(mode, item, packageTitle, destination));
+    if (!confirmed) return;
+
+    const previous = uiBtn.textContent;
+    uiBtn.disabled = true;
+    uiBtn.textContent = mode === 'update' ? 'Updating…' : 'Installing…';
+    try {
+        const res = await fetch('/api/archive/caches/install', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ packageId }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showFlashMessage((mode === 'update' ? 'Update' : 'Install') + ' failed: ' + (data.error || 'unknown'));
+            return;
+        }
+        showFlashMessage((mode === 'update' ? 'Updated' : 'Installed') + ': ' + packageTitle);
+        loadHearthTrustedArchive();
+        loadArchiveCacheManager();
+        loadArchiveSignalPanel();
+    } catch {
+        showFlashMessage((mode === 'update' ? 'Update' : 'Install') + ' failed — server unreachable.');
+    } finally {
+        uiBtn.disabled = false;
+        uiBtn.textContent = previous;
+    }
+}
+
+async function loadArchiveCacheManager() {
+    const listEl = document.getElementById('hearth-cache-manager-list');
+    const metaEl = document.getElementById('hearth-cache-manager-meta');
+    if (!listEl || !metaEl) return;
+
+    listEl.innerHTML = '<span class="message-system">Loading cache packages…</span>';
+    metaEl.textContent = 'Loading cache index…';
+
+    try {
+        const [updatesRes, availableRes] = await Promise.all([
+            fetch('/api/archive/caches/updates'),
+            fetch('/api/archive/caches/available'),
+        ]);
+        const updates = await updatesRes.json();
+        const available = await availableRes.json();
+
+        const upstreamById = new Map(((available && available.packages) || []).map(p => [p.packageId, p]));
+        const rows = (updates && updates.comparison) || [];
+        if (rows.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No canonical cache packages found.</span>';
+            metaEl.textContent = 'No package metadata available.';
+            return;
+        }
+
+        const fetchedAt = updates.fetchedAt || available.fetchedAt || null;
+        metaEl.textContent = [
+            'Source: ' + (updates.source || available.source || 'unknown'),
+            updates.offline ? 'offline fallback' : 'live',
+            fetchedAt ? 'updated ' + formatIsoDate(fetchedAt) : null,
+        ].filter(Boolean).join(' · ');
+
+        listEl.innerHTML = '';
+        rows.forEach(item => {
+            const upstream = item.upstreamPackage || upstreamById.get(item.packageId) || {};
+            const registry = item.registry || {};
+            const packageTitle = upstream.title || (item.manifest && item.manifest.title) || registry.title || item.packageId;
+            const destination = item.recommendedDestination || registry.destination || ('archive/caches/' + item.packageId);
+            const displayVersion = item.upstreamVersion || item.localVersion || registry.installedVersion || '—';
+            const lastUpdated = upstream.lastUpdated || registry.lastUpdated || null;
+            const sizeText = formatBytes(upstream.sizeBytes);
+
+            const row = document.createElement('div');
+            row.className = 'ws-source-row cache-manager-row';
+            row.innerHTML =
+                '<div class="cache-manager-main">' +
+                    '<span class="ws-source-name">' + escapeHtml(packageTitle) + '</span>' +
+                    '<span class="lifecycle-pill indexed">' + escapeHtml(cacheStatusLabel(item.status, item.installed)) + '</span>' +
+                '</div>' +
+                '<div class="cache-manager-meta">' +
+                    'ID: ' + escapeHtml(item.packageId) + ' · ' +
+                    'Version: ' + escapeHtml(displayVersion) + ' · ' +
+                    'Last updated: ' + escapeHtml(formatIsoDate(lastUpdated)) + ' · ' +
+                    'Destination: ' + escapeHtml(destination) + ' · ' +
+                    'Size: ' + escapeHtml(sizeText) +
+                '</div>';
+
+            const actionRow = document.createElement('div');
+            actionRow.className = 'cache-manager-actions';
+
+            const installBtn = document.createElement('button');
+            installBtn.className = 'secondary';
+            installBtn.textContent = 'Install';
+            installBtn.disabled = Boolean(item.installed);
+            installBtn.addEventListener('click', () => {
+                installOrUpdateCache(item.packageId, 'install', installBtn, packageTitle, destination, item);
+            });
+            actionRow.appendChild(installBtn);
+
+            const updateBtn = document.createElement('button');
+            updateBtn.className = 'secondary';
+            updateBtn.textContent = item.status === 'update-available' ? 'Update' : 'Reinstall';
+            updateBtn.disabled = !item.installed;
+            updateBtn.addEventListener('click', () => {
+                installOrUpdateCache(item.packageId, 'update', updateBtn, packageTitle, destination, item);
+            });
+            actionRow.appendChild(updateBtn);
+
+            row.appendChild(actionRow);
+            listEl.appendChild(row);
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load cache manager.</span>';
+        metaEl.textContent = 'Cache index unavailable.';
+    }
+}
+
+async function loadArchiveSignalPanel() {
+    const panel = document.getElementById('hearth-archive-signal-panel');
+    if (!panel) return;
+    panel.innerHTML = '<span class="message-system">Loading signal…</span>';
+
+    try {
+        const [signalRes, resourcesRes] = await Promise.all([
+            fetch('/api/archive/signal'),
+            fetch('/api/archive/resources'),
+        ]);
+        const signalData = await signalRes.json();
+        const resourcesData = await resourcesRes.json();
+        const payload = signalData.payload || {};
+        const endpoints = resourcesData.endpoints || {};
+
+        const dispatch = payload.dispatch || payload.signal_dispatch || (payload.signal && payload.signal.dispatch) || '—';
+        const question = payload.question || payload.signal_question || (payload.signal && payload.signal.question) || '—';
+        const fetchedLabel = signalData.fetchedAt ? formatIsoDate(signalData.fetchedAt) : '—';
+
+        panel.innerHTML =
+            '<div class="cache-signal-line"><strong>Dispatch:</strong> ' + escapeHtml(dispatch) + '</div>' +
+            '<div class="cache-signal-line"><strong>Question:</strong> ' + escapeHtml(question) + '</div>' +
+            '<div class="cache-signal-line"><strong>Source:</strong> ' + escapeHtml(signalData.source || 'unknown') +
+            (signalData.offline ? ' (offline)' : '') + ' · updated ' + escapeHtml(fetchedLabel) + '</div>' +
+            '<div class="cache-signal-links">' +
+                '<a href="' + escapeHtml(endpoints.forgeMd || '#') + '" target="_blank" rel="noopener noreferrer">Forge (MD)</a>' +
+                '<a href="' + escapeHtml(endpoints.forgePdf || '#') + '" target="_blank" rel="noopener noreferrer">Forge (PDF)</a>' +
+                '<a href="' + escapeHtml(endpoints.mythicSeedMd || '#') + '" target="_blank" rel="noopener noreferrer">Mirror Seed (MD)</a>' +
+                '<a href="' + escapeHtml(endpoints.mythicSeedTxt || '#') + '" target="_blank" rel="noopener noreferrer">Mirror Seed (TXT)</a>' +
+            '</div>';
+    } catch {
+        panel.innerHTML = '<span class="message-system">Could not load archive signal.</span>';
+    }
+}
+
 // Archive bootstrap button
 (function initArchiveBootstrap() {
     const btn = document.getElementById('hearth-archive-bootstrap-btn');
@@ -635,11 +831,28 @@ async function loadHearthRememberedThreads() {
             if (data.success) {
                 showFlashMessage('Archive scanned — ' + (data.registered || 0) + ' registered, ' + (data.indexed || 0) + ' indexed.');
                 loadHearthTrustedArchive();
+                loadArchiveCacheManager();
             } else {
                 showFlashMessage('Archive scan failed.');
             }
         } catch {
             showFlashMessage('Could not reach server.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '↻ Rescan';
+        }
+    });
+})();
+
+(function initCacheManagerRescan() {
+    const btn = document.getElementById('hearth-cache-manager-rescan-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = '↻ Refreshing…';
+        try {
+            await loadArchiveCacheManager();
+            await loadArchiveSignalPanel();
         } finally {
             btn.disabled = false;
             btn.textContent = '↻ Rescan';
@@ -3927,6 +4140,11 @@ async function launchOllama(toolId) {
     updateHeaderStatus();
     refreshSystemStatus();
     loadHearthThreads();
+    loadHearthArchive();
+    loadHearthTrustedArchive();
+    loadHearthRememberedThreads();
+    loadArchiveCacheManager();
+    loadArchiveSignalPanel();
     loadStartupCheck();
 
     // Close all source action dropdown menus when clicking outside

@@ -147,6 +147,22 @@
                 <span class="message-system">No archive sources.</span>
               </div>
             </div>
+            <div class="ember-card" style="padding: 1rem 1.25rem; margin-top: 1rem;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+                <div class="workshop-section-title" style="border:none; margin:0; padding:0;">Cache Manager</div>
+                <button class="secondary" id="hearth-cache-manager-rescan-btn" title="Refresh cache manager" style="font-size:0.75rem; padding:0.2rem 0.6rem;">↻ Rescan</button>
+              </div>
+              <div id="hearth-cache-manager-meta" class="message-system" style="margin-bottom:0.5rem;">Loading cache index…</div>
+              <div id="hearth-cache-manager-list" class="ws-sources-list cache-manager-list">
+                <span class="message-system">Loading cache packages…</span>
+              </div>
+            </div>
+            <div class="ember-card" style="padding: 1rem 1.25rem; margin-top: 1rem;">
+              <div class="workshop-section-title">Archive Signal</div>
+              <div id="hearth-archive-signal-panel" class="cache-signal-panel">
+                <span class="message-system">Loading signal…</span>
+              </div>
+            </div>
             <!-- Phase 11: Remembered Threads section -->
             <div class="ember-card" style="padding: 1rem 1.25rem; margin-top: 1rem;">
               <div class="workshop-section-title">Remembered Threads</div>

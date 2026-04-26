@@ -940,6 +940,58 @@ input:focus, textarea:focus {
   color: var(--archive-muted);
 }
 
+.cache-manager-list {
+  max-height: 320px;
+}
+
+.cache-manager-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.4rem 0;
+}
+
+.cache-manager-main {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.cache-manager-meta {
+  font-size: 0.7rem;
+  opacity: 0.9;
+}
+
+.cache-manager-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.cache-signal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--archive-muted);
+}
+
+.cache-signal-line {
+  line-height: 1.4;
+}
+
+.cache-signal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.cache-signal-links a {
+  color: var(--gf-wire-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .ws-note-row {
   display: flex;
   align-items: center;
@@ -2665,4 +2717,3 @@ button.secondary:disabled {
   border: 1px solid hsla(140, 100%, 70%, 0.1);
   border-radius: var(--radius-sm);
 }
-
