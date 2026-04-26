@@ -199,20 +199,42 @@ Open [http://localhost:3477](http://localhost:3477) in your browser.
 
 ---
 
-## Phase 10 — Launcher + Local Install Experience (Windows)
+## Phase 13 — Windows Installer + Launcher + First-Run Setup
 
-### One-Click Launcher
+### Installer (NSIS)
 
-`Awaken-Ember-Node.bat` is located in the project root.  Double-clicking it:
+Windows installer assets now live at:
 
-1. Navigates to the project directory automatically.
-2. Optionally starts Ollama in the background if it is installed but not already running.
-3. Starts the Ember Node backend (`npm run dev`) in a new terminal window.
-4. Waits briefly for the server to initialise.
-5. Opens `http://localhost:3477` in your default browser.
+- `installer/windows/Ember-Node-Installer.nsi`
+- `installer/windows/Awaken-Ember-Node-Installed.bat`
 
-No terminal commands are required.  No admin privileges are needed.  Nothing is installed
-silently.
+Build the installer on Windows (with NSIS installed):
+
+```bash
+npm run installer:windows
+```
+
+This produces `Ember-Node-Setup.exe`, which installs Ember Node by default to:
+
+- `C:\Program Files\Ember Node\`
+
+The installer creates:
+
+- Desktop shortcut: **Awaken Ember Node**
+- Start Menu launcher: **Awaken Ember Node**
+
+### Installed Launcher Behavior
+
+The installed launcher (`Awaken-Ember-Node.bat`) supports one-click startup:
+
+1. Resolves the external data root (`EMBER_NODE_DATA_ROOT`, fallback: `%USERPROFILE%\Documents\Ember-Node-Data`).
+2. Performs first-run setup signaling without overwriting existing data.
+3. Installs runtime dependencies (`npm install --omit=dev`) if `node_modules` is missing.
+4. Optionally starts Ollama when installed and not already running.
+5. Offers a first-run Ollama download assist if Ollama is not detected.
+6. Starts Ember Node and opens `http://localhost:3477`.
+
+User data remains outside the app install directory and is preserved across reinstalls/updates.
 
 #### Requirements
 - [Node.js](https://nodejs.org/) 18+ installed and on the system PATH.
@@ -221,32 +243,9 @@ silently.
 
 ---
 
-### Desktop Shortcut (Windows)
+### Portable Launcher (Repository Checkout)
 
-To place a shortcut on your Desktop:
-
-1. Right-click `Awaken-Ember-Node.bat` in Explorer.
-2. Select **Create shortcut**.
-3. Move the new shortcut to your Desktop.
-4. Rename it to **Awaken Ember Node**.
-5. *(Optional)* Right-click the shortcut → **Properties** → **Change Icon** to assign the
-   Ember Node glyph icon when available.
-
----
-
-### Future Installer Plan
-
-A full installer is not yet built.  The groundwork is in place:
-
-- The launcher lives in the project root with **no hardcoded paths** (all paths are relative).
-- The app runs correctly from any extracted folder.
-- The data root initialises automatically on first run.
-
-Planned future packaging:
-- **Windows installer** — NSIS or WiX bundle.
-- Bundled launcher with icon integration.
-- Optional Ollama setup helper (guided, never silent).
-- Icon: Ember Node glyph (ᚠ).
+For development checkouts, the root `Awaken-Ember-Node.bat` remains available for manual local launch.
 
 ---
 

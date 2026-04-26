@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node app/server.js",
     "dev": "nodemon app/server.js",
-    "test": "jest"
+    "test": "jest",
+    "installer:windows": "makensis installer/windows/Ember-Node-Installer.nsi"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
