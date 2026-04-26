@@ -1,0 +1,199 @@
+'use strict';
+
+const request = require('supertest');
+const fs      = require('fs');
+const path    = require('path');
+const os      = require('os');
+const axios   = require('axios');
+const AdmZip  = require('adm-zip');
+
+jest.mock('axios');
+
+const DATA_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-p12-'));
+process.env.EMBER_NODE_DATA_ROOT = DATA_ROOT;
+delete process.env.EMBER_DATA_ROOT;
+
+const { app } = require('../app/server');
+const sc      = require('../app/storageConfig');
+const {
+    ARCHIVE_ENDPOINTS,
+    ARCHIVE_CACHE_INDEX_FILE,
+} = require('../app/archiveCacheService');
+
+afterAll(() => {
+    delete process.env.EMBER_NODE_DATA_ROOT;
+    delete process.env.EMBER_DATA_ROOT;
+    try { fs.rmSync(DATA_ROOT, { recursive: true, force: true }); } catch { /* ignore */ }
+});
+
+beforeEach(() => {
+    axios.get.mockReset();
+    axios.post.mockReset();
+    axios.post.mockRejectedValue(new Error('offline'));
+});
+
+describe('Phase 12 — Green Fire Archive cache integration', () => {
+    test('GET /api/archive/caches/available returns canonical packages from downloads index', async () => {
+        axios.get.mockResolvedValue({
+            data: {
+                packages: [
+                    { id: 'green-fire-core', version: '1.1.0', downloadUrl: '/downloads/green-fire-core.zip' },
+                    { id: 'green-fire-codices-cache', version: '1.2.0', download_url: '/downloads/green-fire-codices-cache.zip' },
+                    { id: 'not-canonical', version: '99.0.0', downloadUrl: '/downloads/not-canonical.zip' },
+                ],
+            },
+        });
+
+        const res = await request(app).get('/api/archive/caches/available');
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.source).toBe('upstream');
+        expect(Array.isArray(res.body.packages)).toBe(true);
+        expect(res.body.packages.map(p => p.packageId)).toEqual([
+            'green-fire-core',
+            'green-fire-codices-cache',
+        ]);
+        expect(res.body.endpoints.downloadsIndex).toBe(ARCHIVE_ENDPOINTS.downloadsIndex);
+    });
+
+    test('POST /api/archive/caches/install installs green-fire-core into archive/core and parses manifest', async () => {
+        const coreZip = new AdmZip();
+        coreZip.addFile('archive/core/manifest.json', Buffer.from(JSON.stringify({
+            id: 'green-fire-core',
+            version: '2.0.0',
+            type: 'core-archive',
+        })));
+        coreZip.addFile('archive/core/codices/forge.md', Buffer.from('# Forge Core'));
+        const coreZipBuffer = coreZip.toBuffer();
+
+        axios.get.mockImplementation((url, options) => {
+            if (url === ARCHIVE_ENDPOINTS.downloadsIndex) {
+                return Promise.resolve({
+                    data: {
+                        packages: [
+                            { id: 'green-fire-core', version: '2.0.0', downloadUrl: 'https://greenfire-archive.replit.app/downloads/green-fire-core.zip' },
+                        ],
+                    },
+                });
+            }
+            if (url === 'https://greenfire-archive.replit.app/downloads/green-fire-core.zip') {
+                expect(options.responseType).toBe('arraybuffer');
+                return Promise.resolve({ data: coreZipBuffer });
+            }
+            return Promise.reject(new Error('unexpected url: ' + url));
+        });
+
+        const res = await request(app)
+            .post('/api/archive/caches/install')
+            .send({ packageId: 'green-fire-core' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.installed.packageId).toBe('green-fire-core');
+        expect(res.body.installed.installPath).toBe(sc.ARCHIVE_CORE_DIR);
+        expect(res.body.installed.manifest.id).toBe('green-fire-core');
+        expect(res.body.installed.manifest.version).toBe('2.0.0');
+        expect(fs.existsSync(path.join(sc.ARCHIVE_CORE_DIR, 'codices', 'forge.md'))).toBe(true);
+    });
+
+    test('POST /api/archive/caches/install installs non-core cache into archive/caches/<id>', async () => {
+        const cacheZip = new AdmZip();
+        cacheZip.addFile('green-fire-codices-cache/manifest.json', Buffer.from(JSON.stringify({
+            id: 'green-fire-codices-cache',
+            version: '1.5.0',
+            type: 'archive-cache',
+        })));
+        cacheZip.addFile('green-fire-codices-cache/docs/codex.md', Buffer.from('# Codex Cache'));
+        const cacheZipBuffer = cacheZip.toBuffer();
+
+        axios.get.mockImplementation((url, options) => {
+            if (url === ARCHIVE_ENDPOINTS.downloadsIndex) {
+                return Promise.resolve({
+                    data: {
+                        packages: [
+                            {
+                                id: 'green-fire-codices-cache',
+                                version: '1.5.0',
+                                downloadUrl: 'https://greenfire-archive.replit.app/downloads/green-fire-codices-cache.zip',
+                            },
+                        ],
+                    },
+                });
+            }
+            if (url === 'https://greenfire-archive.replit.app/downloads/green-fire-codices-cache.zip') {
+                expect(options.responseType).toBe('arraybuffer');
+                return Promise.resolve({ data: cacheZipBuffer });
+            }
+            return Promise.reject(new Error('unexpected url: ' + url));
+        });
+
+        const installRes = await request(app)
+            .post('/api/archive/caches/install')
+            .send({ packageId: 'green-fire-codices-cache' });
+
+        expect(installRes.status).toBe(200);
+        expect(installRes.body.installed.packageId).toBe('green-fire-codices-cache');
+        expect(installRes.body.installed.manifest.version).toBe('1.5.0');
+
+        const cacheFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'docs', 'codex.md');
+        expect(fs.existsSync(cacheFile)).toBe(true);
+
+        const listRes = await request(app).get('/api/archive/caches/installed');
+        expect(listRes.status).toBe(200);
+        const codices = listRes.body.caches.find(c => c.packageId === 'green-fire-codices-cache');
+        expect(codices).toBeDefined();
+        expect(codices.installed).toBe(true);
+        expect(codices.version).toBe('1.5.0');
+    });
+
+    test('GET /api/archive/caches/updates compares local and upstream versions', async () => {
+        const localCacheDir = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache');
+        fs.mkdirSync(localCacheDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(localCacheDir, 'manifest.json'),
+            JSON.stringify({ id: 'green-fire-codices-cache', version: '1.0.0' }, null, 2),
+            'utf8',
+        );
+
+        axios.get.mockResolvedValue({
+            data: {
+                packages: [
+                    { id: 'green-fire-codices-cache', version: '1.2.0', downloadUrl: '/downloads/green-fire-codices-cache.zip' },
+                    { id: 'green-fire-core', version: '1.0.0', downloadUrl: '/downloads/green-fire-core.zip' },
+                ],
+            },
+        });
+
+        const res = await request(app).get('/api/archive/caches/updates');
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        const codices = res.body.comparison.find(c => c.packageId === 'green-fire-codices-cache');
+        expect(codices.installed).toBe(true);
+        expect(codices.localVersion).toBe('1.0.0');
+        expect(codices.upstreamVersion).toBe('1.2.0');
+        expect(codices.status).toBe('update-available');
+    });
+
+    test('available index falls back to local cached metadata when upstream is offline', async () => {
+        axios.get.mockResolvedValueOnce({
+            data: {
+                packages: [
+                    { id: 'green-fire-gallery-cache', version: '1.0.0', downloadUrl: '/downloads/green-fire-gallery-cache.zip' },
+                ],
+            },
+        });
+
+        const first = await request(app).get('/api/archive/caches/available');
+        expect(first.status).toBe(200);
+        expect(first.body.source).toBe('upstream');
+        expect(fs.existsSync(ARCHIVE_CACHE_INDEX_FILE)).toBe(true);
+
+        axios.get.mockRejectedValueOnce(new Error('network offline'));
+        const second = await request(app).get('/api/archive/caches/available');
+        expect(second.status).toBe(200);
+        expect(second.body.source).toBe('local-cache');
+        expect(second.body.offline).toBe(true);
+        expect(second.body.packages[0].packageId).toBe('green-fire-gallery-cache');
+    });
+});
