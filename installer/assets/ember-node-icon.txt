@@ -1,0 +1,3 @@
+Place Ember Node glyph icon here as:
+ember-node-icon.png
+A .ico version will be generated during installer build.
