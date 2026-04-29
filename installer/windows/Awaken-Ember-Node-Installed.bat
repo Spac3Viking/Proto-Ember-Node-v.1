@@ -18,6 +18,9 @@ if defined EMBER_NODE_DATA_ROOT (
 )
 
 set "SETUP_FLAG=%DATA_ROOT%\system\.ember-first-run-complete"
+set "BUNDLED_NODE=%~dp0runtime\node\node.exe"
+set "BUNDLED_NPM=%~dp0runtime\node\npm.cmd"
+set "NODE_SOURCE="
 
 if not exist "%DATA_ROOT%" (
     mkdir "%DATA_ROOT%" >nul 2>&1
@@ -31,21 +34,24 @@ if not exist "%SETUP_FLAG%" (
     set "IS_FIRST_RUN=1"
 )
 
-:: ── Check for Node.js / npm ───────────────────────────────────────────────────
-where node >nul 2>&1
-if %errorlevel% neq 0 (
-    echo  ERROR: Node.js is required to run Ember Node.
-    echo  Install Node.js and relaunch:
-    echo  https://nodejs.org
-    echo.
-    pause
-    exit /b 1
+:: ── Resolve Node runtime (bundled first, then system) ───────────────────────
+if exist "%BUNDLED_NODE%" (
+    set "NODE_SOURCE=bundled"
+) else (
+    where node >nul 2>&1
+    if %errorlevel% equ 0 (
+        set "NODE_SOURCE=system"
+    )
 )
 
-where npm >nul 2>&1
-if %errorlevel% neq 0 (
-    echo  ERROR: npm not found.
-    echo  Please reinstall Node.js so npm is available on PATH.
+if not defined NODE_SOURCE (
+    echo  Node.js runtime not found.
+    echo  Ember Node can run with either:
+    echo  1. Bundled portable Node in runtime/node/
+    echo  2. System-installed Node.js
+    echo  Install Node.js from:
+    echo  https://nodejs.org
+    echo  Then relaunch Awaken Ember Node.
     echo.
     pause
     exit /b 1
@@ -53,9 +59,31 @@ if %errorlevel% neq 0 (
 
 :: ── Ensure runtime dependencies exist ─────────────────────────────────────────
 if not exist "node_modules\" (
+    set "NPM_SOURCE="
+    if exist "%BUNDLED_NPM%" (
+        set "NPM_SOURCE=bundled"
+    ) else (
+        where npm >nul 2>&1
+        if %errorlevel% equ 0 (
+            set "NPM_SOURCE=system"
+        )
+    )
+
+    if not defined NPM_SOURCE (
+        echo  Dependencies are missing.
+        echo  Run npm install from the app folder, or include npm with the bundled runtime.
+        echo.
+        pause
+        exit /b 1
+    )
+
     echo  Dependencies not found. Installing runtime dependencies...
     echo.
-    npm install --omit=dev
+    if /I "%NPM_SOURCE%"=="bundled" (
+        call "%BUNDLED_NPM%" install --omit=dev
+    ) else (
+        npm install --omit=dev
+    )
     if %errorlevel% neq 0 (
         echo.
         echo  ERROR: npm install failed.
@@ -131,7 +159,11 @@ if "%SERVER_READY%"=="1" (
     echo  Ember Node backend already running.
 ) else (
     echo  Starting Ember Node backend...
-    start "Ember Node" cmd /c "set \"EMBER_NODE_DATA_ROOT=%DATA_ROOT%\" && node app/server.js"
+    if /I "%NODE_SOURCE%"=="bundled" (
+        start "Ember Node" cmd /c "set \"EMBER_NODE_DATA_ROOT=%DATA_ROOT%\" && \"%BUNDLED_NODE%\" app/server.js"
+    ) else (
+        start "Ember Node" cmd /c "set \"EMBER_NODE_DATA_ROOT=%DATA_ROOT%\" && node app/server.js"
+    )
     timeout /t 3 >nul
 )
 

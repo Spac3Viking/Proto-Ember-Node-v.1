@@ -2713,6 +2713,8 @@ async function refreshSystemStatus() {
     const modelEl   = document.getElementById('sys-model');
     const chunksEl  = document.getElementById('sys-indexed-chunks');
     const sourcesEl = document.getElementById('sys-indexed-sources');
+    const nodeRuntimeStatusEl = document.getElementById('sys-node-runtime-status');
+    const nodeRuntimePathEl = document.getElementById('sys-node-runtime-path');
 
     try {
         const res  = await fetch('/api/status');
@@ -2721,8 +2723,28 @@ async function refreshSystemStatus() {
         if (chunksEl)  chunksEl.textContent  = String(data.indexedChunks  ?? 0);
         if (sourcesEl) sourcesEl.textContent = String(data.indexedSources ?? 0);
         updateSystemCartridgeCount(data.cartridgeCount ?? 0);
+        if (nodeRuntimeStatusEl) {
+            nodeRuntimeStatusEl.textContent = data.nodeRuntimeStatus || 'Missing';
+            if (data.nodeRuntimeSource === 'bundled') {
+                nodeRuntimeStatusEl.className = 'system-val ok';
+            } else if (data.nodeRuntimeSource === 'system') {
+                nodeRuntimeStatusEl.className = 'system-val';
+            } else {
+                nodeRuntimeStatusEl.className = 'system-val error';
+            }
+        }
+        if (nodeRuntimePathEl) {
+            nodeRuntimePathEl.textContent = data.nodeRuntimePath || '—';
+        }
     } catch {
         if (modelEl) modelEl.textContent = MODEL_LABEL;
+        if (nodeRuntimeStatusEl) {
+            nodeRuntimeStatusEl.textContent = 'Missing';
+            nodeRuntimeStatusEl.className = 'system-val error';
+        }
+        if (nodeRuntimePathEl) {
+            nodeRuntimePathEl.textContent = '—';
+        }
     }
 
     if (ollamaEl) {

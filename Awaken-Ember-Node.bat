@@ -1,16 +1,33 @@
 @echo off
-cd /d %~dp0
+setlocal EnableExtensions
+cd /d "%~dp0"
 
 echo.
 echo  ᚠ  Awakening Ember Node...
 echo.
 
-:: ── Check for Node.js ────────────────────────────────────────────────────────
-where node >nul 2>&1
-if %errorlevel% neq 0 (
-    echo  ERROR: Node.js is required to run Ember Node.
-    echo  Install Node.js and relaunch:
+set "BUNDLED_NODE=%~dp0runtime\node\node.exe"
+set "BUNDLED_NPM=%~dp0runtime\node\npm.cmd"
+set "NODE_SOURCE="
+
+:: ── Resolve Node runtime (bundled first, then system) ───────────────────────
+if exist "%BUNDLED_NODE%" (
+    set "NODE_SOURCE=bundled"
+) else (
+    where node >nul 2>&1
+    if %errorlevel% equ 0 (
+        set "NODE_SOURCE=system"
+    )
+)
+
+if not defined NODE_SOURCE (
+    echo  Node.js runtime not found.
+    echo  Ember Node can run with either:
+    echo  1. Bundled portable Node in runtime/node/
+    echo  2. System-installed Node.js
+    echo  Install Node.js from:
     echo  https://nodejs.org
+    echo  Then relaunch Awaken Ember Node.
     echo.
     pause
     exit /b 1
@@ -18,10 +35,32 @@ if %errorlevel% neq 0 (
 
 :: ── Check for dependencies ────────────────────────────────────────────────────
 if not exist "node_modules\" (
+    set "NPM_SOURCE="
+    if exist "%BUNDLED_NPM%" (
+        set "NPM_SOURCE=bundled"
+    ) else (
+        where npm >nul 2>&1
+        if %errorlevel% equ 0 (
+            set "NPM_SOURCE=system"
+        )
+    )
+
+    if not defined NPM_SOURCE (
+        echo  Dependencies are missing.
+        echo  Run npm install from the app folder, or include npm with the bundled runtime.
+        echo.
+        pause
+        exit /b 1
+    )
+
     echo  Dependencies not found. Installing now...
     echo  This may take a moment on first run.
     echo.
-    npm install
+    if /I "%NPM_SOURCE%"=="bundled" (
+        call "%BUNDLED_NPM%" install
+    ) else (
+        npm install
+    )
     if %errorlevel% neq 0 (
         echo.
         echo  ERROR: npm install failed.
@@ -54,7 +93,11 @@ if %errorlevel% equ 0 (
 :: ── Start Ember Node backend ─────────────────────────────────────────────────
 echo.
 echo  Starting Ember Node backend...
-start "Ember Node" cmd /k "npm run dev"
+if /I "%NODE_SOURCE%"=="bundled" (
+    start "Ember Node" cmd /k "\"%BUNDLED_NODE%\" app\server.js"
+) else (
+    start "Ember Node" cmd /k "npm run dev"
+)
 
 :: ── Brief pause to let the server initialise ─────────────────────────────────
 timeout /t 3 >nul

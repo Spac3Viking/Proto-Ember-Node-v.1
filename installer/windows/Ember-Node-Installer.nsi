@@ -52,6 +52,7 @@ Section "Install Ember Node" SEC_MAIN
     RMDir /r "$INSTDIR\public"
     RMDir /r "$INSTDIR\cartridges"
     RMDir /r "$INSTDIR\data"
+    RMDir /r "$INSTDIR\runtime"
     RMDir /r "$INSTDIR\node_modules"
 
     CreateDirectory "$INSTDIR\installer\assets"
@@ -62,6 +63,7 @@ Section "Install Ember Node" SEC_MAIN
     File /r "..\..\app"
     File /r "..\..\public"
     File /r "..\..\cartridges"
+    File /r "..\..\runtime"
     ; Bundled seed scaffold + canonical archive baseline for first-run initialization.
     File /r "..\..\data"
     File "..\..\package.json"
