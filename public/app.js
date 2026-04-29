@@ -2753,15 +2753,14 @@ async function refreshSystemStatus() {
 }
 
 function mapStatusToCssClass(status) {
-    if (status === 'Up to date') return 'system-val ok';
-    if (status === 'Update available' || status === 'Coming soon') return 'system-val warn';
-    if (status === 'Unable to check') return 'system-val error';
+    if (status === 'Coming soon') return 'system-val warn';
     return 'system-val';
 }
 
 async function loadNodeStatusUpdates() {
     const appVersionEl = document.getElementById('sys-app-version');
     const latestVersionEl = document.getElementById('sys-latest-version');
+    const updateSourceEl = document.getElementById('sys-update-source');
     const updateStatusEl = document.getElementById('sys-update-status');
     const dataRootEl = document.getElementById('sys-data-root-path');
     const coreCacheVersionEl = document.getElementById('sys-core-cache-version');
@@ -2777,11 +2776,14 @@ async function loadNodeStatusUpdates() {
         if (!res.ok || data.success === false) throw new Error(data.error || 'Failed to load status');
 
         appVersionEl.textContent = data.currentAppVersion || '—';
-        latestVersionEl.textContent = data.latestAvailableVersion || '—';
+        latestVersionEl.textContent = data.latestAvailableVersion || 'Check Archive';
+        if (updateSourceEl) {
+            updateSourceEl.textContent = data.updateSource || 'Green Fire Archive';
+        }
         dataRootEl.textContent = data.dataRootPath || '—';
         coreCacheVersionEl.textContent = data.coreCacheVersion || 'unknown';
 
-        const statusText = data.updateStatus || 'Unable to check';
+        const statusText = data.updateStatus || 'Coming soon';
         updateStatusEl.textContent = statusText;
         updateStatusEl.className = mapStatusToCssClass(statusText);
 
@@ -2801,9 +2803,7 @@ async function loadNodeStatusUpdates() {
             : '<span class="message-system">Cache status unavailable.</span>';
 
         if (guidanceEl) {
-            const updateLine = statusText === 'Update available'
-                ? 'Update available. Download the latest Ember Node build and install it over the current app.'
-                : 'Install updates over your current Ember Node app when a new build is available.';
+            const updateLine = 'Updates are distributed through the Green Fire Archive. Download the latest Ember Node build and install it over the current version.';
             const preservationLine = 'Your Ember-Node-Data folder will be preserved. Archive caches, chats, drafts, projects, and remembered threads live outside the app folder.';
             const hearthLine = 'The app can be replaced. The hearth remains.';
             guidanceEl.textContent = updateLine + ' ' + preservationLine + ' ' + hearthLine;
@@ -2818,15 +2818,18 @@ async function loadNodeStatusUpdates() {
         }
     } catch (err) {
         console.warn('[system] Could not load node status updates:', err && err.message ? err.message : err);
+        if (updateSourceEl) {
+            updateSourceEl.textContent = 'Green Fire Archive';
+        }
         if (updateStatusEl) {
-            updateStatusEl.textContent = 'Unable to check';
-            updateStatusEl.className = 'system-val error';
+            updateStatusEl.textContent = 'Coming soon';
+            updateStatusEl.className = 'system-val warn';
         }
         if (cacheStatusListEl) {
             cacheStatusListEl.innerHTML = '<span class="message-system">Cache status unavailable.</span>';
         }
         if (guidanceEl) {
-            guidanceEl.textContent = 'Install updates over your current Ember Node app when available. Your Ember-Node-Data folder will be preserved. The app can be replaced. The hearth remains.';
+            guidanceEl.textContent = 'Updates are distributed through the Green Fire Archive. Download the latest Ember Node build and install it over the current version. Your Ember-Node-Data folder will be preserved. The app can be replaced. The hearth remains.';
         }
     }
 }

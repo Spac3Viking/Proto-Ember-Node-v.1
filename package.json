@@ -11,8 +11,8 @@
     "installer:windows": "node -e \"const { execSync } = require('child_process'); const v = require('./package.json').version; execSync('npm run installer:icon', { stdio: 'inherit' }); execSync('makensis /DAPP_VERSION=' + v + ' installer/windows/Ember-Node-Installer.nsi', { stdio: 'inherit' });\""
   },
   "emberNode": {
-    "updatePageUrl": "https://github.com/Spac3Viking/Proto-Ember-Node-v.1/releases",
-    "releasesApiUrl": "https://api.github.com/repos/Spac3Viking/Proto-Ember-Node-v.1/releases/latest"
+    "updatePageUrl": "https://greenfire-archive.replit.app/archive",
+    "archiveUpdateUrl": "https://greenfire-archive.replit.app/downloads/index.json"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

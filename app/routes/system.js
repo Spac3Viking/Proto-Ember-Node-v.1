@@ -26,13 +26,13 @@ const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCartridges }                            = require('../cartridgeLoader');
 const { loadIntakeState }                           = require('../intakeState');
 const { loadBootstrap }                             = require('../bootstrap');
-// Reuse canonical archive cache logic for version comparison and installed/update status.
-const { compareVersionStrings, compareInstalledWithUpstream } = require('../archiveCacheService');
+// Reuse canonical archive cache logic for installed/update status.
+const { compareInstalledWithUpstream } = require('../archiveCacheService');
 
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
-const DEFAULT_UPDATE_PAGE_URL = 'https://github.com/Spac3Viking/Proto-Ember-Node-v.1/releases';
-const DEFAULT_RELEASES_API_URL = 'https://api.github.com/repos/Spac3Viking/Proto-Ember-Node-v.1/releases/latest';
+const ARCHIVE_UPDATE_URL = 'https://greenfire-archive.replit.app/downloads/index.json';
+const DEFAULT_UPDATE_PAGE_URL = 'https://greenfire-archive.replit.app/archive';
 const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-core', label: 'Core Cache' },
     { packageId: 'green-fire-codices-cache', label: 'Codices Cache' },
@@ -42,11 +42,6 @@ const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-gallery-cache', label: 'Gallery Cache' },
     { packageId: 'green-fire-complete-cache', label: 'Complete Cache' },
 ];
-
-let latestVersionCache = {
-    checkedAt: 0,
-    payload: null,
-};
 
 function _loadPackageConfig() {
     try {
@@ -67,65 +62,13 @@ function _formatCacheStatusText(row) {
     return 'installed';
 }
 
-async function _checkLatestAppVersion(config) {
-    const now = Date.now();
-    const ttlMs = 5 * 60 * 1000;
-    if (latestVersionCache.payload && (now - latestVersionCache.checkedAt) < ttlMs) {
-        return latestVersionCache.payload;
-    }
-
-    if (!config.releasesApiUrl) {
-        const payload = {
-            latestVersion: null,
-            updateStatus: 'Coming soon',
-            checkedAt: new Date().toISOString(),
-            message: 'Release checks are not configured yet.',
-        };
-        latestVersionCache = { checkedAt: now, payload };
-        return payload;
-    }
-
-    try {
-        const res = await axios.get(config.releasesApiUrl, {
-            timeout: 5000,
-            headers: { Accept: 'application/vnd.github+json' },
-        });
-        const latestVersion = _normalizeVersionString((res.data && (res.data.tag_name || res.data.name)) || null);
-        const payload = {
-            latestVersion,
-            updateStatus: latestVersion ? null : 'Unable to check',
-            checkedAt: new Date().toISOString(),
-            message: latestVersion ? null : 'Latest release metadata did not include a version tag.',
-        };
-        latestVersionCache = { checkedAt: now, payload };
-        return payload;
-    } catch (err) {
-        const payload = {
-            latestVersion: null,
-            updateStatus: 'Unable to check',
-            checkedAt: new Date().toISOString(),
-            message: err.message,
-        };
-        latestVersionCache = { checkedAt: now, payload };
-        return payload;
-    }
-}
-
 async function _buildNodeStatusPayload() {
     const packageConfig = _loadPackageConfig();
     const currentAppVersion = _normalizeVersionString(packageConfig.version) || '0.0.0';
     const emberNodeConfig = packageConfig.emberNode || {};
     const updatePageUrl = emberNodeConfig.updatePageUrl || DEFAULT_UPDATE_PAGE_URL;
-    const releasesApiUrl = emberNodeConfig.releasesApiUrl || DEFAULT_RELEASES_API_URL;
-    const latestVersionResult = await _checkLatestAppVersion({ releasesApiUrl });
-
-    let updateStatus = latestVersionResult.updateStatus;
-    if (!updateStatus && latestVersionResult.latestVersion) {
-        const cmp = compareVersionStrings(currentAppVersion, latestVersionResult.latestVersion);
-        updateStatus = cmp < 0 ? 'Update available' : 'Up to date';
-    } else if (!updateStatus) {
-        updateStatus = 'Unable to check';
-    }
+    const archiveUpdateUrl = emberNodeConfig.archiveUpdateUrl || ARCHIVE_UPDATE_URL;
+    const checkedAt = new Date().toISOString();
 
     let comparison = [];
     let cacheWarning = null;
@@ -162,12 +105,14 @@ async function _buildNodeStatusPayload() {
     return {
         success: true,
         currentAppVersion,
-        latestAvailableVersion: latestVersionResult.latestVersion,
-        updateStatus,
+        latestAvailableVersion: 'Check Archive',
+        updateSource: 'Green Fire Archive',
+        updateStatus: 'Coming soon',
+        archiveUpdateUrl,
         updatePageUrl,
         dataRootPath: DATA_ROOT,
-        checkedAt: latestVersionResult.checkedAt,
-        updateMessage: latestVersionResult.message || null,
+        checkedAt,
+        updateMessage: 'Updates are distributed through the Green Fire Archive.',
         coreCacheVersion: coreCache ? (coreCache.installedVersion || null) : null,
         installedCacheVersions,
         cacheStatuses,

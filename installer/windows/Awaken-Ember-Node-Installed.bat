@@ -34,9 +34,9 @@ if not exist "%SETUP_FLAG%" (
 :: ── Check for Node.js / npm ───────────────────────────────────────────────────
 where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo  ERROR: Node.js not found.
-    echo  Please install Node.js 18+ to run Ember Node.
-    echo  Visit https://nodejs.org to download the installer.
+    echo  ERROR: Node.js is required to run Ember Node.
+    echo  Install Node.js and relaunch:
+    echo  https://nodejs.org
     echo.
     pause
     exit /b 1
