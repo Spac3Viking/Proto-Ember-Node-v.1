@@ -31,6 +31,7 @@ const { compareInstalledWithUpstream } = require('../archiveCacheService');
 
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
+const BUNDLED_NODE_PATH = path.join(__dirname, '..', '..', 'runtime', 'node', 'node.exe');
 const ARCHIVE_UPDATE_URL = 'https://greenfire-archive.replit.app/downloads/index.json';
 const DEFAULT_UPDATE_PAGE_URL = 'https://greenfire-archive.replit.app/archive';
 const CACHE_STATUS_ORDER = [
@@ -60,6 +61,31 @@ function _formatCacheStatusText(row) {
     if (!row || !row.installed) return 'not installed';
     if (row.status === 'update-available') return 'update available';
     return 'installed';
+}
+
+function _detectNodeRuntimeStatus() {
+    if (fs.existsSync(BUNDLED_NODE_PATH)) {
+        return {
+            source: 'bundled',
+            status: 'Bundled runtime detected',
+            path: BUNDLED_NODE_PATH,
+        };
+    }
+
+    const execPath = typeof process.execPath === 'string' ? process.execPath.trim() : '';
+    if (execPath) {
+        return {
+            source: 'system',
+            status: 'System Node detected',
+            path: execPath,
+        };
+    }
+
+    return {
+        source: 'missing',
+        status: 'Missing',
+        path: null,
+    };
 }
 
 async function _buildNodeStatusPayload() {
@@ -138,6 +164,7 @@ function createSystemRouter({ migrationResult }) {
         const embeddings = loadEmbeddings();
         const manifests  = loadManifests();
         const packageConfig = _loadPackageConfig();
+        const runtimeStatus = _detectNodeRuntimeStatus();
 
         const bundledCartridgeCount = listCartridges().length;
         const userCartridgeCount    = fs.existsSync(USER_CARTRIDGES_DIR)
@@ -169,6 +196,9 @@ function createSystemRouter({ migrationResult }) {
             retrievalMode:     embStatus.working ? 'semantic' : 'keyword-fallback',
             storageRoot:       DATA_ROOT,
             appVersion:        _normalizeVersionString(packageConfig.version) || '0.0.0',
+            nodeRuntimeSource: runtimeStatus.source,
+            nodeRuntimeStatus: runtimeStatus.status,
+            nodeRuntimePath:   runtimeStatus.path,
             storageRootSource: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
                              : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
                              : 'default',
