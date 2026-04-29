@@ -248,6 +248,42 @@
                     <span class="system-val ok">active</span>
                   </div>
                 </div>
+                <div class="ember-card system-block">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+                    <div class="system-block-title" style="margin:0;">Node Status / Updates</div>
+                    <button class="secondary" id="sys-open-releases-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Open Releases Page</button>
+                  </div>
+                  <div class="system-row">
+                    <span class="system-key">Current app version</span>
+                    <span class="system-val" id="sys-app-version">—</span>
+                  </div>
+                  <div class="system-row">
+                    <span class="system-key">Latest available version</span>
+                    <span class="system-val" id="sys-latest-version">—</span>
+                  </div>
+                  <div class="system-row">
+                    <span class="system-key">Update status</span>
+                    <span class="system-val" id="sys-update-status">checking…</span>
+                  </div>
+                  <div class="system-row">
+                    <span class="system-key">Data root path</span>
+                    <span class="system-val" id="sys-data-root-path">—</span>
+                  </div>
+                  <div class="system-row">
+                    <span class="system-key">Core cache version</span>
+                    <span class="system-val" id="sys-core-cache-version">—</span>
+                  </div>
+                  <div class="system-row">
+                    <span class="system-key">Installed cache versions</span>
+                    <span class="system-val" id="sys-installed-cache-versions">—</span>
+                  </div>
+                  <div id="sys-cache-status-list" class="sys-cache-status-list">
+                    <span class="message-system">Loading cache status…</span>
+                  </div>
+                  <p class="system-future-note" id="sys-update-guidance" style="margin-top:0.75rem;">
+                    Checking update guidance…
+                  </p>
+                </div>
               </div>
 
               <!-- Active Heart Assignment -->

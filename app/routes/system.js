@@ -11,6 +11,8 @@
 
 const express = require('express');
 const axios   = require('axios');
+const fs = require('fs');
+const path = require('path');
 const { readLimiter } = require('../rateLimiters');
 const {
     DATA_ROOT, ROOM_DIRS,
@@ -24,10 +26,154 @@ const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCartridges }                            = require('../cartridgeLoader');
 const { loadIntakeState }                           = require('../intakeState');
 const { loadBootstrap }                             = require('../bootstrap');
-const fs = require('fs');
-const path = require('path');
+// Reuse canonical archive cache logic for version comparison and installed/update status.
+const { compareVersionStrings, compareInstalledWithUpstream } = require('../archiveCacheService');
 
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
+const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
+const DEFAULT_UPDATE_PAGE_URL = 'https://github.com/Spac3Viking/Proto-Ember-Node-v.1/releases';
+const DEFAULT_RELEASES_API_URL = 'https://api.github.com/repos/Spac3Viking/Proto-Ember-Node-v.1/releases/latest';
+const CACHE_STATUS_ORDER = [
+    { packageId: 'green-fire-core', label: 'Core Cache' },
+    { packageId: 'green-fire-codices-cache', label: 'Codices Cache' },
+    { packageId: 'green-fire-grimoires-cache', label: 'Grimoires Cache' },
+    { packageId: 'green-fire-sagas-cache', label: 'Sagas Cache' },
+    { packageId: 'green-fire-reference-cache', label: 'Reference Cache' },
+    { packageId: 'green-fire-gallery-cache', label: 'Gallery Cache' },
+    { packageId: 'green-fire-complete-cache', label: 'Complete Cache' },
+];
+
+let latestVersionCache = {
+    checkedAt: 0,
+    payload: null,
+};
+
+function _loadPackageConfig() {
+    try {
+        return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+    } catch {
+        return {};
+    }
+}
+
+function _normalizeVersionString(version) {
+    if (!version) return null;
+    return String(version).trim().replace(/^v/i, '');
+}
+
+function _formatCacheStatusText(row) {
+    if (!row || !row.installed) return 'not installed';
+    if (row.status === 'update-available') return 'update available';
+    return 'installed';
+}
+
+async function _checkLatestAppVersion(config) {
+    const now = Date.now();
+    const ttlMs = 5 * 60 * 1000;
+    if (latestVersionCache.payload && (now - latestVersionCache.checkedAt) < ttlMs) {
+        return latestVersionCache.payload;
+    }
+
+    if (!config.releasesApiUrl) {
+        const payload = {
+            latestVersion: null,
+            updateStatus: 'Coming soon',
+            checkedAt: new Date().toISOString(),
+            message: 'Release checks are not configured yet.',
+        };
+        latestVersionCache = { checkedAt: now, payload };
+        return payload;
+    }
+
+    try {
+        const res = await axios.get(config.releasesApiUrl, {
+            timeout: 5000,
+            headers: { Accept: 'application/vnd.github+json' },
+        });
+        const latestVersion = _normalizeVersionString((res.data && (res.data.tag_name || res.data.name)) || null);
+        const payload = {
+            latestVersion,
+            updateStatus: latestVersion ? null : 'Unable to check',
+            checkedAt: new Date().toISOString(),
+            message: latestVersion ? null : 'Latest release metadata did not include a version tag.',
+        };
+        latestVersionCache = { checkedAt: now, payload };
+        return payload;
+    } catch (err) {
+        const payload = {
+            latestVersion: null,
+            updateStatus: 'Unable to check',
+            checkedAt: new Date().toISOString(),
+            message: err.message,
+        };
+        latestVersionCache = { checkedAt: now, payload };
+        return payload;
+    }
+}
+
+async function _buildNodeStatusPayload() {
+    const packageConfig = _loadPackageConfig();
+    const currentAppVersion = _normalizeVersionString(packageConfig.version) || '0.0.0';
+    const emberNodeConfig = packageConfig.emberNode || {};
+    const updatePageUrl = emberNodeConfig.updatePageUrl || DEFAULT_UPDATE_PAGE_URL;
+    const releasesApiUrl = emberNodeConfig.releasesApiUrl || DEFAULT_RELEASES_API_URL;
+    const latestVersionResult = await _checkLatestAppVersion({ releasesApiUrl });
+
+    let updateStatus = latestVersionResult.updateStatus;
+    if (!updateStatus && latestVersionResult.latestVersion) {
+        const cmp = compareVersionStrings(currentAppVersion, latestVersionResult.latestVersion);
+        updateStatus = cmp < 0 ? 'Update available' : 'Up to date';
+    } else if (!updateStatus) {
+        updateStatus = 'Unable to check';
+    }
+
+    let comparison = [];
+    let cacheWarning = null;
+    try {
+        const comparisonPayload = await compareInstalledWithUpstream();
+        comparison = Array.isArray(comparisonPayload.comparison) ? comparisonPayload.comparison : [];
+    } catch (err) {
+        cacheWarning = err.message;
+    }
+
+    const comparisonById = new Map(comparison.map(row => [row.packageId, row]));
+    const cacheStatuses = CACHE_STATUS_ORDER.map(def => {
+        const row = comparisonById.get(def.packageId) || null;
+        return {
+            packageId: def.packageId,
+            label: def.label,
+            status: _formatCacheStatusText(row),
+            installed: Boolean(row && row.installed),
+            installedVersion: row ? (row.localVersion || (row.registry && row.registry.installedVersion) || null) : null,
+            latestVersion: row ? (row.upstreamVersion || null) : null,
+        };
+    });
+
+    const installedCacheVersions = cacheStatuses
+        .filter(item => item.installed)
+        .map(item => ({
+            label: item.label,
+            packageId: item.packageId,
+            version: item.installedVersion || 'unknown',
+        }));
+
+    const coreCache = cacheStatuses.find(item => item.packageId === 'green-fire-core') || null;
+
+    return {
+        success: true,
+        currentAppVersion,
+        latestAvailableVersion: latestVersionResult.latestVersion,
+        updateStatus,
+        updatePageUrl,
+        dataRootPath: DATA_ROOT,
+        checkedAt: latestVersionResult.checkedAt,
+        updateMessage: latestVersionResult.message || null,
+        coreCacheVersion: coreCache ? (coreCache.installedVersion || null) : null,
+        installedCacheVersions,
+        cacheStatuses,
+        cacheWarning,
+    };
+}
 
 /**
  * Create the system router.
@@ -46,6 +192,7 @@ function createSystemRouter({ migrationResult }) {
         const chunks     = loadChunks();
         const embeddings = loadEmbeddings();
         const manifests  = loadManifests();
+        const packageConfig = _loadPackageConfig();
 
         const bundledCartridgeCount = listCartridges().length;
         const userCartridgeCount    = fs.existsSync(USER_CARTRIDGES_DIR)
@@ -76,6 +223,7 @@ function createSystemRouter({ migrationResult }) {
             embeddingModel:    embStatus.model,
             retrievalMode:     embStatus.working ? 'semantic' : 'keyword-fallback',
             storageRoot:       DATA_ROOT,
+            appVersion:        _normalizeVersionString(packageConfig.version) || '0.0.0',
             storageRootSource: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
                              : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
                              : 'default',
@@ -142,6 +290,22 @@ function createSystemRouter({ migrationResult }) {
      */
     router.get('/api/intake-state', readLimiter, (req, res) => {
         res.json(loadIntakeState());
+    });
+
+    /**
+     * GET /api/system/node-status-updates
+     * Returns installer/update guidance state for Hearth → System.
+     */
+    router.get('/api/system/node-status-updates', readLimiter, async (req, res) => {
+        try {
+            const payload = await _buildNodeStatusPayload();
+            res.json(payload);
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                error: 'Could not load node status updates: ' + err.message,
+            });
+        }
     });
 
     return router;

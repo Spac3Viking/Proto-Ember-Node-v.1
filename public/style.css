@@ -763,6 +763,17 @@ input:focus, textarea:focus {
   margin-top: 0.25rem;
 }
 
+.sys-cache-status-list {
+  margin-top: 0.5rem;
+}
+
+#sys-data-root-path,
+#sys-installed-cache-versions {
+  text-align: right;
+  word-break: break-word;
+  max-width: 65%;
+}
+
 /* ── Loading / Spinner ─────────────────────────────────────── */
 
 .loading-dots::after {

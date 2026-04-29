@@ -93,6 +93,43 @@ describe('GET /api/ollama-status', () => {
     });
 });
 
+describe('GET /api/system/node-status-updates', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('returns app/update/cache summary payload', async () => {
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/releases/latest')) {
+                return Promise.resolve({ data: { tag_name: 'v1.1.0' } });
+            }
+            if (url.includes('/downloads/index.json')) {
+                return Promise.resolve({
+                    data: {
+                        packages: [
+                            {
+                                id: 'green-fire-core',
+                                version: '1.1.0',
+                                title: 'Green Fire Core',
+                                download_url: 'https://greenfire-archive.replit.app/downloads/green-fire-core.zip',
+                            },
+                        ],
+                    },
+                });
+            }
+            return Promise.resolve({ data: {} });
+        });
+
+        const res = await request(app).get('/api/system/node-status-updates');
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(typeof res.body.currentAppVersion).toBe('string');
+        expect(res.body).toHaveProperty('updateStatus');
+        expect(Array.isArray(res.body.cacheStatuses)).toBe(true);
+        expect(res.body.cacheStatuses.length).toBeGreaterThan(0);
+    });
+});
+
 /* ─────────────────────────────────────────────────────────────────
    Phase 6 — Detected Files Endpoints
    ─────────────────────────────────────────────────────────────── */
