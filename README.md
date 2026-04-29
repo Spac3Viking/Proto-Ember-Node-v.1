@@ -253,6 +253,10 @@ User data remains outside the app install directory and is preserved across rein
 - `npm` available (comes with Node.js).
 - Ollama is **optional** — the launcher works without it and will note its absence.
 
+Node.js is required to run Ember Node in this version. Future versions will bundle
+the runtime. If Node.js is not detected, install from:
+https://nodejs.org
+
 ---
 
 ### Portable Launcher (Repository Checkout)
