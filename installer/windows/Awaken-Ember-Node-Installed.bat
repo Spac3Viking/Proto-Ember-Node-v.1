@@ -110,13 +110,30 @@ if "%IS_FIRST_RUN%"=="1" if "%OLLAMA_FOUND%"=="0" (
     )
 )
 
-:: ── Start Ember Node backend ──────────────────────────────────────────────────
-echo.
-echo  Starting Ember Node backend...
-start "Ember Node" cmd /c "set \"EMBER_NODE_DATA_ROOT=%DATA_ROOT%\" && node app/server.js"
+:: ── Start Ember Node backend (if not already running) ─────────────────────────
+set "SERVER_READY=0"
+where curl >nul 2>&1
+if %errorlevel% equ 0 (
+    curl -s --max-time 2 http://localhost:3477/api/status >nul 2>&1
+    if %errorlevel% equ 0 (
+        set "SERVER_READY=1"
+    )
+)
+if "%SERVER_READY%"=="0" (
+    netstat -ano | findstr /R /C:":3477 " >nul 2>&1
+    if %errorlevel% equ 0 (
+        set "SERVER_READY=1"
+    )
+)
 
-:: ── Brief pause to let the server initialise ──────────────────────────────────
-timeout /t 3 >nul
+echo.
+if "%SERVER_READY%"=="1" (
+    echo  Ember Node backend already running.
+) else (
+    echo  Starting Ember Node backend...
+    start "Ember Node" cmd /c "set \"EMBER_NODE_DATA_ROOT=%DATA_ROOT%\" && node app/server.js"
+    timeout /t 3 >nul
+)
 
 :: ── Open the interface in the default browser ────────────────────────────────
 echo  Opening interface at http://localhost:3477

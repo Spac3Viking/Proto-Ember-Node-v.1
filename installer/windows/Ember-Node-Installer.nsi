@@ -1,5 +1,5 @@
 Unicode true
-RequestExecutionLevel admin
+RequestExecutionLevel user
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
@@ -11,13 +11,17 @@ RequestExecutionLevel admin
 !endif
 !define COMPANY_NAME "Ember Node"
 !define REG_PATH "Software\${APP_NAME}"
+!define APP_ICON_PNG "..\assets\ember-node-icon.png"
+!define APP_ICON_ICO "..\assets\ember-node-icon.ico"
 
 Name "${APP_NAME}"
 OutFile "Ember-Node-Setup.exe"
 BrandingText "ᚠ Ember Node Installer"
+Icon "${APP_ICON_ICO}"
+UninstallIcon "${APP_ICON_ICO}"
 
-InstallDir "$PROGRAMFILES\${APP_NAME}"
-InstallDirRegKey HKLM "${REG_PATH}" "InstallDir"
+InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
+InstallDirRegKey HKCU "${REG_PATH}" "InstallDir"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -32,16 +36,27 @@ InstallDirRegKey HKLM "${REG_PATH}" "InstallDir"
 !insertmacro MUI_LANGUAGE "English"
 
 Function .onInit
-    ${If} ${RunningX64}
-        StrCpy $INSTDIR "$PROGRAMFILES64\${APP_NAME}"
-    ${Else}
-        StrCpy $INSTDIR "$PROGRAMFILES\${APP_NAME}"
-    ${EndIf}
+    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${APP_NAME}"
 FunctionEnd
 
 Section "Install Ember Node" SEC_MAIN
-    SetShellVarContext all
+    SetShellVarContext current
     SetOutPath "$INSTDIR"
+
+    StrCpy $0 "$DOCUMENTS\Ember-Node-Data"
+    IfFileExists "$0\*" 0 +2
+        DetailPrint "Existing Ember Node data detected. It will be preserved."
+
+    ; Replace app files only. External Ember-Node-Data remains untouched.
+    RMDir /r "$INSTDIR\app"
+    RMDir /r "$INSTDIR\public"
+    RMDir /r "$INSTDIR\cartridges"
+    RMDir /r "$INSTDIR\data"
+    RMDir /r "$INSTDIR\node_modules"
+
+    CreateDirectory "$INSTDIR\installer\assets"
+    File /oname=$INSTDIR\installer\assets\ember-node-icon.png "${APP_ICON_PNG}"
+    File /oname=$INSTDIR\installer\assets\ember-node-icon.ico "${APP_ICON_ICO}"
 
     ; Core runtime files
     File /r "..\..\app"
@@ -57,22 +72,22 @@ Section "Install Ember Node" SEC_MAIN
 
     ; Desktop + Start Menu launcher
     CreateDirectory "$SMPROGRAMS\${APP_NAME}"
-    CreateShortCut "$DESKTOP\Awaken Ember Node.lnk" "$INSTDIR\Awaken-Ember-Node.bat" "" "$INSTDIR\Awaken-Ember-Node.bat" 0 SW_SHOWNORMAL "" "ᚠ Awaken Ember Node"
-    CreateShortCut "$SMPROGRAMS\${APP_NAME}\Awaken Ember Node.lnk" "$INSTDIR\Awaken-Ember-Node.bat" "" "$INSTDIR\Awaken-Ember-Node.bat" 0 SW_SHOWNORMAL "" "ᚠ Awaken Ember Node"
+    CreateShortCut "$DESKTOP\Awaken Ember Node.lnk" "$INSTDIR\Awaken-Ember-Node.bat" "" "$INSTDIR\installer\assets\ember-node-icon.ico" 0 SW_SHOWNORMAL "" "ᚠ Awaken Ember Node"
+    CreateShortCut "$SMPROGRAMS\${APP_NAME}\Awaken Ember Node.lnk" "$INSTDIR\Awaken-Ember-Node.bat" "" "$INSTDIR\installer\assets\ember-node-icon.ico" 0 SW_SHOWNORMAL "" "ᚠ Awaken Ember Node"
 
     ; Uninstaller and registry metadata
     WriteUninstaller "$INSTDIR\Uninstall.exe"
-    WriteRegStr HKLM "${REG_PATH}" "InstallDir" "$INSTDIR"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher" "${COMPANY_NAME}"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" "$\"$INSTDIR\Uninstall.exe$\""
-    WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoModify" 1
-    WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoRepair" 1
+    WriteRegStr HKCU "${REG_PATH}" "InstallDir" "$INSTDIR"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher" "${COMPANY_NAME}"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" "$\"$INSTDIR\Uninstall.exe$\""
+    WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoModify" 1
+    WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoRepair" 1
 SectionEnd
 
 Section "Uninstall"
-    SetShellVarContext all
+    SetShellVarContext current
 
     ; Remove launchers
     Delete "$DESKTOP\Awaken Ember Node.lnk"
@@ -82,6 +97,6 @@ Section "Uninstall"
     ; Remove app files only. User data root is external and intentionally preserved.
     RMDir /r "$INSTDIR"
 
-    DeleteRegKey HKLM "${REG_PATH}"
-    DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
+    DeleteRegKey HKCU "${REG_PATH}"
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 SectionEnd

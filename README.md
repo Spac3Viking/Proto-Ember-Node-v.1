@@ -216,12 +216,24 @@ npm run installer:windows
 
 This produces `Ember-Node-Setup.exe`, which installs Ember Node by default to:
 
-- `C:\Program Files\Ember Node\`
+- `%LOCALAPPDATA%\Programs\Ember Node\` (user-selectable in installer)
 
 The installer creates:
 
 - Desktop shortcut: **Awaken Ember Node**
 - Start Menu launcher: **Awaken Ember Node**
+- Shortcut icon: `installer/assets/ember-node-icon.ico` (generated from glyph PNG)
+
+Icon source files:
+
+- `installer/assets/ember-node-icon.png`
+- `installer/assets/ember-node-icon.ico`
+
+Regenerate `.ico` from `.png`:
+
+```bash
+npm run installer:icon
+```
 
 ### Installed Launcher Behavior
 
@@ -232,7 +244,7 @@ The installed launcher (`Awaken-Ember-Node.bat`) supports one-click startup:
 3. Installs runtime dependencies (`npm install --omit=dev`) if `node_modules` is missing.
 4. Optionally starts Ollama when installed and not already running.
 5. Offers a first-run Ollama download assist if Ollama is not detected.
-6. Starts Ember Node and opens `http://localhost:3477`.
+6. Starts Ember Node only when not already running, then opens `http://localhost:3477`.
 
 User data remains outside the app install directory and is preserved across reinstalls/updates.
 

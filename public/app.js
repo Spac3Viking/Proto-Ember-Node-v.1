@@ -2749,6 +2749,83 @@ async function refreshSystemStatus() {
     }
 
     updateHeaderStatus();
+    loadNodeStatusUpdates();
+}
+
+function updateStatusClass(status) {
+    if (status === 'Up to date') return 'system-val ok';
+    if (status === 'Update available' || status === 'Coming soon') return 'system-val warn';
+    if (status === 'Unable to check') return 'system-val error';
+    return 'system-val';
+}
+
+async function loadNodeStatusUpdates() {
+    const appVersionEl = document.getElementById('sys-app-version');
+    const latestVersionEl = document.getElementById('sys-latest-version');
+    const updateStatusEl = document.getElementById('sys-update-status');
+    const dataRootEl = document.getElementById('sys-data-root-path');
+    const coreCacheVersionEl = document.getElementById('sys-core-cache-version');
+    const installedVersionsEl = document.getElementById('sys-installed-cache-versions');
+    const cacheStatusListEl = document.getElementById('sys-cache-status-list');
+    const guidanceEl = document.getElementById('sys-update-guidance');
+    const releasesBtn = document.getElementById('sys-open-releases-btn');
+    if (!appVersionEl) return;
+
+    try {
+        const res = await fetch('/api/system/node-status-updates');
+        const data = await res.json();
+        if (!res.ok || data.success === false) throw new Error(data.error || 'Failed to load status');
+
+        appVersionEl.textContent = data.currentAppVersion || '—';
+        latestVersionEl.textContent = data.latestAvailableVersion || '—';
+        dataRootEl.textContent = data.dataRootPath || '—';
+        coreCacheVersionEl.textContent = data.coreCacheVersion || 'unknown';
+
+        const statusText = data.updateStatus || 'Unable to check';
+        updateStatusEl.textContent = statusText;
+        updateStatusEl.className = updateStatusClass(statusText);
+
+        const installedList = Array.isArray(data.installedCacheVersions) ? data.installedCacheVersions : [];
+        installedVersionsEl.textContent = installedList.length > 0
+            ? installedList.map(item => item.label + ' ' + item.version).join(' · ')
+            : 'none installed';
+
+        const cacheStatuses = Array.isArray(data.cacheStatuses) ? data.cacheStatuses : [];
+        cacheStatusListEl.innerHTML = cacheStatuses.length > 0
+            ? cacheStatuses.map(item =>
+                '<div class="system-row">' +
+                '<span class="system-key">' + escapeHtml(item.label) + '</span>' +
+                '<span class="system-val">' + escapeHtml(item.status || 'not installed') + '</span>' +
+                '</div>',
+            ).join('')
+            : '<span class="message-system">Cache status unavailable.</span>';
+
+        if (guidanceEl) {
+            const updateLine = statusText === 'Update available'
+                ? 'Update available. Download the latest Ember Node build and install it over the current app.'
+                : 'Install updates over your current Ember Node app when a new build is available.';
+            guidanceEl.textContent = updateLine + ' Your Ember-Node-Data folder will be preserved. Archive caches, chats, drafts, projects, and remembered threads live outside the app folder. The app can be replaced. The hearth remains.';
+        }
+
+        if (releasesBtn) {
+            const hasUrl = Boolean(data.updatePageUrl);
+            releasesBtn.disabled = !hasUrl;
+            releasesBtn.onclick = hasUrl
+                ? () => window.open(data.updatePageUrl, '_blank', 'noopener,noreferrer')
+                : null;
+        }
+    } catch {
+        if (updateStatusEl) {
+            updateStatusEl.textContent = 'Unable to check';
+            updateStatusEl.className = 'system-val error';
+        }
+        if (cacheStatusListEl) {
+            cacheStatusListEl.innerHTML = '<span class="message-system">Cache status unavailable.</span>';
+        }
+        if (guidanceEl) {
+            guidanceEl.textContent = 'Install updates over your current Ember Node app when available. Your Ember-Node-Data folder will be preserved. The app can be replaced. The hearth remains.';
+        }
+    }
 }
 
 function updateSystemCartridgeCount(count) {
