@@ -2752,7 +2752,7 @@ async function refreshSystemStatus() {
     loadNodeStatusUpdates();
 }
 
-function updateStatusClass(status) {
+function mapStatusToCssClass(status) {
     if (status === 'Up to date') return 'system-val ok';
     if (status === 'Update available' || status === 'Coming soon') return 'system-val warn';
     if (status === 'Unable to check') return 'system-val error';
@@ -2783,11 +2783,11 @@ async function loadNodeStatusUpdates() {
 
         const statusText = data.updateStatus || 'Unable to check';
         updateStatusEl.textContent = statusText;
-        updateStatusEl.className = updateStatusClass(statusText);
+        updateStatusEl.className = mapStatusToCssClass(statusText);
 
         const installedList = Array.isArray(data.installedCacheVersions) ? data.installedCacheVersions : [];
         installedVersionsEl.textContent = installedList.length > 0
-            ? installedList.map(item => item.label + ' ' + item.version).join(' · ')
+            ? installedList.map(item => `${item.label} ${item.version}`).join(' · ')
             : 'none installed';
 
         const cacheStatuses = Array.isArray(data.cacheStatuses) ? data.cacheStatuses : [];
@@ -2804,7 +2804,9 @@ async function loadNodeStatusUpdates() {
             const updateLine = statusText === 'Update available'
                 ? 'Update available. Download the latest Ember Node build and install it over the current app.'
                 : 'Install updates over your current Ember Node app when a new build is available.';
-            guidanceEl.textContent = updateLine + ' Your Ember-Node-Data folder will be preserved. Archive caches, chats, drafts, projects, and remembered threads live outside the app folder. The app can be replaced. The hearth remains.';
+            const preservationLine = 'Your Ember-Node-Data folder will be preserved. Archive caches, chats, drafts, projects, and remembered threads live outside the app folder.';
+            const hearthLine = 'The app can be replaced. The hearth remains.';
+            guidanceEl.textContent = updateLine + ' ' + preservationLine + ' ' + hearthLine;
         }
 
         if (releasesBtn) {
@@ -2814,7 +2816,8 @@ async function loadNodeStatusUpdates() {
                 ? () => window.open(data.updatePageUrl, '_blank', 'noopener,noreferrer')
                 : null;
         }
-    } catch {
+    } catch (err) {
+        console.warn('[system] Could not load node status updates:', err && err.message ? err.message : err);
         if (updateStatusEl) {
             updateStatusEl.textContent = 'Unable to check';
             updateStatusEl.className = 'system-val error';

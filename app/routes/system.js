@@ -26,6 +26,7 @@ const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCartridges }                            = require('../cartridgeLoader');
 const { loadIntakeState }                           = require('../intakeState');
 const { loadBootstrap }                             = require('../bootstrap');
+// Reuse canonical archive cache logic for version comparison and installed/update status.
 const { compareVersionStrings, compareInstalledWithUpstream } = require('../archiveCacheService');
 
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
@@ -42,7 +43,7 @@ const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-complete-cache', label: 'Complete Cache' },
 ];
 
-let _latestVersionCache = {
+let latestVersionCache = {
     checkedAt: 0,
     payload: null,
 };
@@ -55,12 +56,12 @@ function _loadPackageConfig() {
     }
 }
 
-function _cleanVersion(version) {
+function _normalizeVersionString(version) {
     if (!version) return null;
     return String(version).trim().replace(/^v/i, '');
 }
 
-function _cacheStatusLabel(row) {
+function _formatCacheStatusText(row) {
     if (!row || !row.installed) return 'not installed';
     if (row.status === 'update-available') return 'update available';
     return 'installed';
@@ -69,8 +70,8 @@ function _cacheStatusLabel(row) {
 async function _checkLatestAppVersion(config) {
     const now = Date.now();
     const ttlMs = 5 * 60 * 1000;
-    if (_latestVersionCache.payload && (now - _latestVersionCache.checkedAt) < ttlMs) {
-        return _latestVersionCache.payload;
+    if (latestVersionCache.payload && (now - latestVersionCache.checkedAt) < ttlMs) {
+        return latestVersionCache.payload;
     }
 
     if (!config.releasesApiUrl) {
@@ -80,23 +81,23 @@ async function _checkLatestAppVersion(config) {
             checkedAt: new Date().toISOString(),
             message: 'Release checks are not configured yet.',
         };
-        _latestVersionCache = { checkedAt: now, payload };
+        latestVersionCache = { checkedAt: now, payload };
         return payload;
     }
 
     try {
         const res = await axios.get(config.releasesApiUrl, {
-            timeout: 8000,
+            timeout: 5000,
             headers: { Accept: 'application/vnd.github+json' },
         });
-        const latestVersion = _cleanVersion((res.data && (res.data.tag_name || res.data.name)) || null);
+        const latestVersion = _normalizeVersionString((res.data && (res.data.tag_name || res.data.name)) || null);
         const payload = {
             latestVersion,
             updateStatus: latestVersion ? null : 'Unable to check',
             checkedAt: new Date().toISOString(),
             message: latestVersion ? null : 'Latest release metadata did not include a version tag.',
         };
-        _latestVersionCache = { checkedAt: now, payload };
+        latestVersionCache = { checkedAt: now, payload };
         return payload;
     } catch (err) {
         const payload = {
@@ -105,23 +106,25 @@ async function _checkLatestAppVersion(config) {
             checkedAt: new Date().toISOString(),
             message: err.message,
         };
-        _latestVersionCache = { checkedAt: now, payload };
+        latestVersionCache = { checkedAt: now, payload };
         return payload;
     }
 }
 
 async function _buildNodeStatusPayload() {
     const packageConfig = _loadPackageConfig();
-    const currentAppVersion = _cleanVersion(packageConfig.version) || '0.0.0';
+    const currentAppVersion = _normalizeVersionString(packageConfig.version) || '0.0.0';
     const emberNodeConfig = packageConfig.emberNode || {};
     const updatePageUrl = emberNodeConfig.updatePageUrl || DEFAULT_UPDATE_PAGE_URL;
     const releasesApiUrl = emberNodeConfig.releasesApiUrl || DEFAULT_RELEASES_API_URL;
     const latestVersionResult = await _checkLatestAppVersion({ releasesApiUrl });
 
     let updateStatus = latestVersionResult.updateStatus;
-    if (!updateStatus) {
+    if (!updateStatus && latestVersionResult.latestVersion) {
         const cmp = compareVersionStrings(currentAppVersion, latestVersionResult.latestVersion);
         updateStatus = cmp < 0 ? 'Update available' : 'Up to date';
+    } else if (!updateStatus) {
+        updateStatus = 'Unable to check';
     }
 
     let comparison = [];
@@ -139,7 +142,7 @@ async function _buildNodeStatusPayload() {
         return {
             packageId: def.packageId,
             label: def.label,
-            status: _cacheStatusLabel(row),
+            status: _formatCacheStatusText(row),
             installed: Boolean(row && row.installed),
             installedVersion: row ? (row.localVersion || (row.registry && row.registry.installedVersion) || null) : null,
             latestVersion: row ? (row.upstreamVersion || null) : null,
@@ -220,7 +223,7 @@ function createSystemRouter({ migrationResult }) {
             embeddingModel:    embStatus.model,
             retrievalMode:     embStatus.working ? 'semantic' : 'keyword-fallback',
             storageRoot:       DATA_ROOT,
-            appVersion:        _cleanVersion(packageConfig.version) || '0.0.0',
+            appVersion:        _normalizeVersionString(packageConfig.version) || '0.0.0',
             storageRootSource: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
                              : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
                              : 'default',

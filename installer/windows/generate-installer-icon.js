@@ -5,6 +5,7 @@ const path = require('path');
 
 const pngPath = path.join(__dirname, '..', 'assets', 'ember-node-icon.png');
 const icoPath = path.join(__dirname, '..', 'assets', 'ember-node-icon.ico');
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function buildIcoFromPng(pngBuffer) {
     const header = Buffer.alloc(6);
@@ -13,8 +14,8 @@ function buildIcoFromPng(pngBuffer) {
     header.writeUInt16LE(1, 4);
 
     const entry = Buffer.alloc(16);
-    entry.writeUInt8(0, 0); // width 256
-    entry.writeUInt8(0, 1); // height 256
+    entry.writeUInt8(0, 0); // ICO convention: 0 means 256px width
+    entry.writeUInt8(0, 1); // ICO convention: 0 means 256px height
     entry.writeUInt8(0, 2); // palette colors
     entry.writeUInt8(0, 3); // reserved
     entry.writeUInt16LE(1, 4); // color planes
@@ -31,7 +32,11 @@ if (!fs.existsSync(pngPath)) {
 }
 
 const pngBuffer = fs.readFileSync(pngPath);
-if (pngBuffer.length < 8 || pngBuffer.readUInt32BE(0) !== 0x89504e47) {
+const hasPngSignature =
+    pngBuffer.length >= PNG_SIGNATURE.length &&
+    pngBuffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE);
+
+if (!hasPngSignature) {
     console.error('[installer-icon] Source file is not a PNG:', pngPath);
     process.exit(1);
 }
