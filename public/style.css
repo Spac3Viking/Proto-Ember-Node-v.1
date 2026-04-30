@@ -744,6 +744,16 @@ input:focus, textarea:focus {
   justify-content: flex-start;
 }
 
+.system-shutdown-btn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+}
+
+.system-shutdown-status {
+  text-align: left;
+  width: 100%;
+}
+
 .system-key {
   color: var(--archive-muted);
   font-size: 0.78rem;

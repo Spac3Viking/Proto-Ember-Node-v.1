@@ -316,7 +316,10 @@ function createSystemRouter({ migrationResult }) {
         });
 
         setTimeout(() => {
-            if (process.env.NODE_ENV === 'test') return;
+            if (process.env.NODE_ENV === 'test') {
+                shutdownScheduled = false;
+                return;
+            }
             console.log('[system] Shutdown requested from local UI. Exiting process.');
             process.exit(0);
         }, SHUTDOWN_DELAY_MS);
