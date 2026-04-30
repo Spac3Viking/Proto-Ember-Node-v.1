@@ -2,7 +2,7 @@
   "id": "ember-node-windows",
   "title": "Ember Node for Windows",
   "version": "0.1.0",
-  "last_updated": "YYYY-MM-DD",
+  "last_updated": "2026-04-30",
   "type": "desktop-app",
   "platform": "windows",
   "includes": {

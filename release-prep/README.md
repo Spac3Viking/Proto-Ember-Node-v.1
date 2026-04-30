@@ -1,7 +1,7 @@
 # Ember Node Release Prep
 
 Before building the public Windows installer:
-1. Download the Node.js Windows Binary .zip from nodejs.org.
+1. Download the current Node.js LTS Windows Binary .zip from nodejs.org.
 2. Extract it locally.
 3. Copy runtime files into runtime/node/.
 4. Confirm runtime/node/node.exe exists.
