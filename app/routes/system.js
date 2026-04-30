@@ -45,6 +45,7 @@ const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-complete-cache', label: 'Complete Cache' },
 ];
 const SHUTDOWN_DELAY_MS = 250;
+let shutdownScheduled = false;
 
 function _loadPackageConfig() {
     try {
@@ -299,6 +300,15 @@ function createSystemRouter({ migrationResult }) {
                 error: 'Shutdown endpoint is local-only.',
             });
         }
+
+        if (shutdownScheduled) {
+            return res.json({
+                success: true,
+                message: 'Ember Node is shutting down. You may close this window.',
+            });
+        }
+
+        shutdownScheduled = true;
 
         res.json({
             success: true,

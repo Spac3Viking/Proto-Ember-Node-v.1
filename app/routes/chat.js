@@ -230,14 +230,13 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             if (validSourceIds.length > 0) {
                 const allChunks    = loadChunks();
                 const retrievedIds = new Set(retrieved.map(c => c.chunk.id));
+                const pinnedSourceChunks = allChunks.filter(c => validSourceIds.includes(c.sourceId));
                 const matchedSourceIds = new Set(
-                    allChunks
-                        .filter(c => validSourceIds.includes(c.sourceId))
-                        .map(c => c.sourceId),
+                    pinnedSourceChunks.map(c => c.sourceId),
                 );
                 missingPinnedSources = validSourceIds.filter(id => !matchedSourceIds.has(id));
-                const pinned       = allChunks
-                    .filter(c => validSourceIds.includes(c.sourceId) && !retrievedIds.has(c.id))
+                const pinned       = pinnedSourceChunks
+                    .filter(c => !retrievedIds.has(c.id))
                     .slice(0, MAX_PINNED_CHUNKS)
                     .map(c => ({ chunk: c, score: 1.0 }));
                 retrieved = [...pinned, ...retrieved];
@@ -308,10 +307,10 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             userContent = userContent + '\n\n' + archetypePart;
         }
 
-        const retrievalStateBlock =
-            '=== Retrieval State ===\n' +
-            'state: ' + retrievalState +
-            '\n\n';
+        const retrievalStateBlock = `=== Retrieval State ===
+state: ${retrievalState}
+
+`;
         userContent = retrievalStateBlock + userContent;
 
         // Select room-appropriate system prompt

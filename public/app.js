@@ -427,8 +427,8 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
     const maxChunk = Number.isFinite(options.maxChunk) ? options.maxChunk : TERMINAL_REVEAL_PROFILE.MAX_CHUNK;
     const flickerDelay = Number.isFinite(options.flickerDelay) ? options.flickerDelay : 18;
 
-    targetElement.textContent = '';
     if (useGlyph && /\S/.test(text)) {
+        targetElement.textContent = '';
         const glyphLength = Math.min(TERMINAL_REVEAL_PROFILE.GLYPH_LENGTH, Math.max(8, text.length));
         const glyphSample = text.slice(0, glyphLength);
         for (let i = 0; i < TERMINAL_REVEAL_PROFILE.GLYPH_FRAMES; i += 1) {
@@ -438,13 +438,15 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
         }
         targetElement.textContent = '';
         if (onFrame) onFrame();
+    } else {
+        targetElement.textContent = '';
     }
 
     let stableText = '';
     let idx = 0;
     while (idx < text.length) {
-        const span = Math.max(maxChunk - minChunk + 1, 1);
-        const chunkSize = Math.min(minChunk + Math.floor(Math.random() * span), text.length - idx);
+        const chunkSizeRange = Math.max(maxChunk - minChunk + 1, 1);
+        const chunkSize = Math.min(minChunk + Math.floor(Math.random() * chunkSizeRange), text.length - idx);
         stableText += text.slice(idx, idx + chunkSize);
         targetElement.textContent = stableText;
         if (onFrame) onFrame();
@@ -2930,7 +2932,8 @@ async function requestSystemShutdown(buttonEl) {
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'shutdown failed');
         setShutdownStatus('Ember Node is shutting down. You may close this window.');
-    } catch {
+    } catch (err) {
+        console.warn('[system] shutdown request failed:', err?.message || err);
         setShutdownStatus('Unable to shut down cleanly. You may close the terminal manually.', 'error');
         btn.disabled = false;
     }
