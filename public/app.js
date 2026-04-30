@@ -393,22 +393,14 @@ function randomRuneLikeChars(sample) {
     return out;
 }
 
-const REVEAL_CHUNK_PROFILE = Object.freeze({
-    LARGE_TEXT_THRESHOLD: 320,
-    MEDIUM_TEXT_THRESHOLD: 180,
-    SMALL_TEXT_THRESHOLD: 80,
-    LARGE_CHUNK: 12,
-    MEDIUM_CHUNK: 9,
-    SMALL_CHUNK: 6,
-    TINY_CHUNK: 3,
+const TERMINAL_REVEAL_PROFILE = Object.freeze({
+    MIN_CHUNK: 20,
+    MAX_CHUNK: 45,
+    MIN_TICK_MS: 15,
+    MAX_TICK_MS: 35,
+    GLYPH_FRAMES: 4,
+    GLYPH_LENGTH: 14,
 });
-
-function nextChunkSize(remaining) {
-    if (remaining > REVEAL_CHUNK_PROFILE.LARGE_TEXT_THRESHOLD) return REVEAL_CHUNK_PROFILE.LARGE_CHUNK;
-    if (remaining > REVEAL_CHUNK_PROFILE.MEDIUM_TEXT_THRESHOLD) return REVEAL_CHUNK_PROFILE.MEDIUM_CHUNK;
-    if (remaining > REVEAL_CHUNK_PROFILE.SMALL_TEXT_THRESHOLD) return REVEAL_CHUNK_PROFILE.SMALL_CHUNK;
-    return REVEAL_CHUNK_PROFILE.TINY_CHUNK;
-}
 
 /**
  * Render text progressively with optional rune flicker that resolves into readable output.
@@ -418,8 +410,10 @@ function nextChunkSize(remaining) {
  * @param {Object} [options]
  * @param {boolean} [options.glyphEffect=true]  Show temporary rune glyphs before settling to text
  * @param {Function} [options.onFrame]          Callback fired after each visual update
- * @param {number} [options.minDelay=14]        Minimum delay (ms) between reveal steps
- * @param {number} [options.maxDelay=26]        Maximum delay (ms) between reveal steps
+ * @param {number} [options.minDelay=15]        Minimum delay (ms) between reveal steps
+ * @param {number} [options.maxDelay=35]        Maximum delay (ms) between reveal steps
+ * @param {number} [options.minChunk=20]        Minimum chars appended per reveal tick
+ * @param {number} [options.maxChunk=45]        Maximum chars appended per reveal tick
  * @param {number} [options.flickerDelay=18]    Delay (ms) for glyph flicker frame
  * @returns {Promise<void>}
  */
@@ -427,24 +421,31 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
     const text = typeof finalText === 'string' ? finalText : '';
     const useGlyph = options.glyphEffect !== false;
     const onFrame = typeof options.onFrame === 'function' ? options.onFrame : null;
-    const minDelay = Number.isFinite(options.minDelay) ? options.minDelay : 14;
-    const maxDelay = Number.isFinite(options.maxDelay) ? options.maxDelay : 26;
+    const minDelay = Number.isFinite(options.minDelay) ? options.minDelay : TERMINAL_REVEAL_PROFILE.MIN_TICK_MS;
+    const maxDelay = Number.isFinite(options.maxDelay) ? options.maxDelay : TERMINAL_REVEAL_PROFILE.MAX_TICK_MS;
+    const minChunk = Number.isFinite(options.minChunk) ? options.minChunk : TERMINAL_REVEAL_PROFILE.MIN_CHUNK;
+    const maxChunk = Number.isFinite(options.maxChunk) ? options.maxChunk : TERMINAL_REVEAL_PROFILE.MAX_CHUNK;
     const flickerDelay = Number.isFinite(options.flickerDelay) ? options.flickerDelay : 18;
+
+    targetElement.textContent = '';
+    if (useGlyph && /\S/.test(text)) {
+        const glyphLength = Math.min(TERMINAL_REVEAL_PROFILE.GLYPH_LENGTH, Math.max(8, text.length));
+        const glyphSample = text.slice(0, glyphLength);
+        for (let i = 0; i < TERMINAL_REVEAL_PROFILE.GLYPH_FRAMES; i += 1) {
+            targetElement.textContent = randomRuneLikeChars(glyphSample);
+            if (onFrame) onFrame();
+            await sleep(flickerDelay);
+        }
+        targetElement.textContent = '';
+        if (onFrame) onFrame();
+    }
 
     let stableText = '';
     let idx = 0;
     while (idx < text.length) {
-        const remaining = text.length - idx;
-        const chunkSize = Math.min(nextChunkSize(remaining), remaining);
-        const chunk = text.slice(idx, idx + chunkSize);
-
-        if (useGlyph && /\S/.test(chunk)) {
-            targetElement.textContent = stableText + randomRuneLikeChars(chunk);
-            if (onFrame) onFrame();
-            await sleep(flickerDelay);
-        }
-
-        stableText += chunk;
+        const span = Math.max(maxChunk - minChunk + 1, 1);
+        const chunkSize = Math.min(minChunk + Math.floor(Math.random() * span), text.length - idx);
+        stableText += text.slice(idx, idx + chunkSize);
         targetElement.textContent = stableText;
         if (onFrame) onFrame();
         idx += chunkSize;
@@ -608,9 +609,7 @@ async function sendMessage() {
         if (data && typeof data.answer === 'string') {
             const responseEl = displayMessage(chatContainer, '', 'message-heart message-heart-live');
             setChatState(CHAT_STATES.RESOLVING);
-            responseEl.textContent = randomRuneLikeChars(data.answer.slice(0, Math.min(12, data.answer.length)));
             chatContainer.scrollTop = chatContainer.scrollHeight;
-            await sleep(90);
             setChatState(CHAT_STATES.RESPONDING);
             await resolveGlyphText(responseEl, data.answer, {
                 glyphEffect: _glyphResolveEnabled,
@@ -2912,6 +2911,38 @@ async function refreshSystemStatus() {
     updateHeaderStatus();
     loadNodeStatusUpdates();
 }
+
+function setShutdownStatus(message, cssClass = '') {
+    const statusEl = document.getElementById('sys-shutdown-status');
+    if (!statusEl) return;
+    statusEl.textContent = message || '';
+    statusEl.className = cssClass ? ('message-system ' + cssClass) : 'message-system';
+}
+
+async function requestSystemShutdown(buttonEl) {
+    const btn = buttonEl || document.getElementById('sys-shutdown-btn');
+    if (!btn) return;
+
+    btn.disabled = true;
+    setShutdownStatus('Sending shutdown signal…');
+    try {
+        const res = await fetch('/api/system/shutdown', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'shutdown failed');
+        setShutdownStatus('Ember Node is shutting down. You may close this window.');
+    } catch {
+        setShutdownStatus('Unable to shut down cleanly. You may close the terminal manually.', 'error');
+        btn.disabled = false;
+    }
+}
+
+(function initSystemShutdownButton() {
+    document.addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'sys-shutdown-btn') {
+            requestSystemShutdown(e.target);
+        }
+    });
+})();
 
 function mapStatusToCssClass(status) {
     if (status === 'Coming soon') return 'system-val warn';
