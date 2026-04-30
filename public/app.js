@@ -346,6 +346,113 @@ function displayMessage(container, text, className) {
     el.className = className;
     el.textContent = text;
     container.appendChild(el);
+    return el;
+}
+
+const HEART_TECHNICAL_ERROR = (
+    'The Heart could not complete the response.\n' +
+    'Check local AI status and try again.'
+);
+
+const CHAT_STATES = Object.freeze({
+    IDLE:       'idle',
+    THINKING:   'thinking',
+    RESOLVING:  'resolving',
+    RESPONDING: 'responding',
+    COMPLETE:   'complete',
+    ERROR:      'error',
+});
+
+let _chatState = CHAT_STATES.IDLE;
+let _glyphResolveEnabled = true;
+
+function setChatState(nextState) {
+    _chatState = nextState;
+    const chatEl = document.getElementById('messages');
+    if (chatEl) chatEl.dataset.chatState = nextState;
+}
+
+setChatState(CHAT_STATES.IDLE);
+
+function cleanupThinkingIndicator(container, thinkingEl, cancelAnim) {
+    if (typeof cancelAnim === 'function') cancelAnim();
+    if (container && thinkingEl && container.contains(thinkingEl)) container.removeChild(thinkingEl);
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function randomRuneLikeChars(sample) {
+    let out = '';
+    for (let i = 0; i < sample.length; i += 1) {
+        out += /\s/.test(sample[i])
+            ? sample[i]
+            : HEART_SYMBOLS[Math.floor(Math.random() * HEART_SYMBOLS.length)];
+    }
+    return out;
+}
+
+const REVEAL_CHUNK_PROFILE = Object.freeze({
+    LARGE_TEXT_THRESHOLD: 320,
+    MEDIUM_TEXT_THRESHOLD: 180,
+    SMALL_TEXT_THRESHOLD: 80,
+    LARGE_CHUNK: 12,
+    MEDIUM_CHUNK: 9,
+    SMALL_CHUNK: 6,
+    TINY_CHUNK: 3,
+});
+
+function nextChunkSize(remaining) {
+    if (remaining > REVEAL_CHUNK_PROFILE.LARGE_TEXT_THRESHOLD) return REVEAL_CHUNK_PROFILE.LARGE_CHUNK;
+    if (remaining > REVEAL_CHUNK_PROFILE.MEDIUM_TEXT_THRESHOLD) return REVEAL_CHUNK_PROFILE.MEDIUM_CHUNK;
+    if (remaining > REVEAL_CHUNK_PROFILE.SMALL_TEXT_THRESHOLD) return REVEAL_CHUNK_PROFILE.SMALL_CHUNK;
+    return REVEAL_CHUNK_PROFILE.TINY_CHUNK;
+}
+
+/**
+ * Render text progressively with optional rune flicker that resolves into readable output.
+ *
+ * @param {HTMLElement} targetElement
+ * @param {string} finalText
+ * @param {Object} [options]
+ * @param {boolean} [options.glyphEffect=true]  Show temporary rune glyphs before settling to text
+ * @param {Function} [options.onFrame]          Callback fired after each visual update
+ * @param {number} [options.minDelay=14]        Minimum delay (ms) between reveal steps
+ * @param {number} [options.maxDelay=26]        Maximum delay (ms) between reveal steps
+ * @param {number} [options.flickerDelay=18]    Delay (ms) for glyph flicker frame
+ * @returns {Promise<void>}
+ */
+async function resolveGlyphText(targetElement, finalText, options = {}) {
+    const text = typeof finalText === 'string' ? finalText : '';
+    const useGlyph = options.glyphEffect !== false;
+    const onFrame = typeof options.onFrame === 'function' ? options.onFrame : null;
+    const minDelay = Number.isFinite(options.minDelay) ? options.minDelay : 14;
+    const maxDelay = Number.isFinite(options.maxDelay) ? options.maxDelay : 26;
+    const flickerDelay = Number.isFinite(options.flickerDelay) ? options.flickerDelay : 18;
+
+    let stableText = '';
+    let idx = 0;
+    while (idx < text.length) {
+        const remaining = text.length - idx;
+        const chunkSize = Math.min(nextChunkSize(remaining), remaining);
+        const chunk = text.slice(idx, idx + chunkSize);
+
+        if (useGlyph && /\S/.test(chunk)) {
+            targetElement.textContent = stableText + randomRuneLikeChars(chunk);
+            if (onFrame) onFrame();
+            await sleep(flickerDelay);
+        }
+
+        stableText += chunk;
+        targetElement.textContent = stableText;
+        if (onFrame) onFrame();
+        idx += chunkSize;
+
+        const pace = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+        await sleep(pace);
+    }
+    targetElement.textContent = text;
 }
 
 /* ================================================================
@@ -463,13 +570,18 @@ async function sendMessage() {
     displayMessage(chatContainer, message, 'message-user');
     messageInput.value = '';
     chatContainer.scrollTop = chatContainer.scrollHeight;
+    setChatState(CHAT_STATES.THINKING);
 
     // Rune loading indicator — JS-driven symbol cycle
     const thinking = document.createElement('div');
-    thinking.className = 'message-heart loading-rune';
+    thinking.className = 'message-heart loading-rune thinking-bubble';
     const runeSpan = document.createElement('span');
     runeSpan.className = 'rune-symbol';
+    const thinkingLabel = document.createElement('span');
+    thinkingLabel.className = 'thinking-label';
+    thinkingLabel.textContent = 'Signal resolving...';
     thinking.appendChild(runeSpan);
+    thinking.appendChild(thinkingLabel);
     const cancelAnim = startRuneAnimation(runeSpan);
     chatContainer.appendChild(thinking);
     chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -489,14 +601,23 @@ async function sendMessage() {
             }),
         });
 
-        chatContainer.removeChild(thinking);
-        cancelAnim();
+        cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
 
         const data = await response.json();
 
         if (data && typeof data.answer === 'string') {
-            displayMessage(chatContainer, data.answer, 'message-heart');
+            const responseEl = displayMessage(chatContainer, '', 'message-heart message-heart-live');
+            setChatState(CHAT_STATES.RESOLVING);
+            responseEl.textContent = randomRuneLikeChars(data.answer.slice(0, Math.min(12, data.answer.length)));
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            await sleep(90);
+            setChatState(CHAT_STATES.RESPONDING);
+            await resolveGlyphText(responseEl, data.answer, {
+                glyphEffect: _glyphResolveEnabled,
+                onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
+            });
             renderSignalTrace(data.sources || []);
+            setChatState(CHAT_STATES.COMPLETE);
 
             // Persist to thread if active
             if (hearthActiveThreadId) {
@@ -504,19 +625,22 @@ async function sendMessage() {
                 await saveMessageToThread(hearthActiveThreadId, 'assistant', data.answer);
             }
         } else if (data && data.error) {
-            displayMessage(chatContainer, 'The Heart returned an error: ' + data.error, 'message-heart');
+            console.warn('[chat] server returned error payload:', data.error);
+            displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
             setTraceStatus('error');
+            setChatState(CHAT_STATES.ERROR);
         } else {
-            displayMessage(chatContainer, 'The Heart returned an unreadable signal.', 'message-heart');
+            console.warn('[chat] unreadable response payload from /api/chat');
+            displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
             setTraceStatus('unexpected response');
+            setChatState(CHAT_STATES.ERROR);
         }
     } catch {
-        if (chatContainer.contains(thinking)) {
-            chatContainer.removeChild(thinking);
-            cancelAnim();
-        }
-        displayMessage(chatContainer, 'Error: could not reach the Heart.', 'message-heart');
+        console.warn('[chat] request to /api/chat failed (connection/runtime issue)');
+        cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
+        displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
         setTraceStatus('connection lost');
+        setChatState(CHAT_STATES.ERROR);
     } finally {
         if (sendButton) sendButton.disabled = false;
         chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -1140,9 +1264,7 @@ async function sendDocumentToHeart() {
         return;
     }
 
-    if (chatEl) {
-        chatEl.innerHTML = '<span class="message-system">Sending to Heart…</span>';
-    }
+    if (chatEl) chatEl.innerHTML = '';
     if (sendBtn) sendBtn.disabled = true;
     if (insertBtn) insertBtn.style.display = 'none';
 
@@ -1156,17 +1278,29 @@ async function sendDocumentToHeart() {
         'Please help me refine, expand, or improve this writing. ' +
         'Suggest structural improvements, identify key themes, and help strengthen the work.';
 
+    let cancelAnim = null;
+    let thinkingEl = null;
     try {
-        const cancelAnim = chatEl ? startRuneAnimation(
-            (() => { const el = document.createElement('span'); chatEl.innerHTML = ''; chatEl.appendChild(el); return el; })()
-        ) : null;
+        if (chatEl) {
+            thinkingEl = document.createElement('div');
+            thinkingEl.className = 'message-heart loading-rune thinking-bubble';
+            const runeEl = document.createElement('span');
+            runeEl.className = 'rune-symbol';
+            const labelEl = document.createElement('span');
+            labelEl.className = 'thinking-label';
+            labelEl.textContent = 'Signal resolving...';
+            thinkingEl.appendChild(runeEl);
+            thinkingEl.appendChild(labelEl);
+            chatEl.appendChild(thinkingEl);
+            cancelAnim = startRuneAnimation(runeEl);
+        }
 
         const res  = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ query }),
         });
-        if (cancelAnim) cancelAnim();
+        cleanupThinkingIndicator(chatEl, thinkingEl, cancelAnim);
 
         const data = await res.json();
         const answer = (data && data.answer) ? data.answer : '(no response)';
@@ -1176,14 +1310,19 @@ async function sendDocumentToHeart() {
             chatEl.innerHTML = '';
             const responseEl = document.createElement('div');
             responseEl.className = 'message-heart scribe-heart-response';
-            responseEl.textContent = answer;
             chatEl.appendChild(responseEl);
+            await resolveGlyphText(responseEl, answer, {
+                glyphEffect: _glyphResolveEnabled,
+                onFrame: () => { chatEl.scrollTop = chatEl.scrollHeight; },
+            });
         }
 
         if (insertBtn) insertBtn.style.display = '';
     } catch {
-        if (chatEl) chatEl.innerHTML = '<span class="message-system">Could not reach Heart.</span>';
-        showFlashMessage('Could not reach Heart.');
+        console.warn('[scribe] request to /api/chat failed while sending document');
+        cleanupThinkingIndicator(chatEl, thinkingEl, cancelAnim);
+        if (chatEl) chatEl.innerHTML = '<span class="message-system">' + HEART_TECHNICAL_ERROR + '</span>';
+        showFlashMessage('The Heart could not complete the response.');
     } finally {
         if (sendBtn) sendBtn.disabled = false;
     }
