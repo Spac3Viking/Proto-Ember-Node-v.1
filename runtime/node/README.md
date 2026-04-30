@@ -1,14 +1,17 @@
-Bundled Portable Node Runtime
-=============================
+# Bundled Portable Node Runtime
 
-Place the portable Windows Node.js runtime files in this folder.
+This folder is intentionally empty in the source repo.
 
-Expected file:
-- `runtime/node/node.exe`
+Before building a public installer, manually place the portable Windows Node.js runtime here.
 
-Optional related files:
-- `runtime/node/npm.cmd`
-- `runtime/node/npx.cmd`
-- `runtime/node/node_modules/`
+Expected release-time structure:
 
-Do not commit a real Node.js binary unless it was provided intentionally for distribution.
+```text
+runtime/node/
+  node.exe
+  npm.cmd
+  npx.cmd
+  node_modules/
+```
+
+Do not commit large runtime binaries to the source repo unless intentionally using Git LFS or release artifacts.

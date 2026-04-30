@@ -259,6 +259,15 @@ https://nodejs.org
 
 ---
 
+## Runtime and Release Builds
+
+The source repo does not include the portable Node.js runtime.
+For public installer builds, place the portable Node.js Windows runtime into runtime/node/ before packaging.
+The installer should include runtime/node/ in the final artifact.
+User data is stored separately in Documents/Ember-Node-Data and is preserved across app updates.
+
+---
+
 ### Portable Launcher (Repository Checkout)
 
 For development checkouts, the root `Awaken-Ember-Node.bat` remains available for manual local launch.

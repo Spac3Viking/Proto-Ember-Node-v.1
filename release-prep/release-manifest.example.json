@@ -1,0 +1,16 @@
+{
+  "id": "ember-node-windows",
+  "title": "Ember Node for Windows",
+  "version": "0.1.0",
+  "last_updated": "YYYY-MM-DD",
+  "type": "desktop-app",
+  "platform": "windows",
+  "includes": {
+    "portable_node_runtime": true,
+    "bundled_core_cache": true,
+    "bundled_forge": true
+  },
+  "preserves_data_root": true,
+  "default_data_root": "Documents/Ember-Node-Data",
+  "notes": "The app may be replaced. The hearth remains."
+}
