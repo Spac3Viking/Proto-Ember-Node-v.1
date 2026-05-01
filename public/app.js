@@ -401,6 +401,9 @@ const TERMINAL_REVEAL_PROFILE = Object.freeze({
     GLYPH_FRAMES: 2,
     GLYPH_LENGTH: 10,
     WARMUP_MS: 1200,
+    STEADY_CHUNK_DIVISOR: 24,
+    WARMUP_MIN_SCALE: 0.85,
+    WARMUP_SCALE_RANGE: 0.15,
 });
 
 /**
@@ -435,6 +438,7 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
     const boundedMaxDelay = Math.max(boundedMinDelay, Math.floor(Math.max(minDelay, maxDelay)));
 
     if (useGlyph && /\S/.test(text)) {
+        targetElement.textContent = '';
         const glyphLength = Math.min(TERMINAL_REVEAL_PROFILE.GLYPH_LENGTH, Math.max(8, text.length));
         const glyphSample = text.slice(0, glyphLength);
         for (let i = 0; i < TERMINAL_REVEAL_PROFILE.GLYPH_FRAMES; i += 1) {
@@ -453,7 +457,10 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
     const totalLength = text.length;
     const steadyChunk = Math.max(
         boundedMinChunk,
-        Math.min(boundedMaxChunk, Math.round(totalLength / 24) || boundedMinChunk),
+        Math.min(
+            boundedMaxChunk,
+            Math.round(totalLength / TERMINAL_REVEAL_PROFILE.STEADY_CHUNK_DIVISOR) || boundedMinChunk,
+        ),
     );
     const steadyDelay = Math.max(
         boundedMinDelay,
@@ -467,7 +474,15 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
         const delayForTick = Math.round(boundedMaxDelay - ((boundedMaxDelay - steadyDelay) * warmupRatio));
         const chunkForTick = Math.max(
             boundedMinChunk,
-            Math.min(boundedMaxChunk, Math.round(steadyChunk * (0.85 + (0.15 * warmupRatio)))),
+            Math.min(
+                boundedMaxChunk,
+                Math.round(
+                    steadyChunk * (
+                        TERMINAL_REVEAL_PROFILE.WARMUP_MIN_SCALE +
+                        (TERMINAL_REVEAL_PROFILE.WARMUP_SCALE_RANGE * warmupRatio)
+                    ),
+                ),
+            ),
         );
         const chunkSize = Math.min(chunkForTick, text.length - idx);
         stableText += text.slice(idx, idx + chunkSize);
