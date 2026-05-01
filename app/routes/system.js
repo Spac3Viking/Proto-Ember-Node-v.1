@@ -304,7 +304,7 @@ function createSystemRouter({ migrationResult }) {
         if (shutdownScheduled) {
             return res.json({
                 success: true,
-                message: 'Ember Node is shutting down. You may close this window.',
+                message: 'Ember Node is returning to slumber. You may close this window.',
             });
         }
 
@@ -312,7 +312,7 @@ function createSystemRouter({ migrationResult }) {
 
         res.json({
             success: true,
-            message: 'Ember Node is shutting down. You may close this window.',
+            message: 'Ember Node is returning to slumber. You may close this window.',
         });
 
         setTimeout(() => {

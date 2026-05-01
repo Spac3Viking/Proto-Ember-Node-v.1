@@ -135,7 +135,7 @@ describe('POST /api/system/shutdown', () => {
         const res = await request(app).post('/api/system/shutdown').send({});
         expect(res.status).toBe(200);
         expect(res.body.success).toBe(true);
-        expect(res.body.message).toMatch(/shutting down/i);
+        expect(res.body.message).toMatch(/returning to slumber/i);
     });
 });
 
