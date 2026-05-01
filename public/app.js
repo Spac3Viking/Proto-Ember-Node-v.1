@@ -161,8 +161,11 @@ let hearthActiveThreadId = null;
         sendButton.addEventListener('click', sendMessage);
     }
     if (messageInput) {
-        messageInput.addEventListener('keypress', e => {
-            if (e.key === 'Enter') sendMessage();
+        messageInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
         });
     }
 })();
@@ -394,14 +397,14 @@ function randomRuneLikeChars(sample) {
 }
 
 const TERMINAL_REVEAL_PROFILE = Object.freeze({
-    MIN_CHUNK: 6,
-    MAX_CHUNK: 18,
-    MIN_TICK_MS: 20,
-    MAX_TICK_MS: 45,
+    MIN_CHUNK: 2,
+    MAX_CHUNK: 6,
+    MIN_TICK_MS: 45,
+    MAX_TICK_MS: 72,
     GLYPH_FRAMES: 2,
     GLYPH_LENGTH: 10,
-    WARMUP_MS: 1200,
-    STEADY_CHUNK_DIVISOR: 24,
+    WARMUP_MS: 1800,
+    STEADY_CHUNK_DIVISOR: 56,
     WARMUP_MIN_SCALE: 0.85,
     WARMUP_SCALE_RANGE: 0.15,
 });
@@ -414,10 +417,10 @@ const TERMINAL_REVEAL_PROFILE = Object.freeze({
  * @param {Object} [options]
  * @param {boolean} [options.glyphEffect=true]  Show temporary rune glyphs before settling to text
  * @param {Function} [options.onFrame]          Callback fired after each visual update
- * @param {number} [options.minDelay=20]        Minimum delay (ms) between reveal steps
- * @param {number} [options.maxDelay=45]        Maximum delay (ms) between reveal steps
- * @param {number} [options.minChunk=6]         Minimum chars appended per reveal tick
- * @param {number} [options.maxChunk=18]        Maximum chars appended per reveal tick
+ * @param {number} [options.minDelay=45]        Minimum delay (ms) between reveal steps
+ * @param {number} [options.maxDelay=72]        Maximum delay (ms) between reveal steps
+ * @param {number} [options.minChunk=2]         Minimum chars appended per reveal tick
+ * @param {number} [options.maxChunk=6]         Maximum chars appended per reveal tick
  * @param {number} [options.flickerDelay=45]    Delay (ms) for glyph flicker frame
  * @returns {Promise<void>}
  */
