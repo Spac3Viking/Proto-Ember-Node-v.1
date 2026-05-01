@@ -7,6 +7,7 @@
  * GET /api/ollama-status
  * GET /api/storage-info
  * GET /api/intake-state
+ * POST /api/system/shutdown
  */
 
 const express = require('express');
@@ -43,6 +44,8 @@ const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-gallery-cache', label: 'Gallery Cache' },
     { packageId: 'green-fire-complete-cache', label: 'Complete Cache' },
 ];
+const SHUTDOWN_DELAY_MS = 250;
+let shutdownScheduled = false;
 
 function _loadPackageConfig() {
     try {
@@ -86,6 +89,13 @@ function _detectNodeRuntimeStatus() {
         status: 'Missing',
         path: null,
     };
+}
+
+function _isLocalRequest(req) {
+    const remoteAddress = (req && req.socket && req.socket.remoteAddress) || req.ip || '';
+    return remoteAddress === '127.0.0.1' ||
+        remoteAddress === '::1' ||
+        remoteAddress === '::ffff:127.0.0.1';
 }
 
 async function _buildNodeStatusPayload() {
@@ -281,6 +291,38 @@ function createSystemRouter({ migrationResult }) {
                 error: 'Could not load node status updates: ' + err.message,
             });
         }
+    });
+
+    router.post('/api/system/shutdown', (req, res) => {
+        if (!_isLocalRequest(req)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Shutdown endpoint is local-only.',
+            });
+        }
+
+        if (shutdownScheduled) {
+            return res.json({
+                success: true,
+                message: 'Ember Node is shutting down. You may close this window.',
+            });
+        }
+
+        shutdownScheduled = true;
+
+        res.json({
+            success: true,
+            message: 'Ember Node is shutting down. You may close this window.',
+        });
+
+        setTimeout(() => {
+            if (process.env.NODE_ENV === 'test') {
+                shutdownScheduled = false;
+                return;
+            }
+            console.log('[system] Shutdown requested from local UI. Exiting process.');
+            process.exit(0);
+        }, SHUTDOWN_DELAY_MS);
     });
 
     return router;

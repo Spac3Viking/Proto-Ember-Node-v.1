@@ -130,6 +130,15 @@ describe('GET /api/system/node-status-updates', () => {
     });
 });
 
+describe('POST /api/system/shutdown', () => {
+    test('returns success message for local shutdown request', async () => {
+        const res = await request(app).post('/api/system/shutdown').send({});
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.message).toMatch(/shutting down/i);
+    });
+});
+
 /* ─────────────────────────────────────────────────────────────────
    Phase 6 — Detected Files Endpoints
    ─────────────────────────────────────────────────────────────── */

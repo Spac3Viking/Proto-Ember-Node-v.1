@@ -435,6 +435,10 @@ input:focus, textarea:focus {
   margin: 0.25rem 0;
 }
 
+.message-system.error {
+  color: var(--gf-ember-orange);
+}
+
 /* ── Workshop Room ─────────────────────────────────────────── */
 
 .workshop-layout {
@@ -734,6 +738,20 @@ input:focus, textarea:focus {
 
 .system-row:last-child {
   border-bottom: none;
+}
+
+.system-action-row {
+  justify-content: flex-start;
+}
+
+.system-shutdown-btn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+}
+
+.system-shutdown-status {
+  text-align: left;
+  width: 100%;
 }
 
 .system-key {

@@ -33,6 +33,14 @@ const {
 } = require('../bootstrap');
 
 const router = express.Router();
+const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
+const RETRIEVAL_STATES = Object.freeze({
+    CONTEXT_AVAILABLE: 'context_available',
+    PARTIAL_CONTEXT:   'partial_context',
+    NO_CONTEXT:        'no_context',
+    MISSING_SOURCE:    'missing_source',
+    RETRIEVAL_ERROR:   'retrieval_error',
+});
 
 const HEART_SYSTEM_PROMPT = (
     'You are The Heart — the resident intelligence of an Ember Node, a sovereign ' +
@@ -53,9 +61,12 @@ const HEART_SYSTEM_PROMPT = (
     '\n' +
     'You speak with quiet authority and a reflective tone. You do not speculate beyond your ' +
     'local documents. Response behavior rules:\n' +
-    '- If grounded context exists: respond directly with no ritual intro and no filler.\n' +
-    '- If context is partial: say "I have part of that signal here, but not the full thread."\n' +
-    '- If context is truly missing: say "That signal has not reached this hearth yet."\n' +
+    '- You will receive a retrieval state marker (`context_available`, `partial_context`, `no_context`, `missing_source`, or `retrieval_error`).\n' +
+    '- If state is `context_available`: respond directly with no ritual intro and no filler.\n' +
+    '- If state is `partial_context` or `missing_source`: mention uncertainty once, briefly, then continue with the best grounded answer.\n' +
+    '- If state is `no_context`: use concise missing-signal language once and suggest what to provide.\n' +
+    '- If state is `retrieval_error`: return a plain technical error response.\n' +
+    '- Never repeat fallback phrasing when the retrieval state does not require it.\n' +
     'You are grounded, patient, and devoted to the work.'
 );
 
@@ -203,19 +214,45 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         const retrievalRooms = rooms || [activeRoom];
 
         // Retrieve relevant local chunks via semantic / keyword search
-        let retrieved = await retrieve({ query, rooms: retrievalRooms, cartridgeId });
+        let retrieved = [];
+        let retrievalState = RETRIEVAL_STATES.CONTEXT_AVAILABLE;
+        try {
+            retrieved = await retrieve({ query, rooms: retrievalRooms, cartridgeId });
+        } catch (retrieveErr) {
+            console.warn('[/api/chat] retrieval failed:', retrieveErr.message);
+            retrievalState = RETRIEVAL_STATES.RETRIEVAL_ERROR;
+        }
 
         // Prepend chunks from any user-pinned sources (deduped by chunk id)
+        let missingPinnedSources = [];
         if (Array.isArray(sourceIds) && sourceIds.length > 0) {
             const validSourceIds = sourceIds.filter(id => id && typeof id === 'string');
             if (validSourceIds.length > 0) {
                 const allChunks    = loadChunks();
                 const retrievedIds = new Set(retrieved.map(c => c.chunk.id));
-                const pinned       = allChunks
-                    .filter(c => validSourceIds.includes(c.sourceId) && !retrievedIds.has(c.id))
+                const pinnedSourceChunks = allChunks.filter(c => validSourceIds.includes(c.sourceId));
+                const matchedSourceIds = new Set(
+                    pinnedSourceChunks.map(c => c.sourceId),
+                );
+                missingPinnedSources = validSourceIds.filter(id => !matchedSourceIds.has(id));
+                const pinned       = pinnedSourceChunks
+                    .filter(c => !retrievedIds.has(c.id))
                     .slice(0, MAX_PINNED_CHUNKS)
                     .map(c => ({ chunk: c, score: 1.0 }));
                 retrieved = [...pinned, ...retrieved];
+            }
+        }
+
+        if (retrievalState !== RETRIEVAL_STATES.RETRIEVAL_ERROR) {
+            if (retrieved.length === 0) {
+                retrievalState = missingPinnedSources.length > 0
+                    ? RETRIEVAL_STATES.MISSING_SOURCE
+                    : RETRIEVAL_STATES.NO_CONTEXT;
+            } else if (
+                missingPinnedSources.length > 0 ||
+                retrieved.length <= PARTIAL_CONTEXT_CHUNK_THRESHOLD
+            ) {
+                retrievalState = RETRIEVAL_STATES.PARTIAL_CONTEXT;
             }
         }
 
@@ -270,6 +307,12 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             userContent = userContent + '\n\n' + archetypePart;
         }
 
+        const retrievalStateBlock = `=== Retrieval State ===
+state: ${retrievalState}
+
+`;
+        userContent = retrievalStateBlock + userContent;
+
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
@@ -294,10 +337,18 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         console.log(
             '[/api/chat] room=' + activeRoom +
             ' grounded=' + (sources.length > 0) +
+            ' retrievalState=' + retrievalState +
             ' archetype=' + (activeArchetype || 'none') +
             ' sources=' + formatSignalTraceSummary(sources),
         );
-        res.json({ answer, sources, grounded: sources.length > 0, room: activeRoom, archetype: activeArchetype });
+        res.json({
+            answer,
+            sources,
+            grounded: sources.length > 0,
+            room: activeRoom,
+            archetype: activeArchetype,
+            retrievalState,
+        });
     } catch (error) {
         console.error('Error in grounded chat:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
