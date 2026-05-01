@@ -395,8 +395,8 @@ input:focus, textarea:focus {
 .chat-input-row #message-input {
   flex: 1;
   font-size: 0.9rem;
-  min-height: 2.8rem;
-  max-height: 14rem;
+  min-height: 120px;
+  max-height: 70vh;
   resize: vertical;
   line-height: 1.5;
 }
@@ -461,7 +461,7 @@ input:focus, textarea:focus {
 
 .draft-area textarea {
   flex: 1;
-  min-height: 300px;
+  min-height: 120px;
   max-height: 70vh;
   resize: vertical;
   font-size: 0.9rem;
@@ -530,8 +530,8 @@ input:focus, textarea:focus {
 }
 
 .threshold-scratch textarea {
-  min-height: 160px;
-  max-height: 45vh;
+  min-height: 120px;
+  max-height: 70vh;
   resize: vertical;
   font-size: 0.875rem;
 }
@@ -2654,7 +2654,7 @@ button.secondary:disabled {
 .scribe-content-area {
   flex: 1;
   width: 100%;
-  min-height: 260px;
+  min-height: 120px;
   max-height: 70vh;
   resize: vertical;
   background: hsl(120, 20%, 3%);
