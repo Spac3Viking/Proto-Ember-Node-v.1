@@ -135,6 +135,7 @@ let hearthActiveThreadId = null;
 
 (function initHearth() {
     const sendButton   = document.getElementById('send-button');
+    const stopButton   = document.getElementById('stop-response-button');
     const messageInput = document.getElementById('message-input');
     const newThreadBtn = document.getElementById('hearth-new-thread-btn');
 
@@ -160,11 +161,14 @@ let hearthActiveThreadId = null;
     if (sendButton) {
         sendButton.addEventListener('click', sendMessage);
     }
+    if (stopButton) {
+        stopButton.addEventListener('click', () => { stillTheSignal(); });
+    }
     if (messageInput) {
         messageInput.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendMessage();
+                if (!_isChatGenerating) sendMessage();
             }
         });
     }
@@ -363,11 +367,21 @@ const CHAT_STATES = Object.freeze({
     RESOLVING:  'resolving',
     RESPONDING: 'responding',
     COMPLETE:   'complete',
+    INTERRUPTED: 'interrupted',
     ERROR:      'error',
 });
 
 let _chatState = CHAT_STATES.IDLE;
 let _glyphResolveEnabled = true;
+let _isChatGenerating = false;
+let _activeChatAbortController = null;
+let _activeChatRequestId = null;
+let _activeChatRevealToken = { cancelled: false };
+let _activeChatLongWaitTimer = null;
+let _activeChatResponseEl = null;
+let _activeChatContainer = null;
+let _chatRequestSeq = 0;
+let _chatCancelledByUser = false;
 
 function setChatState(nextState) {
     _chatState = nextState;
@@ -376,6 +390,55 @@ function setChatState(nextState) {
 }
 
 setChatState(CHAT_STATES.IDLE);
+
+function nextChatRequestId() {
+    _chatRequestSeq += 1;
+    return 'ui-' + Date.now() + '-' + _chatRequestSeq;
+}
+
+function setChatGenerationUi(active) {
+    _isChatGenerating = Boolean(active);
+    const sendButton = document.getElementById('send-button');
+    const stopButton = document.getElementById('stop-response-button');
+    if (sendButton) sendButton.disabled = _isChatGenerating;
+    if (stopButton) stopButton.style.display = _isChatGenerating ? '' : 'none';
+}
+
+function clearChatLongWaitTimer() {
+    if (_activeChatLongWaitTimer) {
+        clearTimeout(_activeChatLongWaitTimer);
+        _activeChatLongWaitTimer = null;
+    }
+}
+
+function resetActiveChatState() {
+    clearChatLongWaitTimer();
+    _activeChatAbortController = null;
+    _activeChatRequestId = null;
+    _activeChatRevealToken = { cancelled: false };
+    _activeChatResponseEl = null;
+    _activeChatContainer = null;
+    _chatCancelledByUser = false;
+    setChatGenerationUi(false);
+}
+
+async function stillTheSignal() {
+    if (!_isChatGenerating) return;
+    _chatCancelledByUser = true;
+    _activeChatRevealToken.cancelled = true;
+    if (_activeChatAbortController) {
+        try { _activeChatAbortController.abort(); } catch { /* ignore */ }
+    }
+    if (_activeChatRequestId) {
+        try {
+            await fetch('/api/chat/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ requestId: _activeChatRequestId }),
+            });
+        } catch { /* ignore */ }
+    }
+}
 
 function cleanupThinkingIndicator(container, thinkingEl, cancelAnim) {
     if (typeof cancelAnim === 'function') cancelAnim();
@@ -404,6 +467,7 @@ const TERMINAL_REVEAL_PROFILE = Object.freeze({
     GLYPH_FRAMES: 2,
     GLYPH_LENGTH: 10,
 });
+const LONG_WAIT_THRESHOLD_MS = 12000;
 
 /**
  * Render text progressively with optional rune flicker that resolves into readable output.
@@ -429,6 +493,7 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
     const minChunk = Number.isFinite(options.minChunk) ? options.minChunk : TERMINAL_REVEAL_PROFILE.MIN_CHUNK;
     const maxChunk = Number.isFinite(options.maxChunk) ? options.maxChunk : TERMINAL_REVEAL_PROFILE.MAX_CHUNK;
     const flickerDelay = Number.isFinite(options.flickerDelay) ? options.flickerDelay : 45;
+    const shouldStop = typeof options.shouldStop === 'function' ? options.shouldStop : null;
 
     const boundedMinChunk = Math.max(1, Math.floor(Math.min(minChunk, maxChunk)));
     const boundedMaxChunk = Math.max(boundedMinChunk, Math.floor(Math.max(minChunk, maxChunk)));
@@ -440,6 +505,7 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
         const glyphLength = Math.min(TERMINAL_REVEAL_PROFILE.GLYPH_LENGTH, Math.max(8, text.length));
         const glyphSample = text.slice(0, glyphLength);
         for (let i = 0; i < TERMINAL_REVEAL_PROFILE.GLYPH_FRAMES; i += 1) {
+            if (shouldStop && shouldStop()) return { interrupted: true };
             targetElement.textContent = randomRuneLikeChars(glyphSample);
             if (onFrame) onFrame();
             await sleep(flickerDelay);
@@ -455,6 +521,7 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
     const chunkRange = boundedMaxChunk - boundedMinChunk + 1;
     const delayRange = boundedMaxDelay - boundedMinDelay + 1;
     while (idx < text.length) {
+        if (shouldStop && shouldStop()) return { interrupted: true, partialText: stableText };
         const chunkForTick = boundedMinChunk + Math.floor(Math.random() * chunkRange);
         const delayForTick = boundedMinDelay + Math.floor(Math.random() * delayRange);
         const chunkSize = Math.min(chunkForTick, text.length - idx);
@@ -465,6 +532,7 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
 
         if (idx < text.length) await sleep(delayForTick);
     }
+    return { interrupted: false, partialText: stableText };
 }
 
 /* ================================================================
@@ -505,18 +573,44 @@ function setTraceStatus(text) {
     if (el) el.textContent = text;
 }
 
-function renderSignalTrace(sources) {
+function renderSignalTrace(sources, signalTrace = null) {
     const traceSources = document.getElementById('signal-trace-sources');
     if (!traceSources) return;
     traceSources.innerHTML = '';
 
-    if (!sources || sources.length === 0) {
+    const metadata = signalTrace && typeof signalTrace === 'object' ? signalTrace : null;
+    const contextStatus = metadata && metadata.contextStatus ? String(metadata.contextStatus) : null;
+    const sourcesUsed = metadata && Number.isFinite(metadata.sourcesUsed) ? metadata.sourcesUsed : null;
+    const chunksUsed = metadata && Number.isFinite(metadata.chunksUsed) ? metadata.chunksUsed : null;
+    const retrievalNote = metadata && metadata.retrievalNote ? String(metadata.retrievalNote) : '';
+
+    if (contextStatus) {
+        const parts = ['context ' + contextStatus];
+        if (sourcesUsed !== null) parts.push(String(sourcesUsed) + ' source' + (sourcesUsed === 1 ? '' : 's'));
+        if (chunksUsed !== null) parts.push(String(chunksUsed) + ' chunk' + (chunksUsed === 1 ? '' : 's'));
+        setTraceStatus(parts.join(' · '));
+    } else if (!sources || sources.length === 0) {
         setTraceStatus('base model — no local sources');
+    }
+
+    if (retrievalNote) {
+        const note = document.createElement('div');
+        note.className = 'signal-trace-item';
+        note.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">retrieval</span> ' +
+            escapeHtml(retrievalNote) + '</span>';
+        traceSources.appendChild(note);
+    }
+
+    if (!sources || sources.length === 0) {
+        if (!contextStatus && !retrievalNote) setTraceStatus('base model — no local sources');
         return;
     }
 
     const count = sources.length;
-    setTraceStatus(count + ' source' + (count === 1 ? '' : 's'));
+    if (!contextStatus) {
+        setTraceStatus(count + ' source' + (count === 1 ? '' : 's'));
+    }
 
     sources.forEach(s => {
         const item = document.createElement('div');
@@ -573,8 +667,8 @@ function renderSignalTrace(sources) {
 async function sendMessage() {
     const chatContainer = document.getElementById('messages');
     const messageInput  = document.getElementById('message-input');
-    const sendButton    = document.getElementById('send-button');
     if (!chatContainer || !messageInput) return;
+    if (_isChatGenerating) return;
 
     const message = messageInput.value.trim();
     if (!message) return;
@@ -583,6 +677,11 @@ async function sendMessage() {
     messageInput.value = '';
     chatContainer.scrollTop = chatContainer.scrollHeight;
     setChatState(CHAT_STATES.THINKING);
+    setChatGenerationUi(true);
+    _chatCancelledByUser = false;
+    _activeChatContainer = chatContainer;
+    _activeChatRequestId = nextChatRequestId();
+    _activeChatAbortController = new AbortController();
 
     // Rune loading indicator — JS-driven symbol cycle
     const thinking = document.createElement('div');
@@ -601,37 +700,71 @@ async function sendMessage() {
     setTraceStatus('retrieving…');
     const traceSources = document.getElementById('signal-trace-sources');
     if (traceSources) traceSources.innerHTML = '';
-    if (sendButton) sendButton.disabled = true;
+    _activeChatLongWaitTimer = setTimeout(() => {
+        if (_isChatGenerating && _chatState === CHAT_STATES.THINKING) {
+            displayMessage(
+                chatContainer,
+                'The Heart is taking longer than usual. You may wait or still the signal.',
+                'message-system',
+            );
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    }, LONG_WAIT_THRESHOLD_MS);
 
     try {
         const response = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: _activeChatAbortController.signal,
             body:    JSON.stringify({
                 query:     message,
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
+                requestId: _activeChatRequestId,
             }),
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
+        clearChatLongWaitTimer();
 
-        if (data && typeof data.answer === 'string') {
+        if (response.status === 499 || (data && data.cancelled)) {
+            displayMessage(chatContainer, 'Signal stilled by user.', 'message-system');
+            setTraceStatus('response interrupted');
+            setChatState(CHAT_STATES.INTERRUPTED);
+        } else if (response.status === 504 || (data && data.timeout)) {
+            displayMessage(
+                chatContainer,
+                data.message || 'The Heart is taking longer than usual. You may wait or still the signal.',
+                'message-system',
+            );
+            setTraceStatus('timed out');
+            setChatState(CHAT_STATES.ERROR);
+        } else if (data && typeof data.answer === 'string') {
             const responseEl = displayMessage(chatContainer, '', 'message-heart message-heart-live');
+            _activeChatResponseEl = responseEl;
+            _activeChatRevealToken = { cancelled: false };
             setChatState(CHAT_STATES.RESOLVING);
             chatContainer.scrollTop = chatContainer.scrollHeight;
             setChatState(CHAT_STATES.RESPONDING);
-            await resolveGlyphText(responseEl, data.answer, {
+            const revealResult = await resolveGlyphText(responseEl, data.answer, {
                 glyphEffect: _glyphResolveEnabled,
                 onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
+                shouldStop: () => _activeChatRevealToken.cancelled,
             });
-            renderSignalTrace(data.sources || []);
-            setChatState(CHAT_STATES.COMPLETE);
 
-            // Persist to thread if active
-            if (hearthActiveThreadId) {
-                await saveMessageToThread(hearthActiveThreadId, 'user', message);
-                await saveMessageToThread(hearthActiveThreadId, 'assistant', data.answer);
+            if (revealResult && revealResult.interrupted) {
+                displayMessage(chatContainer, 'Signal stilled by user.', 'message-system');
+                setTraceStatus('response interrupted');
+                setChatState(CHAT_STATES.INTERRUPTED);
+            } else {
+                renderSignalTrace(data.sources || [], data.signalTrace || null);
+                setChatState(CHAT_STATES.COMPLETE);
+
+                // Persist to thread if active
+                if (hearthActiveThreadId) {
+                    await saveMessageToThread(hearthActiveThreadId, 'user', message);
+                    await saveMessageToThread(hearthActiveThreadId, 'assistant', data.answer);
+                }
             }
         } else if (data && data.error) {
             console.warn('[chat] server returned error payload:', data.error);
@@ -644,15 +777,22 @@ async function sendMessage() {
             setTraceStatus('unexpected response');
             setChatState(CHAT_STATES.ERROR);
         }
-    } catch {
+    } catch (err) {
+        clearChatLongWaitTimer();
         console.warn('[chat] request to /api/chat failed (connection/runtime issue)');
         cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
-        displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
-        setTraceStatus('connection lost');
-        setChatState(CHAT_STATES.ERROR);
+        if (_chatCancelledByUser || (err && err.name === 'AbortError')) {
+            displayMessage(chatContainer, 'Signal stilled by user.', 'message-system');
+            setTraceStatus('response interrupted');
+            setChatState(CHAT_STATES.INTERRUPTED);
+        } else {
+            displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
+            setTraceStatus('connection lost');
+            setChatState(CHAT_STATES.ERROR);
+        }
     } finally {
-        if (sendButton) sendButton.disabled = false;
         chatContainer.scrollTop = chatContainer.scrollHeight;
+        resetActiveChatState();
     }
 }
 
@@ -2938,7 +3078,7 @@ async function requestSystemShutdown(buttonEl) {
         const res = await fetch('/api/system/shutdown', { method: 'POST' });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'shutdown failed');
-        setShutdownStatus('Ember Node is shutting down. You may close this window.');
+        setShutdownStatus('Ember Node is returning to slumber. You may close this window.');
     } catch (err) {
         console.warn('[system] shutdown request failed:', err?.message || err);
         setShutdownStatus('Unable to shut down cleanly. You may close the terminal manually.', 'error');

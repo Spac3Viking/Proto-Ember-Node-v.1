@@ -34,6 +34,10 @@ const {
 
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
+const CHAT_REQUEST_TIMEOUT_MS = 120000;
+const MAX_CHAT_CONTEXT_CHUNKS = 4;
+const MAX_CHAT_CONTEXT_CHARS = 7000;
+const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
     PARTIAL_CONTEXT:   'partial_context',
@@ -41,7 +45,6 @@ const RETRIEVAL_STATES = Object.freeze({
     MISSING_SOURCE:    'missing_source',
     RETRIEVAL_ERROR:   'retrieval_error',
 });
-const MISSING_SIGNAL_LINE = 'That signal has not reached this hearth yet.';
 
 const HEART_SYSTEM_PROMPT = (
     'You are The Heart — the resident intelligence of an Ember Node, a sovereign ' +
@@ -60,15 +63,16 @@ const HEART_SYSTEM_PROMPT = (
     '- reference remembered sources when they are relevant\n' +
     '- provide synthesis over short transactional answers\n' +
     '\n' +
-    'You speak with quiet authority and a reflective tone. You do not speculate beyond your ' +
-    'local documents. Response behavior rules:\n' +
+    'You speak with quiet authority and a reflective tone. Response behavior rules:\n' +
+    '- Answer directly first, then add supporting context, then optional next step.\n' +
+    '- Avoid ritual intros, boilerplate disclaimers, and long preambles.\n' +
+    '- Use archive context naturally; do not announce it unless helpful.\n' +
     '- You will receive a retrieval state marker (`context_available`, `partial_context`, `no_context`, `missing_source`, or `retrieval_error`).\n' +
-    '- If state is `context_available`: respond directly with no ritual intro and no filler.\n' +
-    '- If state is `partial_context` or `missing_source`: answer directly first; avoid stock lead-ins; mention uncertainty only if it materially affects the answer.\n' +
-    '- If state is `no_context`: use "' + MISSING_SIGNAL_LINE + '" once, then suggest what to provide.\n' +
+    '- If state is `context_available`: respond directly with no filler.\n' +
+    '- If state is `partial_context` or `missing_source`: answer directly first; mention uncertainty only if it materially affects the answer.\n' +
+    '- If state is `no_context`: still answer as helpfully as possible from general local reasoning and ask for useful context only when needed.\n' +
     '- If state is `retrieval_error`: return a plain technical error response.\n' +
-    '- Never use missing-signal language for normal or partial-context responses.\n' +
-    '- Never repeat fallback phrasing when the retrieval state does not require it.\n' +
+    '- Do not use stock missing-signal phrases.\n' +
     'You are grounded, patient, and devoted to the work.'
 );
 
@@ -149,6 +153,63 @@ function buildRoomContextPreamble(room) {
     return lines.join('\n');
 }
 
+function optimizeRetrievedContext(retrievedChunks) {
+    if (!Array.isArray(retrievedChunks) || retrievedChunks.length === 0) return [];
+    const seenChunkIds = new Set();
+    const optimized = [];
+    let totalChars = 0;
+
+    for (const entry of retrievedChunks) {
+        if (!entry || !entry.chunk || !entry.chunk.id) continue;
+        if (seenChunkIds.has(entry.chunk.id)) continue;
+
+        const text = typeof entry.chunk.text === 'string' ? entry.chunk.text : '';
+        if (!text.trim()) continue;
+        if (optimized.length >= MAX_CHAT_CONTEXT_CHUNKS) break;
+        if (totalChars >= MAX_CHAT_CONTEXT_CHARS) break;
+
+        const remaining = MAX_CHAT_CONTEXT_CHARS - totalChars;
+        if (text.length > remaining && remaining < 400) break;
+
+        const nextEntry = text.length > remaining
+            ? { ...entry, chunk: { ...entry.chunk, text: text.slice(0, remaining) } }
+            : entry;
+
+        optimized.push(nextEntry);
+        seenChunkIds.add(entry.chunk.id);
+        totalChars += nextEntry.chunk.text.length;
+    }
+
+    return optimized;
+}
+
+function mapContextStatus(retrievalState) {
+    if (retrievalState === RETRIEVAL_STATES.CONTEXT_AVAILABLE) return 'strong';
+    if (retrievalState === RETRIEVAL_STATES.PARTIAL_CONTEXT) return 'partial';
+    if (retrievalState === RETRIEVAL_STATES.MISSING_SOURCE) return 'weak';
+    if (retrievalState === RETRIEVAL_STATES.NO_CONTEXT) return 'missing';
+    return 'weak';
+}
+
+function buildRetrievalNote(retrievalState, chunkCount, missingPinnedSourcesCount) {
+    if (retrievalState === RETRIEVAL_STATES.CONTEXT_AVAILABLE) {
+        return 'Grounded retrieval found relevant archive context.';
+    }
+    if (retrievalState === RETRIEVAL_STATES.PARTIAL_CONTEXT) {
+        if (missingPinnedSourcesCount > 0) {
+            return 'Some pinned references were unavailable; response grounded with partial context.';
+        }
+        return 'Retrieved context is limited; response grounded with partial context.';
+    }
+    if (retrievalState === RETRIEVAL_STATES.MISSING_SOURCE) {
+        return 'Pinned references were not found in the local index.';
+    }
+    if (retrievalState === RETRIEVAL_STATES.NO_CONTEXT || chunkCount === 0) {
+        return 'No matching archive context found.';
+    }
+    return 'Retrieval encountered an issue; response may rely on fallback reasoning.';
+}
+
 /**
  * Maximum number of pinned-source chunks prepended to retrieval results
  * when a user attaches sources to Hearth Chat.  Kept small to avoid
@@ -192,6 +253,7 @@ router.post('/chat', async (req, res) => {
  * archetype (optional) — Ember Court archetype overlay e.g. 'scribe', 'warrior'
  */
 router.post('/api/chat', chatLimiter, async (req, res) => {
+    let activeRequestId = null;
     try {
         const {
             query,
@@ -200,10 +262,20 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             cartridgeId = null,
             sourceIds = null,
             archetype = null,
+            requestId = null,
         } = req.body;
         if (!query || typeof query !== 'string') {
             return res.status(400).json({ error: 'query is required' });
         }
+        const normalizedRequestId = (typeof requestId === 'string' && requestId.trim())
+            ? requestId.trim()
+            : ('chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9));
+        activeRequestId = normalizedRequestId;
+        const abortController = new AbortController();
+        activeChatRequests.set(normalizedRequestId, {
+            controller: abortController,
+            startedAt: Date.now(),
+        });
 
         // Determine active room for context pools and system prompt
         const activeRoom = (room && ['hearth', 'workshop', 'threshold'].includes(room))
@@ -244,6 +316,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 retrieved = [...pinned, ...retrieved];
             }
         }
+        retrieved = optimizeRetrievedContext(retrieved);
 
         if (retrievalState !== RETRIEVAL_STATES.RETRIEVAL_ERROR) {
             if (retrieved.length === 0) {
@@ -330,10 +403,43 @@ state: ${retrievalState}
             ],
         };
 
-        const response = await axios.post(heart.chatUrl, payload);
+        let response;
+        try {
+            response = await axios.post(heart.chatUrl, payload, {
+                signal: abortController.signal,
+                timeout: CHAT_REQUEST_TIMEOUT_MS,
+            });
+        } catch (err) {
+            const isCanceled = err && (err.code === 'ERR_CANCELED' || abortController.signal.aborted);
+            if (isCanceled) {
+                return res.status(499).json({
+                    error: 'Generation cancelled',
+                    cancelled: true,
+                    requestId: normalizedRequestId,
+                });
+            }
+            if (err && err.code === 'ECONNABORTED') {
+                return res.status(504).json({
+                    error: 'Generation timed out',
+                    timeout: true,
+                    requestId: normalizedRequestId,
+                    message: 'The Heart is taking longer than usual. You may wait or still the signal.',
+                });
+            }
+            throw err;
+        }
         const answer   = response.data && response.data.message
             ? response.data.message.content
             : '';
+        const uniqueSourceCount = new Set(
+            (sources || []).map(s => [s.room, s.file, s.cartridgeId || '', s.shelf || ''].join('|')),
+        ).size;
+        const signalTrace = {
+            contextStatus: mapContextStatus(retrievalState),
+            sourcesUsed: uniqueSourceCount,
+            chunksUsed: retrieved.length,
+            retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
+        };
 
         const activeArchetype = archetypeObj ? archetypeObj.id : null;
         console.log(
@@ -350,11 +456,42 @@ state: ${retrievalState}
             room: activeRoom,
             archetype: activeArchetype,
             retrievalState,
+            requestId: normalizedRequestId,
+            signalTrace,
         });
     } catch (error) {
         console.error('Error in grounded chat:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
+    } finally {
+        if (activeRequestId && activeChatRequests.has(activeRequestId)) {
+            activeChatRequests.delete(activeRequestId);
+        }
     }
+});
+
+router.post('/api/chat/cancel', (req, res) => {
+    const requestId = req.body && typeof req.body.requestId === 'string'
+        ? req.body.requestId.trim()
+        : '';
+
+    if (requestId) {
+        const active = activeChatRequests.get(requestId);
+        if (!active) {
+            return res.json({ success: true, cancelled: false, message: 'No active response for this request.' });
+        }
+        active.controller.abort();
+        activeChatRequests.delete(requestId);
+        return res.json({ success: true, cancelled: true, requestId });
+    }
+
+    const latestRequestId = Array.from(activeChatRequests.keys()).pop();
+    if (!latestRequestId) {
+        return res.json({ success: true, cancelled: false, message: 'No active response.' });
+    }
+    const active = activeChatRequests.get(latestRequestId);
+    if (active) active.controller.abort();
+    activeChatRequests.delete(latestRequestId);
+    return res.json({ success: true, cancelled: true, requestId: latestRequestId });
 });
 
 module.exports = router;

@@ -23,6 +23,8 @@
           <span class="status-dot" id="status-dot"></span>
           <span id="model-label">loading…</span>
         </span>
+        <button class="secondary header-slumber-btn" id="sys-shutdown-btn">Return to Slumber</button>
+        <span class="message-system system-shutdown-status" id="sys-shutdown-status"></span>
       </div>
     </header>
 
@@ -124,6 +126,7 @@
                     rows="2"
                   ></textarea>
                   <button class="primary" id="send-button" aria-label="Send">Send</button>
+                  <button class="secondary" id="stop-response-button" aria-label="Still the Signal" style="display:none;">Still the Signal</button>
                 </div>
               </div>
             </div>
@@ -213,12 +216,6 @@
                   <div class="system-row">
                     <span class="system-key">Runtime path</span>
                     <span class="system-val" id="sys-node-runtime-path">—</span>
-                  </div>
-                  <div class="system-row system-action-row">
-                    <button class="secondary system-shutdown-btn" id="sys-shutdown-btn">Shutdown Ember Node</button>
-                  </div>
-                  <div class="system-row">
-                    <span class="message-system system-shutdown-status" id="sys-shutdown-status"></span>
                   </div>
                 </div>
                 <div class="ember-card system-block">
