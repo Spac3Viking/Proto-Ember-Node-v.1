@@ -452,9 +452,11 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
 
     let stableText = '';
     let idx = 0;
+    const chunkRange = boundedMaxChunk - boundedMinChunk + 1;
+    const delayRange = boundedMaxDelay - boundedMinDelay + 1;
     while (idx < text.length) {
-        const chunkForTick = boundedMinChunk + Math.floor(Math.random() * (boundedMaxChunk - boundedMinChunk + 1));
-        const delayForTick = boundedMinDelay + Math.floor(Math.random() * (boundedMaxDelay - boundedMinDelay + 1));
+        const chunkForTick = boundedMinChunk + Math.floor(Math.random() * chunkRange);
+        const delayForTick = boundedMinDelay + Math.floor(Math.random() * delayRange);
         const chunkSize = Math.min(chunkForTick, text.length - idx);
         stableText += text.slice(idx, idx + chunkSize);
         targetElement.textContent = stableText;
