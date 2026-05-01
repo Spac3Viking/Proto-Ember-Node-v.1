@@ -394,12 +394,13 @@ function randomRuneLikeChars(sample) {
 }
 
 const TERMINAL_REVEAL_PROFILE = Object.freeze({
-    MIN_CHUNK: 20,
-    MAX_CHUNK: 45,
-    MIN_TICK_MS: 15,
-    MAX_TICK_MS: 35,
-    GLYPH_FRAMES: 4,
-    GLYPH_LENGTH: 14,
+    MIN_CHUNK: 6,
+    MAX_CHUNK: 18,
+    MIN_TICK_MS: 20,
+    MAX_TICK_MS: 45,
+    GLYPH_FRAMES: 2,
+    GLYPH_LENGTH: 10,
+    WARMUP_MS: 1200,
 });
 
 /**
@@ -410,11 +411,11 @@ const TERMINAL_REVEAL_PROFILE = Object.freeze({
  * @param {Object} [options]
  * @param {boolean} [options.glyphEffect=true]  Show temporary rune glyphs before settling to text
  * @param {Function} [options.onFrame]          Callback fired after each visual update
- * @param {number} [options.minDelay=15]        Minimum delay (ms) between reveal steps
- * @param {number} [options.maxDelay=35]        Maximum delay (ms) between reveal steps
- * @param {number} [options.minChunk=20]        Minimum chars appended per reveal tick
- * @param {number} [options.maxChunk=45]        Maximum chars appended per reveal tick
- * @param {number} [options.flickerDelay=18]    Delay (ms) for glyph flicker frame
+ * @param {number} [options.minDelay=20]        Minimum delay (ms) between reveal steps
+ * @param {number} [options.maxDelay=45]        Maximum delay (ms) between reveal steps
+ * @param {number} [options.minChunk=6]         Minimum chars appended per reveal tick
+ * @param {number} [options.maxChunk=18]        Maximum chars appended per reveal tick
+ * @param {number} [options.flickerDelay=45]    Delay (ms) for glyph flicker frame
  * @returns {Promise<void>}
  */
 async function resolveGlyphText(targetElement, finalText, options = {}) {
@@ -425,10 +426,15 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
     const maxDelay = Number.isFinite(options.maxDelay) ? options.maxDelay : TERMINAL_REVEAL_PROFILE.MAX_TICK_MS;
     const minChunk = Number.isFinite(options.minChunk) ? options.minChunk : TERMINAL_REVEAL_PROFILE.MIN_CHUNK;
     const maxChunk = Number.isFinite(options.maxChunk) ? options.maxChunk : TERMINAL_REVEAL_PROFILE.MAX_CHUNK;
-    const flickerDelay = Number.isFinite(options.flickerDelay) ? options.flickerDelay : 18;
+    const flickerDelay = Number.isFinite(options.flickerDelay) ? options.flickerDelay : 45;
+    const warmupMs = Number.isFinite(options.warmupMs) ? options.warmupMs : TERMINAL_REVEAL_PROFILE.WARMUP_MS;
+
+    const boundedMinChunk = Math.max(1, Math.floor(Math.min(minChunk, maxChunk)));
+    const boundedMaxChunk = Math.max(boundedMinChunk, Math.floor(Math.max(minChunk, maxChunk)));
+    const boundedMinDelay = Math.max(1, Math.floor(Math.min(minDelay, maxDelay)));
+    const boundedMaxDelay = Math.max(boundedMinDelay, Math.floor(Math.max(minDelay, maxDelay)));
 
     if (useGlyph && /\S/.test(text)) {
-        targetElement.textContent = '';
         const glyphLength = Math.min(TERMINAL_REVEAL_PROFILE.GLYPH_LENGTH, Math.max(8, text.length));
         const glyphSample = text.slice(0, glyphLength);
         for (let i = 0; i < TERMINAL_REVEAL_PROFILE.GLYPH_FRAMES; i += 1) {
@@ -444,18 +450,33 @@ async function resolveGlyphText(targetElement, finalText, options = {}) {
 
     let stableText = '';
     let idx = 0;
+    const totalLength = text.length;
+    const steadyChunk = Math.max(
+        boundedMinChunk,
+        Math.min(boundedMaxChunk, Math.round(totalLength / 24) || boundedMinChunk),
+    );
+    const steadyDelay = Math.max(
+        boundedMinDelay,
+        Math.min(boundedMaxDelay, Math.round((boundedMinDelay + boundedMaxDelay) / 2)),
+    );
+    const revealStartedAt = Date.now();
+
     while (idx < text.length) {
-        const chunkSizeRange = Math.max(maxChunk - minChunk + 1, 1);
-        const chunkSize = Math.min(minChunk + Math.floor(Math.random() * chunkSizeRange), text.length - idx);
+        const elapsed = Date.now() - revealStartedAt;
+        const warmupRatio = warmupMs > 0 ? Math.min(elapsed / warmupMs, 1) : 1;
+        const delayForTick = Math.round(boundedMaxDelay - ((boundedMaxDelay - steadyDelay) * warmupRatio));
+        const chunkForTick = Math.max(
+            boundedMinChunk,
+            Math.min(boundedMaxChunk, Math.round(steadyChunk * (0.85 + (0.15 * warmupRatio)))),
+        );
+        const chunkSize = Math.min(chunkForTick, text.length - idx);
         stableText += text.slice(idx, idx + chunkSize);
         targetElement.textContent = stableText;
         if (onFrame) onFrame();
         idx += chunkSize;
 
-        const pace = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-        await sleep(pace);
+        if (idx < text.length) await sleep(delayForTick);
     }
-    targetElement.textContent = text;
 }
 
 /* ================================================================
@@ -604,9 +625,8 @@ async function sendMessage() {
             }),
         });
 
-        cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
-
         const data = await response.json();
+        cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
 
         if (data && typeof data.answer === 'string') {
             const responseEl = displayMessage(chatContainer, '', 'message-heart message-heart-live');
@@ -1301,9 +1321,8 @@ async function sendDocumentToHeart() {
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ query }),
         });
-        cleanupThinkingIndicator(chatEl, thinkingEl, cancelAnim);
-
         const data = await res.json();
+        cleanupThinkingIndicator(chatEl, thinkingEl, cancelAnim);
         const answer = (data && data.answer) ? data.answer : '(no response)';
         _lastHeartResponse = answer;
 
