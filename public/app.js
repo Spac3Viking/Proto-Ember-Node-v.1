@@ -376,7 +376,7 @@ let _glyphResolveEnabled = true;
 let _isChatGenerating = false;
 let _activeChatAbortController = null;
 let _activeChatRequestId = null;
-let _activeChatRevealToken = null;
+let _activeChatRevealToken = { cancelled: false };
 let _activeChatLongWaitTimer = null;
 let _activeChatResponseEl = null;
 let _activeChatContainer = null;
@@ -415,7 +415,7 @@ function resetActiveChatState() {
     clearChatLongWaitTimer();
     _activeChatAbortController = null;
     _activeChatRequestId = null;
-    _activeChatRevealToken = null;
+    _activeChatRevealToken = { cancelled: false };
     _activeChatResponseEl = null;
     _activeChatContainer = null;
     _chatCancelledByUser = false;
@@ -425,7 +425,7 @@ function resetActiveChatState() {
 async function stillTheSignal() {
     if (!_isChatGenerating) return;
     _chatCancelledByUser = true;
-    if (_activeChatRevealToken) _activeChatRevealToken.cancelled = true;
+    _activeChatRevealToken.cancelled = true;
     if (_activeChatAbortController) {
         try { _activeChatAbortController.abort(); } catch { /* ignore */ }
     }
@@ -467,6 +467,7 @@ const TERMINAL_REVEAL_PROFILE = Object.freeze({
     GLYPH_FRAMES: 2,
     GLYPH_LENGTH: 10,
 });
+const LONG_WAIT_THRESHOLD_MS = 12000;
 
 /**
  * Render text progressively with optional rune flicker that resolves into readable output.
@@ -708,7 +709,7 @@ async function sendMessage() {
             );
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
-    }, 12000);
+    }, LONG_WAIT_THRESHOLD_MS);
 
     try {
         const response = await fetch('/api/chat', {
@@ -748,7 +749,7 @@ async function sendMessage() {
             const revealResult = await resolveGlyphText(responseEl, data.answer, {
                 glyphEffect: _glyphResolveEnabled,
                 onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
-                shouldStop: () => Boolean(_activeChatRevealToken && _activeChatRevealToken.cancelled),
+                shouldStop: () => _activeChatRevealToken.cancelled,
             });
 
             if (revealResult && revealResult.interrupted) {
