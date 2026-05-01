@@ -116,13 +116,12 @@
                 </div>
 
                 <div class="chat-input-row" style="padding: 0.75rem 1rem;">
-                  <input
-                    type="text"
+                  <textarea
                     id="message-input"
                     placeholder="Speak to the Heart…"
-                    autocomplete="off"
                     aria-label="Message input"
-                  >
+                    rows="2"
+                  ></textarea>
                   <button class="primary" id="send-button" aria-label="Send">Send</button>
                 </div>
               </div>
@@ -539,7 +538,7 @@
                 </div>
                 <div id="project-editor" style="display:none; flex-direction:column; gap:0.75rem; flex:1;">
                   <input type="text" id="project-title-input" placeholder="Project title" style="font-size:0.95rem;">
-                  <textarea id="project-notes-input" placeholder="Project notes…" style="flex:1; min-height:180px; resize:vertical;"></textarea>
+                  <textarea id="project-notes-input" placeholder="Project notes…" style="flex:1; min-height:180px; max-height:60vh; resize:vertical;"></textarea>
                   <div style="display:flex; gap:0.5rem; align-items:center;">
                     <button class="primary" id="save-project-btn">Save</button>
                     <span class="workshop-status" id="project-status"></span>
