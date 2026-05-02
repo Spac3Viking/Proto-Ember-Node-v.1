@@ -446,6 +446,9 @@ describe('POST /api/chat', () => {
         expect(Array.isArray(res.body.sources)).toBe(true);
         expect(typeof res.body.grounded).toBe('boolean');
         expect(typeof res.body.retrievalState).toBe('string');
+        expect(res.body.signalTrace).toBeDefined();
+        expect(typeof res.body.signalTrace.routeDetected).toBe('string');
+        expect(Array.isArray(res.body.signalTrace.sourceList)).toBe(true);
     });
 
     test('returns 500 when Ollama chat is unreachable', async () => {

@@ -7,6 +7,8 @@
 
 'use strict';
 
+const { loadManifests } = require('./indexStore');
+
 /**
  * Build a signal trace from the output of retrieve().
  *
@@ -15,14 +17,25 @@
  */
 function buildSignalTrace(retrievedChunks) {
     if (!Array.isArray(retrievedChunks)) return [];
-    return retrievedChunks.map(({ chunk, score }) => ({
-        room:        chunk.room,
-        shelf:       chunk.shelf,
-        cartridgeId: chunk.cartridgeId || null,
-        file:        chunk.file,
-        chunkId:     chunk.id,
-        score:       Math.round(score * 100) / 100,
-    }));
+
+    const manifests = loadManifests();
+
+    return retrievedChunks.map(({ chunk, score }) => {
+        const manifest = (chunk && chunk.sourceId && manifests[chunk.sourceId]) || {};
+        const title = manifest.title || chunk.file;
+
+        return {
+            sourceId:    chunk.sourceId || null,
+            sourceName:  title,
+            title,
+            room:        chunk.room,
+            shelf:       chunk.shelf,
+            cartridgeId: chunk.cartridgeId || null,
+            file:        chunk.file,
+            chunkId:     chunk.id,
+            score:       Math.round(score * 100) / 100,
+        };
+    });
 }
 
 /**
@@ -34,7 +47,7 @@ function buildSignalTrace(retrievedChunks) {
 function formatSignalTraceSummary(sources) {
     if (!sources || sources.length === 0) return 'no sources';
     return sources
-        .map(s => `${s.room}/${s.file} (${s.score})`)
+        .map(s => `${s.room}/${s.title || s.file} (${s.score})`)
         .join(', ');
 }
 
