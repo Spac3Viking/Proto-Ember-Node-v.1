@@ -20,6 +20,15 @@ const ROOM_PRIORITY = ['hearth', 'workshop', 'threshold'];
 const DEFAULT_MAX_CONTEXT_CHARS = 16000;
 const DEFAULT_MAX_CHUNK_CHARS = 2200;
 const DEFAULT_MAX_HISTORY_CHARS = 4000;
+const MAX_ROUTE_BONUS = 0.24;
+const BASE_ROUTE_BONUS = 0.12;
+const ROUTE_BONUS_INCREMENT = 0.04;
+const MAX_TITLE_BONUS = 0.12;
+const TITLE_BONUS_PER_MATCH = 0.03;
+const HIGH_RELEVANCE_MIN_SCORE = 0.2;
+const HIGH_RELEVANCE_RATIO = 0.82;
+const MAX_DUPLICATE_PENALTY = 0.24;
+const DUPLICATE_PENALTY_PER_EXTRA = 0.08;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -119,7 +128,7 @@ function routeBonusForSource(sourceMetaText, routeId) {
     }
     if (matches === 0) return 0;
 
-    return Math.min(0.24, 0.12 + ((matches - 1) * 0.04));
+    return Math.min(MAX_ROUTE_BONUS, BASE_ROUTE_BONUS + ((matches - 1) * ROUTE_BONUS_INCREMENT));
 }
 
 function titleBonusForQuery(sourceMetaText, query) {
@@ -134,7 +143,7 @@ function titleBonusForQuery(sourceMetaText, query) {
     for (const term of queryTerms) {
         if (sourceMetaText.includes(term)) hits += 1;
     }
-    return Math.min(0.12, hits * 0.03);
+    return Math.min(MAX_TITLE_BONUS, hits * TITLE_BONUS_PER_MATCH);
 }
 
 function roomPriorityIndex(room) {
@@ -229,7 +238,7 @@ function selectBalancedEntries({
         if (!entry) return false;
 
         if (requireHighRelevance) {
-            const threshold = Math.max(0.2, (bestBySource[sourceId] || 0) * 0.82);
+            const threshold = Math.max(HIGH_RELEVANCE_MIN_SCORE, (bestBySource[sourceId] || 0) * HIGH_RELEVANCE_RATIO);
             if (entry.score < threshold) return false;
         }
 
@@ -342,7 +351,7 @@ async function retrieve({
             const titleBonus = titleBonusForQuery(sourceMetaText, query);
             const fp = chunkFingerprint(entry.chunk.text || '');
             const duplicatePenalty = fp && fingerprintCounts[fp] > 1
-                ? Math.min(0.24, (fingerprintCounts[fp] - 1) * 0.08)
+                ? Math.min(MAX_DUPLICATE_PENALTY, (fingerprintCounts[fp] - 1) * DUPLICATE_PENALTY_PER_EXTRA)
                 : 0;
             const finalScore = entry.score + routeBonus + titleBonus - duplicatePenalty;
 

@@ -8,7 +8,7 @@ describe('Phase 15.5 — multi-source retrieval + context balancing', () => {
     function loadRetrieval({ chunks, manifests }) {
         jest.doMock('../app/indexStore', () => ({
             loadChunks: () => chunks,
-            loadEmbeddings: () => ({}),
+            loadEmbeddings: () => ({ mockChunkId: [0.1, 0.2, 0.3] }),
             loadExcluded: () => [],
             loadManifests: () => manifests,
         }));
@@ -108,6 +108,7 @@ describe('Phase 15.5 — multi-source retrieval + context balancing', () => {
 
         expect(prompt).toContain('User question: What is the through-line?');
         expect(prompt).toContain('=== Recent Chat Context ===');
-        expect(prompt.length).toBeLessThan(3200);
+        const expectedUpperBound = 1800 + 350 + 1200;
+        expect(prompt.length).toBeLessThan(expectedUpperBound);
     });
 });

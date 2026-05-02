@@ -39,6 +39,7 @@ const MAX_CHAT_CONTEXT_CHUNKS = 12;
 const MAX_CHAT_CONTEXT_CHARS = 16000;
 const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
+const MAX_SIGNAL_TRACE_SOURCES = 8;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
@@ -467,7 +468,8 @@ state: ${retrievalState}
         const uniqueSourceCount = new Set(
             (sources || []).map(s => [s.room, s.file, s.cartridgeId || '', s.shelf || ''].join('|')),
         ).size;
-        const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file))).slice(0, 8);
+        const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
+            .slice(0, MAX_SIGNAL_TRACE_SOURCES);
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
             routeDetected: detectedRoute || 'general',
