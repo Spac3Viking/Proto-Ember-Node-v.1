@@ -26,9 +26,11 @@ const ROUTE_BONUS_INCREMENT = 0.04;
 const MAX_TITLE_BONUS = 0.12;
 const TITLE_BONUS_PER_MATCH = 0.03;
 const HIGH_RELEVANCE_MIN_SCORE = 0.2;
-const HIGH_RELEVANCE_RATIO = 0.82;
+const HIGH_RELEVANCE_THRESHOLD_RATIO = 0.82;
 const MAX_DUPLICATE_PENALTY = 0.24;
 const DUPLICATE_PENALTY_PER_EXTRA = 0.08;
+const MIN_REMAINING_HISTORY_CHARS = 120;
+const MIN_REMAINING_CONTEXT_CHARS = 300;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -238,7 +240,10 @@ function selectBalancedEntries({
         if (!entry) return false;
 
         if (requireHighRelevance) {
-            const threshold = Math.max(HIGH_RELEVANCE_MIN_SCORE, (bestBySource[sourceId] || 0) * HIGH_RELEVANCE_RATIO);
+            const threshold = Math.max(
+                HIGH_RELEVANCE_MIN_SCORE,
+                (bestBySource[sourceId] || 0) * HIGH_RELEVANCE_THRESHOLD_RATIO,
+            );
             if (entry.score < threshold) return false;
         }
 
@@ -392,7 +397,7 @@ function formatRecentHistory(recentHistory, maxHistoryChars) {
         const line = role + ': ' + content;
         if (totalChars + line.length > maxHistoryChars) {
             const remaining = maxHistoryChars - totalChars;
-            if (remaining < 120) break;
+            if (remaining < MIN_REMAINING_HISTORY_CHARS) break;
             lines.unshift(line.slice(0, remaining));
             totalChars = maxHistoryChars;
             break;
@@ -435,7 +440,7 @@ function buildGroundedPrompt({
         const block = `[Source: ${chunk.room}/${chunk.shelf}/${chunk.file}]\n${trimmedChunkText}`;
         if (contextChars + block.length > maxContextChars) {
             const remaining = maxContextChars - contextChars;
-            if (remaining < 300) break;
+            if (remaining < MIN_REMAINING_CONTEXT_CHARS) break;
             contextBlocks.push(block.slice(0, remaining));
             contextChars = maxContextChars;
             break;

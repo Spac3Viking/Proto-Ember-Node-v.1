@@ -618,7 +618,7 @@ function renderSignalTrace(sources, signalTrace = null) {
     if (sourceList.length > 0) {
         const sourceListText = sourceList.join(', ');
         const boundedSourceListText = sourceListText.length > MAX_SOURCE_LIST_DISPLAY_CHARS
-            ? sourceListText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS - 1) + '…'
+            ? sourceListText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS) + '…'
             : sourceListText;
         const sourceListEl = document.createElement('div');
         sourceListEl.className = 'signal-trace-item';
