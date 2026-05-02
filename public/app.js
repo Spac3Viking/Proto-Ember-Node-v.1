@@ -586,13 +586,28 @@ function renderSignalTrace(sources, signalTrace = null) {
     const sourcesUsed = metadata && Number.isFinite(metadata.sourcesUsed) ? metadata.sourcesUsed : null;
     const chunksUsed = metadata && Number.isFinite(metadata.chunksUsed) ? metadata.chunksUsed : null;
     const sourceList = metadata && Array.isArray(metadata.sourceList) ? metadata.sourceList : [];
+    const conceptRoute = metadata && metadata.conceptRoute ? String(metadata.conceptRoute) : null;
+    const relatedDomains = metadata && Array.isArray(metadata.relatedDomains) ? metadata.relatedDomains : [];
+    const prioritySourcesConsidered = metadata && Array.isArray(metadata.prioritySourcesConsidered)
+        ? metadata.prioritySourcesConsidered
+        : [];
+    const sourcesActuallyUsed = metadata && Array.isArray(metadata.sourcesActuallyUsed)
+        ? metadata.sourcesActuallyUsed
+        : [];
     const retrievalNote = metadata && metadata.retrievalNote ? String(metadata.retrievalNote) : '';
+
+    function boundedListText(list) {
+        const listText = list.join(', ');
+        if (listText.length <= MAX_SOURCE_LIST_DISPLAY_CHARS) return listText;
+        let truncated = listText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS);
+        const lastCommaIndex = truncated.lastIndexOf(', ');
+        if (lastCommaIndex > MIN_TRUNCATION_POSITION) truncated = truncated.slice(0, lastCommaIndex);
+        return truncated + '…';
+    }
 
     if (contextStatus) {
         const parts = ['context ' + contextStatus];
-        if (routeDetected) parts.push('route ' + routeDetected);
         if (sourcesUsed !== null) parts.push(String(sourcesUsed) + ' source' + (sourcesUsed === 1 ? '' : 's'));
-        if (chunksUsed !== null) parts.push(String(chunksUsed) + ' chunk' + (chunksUsed === 1 ? '' : 's'));
         setTraceStatus(parts.join(' · '));
     } else if (!sources || sources.length === 0) {
         setTraceStatus('base model — no local sources');
@@ -616,20 +631,66 @@ function renderSignalTrace(sources, signalTrace = null) {
         traceSources.appendChild(route);
     }
 
+    if (contextStatus) {
+        const context = document.createElement('div');
+        context.className = 'signal-trace-item';
+        context.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">context status</span> ' +
+            escapeHtml(contextStatus) + '</span>';
+        traceSources.appendChild(context);
+    }
+
+    if (chunksUsed !== null) {
+        const chunks = document.createElement('div');
+        chunks.className = 'signal-trace-item';
+        chunks.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">chunks used</span> ' +
+            escapeHtml(String(chunksUsed)) + '</span>';
+        traceSources.appendChild(chunks);
+    }
+
+    if (conceptRoute) {
+        const route = document.createElement('div');
+        route.className = 'signal-trace-item';
+        route.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">concept route</span> ' +
+            escapeHtml(conceptRoute) + '</span>';
+        traceSources.appendChild(route);
+    }
+
+    if (relatedDomains.length > 0) {
+        const related = document.createElement('div');
+        related.className = 'signal-trace-item';
+        related.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">related domains</span> ' +
+            escapeHtml(boundedListText(relatedDomains)) + '</span>';
+        traceSources.appendChild(related);
+    }
+
+    if (prioritySourcesConsidered.length > 0) {
+        const priority = document.createElement('div');
+        priority.className = 'signal-trace-item';
+        priority.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">priority sources considered</span> ' +
+            escapeHtml(boundedListText(prioritySourcesConsidered)) + '</span>';
+        traceSources.appendChild(priority);
+    }
+
+    if (sourcesActuallyUsed.length > 0) {
+        const used = document.createElement('div');
+        used.className = 'signal-trace-item';
+        used.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">sources actually used</span> ' +
+            escapeHtml(boundedListText(sourcesActuallyUsed)) + '</span>';
+        traceSources.appendChild(used);
+    }
+
     if (sourceList.length > 0) {
-        const sourceListText = sourceList.join(', ');
-        let boundedSourceListText = sourceListText;
-        if (sourceListText.length > MAX_SOURCE_LIST_DISPLAY_CHARS) {
-            let truncated = sourceListText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS);
-            const lastCommaIndex = truncated.lastIndexOf(', ');
-            if (lastCommaIndex > MIN_TRUNCATION_POSITION) truncated = truncated.slice(0, lastCommaIndex);
-            boundedSourceListText = truncated + '…';
-        }
         const sourceListEl = document.createElement('div');
         sourceListEl.className = 'signal-trace-item';
         sourceListEl.innerHTML =
             '<span class="trace-badge"><span class="trace-key">sources</span> ' +
-            escapeHtml(boundedSourceListText) + '</span>';
+            escapeHtml(boundedListText(sourceList)) + '</span>';
         traceSources.appendChild(sourceListEl);
     }
 
