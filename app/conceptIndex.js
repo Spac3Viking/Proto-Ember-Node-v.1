@@ -10,6 +10,8 @@ const USER_CONCEPT_INDEX_PATH = path.join(INDEXES_DIR, 'green-fire-concept-index
 const CONCEPT_BONUS_BASE = 0.1;
 const CONCEPT_BONUS_PER_MATCH = 0.04;
 const CONCEPT_BONUS_MAX = 0.22;
+let cachedUserConceptIndex = null;
+let cachedUserConceptIndexMtimeMs = -1;
 
 const DEFAULT_CONCEPT_INDEX = {
     version: '1.0',
@@ -43,18 +45,56 @@ function loadBundledConceptIndex() {
 }
 
 function ensureUserConceptIndex() {
-    if (fs.existsSync(USER_CONCEPT_INDEX_PATH)) return USER_CONCEPT_INDEX_PATH;
+    if (fs.existsSync(USER_CONCEPT_INDEX_PATH)) {
+        let stat = null;
+        try {
+            stat = fs.statSync(USER_CONCEPT_INDEX_PATH);
+        } catch { /* ignore stat failure */ }
+        const existing = _readConceptIndex(USER_CONCEPT_INDEX_PATH);
+        if (existing) {
+            cachedUserConceptIndex = existing;
+            cachedUserConceptIndexMtimeMs = stat ? stat.mtimeMs : -1;
+        }
+        return USER_CONCEPT_INDEX_PATH;
+    }
 
     fs.mkdirSync(path.dirname(USER_CONCEPT_INDEX_PATH), { recursive: true });
     const bundled = loadBundledConceptIndex();
     const payload = bundled || DEFAULT_CONCEPT_INDEX;
     fs.writeFileSync(USER_CONCEPT_INDEX_PATH, JSON.stringify(payload, null, 2), 'utf8');
+    try {
+        const stat = fs.statSync(USER_CONCEPT_INDEX_PATH);
+        cachedUserConceptIndex = payload;
+        cachedUserConceptIndexMtimeMs = stat.mtimeMs;
+    } catch {
+        cachedUserConceptIndex = payload;
+        cachedUserConceptIndexMtimeMs = -1;
+    }
     return USER_CONCEPT_INDEX_PATH;
 }
 
 function loadConceptIndex() {
+    let userStat = null;
+    try {
+        userStat = fs.statSync(USER_CONCEPT_INDEX_PATH);
+    } catch {
+        userStat = null;
+    }
+
+    if (
+        userStat &&
+        cachedUserConceptIndex &&
+        cachedUserConceptIndexMtimeMs === userStat.mtimeMs
+    ) {
+        return cachedUserConceptIndex;
+    }
+
     const fromUserData = _readConceptIndex(USER_CONCEPT_INDEX_PATH);
-    if (fromUserData) return fromUserData;
+    if (fromUserData) {
+        cachedUserConceptIndex = fromUserData;
+        cachedUserConceptIndexMtimeMs = userStat ? userStat.mtimeMs : -1;
+        return fromUserData;
+    }
 
     const fromBundled = loadBundledConceptIndex();
     if (fromBundled) return fromBundled;
@@ -110,7 +150,7 @@ function conceptBonusForSource(sourceMetaText, conceptDomain, conceptIndex) {
     }
     if (matches === 0) return 0;
 
-    return Math.min(CONCEPT_BONUS_MAX, CONCEPT_BONUS_BASE + ((matches - 1) * CONCEPT_BONUS_PER_MATCH));
+    return Math.min(CONCEPT_BONUS_MAX, CONCEPT_BONUS_BASE + (matches * CONCEPT_BONUS_PER_MATCH));
 }
 
 module.exports = {

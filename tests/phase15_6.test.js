@@ -6,6 +6,7 @@ const path = require('path');
 
 describe('Phase 15.6 — concept index layer', () => {
     let originalDataRoot;
+    const tempRoots = [];
 
     beforeAll(() => {
         originalDataRoot = process.env.EMBER_NODE_DATA_ROOT;
@@ -23,8 +24,17 @@ describe('Phase 15.6 — concept index layer', () => {
         jest.resetModules();
     });
 
+    afterEach(() => {
+        while (tempRoots.length > 0) {
+            const dir = tempRoots.pop();
+            if (!dir) continue;
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('ensureUserConceptIndex seeds user data index when missing', () => {
         const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-p15-6-'));
+        tempRoots.push(tempRoot);
         process.env.EMBER_NODE_DATA_ROOT = tempRoot;
 
         const { ensureDataRoot } = require('../app/storageConfig');
@@ -45,7 +55,7 @@ describe('Phase 15.6 — concept index layer', () => {
         expect(loaded.domains.length).toBeGreaterThan(0);
     });
 
-    function loadRetrieval({ chunks, manifests }) {
+    function setupRetrievalModule({ chunks, manifests }) {
         jest.doMock('../app/indexStore', () => ({
             loadChunks: () => chunks,
             loadEmbeddings: () => ({ mockChunkId: [0.1, 0.2, 0.3] }),
@@ -76,7 +86,7 @@ describe('Phase 15.6 — concept index layer', () => {
     }
 
     test('detectConceptDomain maps philosophy queries from concept index keywords', () => {
-        const retrieval = loadRetrieval({ chunks: [], manifests: {} });
+        const retrieval = setupRetrievalModule({ chunks: [], manifests: {} });
         expect(retrieval.detectConceptDomain('Help me explore ontology, meaning, and perception.')).toBe('philosophy');
         expect(retrieval.detectConceptDomain('Tell me something unrelated')).toBe('general');
     });
@@ -116,7 +126,7 @@ describe('Phase 15.6 — concept index layer', () => {
             },
         };
 
-        const retrieval = loadRetrieval({ chunks, manifests });
+        const retrieval = setupRetrievalModule({ chunks, manifests });
         const results = await retrieval.retrieve({
             query: 'I want to understand ontology and meaning',
             rooms: ['hearth'],
