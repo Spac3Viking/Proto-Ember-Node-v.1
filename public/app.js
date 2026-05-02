@@ -607,9 +607,7 @@ function renderSignalTrace(sources, signalTrace = null) {
 
     if (contextStatus) {
         const parts = ['context ' + contextStatus];
-        if (routeDetected) parts.push('route ' + routeDetected);
         if (sourcesUsed !== null) parts.push(String(sourcesUsed) + ' source' + (sourcesUsed === 1 ? '' : 's'));
-        if (chunksUsed !== null) parts.push(String(chunksUsed) + ' chunk' + (chunksUsed === 1 ? '' : 's'));
         setTraceStatus(parts.join(' · '));
     } else if (!sources || sources.length === 0) {
         setTraceStatus('base model — no local sources');
