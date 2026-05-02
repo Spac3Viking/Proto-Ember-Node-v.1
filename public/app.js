@@ -574,18 +574,23 @@ function setTraceStatus(text) {
 }
 
 function renderSignalTrace(sources, signalTrace = null) {
+    const MAX_SOURCE_LIST_DISPLAY_CHARS = 180;
+    const MIN_TRUNCATION_POSITION = 40;
     const traceSources = document.getElementById('signal-trace-sources');
     if (!traceSources) return;
     traceSources.innerHTML = '';
 
     const metadata = signalTrace && typeof signalTrace === 'object' ? signalTrace : null;
     const contextStatus = metadata && metadata.contextStatus ? String(metadata.contextStatus) : null;
+    const routeDetected = metadata && metadata.routeDetected ? String(metadata.routeDetected) : null;
     const sourcesUsed = metadata && Number.isFinite(metadata.sourcesUsed) ? metadata.sourcesUsed : null;
     const chunksUsed = metadata && Number.isFinite(metadata.chunksUsed) ? metadata.chunksUsed : null;
+    const sourceList = metadata && Array.isArray(metadata.sourceList) ? metadata.sourceList : [];
     const retrievalNote = metadata && metadata.retrievalNote ? String(metadata.retrievalNote) : '';
 
     if (contextStatus) {
         const parts = ['context ' + contextStatus];
+        if (routeDetected) parts.push('route ' + routeDetected);
         if (sourcesUsed !== null) parts.push(String(sourcesUsed) + ' source' + (sourcesUsed === 1 ? '' : 's'));
         if (chunksUsed !== null) parts.push(String(chunksUsed) + ' chunk' + (chunksUsed === 1 ? '' : 's'));
         setTraceStatus(parts.join(' · '));
@@ -600,6 +605,32 @@ function renderSignalTrace(sources, signalTrace = null) {
             '<span class="trace-badge"><span class="trace-key">retrieval</span> ' +
             escapeHtml(retrievalNote) + '</span>';
         traceSources.appendChild(note);
+    }
+
+    if (routeDetected) {
+        const route = document.createElement('div');
+        route.className = 'signal-trace-item';
+        route.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">route</span> ' +
+            escapeHtml(routeDetected) + '</span>';
+        traceSources.appendChild(route);
+    }
+
+    if (sourceList.length > 0) {
+        const sourceListText = sourceList.join(', ');
+        let boundedSourceListText = sourceListText;
+        if (sourceListText.length > MAX_SOURCE_LIST_DISPLAY_CHARS) {
+            let truncated = sourceListText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS);
+            const lastCommaIndex = truncated.lastIndexOf(', ');
+            if (lastCommaIndex > MIN_TRUNCATION_POSITION) truncated = truncated.slice(0, lastCommaIndex);
+            boundedSourceListText = truncated + '…';
+        }
+        const sourceListEl = document.createElement('div');
+        sourceListEl.className = 'signal-trace-item';
+        sourceListEl.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">sources</span> ' +
+            escapeHtml(boundedSourceListText) + '</span>';
+        traceSources.appendChild(sourceListEl);
     }
 
     if (!sources || sources.length === 0) {

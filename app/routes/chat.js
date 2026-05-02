@@ -21,7 +21,7 @@ const axios   = require('axios');
 const { chatLimiter } = require('../rateLimiters');
 const { OLLAMA_CHAT_URL, MODEL, resolveActiveHeart } = require('../toolRegistry');
 const { loadChunks }                                  = require('../indexStore');
-const { retrieve, buildGroundedPrompt }               = require('../retrieval');
+const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
 const { assembleRoomContext }                         = require('../contextMaps');
 const {
@@ -35,8 +35,11 @@ const {
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
 const CHAT_REQUEST_TIMEOUT_MS = 120000;
-const MAX_CHAT_CONTEXT_CHUNKS = 4;
-const MAX_CHAT_CONTEXT_CHARS = 7000;
+const MAX_CHAT_CONTEXT_CHUNKS = 12;
+const MAX_CHAT_CONTEXT_CHARS = 16000;
+const MAX_CHAT_CHUNK_CHARS = 2200;
+const MAX_CHAT_HISTORY_CHARS = 4000;
+const MAX_SIGNAL_TRACE_SOURCES = 8;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
@@ -156,8 +159,18 @@ function buildRoomContextPreamble(room) {
 function optimizeRetrievedContext(retrievedChunks) {
     if (!Array.isArray(retrievedChunks) || retrievedChunks.length === 0) return [];
     const seenChunkIds = new Set();
+    const seenFingerprints = new Set();
     const optimized = [];
     let totalChars = 0;
+
+    function fingerprint(text) {
+        return String(text || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .replace(/[^a-z0-9\s]/g, '')
+            .trim()
+            .slice(0, 240);
+    }
 
     for (const entry of retrievedChunks) {
         if (!entry || !entry.chunk || !entry.chunk.id) continue;
@@ -165,18 +178,24 @@ function optimizeRetrievedContext(retrievedChunks) {
 
         const text = typeof entry.chunk.text === 'string' ? entry.chunk.text : '';
         if (!text.trim()) continue;
+        const fp = fingerprint(text);
+        if (fp && seenFingerprints.has(fp)) continue;
         if (optimized.length >= MAX_CHAT_CONTEXT_CHUNKS) break;
         if (totalChars >= MAX_CHAT_CONTEXT_CHARS) break;
 
         const remaining = MAX_CHAT_CONTEXT_CHARS - totalChars;
         if (text.length > remaining && remaining < 400) break;
 
-        const nextEntry = text.length > remaining
-            ? { ...entry, chunk: { ...entry.chunk, text: text.slice(0, remaining) } }
-            : entry;
+        const boundedText = text.length > MAX_CHAT_CHUNK_CHARS
+            ? text.slice(0, MAX_CHAT_CHUNK_CHARS)
+            : text;
+        const nextEntry = boundedText.length > remaining
+            ? { ...entry, chunk: { ...entry.chunk, text: boundedText.slice(0, remaining) } }
+            : { ...entry, chunk: { ...entry.chunk, text: boundedText } };
 
         optimized.push(nextEntry);
         seenChunkIds.add(entry.chunk.id);
+        if (fp) seenFingerprints.add(fp);
         totalChars += nextEntry.chunk.text.length;
     }
 
@@ -243,7 +262,7 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, room?, rooms?, cartridgeId?, sourceIds?, archetype? }
+ * Body: { query, room?, rooms?, cartridgeId?, sourceIds?, archetype?, history? }
  * Response: { answer, sources, grounded }
  *
  * room (optional)      — active room for context-bounded chat ('hearth' | 'workshop' | 'threshold')
@@ -262,6 +281,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             cartridgeId = null,
             sourceIds = null,
             archetype = null,
+            history = null,
             requestId = null,
         } = req.body;
         if (!query || typeof query !== 'string') {
@@ -290,8 +310,15 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // Retrieve relevant local chunks via semantic / keyword search
         let retrieved = [];
         let retrievalState = RETRIEVAL_STATES.CONTEXT_AVAILABLE;
+        const detectedRoute = detectRoute(query);
         try {
-            retrieved = await retrieve({ query, rooms: retrievalRooms, cartridgeId });
+            retrieved = await retrieve({
+                query,
+                rooms: retrievalRooms,
+                cartridgeId,
+                topK: MAX_CHAT_CONTEXT_CHUNKS,
+                routeHint: detectedRoute,
+            });
         } catch (retrieveErr) {
             console.warn('[/api/chat] retrieval failed:', retrieveErr.message);
             retrievalState = RETRIEVAL_STATES.RETRIEVAL_ERROR;
@@ -351,7 +378,14 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         // [3] Retrieval — grounded source context (must follow identity, never precede it)
         const roomPreamble = buildRoomContextPreamble(activeRoom);
-        let userContent    = buildGroundedPrompt({ query, retrievedChunks: retrieved });
+        let userContent    = buildGroundedPrompt({
+            query,
+            retrievedChunks: retrieved,
+            recentHistory: Array.isArray(history) ? history : null,
+            maxContextChars: MAX_CHAT_CONTEXT_CHARS,
+            maxChunkChars: MAX_CHAT_CHUNK_CHARS,
+            maxHistoryChars: MAX_CHAT_HISTORY_CHARS,
+        });
         if (roomPreamble) {
             userContent = roomPreamble + userContent;
         }
@@ -434,10 +468,14 @@ state: ${retrievalState}
         const uniqueSourceCount = new Set(
             (sources || []).map(s => [s.room, s.file, s.cartridgeId || '', s.shelf || ''].join('|')),
         ).size;
+        const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
+            .slice(0, MAX_SIGNAL_TRACE_SOURCES);
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
+            routeDetected: detectedRoute || 'general',
             sourcesUsed: uniqueSourceCount,
             chunksUsed: retrieved.length,
+            sourceList,
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
         };
 
