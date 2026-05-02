@@ -17,9 +17,12 @@ const DEFAULT_CONCEPT_INDEX = {
     version: '1.0',
     domains: [],
 };
+const MAX_DETECTED_DOMAINS = 3;
 
 function _normalizeText(value) {
-    return typeof value === 'string' ? value.toLowerCase().replace(/\s+/g, ' ').trim() : '';
+    return typeof value === 'string'
+        ? value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+        : '';
 }
 
 function _safeParseJSON(raw) {
@@ -109,14 +112,26 @@ function getDomain(conceptIndex, domainId) {
     return domains.find(d => d && d.id === domainId) || null;
 }
 
-function detectConceptDomain(query, conceptIndex) {
+function _domainPrioritySources(domain) {
+    if (!domain || typeof domain !== 'object') return [];
+    if (Array.isArray(domain.priority_sources)) return domain.priority_sources;
+    if (Array.isArray(domain.prioritizedWorks)) return domain.prioritizedWorks;
+    return [];
+}
+
+function detectConceptDomains(query, conceptIndex) {
     const normalizedQuery = _normalizeText(query);
-    if (!normalizedQuery) return 'general';
+    if (!normalizedQuery) {
+        return {
+            primary: 'general',
+            domains: ['general'],
+            scores: {},
+        };
+    }
 
     const index = conceptIndex || loadConceptIndex();
     const domains = Array.isArray(index.domains) ? index.domains : [];
-    let bestDomain = 'general';
-    let bestScore = 0;
+    const scoreEntries = [];
 
     for (const domain of domains) {
         if (!domain || !Array.isArray(domain.keywords)) continue;
@@ -126,27 +141,71 @@ function detectConceptDomain(query, conceptIndex) {
             if (!normalizedKeyword) continue;
             if (normalizedQuery.includes(normalizedKeyword)) score += 1;
         }
-        if (score > bestScore) {
-            bestScore = score;
-            bestDomain = domain.id || 'general';
+        if (score > 0) scoreEntries.push({ domainId: domain.id || 'general', score });
+    }
+
+    scoreEntries.sort((a, b) => b.score - a.score);
+    const top = scoreEntries.slice(0, MAX_DETECTED_DOMAINS);
+    if (top.length === 0) {
+        return {
+            primary: 'general',
+            domains: ['general'],
+            scores: {},
+        };
+    }
+
+    const scores = {};
+    for (const entry of top) {
+        scores[entry.domainId] = entry.score;
+    }
+
+    return {
+        primary: top[0].domainId,
+        domains: top.map(entry => entry.domainId),
+        scores,
+    };
+}
+
+function detectConceptDomain(query, conceptIndex) {
+    const result = detectConceptDomains(query, conceptIndex);
+    return result.primary || 'general';
+}
+
+function getPrioritySourcesForQuery(query, conceptIndex) {
+    const index = conceptIndex || loadConceptIndex();
+    const routed = detectConceptDomains(query, index);
+    const deduped = new Set();
+    const ordered = [];
+
+    for (const domainId of routed.domains) {
+        if (!domainId || domainId === 'general') continue;
+        const domain = getDomain(index, domainId);
+        const domainSources = _domainPrioritySources(domain);
+        for (const sourceName of domainSources) {
+            const normalized = _normalizeText(sourceName);
+            if (!normalized || deduped.has(normalized)) continue;
+            deduped.add(normalized);
+            ordered.push(sourceName);
         }
     }
 
-    return bestScore > 0 ? bestDomain : 'general';
+    return {
+        primary: routed.primary || 'general',
+        domains: Array.isArray(routed.domains) && routed.domains.length > 0 ? routed.domains : ['general'],
+        scores: routed.scores || {},
+        priority_sources: ordered,
+    };
 }
 
-function conceptBonusForSource(sourceMetaText, conceptDomain, conceptIndex) {
-    if (!sourceMetaText || !conceptDomain || conceptDomain === 'general') return 0;
-    const index = conceptIndex || loadConceptIndex();
-    const domain = getDomain(index, conceptDomain);
-    if (!domain || !Array.isArray(domain.prioritizedWorks) || domain.prioritizedWorks.length === 0) return 0;
-
+function conceptBonusForSource(sourceMetaText, prioritySources) {
+    if (!sourceMetaText || !Array.isArray(prioritySources) || prioritySources.length === 0) return 0;
     const haystack = _normalizeText(sourceMetaText);
     let matches = 0;
-    for (const work of domain.prioritizedWorks) {
-        const normalizedWork = _normalizeText(work);
-        if (!normalizedWork) continue;
-        if (haystack.includes(normalizedWork)) matches += 1;
+
+    for (const source of prioritySources) {
+        const normalizedSource = _normalizeText(source);
+        if (!normalizedSource) continue;
+        if (haystack.includes(normalizedSource)) matches += 1;
     }
     if (matches === 0) return 0;
 
@@ -160,6 +219,8 @@ module.exports = {
     ensureUserConceptIndex,
     loadConceptIndex,
     getDomain,
+    detectConceptDomains,
     detectConceptDomain,
+    getPrioritySourcesForQuery,
     conceptBonusForSource,
 };

@@ -85,13 +85,39 @@ describe('Phase 15.6 — concept index layer', () => {
         return require('../app/retrieval');
     }
 
-    test('detectConceptDomain maps philosophy queries from concept index keywords', () => {
+    test('detectConceptDomains returns top domains and fallback general', () => {
         const retrieval = setupRetrievalModule({ chunks: [], manifests: {} });
-        expect(retrieval.detectConceptDomain('Help me explore ontology, meaning, and perception.')).toBe('philosophy');
+        const routed = retrieval.detectConceptDomains('Explain rune glyph archetype links to myth-tech interfaces');
+        expect(routed.primary).toBe('symbolic_language');
+        expect(routed.domains).toContain('symbolic_language');
+        expect(routed.domains).toContain('myth_tech');
+        expect(routed.domains.length).toBeLessThanOrEqual(3);
+        expect(routed.scores.symbolic_language).toBeGreaterThan(0);
+
+        const fallback = retrieval.detectConceptDomains('Tell me something unrelated');
+        expect(fallback).toEqual({
+            primary: 'general',
+            domains: ['general'],
+            scores: {},
+        });
         expect(retrieval.detectConceptDomain('Tell me something unrelated')).toBe('general');
     });
 
-    test('retrieve boosts sources aligned to concept-index prioritized works', async () => {
+    test('getPrioritySourcesForQuery combines and deduplicates multi-domain source priorities', () => {
+        const retrieval = setupRetrievalModule({ chunks: [], manifests: {} });
+        const routing = retrieval.getPrioritySourcesForQuery(
+            'Map rune glyph archetype language through myth-tech interfaces',
+        );
+
+        expect(routing.primary).toBe('symbolic_language');
+        expect(routing.domains).toEqual(expect.arrayContaining(['symbolic_language', 'myth_tech']));
+        expect(Array.isArray(routing.priority_sources)).toBe(true);
+        expect(routing.priority_sources.length).toBeGreaterThan(0);
+        expect(routing.priority_sources[0]).toBe('runelore');
+        expect(new Set(routing.priority_sources).size).toBe(routing.priority_sources.length);
+    });
+
+    test('retrieve boosts sources aligned to concept-index priority sources and exposes routing metadata', async () => {
         const chunks = [
             {
                 id: 'c1',
@@ -128,7 +154,7 @@ describe('Phase 15.6 — concept index layer', () => {
 
         const retrieval = setupRetrievalModule({ chunks, manifests });
         const results = await retrieval.retrieve({
-            query: 'I want to understand ontology and meaning',
+            query: 'I want to understand the green fire framework and map',
             rooms: ['hearth'],
             routeHint: 'general',
             topK: 2,
@@ -136,7 +162,10 @@ describe('Phase 15.6 — concept index layer', () => {
 
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].chunk.sourceId).toBe('src-ontological');
-        expect(results[0].conceptDomain).toBe('philosophy');
+        expect(results[0].conceptDomain).toBe('core_orientation');
+        expect(results[0].conceptDomains).toContain('core_orientation');
+        expect(Array.isArray(results[0].prioritySourcesConsidered)).toBe(true);
+        expect(results[0].prioritySourcesConsidered.length).toBeGreaterThan(0);
         expect(results[0].conceptBonus).toBeGreaterThan(0);
     });
 });

@@ -10,7 +10,13 @@
 const { generateEmbedding, cosineSimilarity, keywordScore } = require('./embeddings');
 const { loadChunks, loadEmbeddings, loadExcluded, loadManifests } = require('./indexStore');
 const { SOURCE_CLASS_ARCHIVE } = require('./archiveService');
-const { loadConceptIndex, detectConceptDomain, conceptBonusForSource } = require('./conceptIndex');
+const {
+    loadConceptIndex,
+    detectConceptDomains,
+    detectConceptDomain,
+    getPrioritySourcesForQuery,
+    conceptBonusForSource,
+} = require('./conceptIndex');
 
 const DEFAULT_TOP_K = 12;
 const DEFAULT_TARGET_SOURCES = 6;
@@ -340,8 +346,18 @@ async function retrieve({
 
     const queryVector = await generateEmbedding(query);
     const routedAs = routeHint || detectRoute(query);
-    const conceptIndex = loadConceptIndex();
-    const conceptDomain = detectConceptDomain(query, conceptIndex);
+    let conceptRouting = {
+        primary: 'general',
+        domains: ['general'],
+        scores: {},
+        priority_sources: [],
+    };
+    try {
+        const conceptIndex = loadConceptIndex();
+        conceptRouting = getPrioritySourcesForQuery(query, conceptIndex);
+    } catch (err) {
+        console.warn('[retrieval] concept routing unavailable; falling back to base retrieval:', err.message);
+    }
 
     const baseScored = scoreChunks({ chunks: candidates, queryVector, queryText: query, embeddings });
     if (baseScored.length === 0) return [];
@@ -358,7 +374,7 @@ async function retrieve({
             const sourceMetaText = buildSourceMetaText(entry.chunk, manifests);
             const routeBonus = routeBonusForSource(sourceMetaText, routedAs);
             const titleBonus = titleBonusForQuery(sourceMetaText, query);
-            const conceptBonus = conceptBonusForSource(sourceMetaText, conceptDomain, conceptIndex);
+            const conceptBonus = conceptBonusForSource(sourceMetaText, conceptRouting.priority_sources);
             const fp = chunkFingerprint(entry.chunk.text || '');
             const duplicatePenalty = fp && fingerprintCounts[fp] > 1
                 ? Math.min(MAX_DUPLICATE_PENALTY, (fingerprintCounts[fp] - 1) * DUPLICATE_PENALTY_PER_EXTRA)
@@ -373,7 +389,10 @@ async function retrieve({
                 titleBonus,
                 conceptBonus,
                 duplicatePenalty,
-                conceptDomain,
+                conceptDomain: conceptRouting.primary,
+                conceptDomains: conceptRouting.domains,
+                conceptScores: conceptRouting.scores,
+                prioritySourcesConsidered: conceptRouting.priority_sources,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);
@@ -476,7 +495,9 @@ module.exports = {
     buildGroundedPrompt,
     scoreChunks,
     detectRoute,
+    detectConceptDomains,
     detectConceptDomain,
+    getPrioritySourcesForQuery,
     DEFAULT_TOP_K,
     DEFAULT_TARGET_SOURCES,
     DEFAULT_MAX_CHUNKS_PER_SOURCE,

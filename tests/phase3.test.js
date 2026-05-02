@@ -448,6 +448,10 @@ describe('POST /api/chat', () => {
         expect(typeof res.body.retrievalState).toBe('string');
         expect(res.body.signalTrace).toBeDefined();
         expect(typeof res.body.signalTrace.routeDetected).toBe('string');
+        expect(typeof res.body.signalTrace.conceptRoute).toBe('string');
+        expect(Array.isArray(res.body.signalTrace.relatedDomains)).toBe(true);
+        expect(Array.isArray(res.body.signalTrace.prioritySourcesConsidered)).toBe(true);
+        expect(Array.isArray(res.body.signalTrace.sourcesActuallyUsed)).toBe(true);
         expect(Array.isArray(res.body.signalTrace.sourceList)).toBe(true);
     });
 

@@ -2,34 +2,52 @@
   "version": "1.0",
   "domains": [
     {
-      "id": "symbolic",
+      "id": "core_orientation",
+      "description": "Foundational Green Fire framing, worldview, and orientation requests.",
+      "keywords": ["green fire", "first spark", "foundations", "core", "orientation", "framework", "map"],
+      "priority_sources": ["green-fire-first-spark", "green-fire-philosophy", "green-fire-ontological-framework"]
+    },
+    {
+      "id": "myth_tech",
+      "description": "Myth-Tech interfaces, mirror logic, and node-forge synthesis.",
+      "keywords": ["myth-tech", "myth tech", "mirror", "node", "forge", "model", "interface", "signal engine"],
+      "priority_sources": ["myth-tech", "mythic-mirror-seed", "ember-node-forge", "green-fire-dialogues"]
+    },
+    {
+      "id": "symbolic_language",
+      "description": "Runes, glyphs, symbols, and archetypal language of the archive.",
       "keywords": ["symbol", "symbols", "rune", "runes", "glyph", "glyphs", "archetype", "archetypes", "element", "elements"],
-      "prioritizedWorks": ["runelore", "myth-tech", "symbol index", "sentinel archetypes"]
+      "priority_sources": ["runelore", "symbol-index", "myth-tech", "sentinel-archetypes"]
     },
     {
-      "id": "saga",
+      "id": "triform_system",
+      "description": "Questions involving codex, grimoire, and saga interplay as one system.",
+      "keywords": ["triform", "codex", "grimoire", "grimoires", "saga", "sagas", "triad", "three forms"],
+      "priority_sources": ["codex-grimoire-codices-sagas", "green-fire-dialogues", "living-sagas"]
+    },
+    {
+      "id": "collapse_continuity",
+      "description": "Collapse-era survival, continuity strategy, and fractured-world adaptation.",
+      "keywords": ["collapse", "continuity", "survival", "fracture", "fractured earth", "systems failure", "resilience"],
+      "priority_sources": ["fractured-earth", "green-fire-sentinels", "sentinel-armory", "first-codex"]
+    },
+    {
+      "id": "practice_reflection",
+      "description": "Applied practice, journaling, ritual cadence, and reflective refinement.",
+      "keywords": ["practice", "reflection", "journal", "field notes", "ritual", "exercise", "self refinement", "self-refinement"],
+      "priority_sources": ["green-fire-grimoire", "field-notes", "first-codex", "codex-grimoire-codices-sagas"]
+    },
+    {
+      "id": "living_sagas",
+      "description": "Storyline, narrative continuity, character arcs, and worldbuilding threads.",
       "keywords": ["story", "stories", "saga", "sagas", "narrative", "character", "characters", "worldbuilding"],
-      "prioritizedWorks": ["living sagas", "signal saga", "saga seeds", "green fire dialogues"]
+      "priority_sources": ["living-sagas", "signal-saga", "saga-seeds", "green-fire-dialogues"]
     },
     {
-      "id": "collapse",
-      "keywords": ["collapse", "survival", "continuity", "systems failure", "failure", "breakdown"],
-      "prioritizedWorks": ["fractured earth", "green fire sentinels", "sentinel armory", "codex"]
-    },
-    {
-      "id": "ai",
-      "keywords": ["ai", "mirror", "node", "prompt", "forge", "model", "models"],
-      "prioritizedWorks": ["mythic mirror seed", "ember node forge", "myth-tech", "dialogues"]
-    },
-    {
-      "id": "philosophy",
-      "keywords": ["philosophy", "meaning", "ontology", "ontological", "reality", "perception"],
-      "prioritizedWorks": ["green fire philosophy", "ontological framework", "signal and flame", "dialogues"]
-    },
-    {
-      "id": "practice",
-      "keywords": ["practice", "grimoire", "grimoires", "journal", "reflection", "self refinement", "self-refinement"],
-      "prioritizedWorks": ["green fire grimoire", "codices-grimoires-sagas", "first codex", "field notes"]
+      "id": "sentinel_identity",
+      "description": "Sentinel role, duty, posture, and identity-aligned action in system context.",
+      "keywords": ["sentinel", "warden", "guardian", "duty", "identity", "oath", "stance", "armory"],
+      "priority_sources": ["green-fire-sentinels", "sentinel-armory", "sentinel-archetypes", "green-fire-philosophy"]
     }
   ]
 }

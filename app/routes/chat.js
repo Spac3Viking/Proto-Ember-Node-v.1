@@ -40,6 +40,7 @@ const MAX_CHAT_CONTEXT_CHARS = 16000;
 const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
 const MAX_SIGNAL_TRACE_SOURCES = 8;
+const MAX_SIGNAL_TRACE_ROUTING_LIST = 6;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
@@ -468,11 +469,29 @@ state: ${retrievalState}
         const uniqueSourceCount = new Set(
             (sources || []).map(s => [s.room, s.file, s.cartridgeId || '', s.shelf || ''].join('|')),
         ).size;
+        const conceptRoute = retrieved[0] && retrieved[0].conceptDomain
+            ? String(retrieved[0].conceptDomain)
+            : 'general';
+        const relatedDomains = Array.isArray(retrieved[0] && retrieved[0].conceptDomains) &&
+            retrieved[0].conceptDomains.length > 0
+            ? retrieved[0].conceptDomains.map(String).slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
+            : ['general'];
+        const prioritySourcesConsidered = Array.isArray(retrieved[0] && retrieved[0].prioritySourcesConsidered)
+            ? retrieved[0].prioritySourcesConsidered
+                .map(String)
+                .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
+            : [];
+        const sourcesActuallyUsed = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
+            .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST);
         const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
             .slice(0, MAX_SIGNAL_TRACE_SOURCES);
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
             routeDetected: detectedRoute || 'general',
+            conceptRoute,
+            relatedDomains,
+            prioritySourcesConsidered,
+            sourcesActuallyUsed,
             sourcesUsed: uniqueSourceCount,
             chunksUsed: retrieved.length,
             sourceList,
