@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "domains": [
+    {
+      "id": "symbolic",
+      "keywords": ["symbol", "symbols", "rune", "runes", "glyph", "glyphs", "archetype", "archetypes", "element", "elements"],
+      "prioritizedWorks": ["runelore", "myth-tech", "symbol index", "sentinel archetypes"]
+    },
+    {
+      "id": "saga",
+      "keywords": ["story", "stories", "saga", "sagas", "narrative", "character", "characters", "worldbuilding"],
+      "prioritizedWorks": ["living sagas", "signal saga", "saga seeds", "green fire dialogues"]
+    },
+    {
+      "id": "collapse",
+      "keywords": ["collapse", "survival", "continuity", "systems failure", "failure", "breakdown"],
+      "prioritizedWorks": ["fractured earth", "green fire sentinels", "sentinel armory", "codex"]
+    },
+    {
+      "id": "ai",
+      "keywords": ["ai", "mirror", "node", "prompt", "forge", "model", "models"],
+      "prioritizedWorks": ["mythic mirror seed", "ember node forge", "myth-tech", "dialogues"]
+    },
+    {
+      "id": "philosophy",
+      "keywords": ["philosophy", "meaning", "ontology", "ontological", "reality", "perception"],
+      "prioritizedWorks": ["green fire philosophy", "ontological framework", "signal and flame", "dialogues"]
+    },
+    {
+      "id": "practice",
+      "keywords": ["practice", "grimoire", "grimoires", "journal", "reflection", "self refinement", "self-refinement"],
+      "prioritizedWorks": ["green fire grimoire", "codices-grimoires-sagas", "first codex", "field notes"]
+    }
+  ]
+}
