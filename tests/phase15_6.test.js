@@ -87,7 +87,9 @@ describe('Phase 15.6 — concept index layer', () => {
 
     test('detectConceptDomains returns top domains and fallback general', () => {
         const retrieval = setupRetrievalModule({ chunks: [], manifests: {} });
-        const routed = retrieval.detectConceptDomains('Explain rune glyph archetype links to myth-tech interfaces');
+        const routed = retrieval.detectConceptDomains(
+            'Explain rune glyph archetype symbols with a minor myth-tech mention',
+        );
         expect(routed.primary).toBe('symbolic_language');
         expect(routed.domains).toContain('symbolic_language');
         expect(routed.domains).toContain('myth_tech');
@@ -106,7 +108,7 @@ describe('Phase 15.6 — concept index layer', () => {
     test('getPrioritySourcesForQuery combines and deduplicates multi-domain source priorities', () => {
         const retrieval = setupRetrievalModule({ chunks: [], manifests: {} });
         const routing = retrieval.getPrioritySourcesForQuery(
-            'Map rune glyph archetype language through myth-tech interfaces',
+            'Map rune glyph archetype symbols through myth-tech',
         );
 
         expect(routing.primary).toBe('symbolic_language');
