@@ -119,6 +119,110 @@ describe('Phase 15.6 — concept index layer', () => {
         expect(new Set(routing.priority_sources).size).toBe(routing.priority_sources.length);
     });
 
+    test('retrieve applies concept bonus multiplicatively', async () => {
+        const chunks = [
+            {
+                id: 'c1',
+                sourceId: 'src-generic',
+                room: 'hearth',
+                shelf: 'archive',
+                file: 'generic.md',
+                text: 'glyph archetype language baseline',
+            },
+            {
+                id: 'c2',
+                sourceId: 'src-runelore',
+                room: 'hearth',
+                shelf: 'archive',
+                file: 'runelore.md',
+                text: 'glyph archetype language runic',
+            },
+        ];
+
+        const manifests = {
+            'src-generic': {
+                id: 'src-generic',
+                sourceClass: 'trusted-archive',
+                title: 'General Notes',
+                file: 'generic.md',
+            },
+            'src-runelore': {
+                id: 'src-runelore',
+                sourceClass: 'trusted-archive',
+                title: 'Runelore',
+                file: 'runelore.md',
+            },
+        };
+
+        const retrieval = setupRetrievalModule({ chunks, manifests });
+        const results = await retrieval.retrieve({
+            query: 'glyph archetype language',
+            rooms: ['hearth'],
+            routeHint: 'general',
+            topK: 2,
+        });
+
+        const boosted = results.find(r => r.chunk.sourceId === 'src-runelore');
+        expect(boosted).toBeTruthy();
+        expect(boosted.routeBonus).toBe(0);
+        expect(boosted.titleBonus).toBe(0);
+        expect(boosted.duplicatePenalty).toBe(0);
+        const expected = boosted.textMatchScore * (1 + boosted.conceptBonus);
+        expect(boosted.score).toBeCloseTo(expected, 6);
+        expect(results[0].chunk.sourceId).toBe('src-runelore');
+    });
+
+    test('retrieve enforces minimum distinct priority sources when available', async () => {
+        const chunks = [
+            { id: 'np1', sourceId: 'src-non-1', room: 'hearth', shelf: 'archive', file: 'n1.md', text: 'rune glyph archetype map meaning' },
+            { id: 'np2', sourceId: 'src-non-2', room: 'hearth', shelf: 'archive', file: 'n2.md', text: 'rune glyph archetype map meaning' },
+            { id: 'np3', sourceId: 'src-non-3', room: 'hearth', shelf: 'archive', file: 'n3.md', text: 'rune glyph archetype map meaning' },
+            { id: 'np4', sourceId: 'src-non-4', room: 'hearth', shelf: 'archive', file: 'n4.md', text: 'rune glyph archetype map meaning' },
+            { id: 'np5', sourceId: 'src-non-5', room: 'hearth', shelf: 'archive', file: 'n5.md', text: 'rune glyph archetype map meaning' },
+            { id: 'p1', sourceId: 'src-runelore', room: 'hearth', shelf: 'archive', file: 'runelore.md', text: 'rune archetype language' },
+            { id: 'p2', sourceId: 'src-symbol-index', room: 'hearth', shelf: 'archive', file: 'symbol-index.md', text: 'glyph language index' },
+            { id: 'p3', sourceId: 'src-myth-tech', room: 'hearth', shelf: 'archive', file: 'myth-tech.md', text: 'archetype interfaces language' },
+        ];
+
+        const manifests = {
+            'src-non-1': { id: 'src-non-1', sourceClass: 'trusted-archive', title: 'Other Source 1', file: 'n1.md' },
+            'src-non-2': { id: 'src-non-2', sourceClass: 'trusted-archive', title: 'Other Source 2', file: 'n2.md' },
+            'src-non-3': { id: 'src-non-3', sourceClass: 'trusted-archive', title: 'Other Source 3', file: 'n3.md' },
+            'src-non-4': { id: 'src-non-4', sourceClass: 'trusted-archive', title: 'Other Source 4', file: 'n4.md' },
+            'src-non-5': { id: 'src-non-5', sourceClass: 'trusted-archive', title: 'Other Source 5', file: 'n5.md' },
+            'src-runelore': { id: 'src-runelore', sourceClass: 'trusted-archive', title: 'Runelore', file: 'runelore.md' },
+            'src-symbol-index': { id: 'src-symbol-index', sourceClass: 'trusted-archive', title: 'Symbol Index', file: 'symbol-index.md' },
+            'src-myth-tech': { id: 'src-myth-tech', sourceClass: 'trusted-archive', title: 'Myth-Tech', file: 'myth-tech.md' },
+        };
+
+        const retrieval = setupRetrievalModule({ chunks, manifests });
+        const results = await retrieval.retrieve({
+            query: 'rune glyph archetype map',
+            rooms: ['hearth'],
+            routeHint: 'general',
+            topK: 6,
+            maxChunksPerSource: 1,
+            targetSources: 6,
+        });
+
+        const prioritySourceIds = new Set(['src-runelore', 'src-symbol-index', 'src-myth-tech']);
+        const presentPrioritySources = new Set(
+            results
+                .map(r => r.chunk.sourceId)
+                .filter(sourceId => prioritySourceIds.has(sourceId)),
+        );
+
+        expect(results.length).toBeLessThanOrEqual(6);
+        expect(presentPrioritySources.size).toBeGreaterThanOrEqual(3);
+
+        const perSource = {};
+        for (const entry of results) {
+            const sourceId = entry.chunk.sourceId;
+            perSource[sourceId] = (perSource[sourceId] || 0) + 1;
+        }
+        expect(Math.max(...Object.values(perSource))).toBeLessThanOrEqual(1);
+    });
+
     test('retrieve boosts sources aligned to concept-index priority sources and exposes routing metadata', async () => {
         const chunks = [
             {

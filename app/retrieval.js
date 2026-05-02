@@ -39,6 +39,7 @@ const DUPLICATE_PENALTY_PER_EXTRA = 0.08;
 const MIN_REMAINING_HISTORY_CHARS = 120;
 const MIN_REMAINING_CONTEXT_CHARS = 300;
 const MIN_QUERY_TERM_LENGTH = 4;
+const MIN_PRIORITY_SOURCES_IN_SELECTION = 3;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -127,6 +128,18 @@ function buildSourceMetaText(chunk, manifestsById) {
     ].filter(Boolean).join(' '));
 }
 
+function findMatchedPrioritySources(sourceMetaText, prioritySources) {
+    if (!sourceMetaText || !Array.isArray(prioritySources) || prioritySources.length === 0) return [];
+
+    const matches = [];
+    for (const sourceName of prioritySources) {
+        const normalizedSource = normalizeText(sourceName);
+        if (!normalizedSource) continue;
+        if (sourceMetaText.includes(normalizedSource)) matches.push(sourceName);
+    }
+    return matches;
+}
+
 function routeBonusForSource(sourceMetaText, routeId) {
     if (!sourceMetaText || routeId === 'general') return 0;
     const route = routeDefinition(routeId);
@@ -197,6 +210,8 @@ function selectBalancedEntries({
     topK,
     targetSources,
     maxChunksPerSource,
+    prioritySourceIds = [],
+    minPrioritySources = 0,
 }) {
     if (!scoredEntries || scoredEntries.length === 0) return [];
 
@@ -226,6 +241,14 @@ function selectBalancedEntries({
         usageBySource[sid] = 0;
         bestBySource[sid] = bySource[sid][0] ? bySource[sid][0].score : 0;
     }
+
+    const prioritySourceSet = new Set(prioritySourceIds || []);
+    const orderedPrioritySources = sourceOrder.filter(sourceId => prioritySourceSet.has(sourceId));
+    const requiredPrioritySources = Math.min(
+        topK,
+        orderedPrioritySources.length,
+        Math.max(0, minPrioritySources || 0),
+    );
 
     function pullNextEntry(sourceId) {
         const list = bySource[sourceId] || [];
@@ -262,6 +285,15 @@ function selectBalancedEntries({
         const fp = chunkFingerprint(entry.chunk.text || '');
         if (fp) seenFingerprints.add(fp);
         return true;
+    }
+
+    // Pass 0: enforce minimum distinct priority sources (if available)
+    if (requiredPrioritySources > 0) {
+        for (const sourceId of orderedPrioritySources) {
+            if (selected.length >= topK) break;
+            if (selectedSources.size >= requiredPrioritySources) break;
+            takeFromSource(sourceId, { requireHighRelevance: false });
+        }
     }
 
     // Pass 1: best chunk from top target sources
@@ -375,11 +407,13 @@ async function retrieve({
             const routeBonus = routeBonusForSource(sourceMetaText, routedAs);
             const titleBonus = titleBonusForQuery(sourceMetaText, query);
             const conceptBonus = conceptBonusForSource(sourceMetaText, conceptRouting.priority_sources);
+            const matchedPrioritySources = findMatchedPrioritySources(sourceMetaText, conceptRouting.priority_sources);
             const fp = chunkFingerprint(entry.chunk.text || '');
             const duplicatePenalty = fp && fingerprintCounts[fp] > 1
                 ? Math.min(MAX_DUPLICATE_PENALTY, (fingerprintCounts[fp] - 1) * DUPLICATE_PENALTY_PER_EXTRA)
                 : 0;
-            const finalScore = entry.score + routeBonus + titleBonus + conceptBonus - duplicatePenalty;
+            const preConceptScore = entry.score + routeBonus + titleBonus - duplicatePenalty;
+            const finalScore = preConceptScore * (1 + conceptBonus);
 
             return {
                 chunk: entry.chunk,
@@ -393,17 +427,35 @@ async function retrieve({
                 conceptDomains: conceptRouting.domains,
                 conceptScores: conceptRouting.scores,
                 prioritySourcesConsidered: conceptRouting.priority_sources,
+                matchedPrioritySources,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);
 
     if (scored.length === 0) return [];
 
+    const prioritySourceIds = [];
+    const seenPrioritySourceIds = new Set();
+    for (const entry of scored.slice().sort((a, b) => b.score - a.score)) {
+        if (!entry || !entry.chunk) continue;
+        if (!entry.matchedPrioritySources || entry.matchedPrioritySources.length === 0) continue;
+        const sourceId = entry.chunk.sourceId;
+        if (!sourceId || seenPrioritySourceIds.has(sourceId)) continue;
+        seenPrioritySourceIds.add(sourceId);
+        prioritySourceIds.push(sourceId);
+    }
+
+    const minPrioritySources = Array.isArray(conceptRouting.priority_sources) && conceptRouting.priority_sources.length > 0
+        ? MIN_PRIORITY_SOURCES_IN_SELECTION
+        : 0;
+
     return selectBalancedEntries({
         scoredEntries: scored,
         topK,
         targetSources,
         maxChunksPerSource,
+        prioritySourceIds,
+        minPrioritySources,
     });
 }
 
