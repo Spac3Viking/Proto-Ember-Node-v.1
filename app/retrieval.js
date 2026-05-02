@@ -10,6 +10,7 @@
 const { generateEmbedding, cosineSimilarity, keywordScore } = require('./embeddings');
 const { loadChunks, loadEmbeddings, loadExcluded, loadManifests } = require('./indexStore');
 const { SOURCE_CLASS_ARCHIVE } = require('./archiveService');
+const { loadConceptIndex, detectConceptDomain, conceptBonusForSource } = require('./conceptIndex');
 
 const DEFAULT_TOP_K = 12;
 const DEFAULT_TARGET_SOURCES = 6;
@@ -339,6 +340,8 @@ async function retrieve({
 
     const queryVector = await generateEmbedding(query);
     const routedAs = routeHint || detectRoute(query);
+    const conceptIndex = loadConceptIndex();
+    const conceptDomain = detectConceptDomain(query, conceptIndex);
 
     const baseScored = scoreChunks({ chunks: candidates, queryVector, queryText: query, embeddings });
     if (baseScored.length === 0) return [];
@@ -355,11 +358,12 @@ async function retrieve({
             const sourceMetaText = buildSourceMetaText(entry.chunk, manifests);
             const routeBonus = routeBonusForSource(sourceMetaText, routedAs);
             const titleBonus = titleBonusForQuery(sourceMetaText, query);
+            const conceptBonus = conceptBonusForSource(sourceMetaText, conceptDomain, conceptIndex);
             const fp = chunkFingerprint(entry.chunk.text || '');
             const duplicatePenalty = fp && fingerprintCounts[fp] > 1
                 ? Math.min(MAX_DUPLICATE_PENALTY, (fingerprintCounts[fp] - 1) * DUPLICATE_PENALTY_PER_EXTRA)
                 : 0;
-            const finalScore = entry.score + routeBonus + titleBonus - duplicatePenalty;
+            const finalScore = entry.score + routeBonus + titleBonus + conceptBonus - duplicatePenalty;
 
             return {
                 chunk: entry.chunk,
@@ -367,7 +371,9 @@ async function retrieve({
                 textMatchScore: entry.score,
                 routeBonus,
                 titleBonus,
+                conceptBonus,
                 duplicatePenalty,
+                conceptDomain,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);
@@ -470,6 +476,7 @@ module.exports = {
     buildGroundedPrompt,
     scoreChunks,
     detectRoute,
+    detectConceptDomain,
     DEFAULT_TOP_K,
     DEFAULT_TARGET_SOURCES,
     DEFAULT_MAX_CHUNKS_PER_SOURCE,
