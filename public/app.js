@@ -617,9 +617,13 @@ function renderSignalTrace(sources, signalTrace = null) {
 
     if (sourceList.length > 0) {
         const sourceListText = sourceList.join(', ');
-        const boundedSourceListText = sourceListText.length > MAX_SOURCE_LIST_DISPLAY_CHARS
-            ? sourceListText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS) + '…'
-            : sourceListText;
+        let boundedSourceListText = sourceListText;
+        if (sourceListText.length > MAX_SOURCE_LIST_DISPLAY_CHARS) {
+            let truncated = sourceListText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS);
+            const lastCommaIndex = truncated.lastIndexOf(', ');
+            if (lastCommaIndex > 40) truncated = truncated.slice(0, lastCommaIndex);
+            boundedSourceListText = truncated + '…';
+        }
         const sourceListEl = document.createElement('div');
         sourceListEl.className = 'signal-trace-item';
         sourceListEl.innerHTML =

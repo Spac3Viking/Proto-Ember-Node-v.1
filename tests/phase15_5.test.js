@@ -108,7 +108,7 @@ describe('Phase 15.5 — multi-source retrieval + context balancing', () => {
 
         expect(prompt).toContain('User question: What is the through-line?');
         expect(prompt).toContain('=== Recent Chat Context ===');
-        const expectedUpperBound = 1800 + 350 + 1200;
+        const expectedUpperBound = 2600;
         expect(prompt.length).toBeLessThan(expectedUpperBound);
     });
 });
