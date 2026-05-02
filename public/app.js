@@ -575,6 +575,7 @@ function setTraceStatus(text) {
 
 function renderSignalTrace(sources, signalTrace = null) {
     const MAX_SOURCE_LIST_DISPLAY_CHARS = 180;
+    const MIN_TRUNCATION_POSITION = 40;
     const traceSources = document.getElementById('signal-trace-sources');
     if (!traceSources) return;
     traceSources.innerHTML = '';
@@ -621,7 +622,7 @@ function renderSignalTrace(sources, signalTrace = null) {
         if (sourceListText.length > MAX_SOURCE_LIST_DISPLAY_CHARS) {
             let truncated = sourceListText.slice(0, MAX_SOURCE_LIST_DISPLAY_CHARS);
             const lastCommaIndex = truncated.lastIndexOf(', ');
-            if (lastCommaIndex > 40) truncated = truncated.slice(0, lastCommaIndex);
+            if (lastCommaIndex > MIN_TRUNCATION_POSITION) truncated = truncated.slice(0, lastCommaIndex);
             boundedSourceListText = truncated + '…';
         }
         const sourceListEl = document.createElement('div');

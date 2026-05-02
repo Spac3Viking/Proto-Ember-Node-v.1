@@ -31,6 +31,7 @@ const MAX_DUPLICATE_PENALTY = 0.24;
 const DUPLICATE_PENALTY_PER_EXTRA = 0.08;
 const MIN_REMAINING_HISTORY_CHARS = 120;
 const MIN_REMAINING_CONTEXT_CHARS = 300;
+const MIN_QUERY_TERM_LENGTH = 4;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -138,7 +139,7 @@ function titleBonusForQuery(sourceMetaText, query) {
     const queryTerms = normalizeText(query)
         .split(' ')
         .filter(Boolean)
-        .filter(term => term.length >= 4);
+        .filter(term => term.length >= MIN_QUERY_TERM_LENGTH);
     if (queryTerms.length === 0) return 0;
 
     let hits = 0;
