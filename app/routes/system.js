@@ -7,6 +7,8 @@
  * GET /api/ollama-status
  * GET /api/storage-info
  * GET /api/intake-state
+ * GET /api/ai/models
+ * POST /api/ai/models/select
  * POST /api/system/shutdown
  */
 
@@ -14,14 +16,15 @@ const express = require('express');
 const axios   = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { readLimiter } = require('../rateLimiters');
+const { readLimiter, writeLimiter } = require('../rateLimiters');
 const {
     DATA_ROOT, ROOM_DIRS,
     INDEXES_DIR, PROJECTS_DIR, THREADS_DIR,
     USER_CARTRIDGES_DIR, SYSTEM_DIR, EXPORTS_DIR,
     FORGE_DIR,
 } = require('../storageConfig');
-const { MODEL, OLLAMA_BASE_URL } = require('../toolRegistry');
+const { OLLAMA_BASE_URL } = require('../toolRegistry');
+const { getSelectedModel, setSelectedModel } = require('../aiConfig');
 const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
 const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCartridges }                            = require('../cartridgeLoader');
@@ -189,7 +192,7 @@ function createSystemRouter({ migrationResult }) {
         const activeArchetype = bootstrap ? (bootstrap.nodeState || {}).activeArchetype || null : null;
 
         res.json({
-            model:             MODEL,
+            model:             getSelectedModel(),
             ollamaBaseUrl:     OLLAMA_BASE_URL,
             port:              3477,
             cartridgeCount:    bundledCartridgeCount,
@@ -229,6 +232,74 @@ function createSystemRouter({ migrationResult }) {
             res.json({ status: 'reachable' });
         } catch {
             res.status(503).json({ status: 'unreachable' });
+        }
+    });
+
+    /**
+     * GET /api/ai/models
+     */
+    router.get('/api/ai/models', readLimiter, async (req, res) => {
+        try {
+            const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+            const models = Array.isArray(response.data && response.data.models)
+                ? response.data.models
+                : [];
+            res.json({
+                provider: 'ollama',
+                available: true,
+                models: models.map(model => ({
+                    name: model.name || null,
+                    size: model.size !== undefined && model.size !== null ? String(model.size) : null,
+                    modified_at: model.modified_at || null,
+                })).filter(model => model.name),
+                selected_model: getSelectedModel(),
+            });
+        } catch {
+            res.json({
+                provider: 'ollama',
+                available: false,
+                models: [],
+                selected_model: null,
+                error: 'Ollama is not running',
+            });
+        }
+    });
+
+    /**
+     * POST /api/ai/models/select
+     * Body: { model: string }
+     */
+    router.post('/api/ai/models/select', writeLimiter, async (req, res) => {
+        const nextModel = req.body && typeof req.body.model === 'string'
+            ? req.body.model.trim()
+            : '';
+        if (!nextModel) {
+            return res.status(400).json({ success: false, error: 'model is required' });
+        }
+
+        try {
+            const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+            const models = Array.isArray(response.data && response.data.models)
+                ? response.data.models
+                : [];
+            const availableModelNames = new Set(models.map(model => model && model.name).filter(Boolean));
+            if (!availableModelNames.has(nextModel)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Model is not installed in Ollama',
+                });
+            }
+
+            return res.json({
+                success: true,
+                provider: 'ollama',
+                selected_model: setSelectedModel(nextModel),
+            });
+        } catch {
+            return res.status(503).json({
+                success: false,
+                error: 'Ollama is not running',
+            });
         }
     });
 

@@ -7,8 +7,9 @@
  * management.  All UI logic communicates only with the local Express server.
  */
 
-/** Model name — kept in sync with app/server.js MODEL constant. */
-const MODEL_LABEL = 'gemma3:4b';
+/** Default model name — used as fallback if local config is unavailable. */
+const DEFAULT_MODEL_LABEL = 'gemma3:4b';
+let activeModelLabel = DEFAULT_MODEL_LABEL;
 
 /* ================================================================
    Utility
@@ -3090,6 +3091,9 @@ function buildThresholdFileRow(f, isChanged) {
 async function refreshSystemStatus() {
     const ollamaEl  = document.getElementById('sys-ollama-status');
     const modelEl   = document.getElementById('sys-model');
+    const modelSelectEl = document.getElementById('sys-model-select');
+    const modelSaveBtnEl = document.getElementById('sys-model-save-btn');
+    const modelSelectionStatusEl = document.getElementById('sys-model-selection-status');
     const chunksEl  = document.getElementById('sys-indexed-chunks');
     const sourcesEl = document.getElementById('sys-indexed-sources');
     const nodeRuntimeStatusEl = document.getElementById('sys-node-runtime-status');
@@ -3098,7 +3102,6 @@ async function refreshSystemStatus() {
     try {
         const res  = await fetch('/api/status');
         const data = await res.json();
-        if (modelEl)   modelEl.textContent   = data.model || MODEL_LABEL;
         if (chunksEl)  chunksEl.textContent  = String(data.indexedChunks  ?? 0);
         if (sourcesEl) sourcesEl.textContent = String(data.indexedSources ?? 0);
         updateSystemCartridgeCount(data.cartridgeCount ?? 0);
@@ -3116,7 +3119,6 @@ async function refreshSystemStatus() {
             nodeRuntimePathEl.textContent = data.nodeRuntimePath || '—';
         }
     } catch {
-        if (modelEl) modelEl.textContent = MODEL_LABEL;
         if (nodeRuntimeStatusEl) {
             nodeRuntimeStatusEl.textContent = 'Missing';
             nodeRuntimeStatusEl.className = 'system-val error';
@@ -3149,9 +3151,91 @@ async function refreshSystemStatus() {
         }
     }
 
+    try {
+        const res = await fetch('/api/ai/models');
+        const data = await res.json();
+        activeModelLabel = data.selected_model || DEFAULT_MODEL_LABEL;
+        if (modelEl) {
+            modelEl.textContent = activeModelLabel;
+        }
+        if (modelSelectEl) {
+            const models = Array.isArray(data.models) ? data.models : [];
+            const options = models
+                .map(m => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`)
+                .join('');
+            modelSelectEl.innerHTML = options || '<option value="">No models detected</option>';
+            if (data.selected_model && models.some(m => m.name === data.selected_model)) {
+                modelSelectEl.value = data.selected_model;
+            }
+            modelSelectEl.disabled = !data.available || models.length === 0;
+        }
+        if (modelSaveBtnEl) {
+            modelSaveBtnEl.disabled = !data.available || !modelSelectEl || !modelSelectEl.value;
+        }
+        if (modelSelectionStatusEl) {
+            modelSelectionStatusEl.textContent = data.available ? 'ready' : 'unavailable';
+            modelSelectionStatusEl.className = data.available ? 'system-val ok' : 'system-val error';
+        }
+    } catch {
+        activeModelLabel = DEFAULT_MODEL_LABEL;
+        if (modelEl) modelEl.textContent = DEFAULT_MODEL_LABEL;
+        if (modelSelectEl) {
+            modelSelectEl.innerHTML = '<option value="">No models detected</option>';
+            modelSelectEl.disabled = true;
+        }
+        if (modelSaveBtnEl) modelSaveBtnEl.disabled = true;
+        if (modelSelectionStatusEl) {
+            modelSelectionStatusEl.textContent = 'unavailable';
+            modelSelectionStatusEl.className = 'system-val error';
+        }
+    }
+
     updateHeaderStatus();
     loadNodeStatusUpdates();
 }
+
+(function initModelSelectionButton() {
+    document.addEventListener('click', async (e) => {
+        if (!e.target || e.target.id !== 'sys-model-save-btn') return;
+        const selectEl = document.getElementById('sys-model-select');
+        const statusEl = document.getElementById('sys-model-selection-status');
+        const buttonEl = e.target;
+        const model = selectEl ? String(selectEl.value || '').trim() : '';
+        if (!model) return;
+
+        buttonEl.disabled = true;
+        if (statusEl) {
+            statusEl.textContent = 'saving…';
+            statusEl.className = 'system-val';
+        }
+        try {
+            const res = await fetch('/api/ai/models/select', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Could not save model');
+            }
+            activeModelLabel = data.selected_model || model;
+            if (statusEl) {
+                statusEl.textContent = 'saved';
+                statusEl.className = 'system-val ok';
+            }
+            showFlashMessage('Heart model set to ' + activeModelLabel + '.');
+            await refreshSystemStatus();
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = 'failed';
+                statusEl.className = 'system-val error';
+            }
+            showFlashMessage(err.message || 'Could not save model.');
+        } finally {
+            buttonEl.disabled = false;
+        }
+    });
+})();
 
 function setShutdownStatus(message, cssClass = '') {
     const statusEl = document.getElementById('sys-shutdown-status');
@@ -3423,7 +3507,7 @@ async function loadBootstrapStatus() {
 function updateHeaderStatus() {
     const dot   = document.getElementById('status-dot');
     const label = document.getElementById('model-label');
-    if (label) label.textContent = MODEL_LABEL + ' · local';
+    if (label) label.textContent = activeModelLabel + ' · local';
     if (dot)   dot.className = 'status-dot';
 }
 
