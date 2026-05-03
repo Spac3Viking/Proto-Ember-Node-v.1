@@ -249,7 +249,7 @@ function createSystemRouter({ migrationResult }) {
                 available: true,
                 models: models.map(model => ({
                     name: model.name || null,
-                    size: model.size !== undefined && model.size !== null ? String(model.size) : null,
+                    size: model.size != null ? String(model.size) : null,
                     modified_at: model.modified_at || null,
                 })).filter(model => model.name),
                 selected_model: getSelectedModel(),
