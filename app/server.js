@@ -36,7 +36,7 @@ const { ensureUserConceptIndex } = require('./conceptIndex');
 const { listCartridges, loadCartridge }               = require('./cartridgeLoader');
 const { loadToolRegistry, saveToolRegistry,
         mergeDetectedTools, resolveActiveHeart,
-        MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL,
+        MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL, getHeartModel,
         discoverTools }                                = require('./toolRegistry');
 const { loadIntakeState, saveIntakeState,
         upsertIntakeFile, upsertIntakeTool }           = require('./intakeState');
@@ -98,14 +98,15 @@ async function checkModel() {
     try {
         const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
         const models   = (response.data.models || []).map(function(m) { return m.name; });
-        if (!models.some(function(name) { return name === MODEL || name.startsWith(MODEL + ':'); })) {
+        const selectedModel = getHeartModel();
+        if (!models.some(function(name) { return name === selectedModel || name.startsWith(selectedModel + ':'); })) {
             console.warn(
-                'WARNING: Model "' + MODEL + '" was not found in Ollama. ' +
+                'WARNING: Model "' + selectedModel + '" was not found in Ollama. ' +
                 'Available models: ' + (models.join(', ') || '(none)') + '. ' +
-                'Run: ollama pull ' + MODEL,
+                'Run: ollama pull ' + selectedModel,
             );
         } else {
-            console.log('Model check passed: "' + MODEL + '" is available.');
+            console.log('Model check passed: "' + selectedModel + '" is available.');
         }
     } catch (err) {
         console.warn(

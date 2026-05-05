@@ -19,7 +19,7 @@
 const express = require('express');
 const axios   = require('axios');
 const { chatLimiter } = require('../rateLimiters');
-const { OLLAMA_CHAT_URL, MODEL, resolveActiveHeart } = require('../toolRegistry');
+const { OLLAMA_CHAT_URL, getHeartModel, resolveActiveHeart } = require('../toolRegistry');
 const { loadChunks }                                  = require('../indexStore');
 const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
@@ -245,11 +245,12 @@ const MAX_PINNED_CHUNKS = 8;
 router.post('/chat', async (req, res) => {
     try {
         const { message, prompt, model: _ignored, ...rest } = req.body;
+        const selectedModel = getHeartModel();
         const payload = {
             stream:   false,
             ...rest,
             messages: rest.messages || [{ role: 'user', content: message || prompt || '' }],
-            model:    MODEL,
+            model:    selectedModel,
         };
         const response = await axios.post(OLLAMA_CHAT_URL, payload);
         res.json(response.data);

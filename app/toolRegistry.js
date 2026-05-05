@@ -11,10 +11,11 @@ const fs   = require('fs');
 const path = require('path');
 const { SYSTEM_DIR } = require('./storageConfig');
 const { discoverTools, httpProbe } = require('./toolDiscovery');
+const { DEFAULT_OLLAMA_MODEL, getSelectedModel } = require('./aiConfig');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MODEL           = 'gemma3:4b';
+const MODEL           = DEFAULT_OLLAMA_MODEL;
 const OLLAMA_BASE_URL = 'http://localhost:11434';
 const OLLAMA_CHAT_URL = `${OLLAMA_BASE_URL}/api/chat`;
 
@@ -112,6 +113,7 @@ function mergeDetectedTools(detected) {
  * @returns {{ chatUrl: string, model: string, toolId: string|null }}
  */
 function resolveActiveHeart() {
+    const selectedModel = getSelectedModel();
     const registry = loadToolRegistry();
     const heartId  = registry.active && registry.active.heart;
     if (heartId) {
@@ -119,18 +121,23 @@ function resolveActiveHeart() {
         if (tool && tool.interface === 'http' && tool.endpoint) {
             return {
                 chatUrl: tool.endpoint.replace(/\/$/, '') + '/api/chat',
-                model:   MODEL,
+                model:   selectedModel,
                 toolId:  tool.id,
             };
         }
     }
-    return { chatUrl: OLLAMA_CHAT_URL, model: MODEL, toolId: null };
+    return { chatUrl: OLLAMA_CHAT_URL, model: selectedModel, toolId: null };
+}
+
+function getHeartModel() {
+    return getSelectedModel();
 }
 
 module.exports = {
     MODEL,
     OLLAMA_BASE_URL,
     OLLAMA_CHAT_URL,
+    getHeartModel,
     loadToolRegistry,
     saveToolRegistry,
     mergeDetectedTools,

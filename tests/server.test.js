@@ -1,6 +1,7 @@
 const axios = require('axios');
 const request = require('supertest');
 const { app, MODEL, OLLAMA_CHAT_URL, OLLAMA_BASE_URL } = require('../app/server');
+const { setSelectedModel } = require('../app/aiConfig');
 
 jest.mock('axios');
 
@@ -21,6 +22,7 @@ describe('Ollama model configuration', () => {
 describe('POST /chat enforces gemma3:4b model', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        setSelectedModel('gemma3:4b');
     });
 
     test('injects the configured model into every Ollama request', async () => {
@@ -56,11 +58,25 @@ describe('POST /chat enforces gemma3:4b model', () => {
 
         expect(res.status).toBe(500);
     });
+
+    test('uses selected model config when changed', async () => {
+        setSelectedModel('llama3.2:3b');
+        axios.post.mockResolvedValue({ data: { message: { content: 'Hi' } } });
+
+        const res = await request(app)
+            .post('/chat')
+            .send({ message: 'test' });
+
+        expect(res.status).toBe(200);
+        const [, payload] = axios.post.mock.calls[0];
+        expect(payload.model).toBe('llama3.2:3b');
+    });
 });
 
 describe('GET /api/status', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        setSelectedModel('gemma3:4b');
     });
 
     test('returns 200 with model, cartridgeCount, and port', async () => {
@@ -70,6 +86,95 @@ describe('GET /api/status', () => {
         expect(typeof res.body.cartridgeCount).toBe('number');
         expect(res.body.cartridgeCount).toBeGreaterThan(0);
         expect(res.body.port).toBe(3477);
+    });
+});
+
+describe('GET /api/ai/models', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        setSelectedModel('gemma3:4b');
+    });
+
+    test('returns provider, availability, models and selected model when Ollama is reachable', async () => {
+        axios.get.mockResolvedValue({
+            data: {
+                models: [
+                    { name: 'gemma3:4b', size: 123456, modified_at: '2026-01-01T00:00:00Z' },
+                    { name: 'llama3.2:3b', size: 987654, modified_at: '2026-01-02T00:00:00Z' },
+                ],
+            },
+        });
+        const res = await request(app).get('/api/ai/models');
+        expect(res.status).toBe(200);
+        expect(res.body.provider).toBe('ollama');
+        expect(res.body.available).toBe(true);
+        expect(res.body.selected_model).toBe('gemma3:4b');
+        expect(Array.isArray(res.body.models)).toBe(true);
+        expect(res.body.models[0]).toEqual({
+            name: 'gemma3:4b',
+            size: '123456',
+            modified_at: '2026-01-01T00:00:00Z',
+        });
+    });
+
+    test('returns unavailable payload when Ollama is not running', async () => {
+        axios.get.mockRejectedValue(new Error('ECONNREFUSED'));
+        const res = await request(app).get('/api/ai/models');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({
+            provider: 'ollama',
+            available: false,
+            models: [],
+            selected_model: null,
+            error: 'Ollama is not running',
+        });
+    });
+});
+
+describe('POST /api/ai/models/select', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        setSelectedModel('gemma3:4b');
+    });
+
+    test('updates selected model when model exists in Ollama tags', async () => {
+        axios.get.mockResolvedValue({
+            data: {
+                models: [
+                    { name: 'gemma3:4b' },
+                    { name: 'llama3.2:3b' },
+                ],
+            },
+        });
+        const res = await request(app)
+            .post('/api/ai/models/select')
+            .send({ model: 'llama3.2:3b' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.selected_model).toBe('llama3.2:3b');
+    });
+
+    test('rejects selection when model is not installed', async () => {
+        axios.get.mockResolvedValue({
+            data: { models: [{ name: 'gemma3:4b' }] },
+        });
+        const res = await request(app)
+            .post('/api/ai/models/select')
+            .send({ model: 'not-installed:1b' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/not installed/i);
+    });
+
+    test('returns 503 when Ollama is unavailable', async () => {
+        axios.get.mockRejectedValue(new Error('ECONNREFUSED'));
+        const res = await request(app)
+            .post('/api/ai/models/select')
+            .send({ model: 'gemma3:4b' });
+
+        expect(res.status).toBe(503);
+        expect(res.body.error).toBe('Ollama is not running');
     });
 });
 
