@@ -7,9 +7,9 @@ const { INDEXES_DIR } = require('./storageConfig');
 
 const BUNDLED_CONCEPT_INDEX_PATH = path.join(__dirname, 'concept-index', 'green-fire-concept-index.json');
 const USER_CONCEPT_INDEX_PATH = path.join(INDEXES_DIR, 'green-fire-concept-index.json');
-const CONCEPT_BONUS_BASE = 0.1;
-const CONCEPT_BONUS_PER_MATCH = 0.04;
-const CONCEPT_BONUS_MAX = 0.22;
+const CONCEPT_BONUS_BASE = 0.2;
+const CONCEPT_BONUS_PER_MATCH = 0.08;
+const CONCEPT_BONUS_MAX = 0.6;
 let cachedUserConceptIndex = null;
 let cachedUserConceptIndexMtimeMs = -1;
 
