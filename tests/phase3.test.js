@@ -439,7 +439,7 @@ describe('POST /api/chat', () => {
         const { app } = require('../app/server');
         const res = await request(app)
             .post('/api/chat')
-            .send({ query: 'What is green fire?' });
+            .send({ query: 'What is green fire?', courtMember: 'builder' });
 
         expect(res.status).toBe(200);
         expect(typeof res.body.answer).toBe('string');
@@ -448,8 +448,9 @@ describe('POST /api/chat', () => {
         expect(typeof res.body.retrievalState).toBe('string');
         expect(res.body.signalTrace).toBeDefined();
         expect(typeof res.body.signalTrace.routeDetected).toBe('string');
-        expect(typeof res.body.signalTrace.courtLens).toBe('string');
+        expect(res.body.signalTrace.courtLens).toBe('ᛒ Builder');
         expect(Array.isArray(res.body.signalTrace.courtDomains)).toBe(true);
+        expect(Array.isArray(res.body.signalTrace.courtSourcesConsidered)).toBe(true);
         expect(Array.isArray(res.body.signalTrace.courtPrioritySourcesConsidered)).toBe(true);
         expect(typeof res.body.signalTrace.conceptRoute).toBe('string');
         expect(Array.isArray(res.body.signalTrace.relatedDomains)).toBe(true);

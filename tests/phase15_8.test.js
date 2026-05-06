@@ -44,6 +44,17 @@ describe('Phase 15.8 — Ember Prime + Ember Court restructure', () => {
         );
 
         const scholar = getCourtMember('scholar');
+        const builder = getCourtMember('builder');
+        const scribe = getCourtMember('scribe');
+        const warrior = getCourtMember('warrior');
+        const mystic = getCourtMember('mystic');
+
+        expect(builder.name).toBe('ᛒ Builder');
+        expect(scribe.name).toBe('ᚲ Scribe');
+        expect(warrior.name).toBe('ᛏ Warrior');
+        expect(scholar.name).toBe('ᚨ Scholar');
+        expect(mystic.name).toBe('ᛇ Mystic');
+
         expect(scholar).toBeTruthy();
         expect(scholar.id).toBe('scholar');
         expect(scholar.retrieval.topK).toBeGreaterThan(0);
