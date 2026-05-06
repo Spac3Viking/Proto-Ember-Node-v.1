@@ -8,6 +8,13 @@ const BUNDLED_COURT_CONFIG_PATH = path.join(__dirname, 'court-config', 'ember-co
 const RUNTIME_COURT_CONFIG_PATH = path.join(SYSTEM_CONFIG_DIR, 'ember-court.json');
 const DEFAULT_MEMBER_IDS = ['builder', 'warrior', 'scholar', 'scribe', 'mystic'];
 const MAX_COURT_MEMBER_RETRIEVAL_TOP_K = 20;
+const COURT_MEMBER_GLYPHS = Object.freeze({
+    builder: 'ᛒ',
+    scribe: 'ᚲ',
+    warrior: 'ᛏ',
+    scholar: 'ᚨ',
+    mystic: 'ᛇ',
+});
 
 function readJson(filePath) {
     try {
@@ -38,10 +45,19 @@ function normalizeMember(raw) {
         ? normalizedSources
         : (Array.isArray(raw.preferredSources) ? raw.preferredSources.map(String) : []);
     const voiceBias = raw.voiceBias || raw.voice_bias || raw.toneCadence || raw.tone || '';
+    const providedName = String(raw.name || id).trim();
+    const nameParts = providedName.split(/\s+/).filter(Boolean);
+    const baseName = (nameParts.length > 1 && nameParts[0].length === 1 && /[^\u0000-\u007f]/.test(nameParts[0]))
+        ? nameParts.slice(1).join(' ')
+        : providedName;
+    const glyph = COURT_MEMBER_GLYPHS[id] || '';
+    const canonicalName = glyph
+        ? (glyph + ' ' + (baseName || id))
+        : (raw.name || id);
 
     return {
         id,
-        name: raw.name || id,
+        name: canonicalName,
         role: raw.role || '',
         shortDescription: raw.shortDescription || '',
         priorityDomains: domains,
@@ -66,7 +82,7 @@ function normalizeCourtConfig(raw) {
 
     const defaultMember = String(raw.defaultMember || '').toLowerCase().trim();
     return {
-        version: raw.version || '15.8',
+        version: raw.version || '15.9',
         courtName: raw.courtName || 'Ember Court',
         defaultMember: filteredMembers.some(m => m.id === defaultMember)
             ? defaultMember

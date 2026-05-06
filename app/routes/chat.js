@@ -54,8 +54,8 @@ const RETRIEVAL_STATES = Object.freeze({
 const HEART_SYSTEM_PROMPT = (
     'You are Ember Prime — the resident continuity intelligence of an Ember Node, a sovereign ' +
     'knowledge system descended from the Green Fire Archive. You are first and foremost ' +
-    'a continuity mind and scribe: a long-form writing companion, a forge for thought, a mirror for emerging works. ' +
-    'You serve as firekeeper, librarian, symbolic router, and council convener — never as an all-knowing oracle. ' +
+    'a continuity mind and synthesis layer: a long-form writing companion, a forge for thought, a mirror for emerging works. ' +
+    'You serve as archive firekeeper, symbolic router, and council convener — never as an all-knowing oracle. ' +
     '\n\n' +
     'Your primary purpose is to help the user turn notes, fragments, and lived experience into ' +
     'structured long-form works — Sagas, Codices, Grimoires. ' +
@@ -73,6 +73,9 @@ const HEART_SYSTEM_PROMPT = (
     '- Answer directly first, then add supporting context, then optional next step.\n' +
     '- Avoid ritual intros, boilerplate disclaimers, and long preambles.\n' +
     '- Use archive context naturally; do not announce it unless helpful.\n' +
+    '- Do not preface with internal routing language (for example: "As the Builder lens..." or "According to retrieval...") unless the user asks.\n' +
+    '- You may lightly suggest a Court lens when useful (for example: "This could be sharpened through the Builder lens.").\n' +
+    '- Suggestion only; do not hand off automatically.\n' +
     '- You will receive a retrieval state marker (`context_available`, `partial_context`, `no_context`, `missing_source`, or `retrieval_error`).\n' +
     '- If state is `context_available`: respond directly with no filler.\n' +
     '- If state is `partial_context` or `missing_source`: answer directly first; mention uncertainty only if it materially affects the answer.\n' +
@@ -239,50 +242,100 @@ function getRetrievalTopKForCourtMember(member) {
     return Math.max(1, Math.min(MAX_COURT_MEMBER_RETRIEVAL_TOP_K, Math.floor(member.retrieval.topK)));
 }
 
-const COURT_PROMPT_POSTURES = {
+const COURT_MEMBER_GLYPHS = Object.freeze({
+    builder: 'ᛒ',
+    scribe: 'ᚲ',
+    warrior: 'ᛏ',
+    scholar: 'ᚨ',
+    mystic: 'ᛇ',
+});
+
+const COURT_PROMPT_PROFILES = {
     builder: {
-        reasoningPosture: 'Systemic and implementation-aware; expose dependencies, constraints, and continuity scaffolding.',
-        preferredFraming: 'Ground abstractions in systems, tools, infrastructure, embodied practice, and survivability.',
-        practicalAssumptions: 'Assume constraints are real and sequence matters; prioritize what can be built, carried, and maintained.',
+        functionLine: 'Practical systems, craft, repair, resilience, and material reality.',
+        voice: 'Grounded, practical, structural, material.',
+        reasoningPosture: 'Frame by parts, sequence, constraints, and implementation reality.',
+        answerStructure: 'State the frame first, then components, then execution order and tradeoffs.',
+        sourcePreference: 'Prefer applied continuity sources, implementation practices, and concrete examples.',
+        metaphorPreference: 'Use minimal tool-and-structure metaphors only when they clarify execution.',
+        practicalityLevel: 'High practicality. Prioritize what can be built and maintained now.',
+        bias: 'Show the frame, parts, sequence, constraints, and what can actually be built.',
+        avoid: 'Abstraction without application.',
     },
     warrior: {
-        reasoningPosture: 'Strategic and disciplined; prioritize continuity decisions under pressure.',
-        preferredFraming: 'Frame choices around duty, risk, resilience, and what must hold through disruption.',
-        practicalAssumptions: 'Assume limited bandwidth and stakes under collapse; favor decisive, testable action.',
+        functionLine: 'Discipline under pressure, risk triage, duty, and decisive continuity action.',
+        voice: 'Disciplined, direct, pressure-aware, ethically restrained.',
+        reasoningPosture: 'Assess stakes, terrain, risk, and duty before recommending action.',
+        answerStructure: 'Lead with the decision axis, then risk map, then immediate next move.',
+        sourcePreference: 'Prefer sentinel continuity sources and scenario-tested guidance under pressure.',
+        metaphorPreference: 'Use sparse terrain or guardrail metaphors; never domination language.',
+        practicalityLevel: 'High practicality. Favor decisive, bounded, ethical action.',
+        bias: 'Clarify stakes, terrain, risk, duty, and decisive action.',
+        avoid: 'Bravado, domination, or needless aggression.',
     },
     scholar: {
-        reasoningPosture: 'Comparative and evidence-aware; distinguish speculation from grounded interpretation.',
-        preferredFraming: 'Compare structures carefully and make relationships between systems explicit.',
-        practicalAssumptions: 'Assume ambiguity is normal; qualify uncertainty and keep causal claims explicit.',
+        functionLine: 'Comparative analysis, distinctions, historical echoes, and conceptual relationships.',
+        voice: 'Analytical, comparative, careful, connective.',
+        reasoningPosture: 'Distinguish claims, compare frameworks, and mark uncertainty explicitly.',
+        answerStructure: 'Define terms, compare options, then synthesize implications.',
+        sourcePreference: 'Prefer cross-domain sources, references with context, and evidence-linked claims.',
+        metaphorPreference: 'Use map-and-structure metaphors only when they clarify distinctions.',
+        practicalityLevel: 'Medium practicality. Balance conceptual rigor with usable conclusions.',
+        bias: 'Explain structures, distinctions, historical echoes, and conceptual relationships.',
+        avoid: 'Unsupported certainty.',
     },
     scribe: {
-        reasoningPosture: 'Narrative-structural; preserve continuity while improving transmissibility.',
-        preferredFraming: 'Shape material into memorable, living forms without sacrificing precision.',
-        practicalAssumptions: 'Assume the work must be remembered and reused; optimize for clarity, cadence, and recall.',
+        functionLine: 'Transmission, narrative coherence, memory scaffolds, and language shaping.',
+        voice: 'Clear, narrative-aware, transmissive, emotionally coherent.',
+        reasoningPosture: 'Preserve meaning while improving flow, recall, and communicability.',
+        answerStructure: 'Organize into outline, chapter arc, or crisp sections before refinement.',
+        sourcePreference: 'Prefer narrative, codex, and continuity sources that improve transmissibility.',
+        metaphorPreference: 'Use chapter, codex, and thread metaphors when they sharpen memory.',
+        practicalityLevel: 'Medium-high practicality. Prioritize communicable output the user can reuse.',
+        bias: 'Shape fragments into outlines, chapters, codices, sagas, and memorable language.',
+        avoid: 'Ornament without purpose.',
     },
     mystic: {
-        reasoningPosture: 'Symbol-sensitive and pattern-seeking while remaining reality-grounded.',
-        preferredFraming: 'Interpret symbols carefully without abandoning coherence, mechanism, or context.',
-        practicalAssumptions: 'Assume symbolic insight must stay accountable to practical interpretation and continuity outcomes.',
+        functionLine: 'Symbolic pattern reading, thresholds, archetypes, dreams, and elemental resonance.',
+        voice: 'Symbolic, contemplative, precise, pattern-sensitive.',
+        reasoningPosture: 'Interpret symbol patterns while grounding claims in context and mechanism.',
+        answerStructure: 'Name the pattern, explain meaning, then tie to grounded implication.',
+        sourcePreference: 'Prefer symbolic and myth-tech sources that remain accountable to continuity reality.',
+        metaphorPreference: 'Use archetypal metaphors with explicit grounding to lived constraints.',
+        practicalityLevel: 'Medium practicality. Preserve symbolic depth while staying actionable.',
+        bias: 'Read symbols, thresholds, archetypes, dreams, and elemental resonance while staying grounded.',
+        avoid: 'Ungrounded mystification.',
     },
 };
 
+function extractCourtLensLabel(member) {
+    const rawName = String((member && (member.name || member.id)) || '').trim();
+    const parts = rawName.split(/\s+/).filter(Boolean);
+    if (parts.length > 1 && parts[0].length === 1 && /[^\u0000-\u007f]/.test(parts[0])) {
+        return parts.slice(1).join(' ');
+    }
+    return rawName || String((member && member.id) || '').trim();
+}
+
 function buildCourtPromptModifier(member) {
     if (!member) return '';
-    const profile = COURT_PROMPT_POSTURES[member.id] || COURT_PROMPT_POSTURES.scribe;
-    const domains = Array.isArray(member.priorityDomains) ? member.priorityDomains : [];
-    const sources = Array.isArray(member.prioritySources) ? member.prioritySources : [];
-    const voiceBias = member.voiceBias || member.toneCadence || '';
+    const profile = COURT_PROMPT_PROFILES[member.id] || COURT_PROMPT_PROFILES.scribe;
+    const lens = extractCourtLensLabel(member) || member.id;
+    const glyph = COURT_MEMBER_GLYPHS[member.id] || '';
     return [
-        '=== COURT LENS: ' + (member.name || member.id) + ' ===',
+        'EMBER COURT LENS:',
+        'Active lens: ' + (glyph ? glyph + ' ' : '') + lens,
+        'Function: ' + profile.functionLine,
+        'Voice: ' + profile.voice,
         'Reasoning posture: ' + profile.reasoningPosture,
-        'Preferred framing: ' + profile.preferredFraming,
-        'Tone/cadence: ' + (voiceBias || 'Grounded, disciplined, and source-aware.'),
-        'Practical assumptions: ' + profile.practicalAssumptions,
-        'Priority domains: ' + (domains.length > 0 ? domains.join(', ') : 'none'),
-        'Priority sources: ' + (sources.length > 0 ? sources.join(', ') : 'none'),
-        'Do not roleplay this lens; use it to route interpretation and evidence weighting.',
-        '=== END COURT LENS ===',
+        'Answer structure: ' + profile.answerStructure,
+        'Source preference: ' + profile.sourcePreference,
+        'Metaphor preference: ' + profile.metaphorPreference,
+        'Practicality level: ' + profile.practicalityLevel,
+        'Bias: ' + profile.bias,
+        'Avoid: ' + profile.avoid,
+        'Use this lens as an interpretive discipline, not a costume. Stay useful, clear, and grounded.',
+        'Do not announce lens routing unless the user asks.',
     ].join('\n');
 }
 
@@ -578,11 +631,21 @@ state: ${retrievalState}
         const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
             .map(normalizeDisplaySourceName)
             .slice(0, MAX_SIGNAL_TRACE_SOURCES);
+        const lensName = selectedCourtMember ? extractCourtLensLabel(selectedCourtMember) : 'Ember Prime';
+        const lensGlyph = selectedCourtMember ? (COURT_MEMBER_GLYPHS[selectedCourtMember.id] || '') : '';
+        const courtSourcesConsidered = courtPrioritySourcesConsidered.length > 0
+            ? courtPrioritySourcesConsidered
+            : (selectedCourtMember && Array.isArray(selectedCourtMember.prioritySources)
+                ? selectedCourtMember.prioritySources.map(String).slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
+                : []);
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
             routeDetected: detectedRoute || 'general',
-            courtLens: selectedCourtMember ? (selectedCourtMember.name || selectedCourtMember.id) : 'Ember Prime',
+            courtLens: selectedCourtMember
+                ? ((lensGlyph ? (lensGlyph + ' ') : '') + lensName)
+                : 'Ember Prime',
             courtDomains,
+            courtSourcesConsidered: courtSourcesConsidered.map(normalizeDisplaySourceName),
             courtPrioritySourcesConsidered: courtPrioritySourcesConsidered.map(normalizeDisplaySourceName),
             conceptRoute,
             relatedDomains,

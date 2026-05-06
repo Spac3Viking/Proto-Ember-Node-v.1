@@ -42,6 +42,14 @@ function setActiveCourtMemberId(memberId) {
     return _activeCourtMemberId;
 }
 
+const COURT_MEMBER_TRANSITIONS = Object.freeze({
+    builder: 'Grounding signal in structure, tools, and practical sequence.',
+    warrior: 'Clarifying stakes, terrain, risk, and disciplined action.',
+    scholar: 'Mapping distinctions, connections, and conceptual structure.',
+    scribe: 'Shaping fragments into coherent chapters and transmissible language.',
+    mystic: 'Reading symbolic thresholds while staying practical and clear.',
+});
+
 /* ================================================================
    Utility
    ================================================================ */
@@ -614,9 +622,7 @@ function renderSignalTrace(sources, signalTrace = null) {
 
     const metadata = signalTrace && typeof signalTrace === 'object' ? signalTrace : null;
     const contextStatus = metadata && metadata.contextStatus ? String(metadata.contextStatus) : null;
-    const routeDetected = metadata && metadata.routeDetected ? String(metadata.routeDetected) : null;
     const sourcesUsed = metadata && Number.isFinite(metadata.sourcesUsed) ? metadata.sourcesUsed : null;
-    const chunksUsed = metadata && Number.isFinite(metadata.chunksUsed) ? metadata.chunksUsed : null;
     const sourceList = metadata && Array.isArray(metadata.sourceList) ? metadata.sourceList : [];
     const conceptRoute = metadata && metadata.conceptRoute ? String(metadata.conceptRoute) : null;
     const courtLens = metadata && metadata.courtLens ? String(metadata.courtLens) : null;
@@ -624,11 +630,13 @@ function renderSignalTrace(sources, signalTrace = null) {
     const model = metadata && metadata.model ? String(metadata.model) : null;
     const provider = metadata && metadata.provider ? String(metadata.provider) : null;
     const relatedDomains = metadata && Array.isArray(metadata.relatedDomains) ? metadata.relatedDomains : [];
+    const courtSourcesConsidered = metadata && Array.isArray(metadata.courtSourcesConsidered)
+        ? metadata.courtSourcesConsidered
+        : (metadata && Array.isArray(metadata.courtPrioritySourcesConsidered)
+            ? metadata.courtPrioritySourcesConsidered
+            : []);
     const prioritySourcesConsidered = metadata && Array.isArray(metadata.prioritySourcesConsidered)
         ? metadata.prioritySourcesConsidered
-        : [];
-    const courtPrioritySourcesConsidered = metadata && Array.isArray(metadata.courtPrioritySourcesConsidered)
-        ? metadata.courtPrioritySourcesConsidered
         : [];
     const sourcesActuallyUsed = metadata && Array.isArray(metadata.sourcesActuallyUsed)
         ? metadata.sourcesActuallyUsed
@@ -652,6 +660,37 @@ function renderSignalTrace(sources, signalTrace = null) {
         setTraceStatus('base model — no local sources');
     }
 
+    const conceptRouteList = [conceptRoute, ...relatedDomains]
+        .filter(Boolean)
+        .map(String);
+    const dedupedConceptRoute = Array.from(new Set(conceptRouteList));
+    const sourceSummary = sourcesActuallyUsed.length > 0
+        ? sourcesActuallyUsed
+        : (sourceList.length > 0 ? sourceList : prioritySourcesConsidered);
+    const rows = [
+        { key: 'Court lens', value: courtLens || 'Ember Prime' },
+        { key: 'Court domains', value: courtDomains.length > 0 ? boundedListText(courtDomains) : null },
+        {
+            key: 'Court sources considered',
+            value: courtSourcesConsidered.length > 0 ? boundedListText(courtSourcesConsidered) : null,
+        },
+        { key: 'Concept route', value: dedupedConceptRoute.length > 0 ? boundedListText(dedupedConceptRoute) : null },
+        { key: 'Sources used', value: sourceSummary.length > 0 ? boundedListText(sourceSummary) : null },
+        { key: 'Model', value: model },
+        { key: 'Provider', value: provider },
+    ];
+
+    rows.forEach(row => {
+        if (!row.value) return;
+        const item = document.createElement('div');
+        item.className = 'signal-trace-item';
+        item.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">' +
+            escapeHtml(row.key.toLowerCase()) + '</span> ' +
+            escapeHtml(row.value) + '</span>';
+        traceSources.appendChild(item);
+    });
+
     if (retrievalNote) {
         const note = document.createElement('div');
         note.className = 'signal-trace-item';
@@ -659,123 +698,6 @@ function renderSignalTrace(sources, signalTrace = null) {
             '<span class="trace-badge"><span class="trace-key">retrieval</span> ' +
             escapeHtml(retrievalNote) + '</span>';
         traceSources.appendChild(note);
-    }
-
-    if (routeDetected) {
-        const route = document.createElement('div');
-        route.className = 'signal-trace-item';
-        route.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">route</span> ' +
-            escapeHtml(routeDetected) + '</span>';
-        traceSources.appendChild(route);
-    }
-
-    if (courtLens) {
-        const lens = document.createElement('div');
-        lens.className = 'signal-trace-item';
-        lens.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">court lens</span> ' +
-            escapeHtml(courtLens) + '</span>';
-        traceSources.appendChild(lens);
-    }
-
-    if (courtDomains.length > 0) {
-        const domains = document.createElement('div');
-        domains.className = 'signal-trace-item';
-        domains.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">court domains</span> ' +
-            escapeHtml(boundedListText(courtDomains)) + '</span>';
-        traceSources.appendChild(domains);
-    }
-
-    if (courtPrioritySourcesConsidered.length > 0) {
-        const courtSources = document.createElement('div');
-        courtSources.className = 'signal-trace-item';
-        courtSources.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">court priority sources considered</span> ' +
-            escapeHtml(boundedListText(courtPrioritySourcesConsidered)) + '</span>';
-        traceSources.appendChild(courtSources);
-    }
-
-    if (contextStatus) {
-        const context = document.createElement('div');
-        context.className = 'signal-trace-item';
-        context.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">context status</span> ' +
-            escapeHtml(contextStatus) + '</span>';
-        traceSources.appendChild(context);
-    }
-
-    if (chunksUsed !== null) {
-        const chunks = document.createElement('div');
-        chunks.className = 'signal-trace-item';
-        chunks.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">chunks used</span> ' +
-            escapeHtml(String(chunksUsed)) + '</span>';
-        traceSources.appendChild(chunks);
-    }
-
-    if (conceptRoute) {
-        const route = document.createElement('div');
-        route.className = 'signal-trace-item';
-        route.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">concept route</span> ' +
-            escapeHtml(conceptRoute) + '</span>';
-        traceSources.appendChild(route);
-    }
-
-    if (relatedDomains.length > 0) {
-        const related = document.createElement('div');
-        related.className = 'signal-trace-item';
-        related.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">related domains</span> ' +
-            escapeHtml(boundedListText(relatedDomains)) + '</span>';
-        traceSources.appendChild(related);
-    }
-
-    if (prioritySourcesConsidered.length > 0) {
-        const priority = document.createElement('div');
-        priority.className = 'signal-trace-item';
-        priority.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">priority sources considered</span> ' +
-            escapeHtml(boundedListText(prioritySourcesConsidered)) + '</span>';
-        traceSources.appendChild(priority);
-    }
-
-    if (sourcesActuallyUsed.length > 0) {
-        const used = document.createElement('div');
-        used.className = 'signal-trace-item';
-        used.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">sources actually used</span> ' +
-            escapeHtml(boundedListText(sourcesActuallyUsed)) + '</span>';
-        traceSources.appendChild(used);
-    }
-
-    if (sourceList.length > 0) {
-        const sourceListEl = document.createElement('div');
-        sourceListEl.className = 'signal-trace-item';
-        sourceListEl.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">sources</span> ' +
-            escapeHtml(boundedListText(sourceList)) + '</span>';
-        traceSources.appendChild(sourceListEl);
-    }
-
-    if (model) {
-        const modelEl = document.createElement('div');
-        modelEl.className = 'signal-trace-item';
-        modelEl.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">model</span> ' +
-            escapeHtml(model) + '</span>';
-        traceSources.appendChild(modelEl);
-    }
-
-    if (provider) {
-        const providerEl = document.createElement('div');
-        providerEl.className = 'signal-trace-item';
-        providerEl.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">provider</span> ' +
-            escapeHtml(provider) + '</span>';
-        traceSources.appendChild(providerEl);
     }
 
     if (!sources || sources.length === 0) {
@@ -3884,7 +3806,7 @@ function renderEmberCourtMembers(court) {
             '<span class="source-card-description">' + escapeHtml(member.shortDescription || '—') + '</span>' +
             '<span class="message-system">Domains: ' + escapeHtml((member.primaryDomains || []).join(', ') || '—') + '</span>' +
             '<span class="message-system">Sources: ' + escapeHtml((member.preferredSources || []).join(', ') || '—') + '</span>' +
-            '<span class="message-system">Tone/Cadence: ' + escapeHtml(member.toneCadence || member.tone || '—') + '</span>';
+            '<span class="message-system">Voice: ' + escapeHtml(member.toneCadence || member.tone || '—') + '</span>';
         button.addEventListener('click', () => {
             if (!memberId) return;
             setActiveCourtMemberId(memberId);
@@ -3897,9 +3819,16 @@ function renderEmberCourtMembers(court) {
 
     const activeMember = members.find(m => normalizeCourtMemberId(m.id) === activeMemberId) || null;
     if (activeEl) {
-        activeEl.textContent = activeMember
-            ? 'Active Court Member: ' + (activeMember.name || activeMember.id)
-            : 'Active Court Member: none';
+        if (!activeMember) {
+            activeEl.textContent = 'Active lens: Ember Prime';
+            return;
+        }
+        const transitionSubline = COURT_MEMBER_TRANSITIONS[normalizeCourtMemberId(activeMember.id)] || '';
+        activeEl.innerHTML =
+            '<strong>Active lens: ' + escapeHtml(activeMember.name || activeMember.id) + '</strong>' +
+            (transitionSubline
+                ? '<br><span class="message-system">' + escapeHtml(transitionSubline) + '</span>'
+                : '');
     }
 }
 
