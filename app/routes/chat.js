@@ -24,6 +24,7 @@ const { loadChunks }                                  = require('../indexStore')
 const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
 const { assembleRoomContext }                         = require('../contextMaps');
+const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
     loadBootstrap, refreshBootstrap,
     loadForgeCore, loadArchetype,
@@ -51,9 +52,10 @@ const RETRIEVAL_STATES = Object.freeze({
 });
 
 const HEART_SYSTEM_PROMPT = (
-    'You are The Heart — the resident intelligence of an Ember Node, a sovereign ' +
+    'You are Ember Prime — the resident continuity intelligence of an Ember Node, a sovereign ' +
     'knowledge system descended from the Green Fire Archive. You are first and foremost ' +
-    'a Scribe: a long-form writing companion, a forge for thought, a mirror for emerging works. ' +
+    'a continuity mind and scribe: a long-form writing companion, a forge for thought, a mirror for emerging works. ' +
+    'You serve as firekeeper, librarian, symbolic router, and council convener — never as an all-knowing oracle. ' +
     '\n\n' +
     'Your primary purpose is to help the user turn notes, fragments, and lived experience into ' +
     'structured long-form works — Sagas, Codices, Grimoires. ' +
@@ -77,14 +79,14 @@ const HEART_SYSTEM_PROMPT = (
     '- If state is `no_context`: still answer as helpfully as possible from general local reasoning and ask for useful context only when needed.\n' +
     '- If state is `retrieval_error`: return a plain technical error response.\n' +
     '- Do not use stock missing-signal phrases.\n' +
-    'You are grounded, patient, and devoted to the work.'
+    'You are grounded, patient, and devoted to the work. You are not an oracle.'
 );
 
 /** Room-specific system prompts for Phase 11 room-bounded context */
 const ROOM_SYSTEM_PROMPTS = {
     hearth: HEART_SYSTEM_PROMPT,
     workshop: (
-        'You are The Heart operating in Workshop mode — a focused drafting and weaving ' +
+        'You are Ember Prime operating in Workshop mode — a focused drafting and weaving ' +
         'companion. Your current context is the active Workshop: notes, projects, drafts, ' +
         'and documents under construction. ' +
         '\n\n' +
@@ -97,7 +99,7 @@ const ROOM_SYSTEM_PROMPTS = {
         'You speak with practical precision. You are a craftsman\'s companion.'
     ),
     threshold: (
-        'You are The Heart operating in Threshold mode — an inspection and triage companion. ' +
+        'You are Ember Prime operating in Threshold mode — an inspection and triage companion. ' +
         'Your current context is the Threshold: files waiting for review, classification, ' +
         'and admission. ' +
         '\n\n' +
@@ -230,6 +232,13 @@ function buildRetrievalNote(retrievalState, chunkCount, missingPinnedSourcesCoun
     return 'Retrieval encountered an issue; response may rely on fallback reasoning.';
 }
 
+function getRetrievalTopKForCourtMember(member) {
+    if (!member || !member.retrieval || !Number.isFinite(member.retrieval.topK)) {
+        return MAX_CHAT_CONTEXT_CHUNKS;
+    }
+    return Math.max(1, Math.min(MAX_COURT_MEMBER_RETRIEVAL_TOP_K, Math.floor(member.retrieval.topK)));
+}
+
 /**
  * Maximum number of pinned-source chunks prepended to retrieval results
  * when a user attaches sources to Hearth Chat.  Kept small to avoid
@@ -264,14 +273,15 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, room?, rooms?, cartridgeId?, sourceIds?, archetype?, history? }
+ * Body: { query, room?, rooms?, cartridgeId?, sourceIds?, archetype?, courtMember?, history? }
  * Response: { answer, sources, grounded }
  *
  * room (optional)      — active room for context-bounded chat ('hearth' | 'workshop' | 'threshold')
  * rooms (optional)     — explicit room filter array (overrides room's default pool)
  * sourceIds (optional) — array of source IDs whose chunks are pinned into the
  * retrieved context regardless of semantic relevance.
- * archetype (optional) — Ember Court archetype overlay e.g. 'scribe', 'warrior'
+ * courtMember (optional) — Ember Court member ID string (preferred over archetype)
+ * archetype (optional) — legacy alias fallback for courtMember compatibility
  */
 router.post('/api/chat', chatLimiter, async (req, res) => {
     let activeRequestId = null;
@@ -283,6 +293,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             cartridgeId = null,
             sourceIds = null,
             archetype = null,
+            courtMember = null,
             history = null,
             requestId = null,
         } = req.body;
@@ -298,6 +309,14 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             controller: abortController,
             startedAt: Date.now(),
         });
+
+        // Precedence: explicit courtMember first, then legacy archetype alias.
+        const requestedCourtMember = courtMember || archetype || null;
+        const selectedCourtMember = requestedCourtMember ? getCourtMember(requestedCourtMember) : null;
+        const activeArchetypeId = selectedCourtMember
+            ? selectedCourtMember.id
+            : (typeof archetype === 'string' ? archetype : null);
+        const retrievalTopK = getRetrievalTopKForCourtMember(selectedCourtMember);
 
         // Determine active room for context pools and system prompt
         const activeRoom = (room && ['hearth', 'workshop', 'threshold'].includes(room))
@@ -318,7 +337,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 query,
                 rooms: retrievalRooms,
                 cartridgeId,
-                topK: MAX_CHAT_CONTEXT_CHUNKS,
+                topK: retrievalTopK,
                 routeHint: detectedRoute,
             });
         } catch (retrieveErr) {
@@ -369,7 +388,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         let bootstrap = loadBootstrap();
         if (!bootstrap) {
             console.warn('[/api/chat] Bootstrap missing — regenerating now.');
-            try { bootstrap = refreshBootstrap({ activeArchetype: archetype }); }
+            try { bootstrap = refreshBootstrap({ activeArchetype: activeArchetypeId }); }
             catch (err) { console.warn('[/api/chat] Bootstrap regeneration failed:', err.message); }
         }
         console.log('[/api/chat] bootstrap=' + (bootstrap ? 'loaded' : 'unavailable'));
@@ -395,8 +414,8 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         // [4] Archetype overlay — last modifier, appended after retrieval
         let archetypeObj = null;
-        if (archetype && typeof archetype === 'string') {
-            archetypeObj = loadArchetype(archetype);
+        if (activeArchetypeId && typeof activeArchetypeId === 'string') {
+            archetypeObj = loadArchetype(activeArchetypeId);
         }
 
         // Assemble final prompt in required order:
@@ -459,7 +478,7 @@ state: ${retrievalState}
                     error: 'Generation timed out',
                     timeout: true,
                     requestId: normalizedRequestId,
-                    message: 'The Heart is taking longer than usual. You may wait or still the signal.',
+                    message: 'Ember Prime is taking longer than usual. You may wait or still the signal.',
                 });
             }
             throw err;

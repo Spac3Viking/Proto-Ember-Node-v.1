@@ -31,6 +31,7 @@ const {
 } = require('./storageConfig');
 const { installBundledCoreCache } = require('./archiveCacheService');
 const { ensureUserConceptIndex } = require('./conceptIndex');
+const { ensureCourtConfig } = require('./courtConfig');
 
 // Re-export legacy symbols for backward compatibility with tests
 const { listCartridges, loadCartridge }               = require('./cartridgeLoader');
@@ -50,6 +51,7 @@ const MIGRATION_RESULT = migrateLegacyData();
 seedDataRoot();
 installBundledCoreCache();
 ensureCanonicalDataFiles();
+ensureCourtConfig();
 ensureUserConceptIndex();
 
 // ── Route modules ─────────────────────────────────────────────────────────────

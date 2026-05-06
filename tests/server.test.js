@@ -89,6 +89,17 @@ describe('GET /api/status', () => {
     });
 });
 
+describe('GET /api/court', () => {
+    test('returns ember court configuration payload', async () => {
+        const res = await request(app).get('/api/court');
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveProperty('court');
+        expect(res.body.court.courtName).toBe('Ember Court');
+        expect(Array.isArray(res.body.court.members)).toBe(true);
+        expect(res.body.court.members.length).toBeGreaterThanOrEqual(5);
+    });
+});
+
 describe('GET /api/ai/models', () => {
     beforeEach(() => {
         jest.clearAllMocks();
