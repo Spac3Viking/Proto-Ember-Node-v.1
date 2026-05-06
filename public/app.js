@@ -844,7 +844,7 @@ async function sendMessage() {
             body:    JSON.stringify({
                 query:     message,
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
-                archetype: activeCourtMember || undefined,
+                courtMember: activeCourtMember || undefined,
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1575,7 +1575,7 @@ async function sendDocumentToHeart() {
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
                 query,
-                archetype: getActiveCourtMemberId() || undefined,
+                courtMember: getActiveCourtMemberId() || undefined,
             }),
         });
         const data = await res.json();
@@ -3812,7 +3812,9 @@ function renderEmberCourtMembers(court) {
     }
 
     const configuredDefault = normalizeCourtMemberId(court && court.defaultMember);
-    const activeMemberId = getActiveCourtMemberId() || configuredDefault || normalizeCourtMemberId(members[0].id);
+    const persistedMember = getActiveCourtMemberId();
+    const firstMemberId = normalizeCourtMemberId(members[0] && members[0].id);
+    const activeMemberId = persistedMember || configuredDefault || firstMemberId;
     setActiveCourtMemberId(activeMemberId);
 
     listEl.innerHTML = '';
@@ -3835,7 +3837,8 @@ function renderEmberCourtMembers(court) {
             if (!memberId) return;
             setActiveCourtMemberId(memberId);
             renderEmberCourtMembers(court);
-            showFlashMessage('Ember Court lens set to ' + escapeHtml(member.name || memberId) + ' ✓');
+            const memberLabel = member.name ? escapeHtml(member.name) : escapeHtml(memberId);
+            showFlashMessage('Ember Court lens set to ' + memberLabel + ' ✓');
         });
         listEl.appendChild(button);
     });

@@ -7,6 +7,7 @@ const { SYSTEM_CONFIG_DIR } = require('./storageConfig');
 const BUNDLED_COURT_CONFIG_PATH = path.join(__dirname, 'court-config', 'ember-court.json');
 const RUNTIME_COURT_CONFIG_PATH = path.join(SYSTEM_CONFIG_DIR, 'ember-court.json');
 const DEFAULT_MEMBER_IDS = ['builder', 'warrior', 'scholar', 'scribe', 'mystic'];
+const MAX_COURT_MEMBER_RETRIEVAL_TOP_K = 20;
 
 function readJson(filePath) {
     try {
@@ -18,10 +19,11 @@ function readJson(filePath) {
 
 function normalizeMember(raw) {
     if (!raw || typeof raw !== 'object') return null;
+    // Server-side normalization mirrors the client helper to keep persisted IDs stable.
     const id = String(raw.id || '').toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
     if (!id) return null;
     const topK = raw.retrieval && Number.isFinite(raw.retrieval.topK)
-        ? Math.max(1, Math.min(20, Math.floor(raw.retrieval.topK)))
+        ? Math.max(1, Math.min(MAX_COURT_MEMBER_RETRIEVAL_TOP_K, Math.floor(raw.retrieval.topK)))
         : 12;
     return {
         id,
@@ -40,6 +42,8 @@ function normalizeCourtConfig(raw) {
     const members = Array.isArray(raw.members)
         ? raw.members.map(normalizeMember).filter(Boolean)
         : [];
+    // Restrict to canonical Ember Court identities to keep routing/prompt overlays stable.
+    // Additional members can be enabled later by expanding DEFAULT_MEMBER_IDS intentionally.
     const filteredMembers = members.filter(m => DEFAULT_MEMBER_IDS.includes(m.id));
     if (filteredMembers.length === 0) return null;
 
@@ -85,6 +89,7 @@ function getCourtMember(memberId) {
 module.exports = {
     BUNDLED_COURT_CONFIG_PATH,
     RUNTIME_COURT_CONFIG_PATH,
+    MAX_COURT_MEMBER_RETRIEVAL_TOP_K,
     ensureCourtConfig,
     loadCourtConfig,
     getCourtMember,

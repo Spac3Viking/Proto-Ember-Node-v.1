@@ -24,7 +24,7 @@ const { loadChunks }                                  = require('../indexStore')
 const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
 const { assembleRoomContext }                         = require('../contextMaps');
-const { getCourtMember }                              = require('../courtConfig');
+const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
     loadBootstrap, refreshBootstrap,
     loadForgeCore, loadArchetype,
@@ -236,7 +236,7 @@ function getRetrievalTopKForCourtMember(member) {
     if (!member || !member.retrieval || !Number.isFinite(member.retrieval.topK)) {
         return MAX_CHAT_CONTEXT_CHUNKS;
     }
-    return Math.max(1, Math.min(MAX_CHAT_CONTEXT_CHUNKS + 8, Math.floor(member.retrieval.topK)));
+    return Math.max(1, Math.min(MAX_COURT_MEMBER_RETRIEVAL_TOP_K, Math.floor(member.retrieval.topK)));
 }
 
 /**
@@ -280,7 +280,8 @@ router.post('/chat', async (req, res) => {
  * rooms (optional)     — explicit room filter array (overrides room's default pool)
  * sourceIds (optional) — array of source IDs whose chunks are pinned into the
  * retrieved context regardless of semantic relevance.
- * archetype (optional) — Ember Court archetype overlay e.g. 'scribe', 'warrior'
+ * courtMember (optional) — Ember Court member ID string (preferred over archetype)
+ * archetype (optional) — legacy alias fallback for courtMember compatibility
  */
 router.post('/api/chat', chatLimiter, async (req, res) => {
     let activeRequestId = null;
@@ -309,6 +310,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             startedAt: Date.now(),
         });
 
+        // Precedence: explicit courtMember first, then legacy archetype alias.
         const requestedCourtMember = courtMember || archetype || null;
         const selectedCourtMember = requestedCourtMember ? getCourtMember(requestedCourtMember) : null;
         const activeArchetypeId = selectedCourtMember
