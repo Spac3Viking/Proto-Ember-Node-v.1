@@ -330,7 +330,8 @@ describe('Phase 15.6 — concept index layer', () => {
         expect(boosted.courtPriorityDomainMatch).toBe(true);
         expect(boosted.courtSourceBoost).toBeCloseTo(1.25, 6);
         expect(boosted.courtDomainBoost).toBeCloseTo(1.12, 6);
-        const expected = boosted.textMatchScore * (1 + boosted.conceptBonus) * boosted.courtSourceBoost * boosted.courtDomainBoost;
+        const preConceptScore = boosted.textMatchScore + boosted.routeBonus + boosted.titleBonus - boosted.duplicatePenalty;
+        const expected = preConceptScore * (1 + boosted.conceptBonus) * boosted.courtSourceBoost * boosted.courtDomainBoost;
         expect(boosted.score).toBeCloseTo(expected, 6);
         expect(results[0].chunk.sourceId).toBe('src-runelore');
     });
