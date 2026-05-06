@@ -47,5 +47,15 @@ describe('Phase 15.8 — Ember Prime + Ember Court restructure', () => {
         expect(scholar).toBeTruthy();
         expect(scholar.id).toBe('scholar');
         expect(scholar.retrieval.topK).toBeGreaterThan(0);
+        expect(Array.isArray(scholar.priorityDomains)).toBe(true);
+        expect(scholar.priorityDomains).toEqual(
+            expect.arrayContaining(['core_orientation', 'myth_tech', 'symbolic_language']),
+        );
+        expect(Array.isArray(scholar.prioritySources)).toBe(true);
+        expect(scholar.prioritySources).toEqual(
+            expect.arrayContaining(['green-fire-ontological-framework', 'runelore', 'myth-tech']),
+        );
+        expect(typeof scholar.voiceBias).toBe('string');
+        expect(scholar.voiceBias.length).toBeGreaterThan(0);
     });
 });

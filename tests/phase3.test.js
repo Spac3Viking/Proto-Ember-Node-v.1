@@ -448,11 +448,16 @@ describe('POST /api/chat', () => {
         expect(typeof res.body.retrievalState).toBe('string');
         expect(res.body.signalTrace).toBeDefined();
         expect(typeof res.body.signalTrace.routeDetected).toBe('string');
+        expect(typeof res.body.signalTrace.courtLens).toBe('string');
+        expect(Array.isArray(res.body.signalTrace.courtDomains)).toBe(true);
+        expect(Array.isArray(res.body.signalTrace.courtPrioritySourcesConsidered)).toBe(true);
         expect(typeof res.body.signalTrace.conceptRoute).toBe('string');
         expect(Array.isArray(res.body.signalTrace.relatedDomains)).toBe(true);
         expect(Array.isArray(res.body.signalTrace.prioritySourcesConsidered)).toBe(true);
         expect(Array.isArray(res.body.signalTrace.sourcesActuallyUsed)).toBe(true);
         expect(Array.isArray(res.body.signalTrace.sourceList)).toBe(true);
+        expect(typeof res.body.signalTrace.model).toBe('string');
+        expect(typeof res.body.signalTrace.provider).toBe('string');
     });
 
     test('returns 500 when Ollama chat is unreachable', async () => {

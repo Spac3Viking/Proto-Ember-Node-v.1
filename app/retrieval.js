@@ -40,6 +40,8 @@ const MIN_REMAINING_HISTORY_CHARS = 120;
 const MIN_REMAINING_CONTEXT_CHARS = 300;
 const MIN_QUERY_TERM_LENGTH = 4;
 const MIN_PRIORITY_SOURCES_IN_SELECTION = 3;
+const COURT_PRIORITY_SOURCE_BOOST = 1.25;
+const COURT_PRIORITY_DOMAIN_BOOST = 1.12;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -138,6 +140,49 @@ function findMatchedPrioritySources(sourceMetaText, prioritySources) {
         if (sourceMetaText.includes(normalizedSource)) matches.push(sourceName);
     }
     return matches;
+}
+
+function normalizeCourtMemberConfig(courtMember) {
+    if (!courtMember || typeof courtMember !== 'object') return null;
+    const prioritySources = Array.isArray(courtMember.prioritySources)
+        ? courtMember.prioritySources.map(String)
+        : (Array.isArray(courtMember.preferredSources) ? courtMember.preferredSources.map(String) : []);
+    const priorityDomains = Array.isArray(courtMember.priorityDomains)
+        ? courtMember.priorityDomains.map(String)
+        : (Array.isArray(courtMember.primaryDomains) ? courtMember.primaryDomains.map(String) : []);
+    return {
+        id: courtMember.id ? String(courtMember.id) : null,
+        name: courtMember.name ? String(courtMember.name) : null,
+        prioritySources,
+        priorityDomains,
+    };
+}
+
+function buildPrioritySourceSetForDomains(conceptIndex, domainIds) {
+    const normalized = new Set();
+    if (!conceptIndex || !Array.isArray(conceptIndex.domains) || !Array.isArray(domainIds) || domainIds.length === 0) {
+        return normalized;
+    }
+    const targetDomains = new Set(domainIds.map(d => String(d)));
+    for (const domain of conceptIndex.domains) {
+        if (!domain || !targetDomains.has(String(domain.id || ''))) continue;
+        const domainSources = Array.isArray(domain.priority_sources) ? domain.priority_sources : [];
+        for (const source of domainSources) {
+            const normalizedSource = normalizeText(source);
+            if (normalizedSource) normalized.add(normalizedSource);
+        }
+    }
+    return normalized;
+}
+
+function hasSourceMatch(sourceMetaText, normalizedPrioritySourceSet) {
+    if (!sourceMetaText || !(normalizedPrioritySourceSet instanceof Set) || normalizedPrioritySourceSet.size === 0) {
+        return false;
+    }
+    for (const source of normalizedPrioritySourceSet) {
+        if (sourceMetaText.includes(source)) return true;
+    }
+    return false;
 }
 
 function routeBonusForSource(sourceMetaText, routeId) {
@@ -351,6 +396,7 @@ async function retrieve({
     routeHint = null,
     targetSources = DEFAULT_TARGET_SOURCES,
     maxChunksPerSource = DEFAULT_MAX_CHUNKS_PER_SOURCE,
+    courtMember = null,
 }) {
     const allChunks = loadChunks();
     const embeddings = loadEmbeddings();
@@ -378,18 +424,23 @@ async function retrieve({
 
     const queryVector = await generateEmbedding(query);
     const routedAs = routeHint || detectRoute(query);
+    const normalizedCourtMember = normalizeCourtMemberConfig(courtMember);
     let conceptRouting = {
         primary: 'general',
         domains: ['general'],
         scores: {},
         priority_sources: [],
     };
+    let conceptIndex = null;
     try {
-        const conceptIndex = loadConceptIndex();
+        conceptIndex = loadConceptIndex();
         conceptRouting = getPrioritySourcesForQuery(query, conceptIndex);
     } catch (err) {
         console.warn('[retrieval] concept routing unavailable; falling back to base retrieval:', err.message);
     }
+    const courtPrioritySources = normalizedCourtMember ? normalizedCourtMember.prioritySources : [];
+    const courtPriorityDomains = normalizedCourtMember ? normalizedCourtMember.priorityDomains : [];
+    const normalizedCourtDomainPrioritySources = buildPrioritySourceSetForDomains(conceptIndex, courtPriorityDomains);
 
     const baseScored = scoreChunks({ chunks: candidates, queryVector, queryText: query, embeddings });
     if (baseScored.length === 0) return [];
@@ -408,12 +459,24 @@ async function retrieve({
             const titleBonus = titleBonusForQuery(sourceMetaText, query);
             const conceptBonus = conceptBonusForSource(sourceMetaText, conceptRouting.priority_sources);
             const matchedPrioritySources = findMatchedPrioritySources(sourceMetaText, conceptRouting.priority_sources);
+            const matchedCourtPrioritySources = findMatchedPrioritySources(sourceMetaText, courtPrioritySources);
+            const courtPrioritySourceMatch = matchedCourtPrioritySources.length > 0;
+            const courtPriorityDomainMatch = hasSourceMatch(sourceMetaText, normalizedCourtDomainPrioritySources);
             const fp = chunkFingerprint(entry.chunk.text || '');
             const duplicatePenalty = fp && fingerprintCounts[fp] > 1
                 ? Math.min(MAX_DUPLICATE_PENALTY, (fingerprintCounts[fp] - 1) * DUPLICATE_PENALTY_PER_EXTRA)
                 : 0;
             const preConceptScore = entry.score + routeBonus + titleBonus - duplicatePenalty;
-            const finalScore = preConceptScore * (1 + conceptBonus);
+            // Compose scoring in conservative layers:
+            // [base similarity + route/title adjustments - duplicate penalty]
+            // × concept index weighting
+            // × court source/domain boosts (when a court lens is active)
+            // This keeps concept routing as the core signal while allowing court lenses
+            // to bend retrieval paths without hard-locking source selection.
+            const postConceptScore = preConceptScore * (1 + conceptBonus);
+            const courtSourceBoost = courtPrioritySourceMatch ? COURT_PRIORITY_SOURCE_BOOST : 1;
+            const courtDomainBoost = courtPriorityDomainMatch ? COURT_PRIORITY_DOMAIN_BOOST : 1;
+            const finalScore = postConceptScore * courtSourceBoost * courtDomainBoost;
 
             return {
                 chunk: entry.chunk,
@@ -427,25 +490,41 @@ async function retrieve({
                 conceptDomains: conceptRouting.domains,
                 conceptScores: conceptRouting.scores,
                 prioritySourcesConsidered: conceptRouting.priority_sources,
+                courtMemberId: normalizedCourtMember ? normalizedCourtMember.id : null,
+                courtMemberName: normalizedCourtMember ? normalizedCourtMember.name : null,
+                courtDomainsConsidered: courtPriorityDomains,
+                courtPrioritySourcesConsidered: courtPrioritySources,
                 matchedPrioritySources,
+                matchedCourtPrioritySources,
+                courtPrioritySourceMatch,
+                courtPriorityDomainMatch,
+                courtSourceBoost,
+                courtDomainBoost,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);
 
     if (scored.length === 0) return [];
 
-    const prioritySourceIds = [];
-    const seenPrioritySourceIds = new Set();
+    const priorityMatchedSourceIds = [];
+    const seenPriorityMatchedSourceIds = new Set();
     for (const entry of scored.slice().sort((a, b) => b.score - a.score)) {
         if (!entry || !entry.chunk) continue;
-        if (!entry.matchedPrioritySources || entry.matchedPrioritySources.length === 0) continue;
+        const hasConceptPriorityMatch = Array.isArray(entry.matchedPrioritySources) && entry.matchedPrioritySources.length > 0;
+        const hasCourtPriorityMatch = Array.isArray(entry.matchedCourtPrioritySources) && entry.matchedCourtPrioritySources.length > 0;
+        if (!hasConceptPriorityMatch && !hasCourtPriorityMatch) continue;
         const sourceId = entry.chunk.sourceId;
-        if (!sourceId || seenPrioritySourceIds.has(sourceId)) continue;
-        seenPrioritySourceIds.add(sourceId);
-        prioritySourceIds.push(sourceId);
+        if (!sourceId || seenPriorityMatchedSourceIds.has(sourceId)) continue;
+        seenPriorityMatchedSourceIds.add(sourceId);
+        priorityMatchedSourceIds.push(sourceId);
     }
 
-    const minPrioritySources = Array.isArray(conceptRouting.priority_sources) && conceptRouting.priority_sources.length > 0
+    const hasAnyPriorityRouting = (
+        Array.isArray(conceptRouting.priority_sources) && conceptRouting.priority_sources.length > 0
+    ) || (
+        Array.isArray(courtPrioritySources) && courtPrioritySources.length > 0
+    );
+    const minPrioritySources = hasAnyPriorityRouting
         ? MIN_PRIORITY_SOURCES_IN_SELECTION
         : 0;
 
@@ -454,7 +533,7 @@ async function retrieve({
         topK,
         targetSources,
         maxChunksPerSource,
-        prioritySourceIds,
+        prioritySourceIds: priorityMatchedSourceIds,
         minPrioritySources,
     });
 }
