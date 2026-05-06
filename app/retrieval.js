@@ -467,6 +467,12 @@ async function retrieve({
                 ? Math.min(MAX_DUPLICATE_PENALTY, (fingerprintCounts[fp] - 1) * DUPLICATE_PENALTY_PER_EXTRA)
                 : 0;
             const preConceptScore = entry.score + routeBonus + titleBonus - duplicatePenalty;
+            // Compose scoring in conservative layers:
+            // [base similarity + route/title adjustments - duplicate penalty]
+            // × concept index weighting
+            // × court source/domain boosts (when a court lens is active)
+            // This keeps concept routing as the core signal while allowing court lenses
+            // to bend retrieval paths without hard-locking source selection.
             const postConceptScore = preConceptScore * (1 + conceptBonus);
             const courtSourceBoost = courtPrioritySourceMatch ? COURT_PRIORITY_SOURCE_BOOST : 1;
             const courtDomainBoost = courtPriorityDomainMatch ? COURT_PRIORITY_DOMAIN_BOOST : 1;
@@ -500,17 +506,17 @@ async function retrieve({
 
     if (scored.length === 0) return [];
 
-    const prioritySourceIds = [];
-    const seenPrioritySourceIds = new Set();
+    const priorityMatchedSourceIds = [];
+    const seenPriorityMatchedSourceIds = new Set();
     for (const entry of scored.slice().sort((a, b) => b.score - a.score)) {
         if (!entry || !entry.chunk) continue;
         const hasConceptPriorityMatch = Array.isArray(entry.matchedPrioritySources) && entry.matchedPrioritySources.length > 0;
         const hasCourtPriorityMatch = Array.isArray(entry.matchedCourtPrioritySources) && entry.matchedCourtPrioritySources.length > 0;
         if (!hasConceptPriorityMatch && !hasCourtPriorityMatch) continue;
         const sourceId = entry.chunk.sourceId;
-        if (!sourceId || seenPrioritySourceIds.has(sourceId)) continue;
-        seenPrioritySourceIds.add(sourceId);
-        prioritySourceIds.push(sourceId);
+        if (!sourceId || seenPriorityMatchedSourceIds.has(sourceId)) continue;
+        seenPriorityMatchedSourceIds.add(sourceId);
+        priorityMatchedSourceIds.push(sourceId);
     }
 
     const hasAnyPriorityRouting = (
@@ -527,7 +533,7 @@ async function retrieve({
         topK,
         targetSources,
         maxChunksPerSource,
-        prioritySourceIds,
+        prioritySourceIds: priorityMatchedSourceIds,
         minPrioritySources,
     });
 }

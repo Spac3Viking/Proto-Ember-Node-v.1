@@ -291,7 +291,11 @@ function normalizeDisplaySourceName(value) {
     if (!raw) return raw;
     return raw
         .split(/[-_]+/)
-        .map(part => part ? (part[0].toUpperCase() + part.slice(1)) : part)
+        .filter(part => typeof part === 'string' && part.trim().length > 0)
+        .map(part => {
+            const trimmed = part.trim();
+            return trimmed[0].toUpperCase() + trimmed.slice(1);
+        })
         .join(' ');
 }
 
@@ -569,8 +573,10 @@ state: ${retrievalState}
                 .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
             : [];
         const sourcesActuallyUsed = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
+            .map(normalizeDisplaySourceName)
             .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST);
         const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
+            .map(normalizeDisplaySourceName)
             .slice(0, MAX_SIGNAL_TRACE_SOURCES);
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
