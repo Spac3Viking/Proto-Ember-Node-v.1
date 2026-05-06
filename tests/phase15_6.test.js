@@ -274,4 +274,64 @@ describe('Phase 15.6 — concept index layer', () => {
         expect(results[0].prioritySourcesConsidered.length).toBeGreaterThan(0);
         expect(results[0].conceptBonus).toBeGreaterThan(0);
     });
+
+    test('retrieve applies court source and domain boosts conservatively', async () => {
+        const chunks = [
+            {
+                id: 'c1',
+                sourceId: 'src-general',
+                room: 'hearth',
+                shelf: 'archive',
+                file: 'notes.md',
+                text: 'symbol pattern continuity map',
+            },
+            {
+                id: 'c2',
+                sourceId: 'src-runelore',
+                room: 'hearth',
+                shelf: 'archive',
+                file: 'runelore.md',
+                text: 'symbol pattern continuity map',
+            },
+        ];
+
+        const manifests = {
+            'src-general': {
+                id: 'src-general',
+                sourceClass: 'trusted-archive',
+                title: 'General Notes',
+                file: 'notes.md',
+            },
+            'src-runelore': {
+                id: 'src-runelore',
+                sourceClass: 'trusted-archive',
+                title: 'Runelore',
+                file: 'runelore.md',
+            },
+        };
+
+        const retrieval = setupRetrievalModule({ chunks, manifests });
+        const results = await retrieval.retrieve({
+            query: 'symbol pattern continuity map',
+            rooms: ['hearth'],
+            routeHint: 'general',
+            topK: 2,
+            courtMember: {
+                id: 'mystic',
+                name: 'Mystic',
+                priorityDomains: ['symbolic_language'],
+                prioritySources: ['runelore'],
+            },
+        });
+
+        const boosted = results.find(r => r.chunk.sourceId === 'src-runelore');
+        expect(boosted).toBeTruthy();
+        expect(boosted.courtPrioritySourceMatch).toBe(true);
+        expect(boosted.courtPriorityDomainMatch).toBe(true);
+        expect(boosted.courtSourceBoost).toBeCloseTo(1.25, 6);
+        expect(boosted.courtDomainBoost).toBeCloseTo(1.12, 6);
+        const expected = boosted.textMatchScore * (1 + boosted.conceptBonus) * boosted.courtSourceBoost * boosted.courtDomainBoost;
+        expect(boosted.score).toBeCloseTo(expected, 6);
+        expect(results[0].chunk.sourceId).toBe('src-runelore');
+    });
 });

@@ -619,9 +619,16 @@ function renderSignalTrace(sources, signalTrace = null) {
     const chunksUsed = metadata && Number.isFinite(metadata.chunksUsed) ? metadata.chunksUsed : null;
     const sourceList = metadata && Array.isArray(metadata.sourceList) ? metadata.sourceList : [];
     const conceptRoute = metadata && metadata.conceptRoute ? String(metadata.conceptRoute) : null;
+    const courtLens = metadata && metadata.courtLens ? String(metadata.courtLens) : null;
+    const courtDomains = metadata && Array.isArray(metadata.courtDomains) ? metadata.courtDomains : [];
+    const model = metadata && metadata.model ? String(metadata.model) : null;
+    const provider = metadata && metadata.provider ? String(metadata.provider) : null;
     const relatedDomains = metadata && Array.isArray(metadata.relatedDomains) ? metadata.relatedDomains : [];
     const prioritySourcesConsidered = metadata && Array.isArray(metadata.prioritySourcesConsidered)
         ? metadata.prioritySourcesConsidered
+        : [];
+    const courtPrioritySourcesConsidered = metadata && Array.isArray(metadata.courtPrioritySourcesConsidered)
+        ? metadata.courtPrioritySourcesConsidered
         : [];
     const sourcesActuallyUsed = metadata && Array.isArray(metadata.sourcesActuallyUsed)
         ? metadata.sourcesActuallyUsed
@@ -661,6 +668,33 @@ function renderSignalTrace(sources, signalTrace = null) {
             '<span class="trace-badge"><span class="trace-key">route</span> ' +
             escapeHtml(routeDetected) + '</span>';
         traceSources.appendChild(route);
+    }
+
+    if (courtLens) {
+        const lens = document.createElement('div');
+        lens.className = 'signal-trace-item';
+        lens.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">court lens</span> ' +
+            escapeHtml(courtLens) + '</span>';
+        traceSources.appendChild(lens);
+    }
+
+    if (courtDomains.length > 0) {
+        const domains = document.createElement('div');
+        domains.className = 'signal-trace-item';
+        domains.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">court domains</span> ' +
+            escapeHtml(boundedListText(courtDomains)) + '</span>';
+        traceSources.appendChild(domains);
+    }
+
+    if (courtPrioritySourcesConsidered.length > 0) {
+        const courtSources = document.createElement('div');
+        courtSources.className = 'signal-trace-item';
+        courtSources.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">court priority sources considered</span> ' +
+            escapeHtml(boundedListText(courtPrioritySourcesConsidered)) + '</span>';
+        traceSources.appendChild(courtSources);
     }
 
     if (contextStatus) {
@@ -724,6 +758,24 @@ function renderSignalTrace(sources, signalTrace = null) {
             '<span class="trace-badge"><span class="trace-key">sources</span> ' +
             escapeHtml(boundedListText(sourceList)) + '</span>';
         traceSources.appendChild(sourceListEl);
+    }
+
+    if (model) {
+        const modelEl = document.createElement('div');
+        modelEl.className = 'signal-trace-item';
+        modelEl.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">model</span> ' +
+            escapeHtml(model) + '</span>';
+        traceSources.appendChild(modelEl);
+    }
+
+    if (provider) {
+        const providerEl = document.createElement('div');
+        providerEl.className = 'signal-trace-item';
+        providerEl.innerHTML =
+            '<span class="trace-badge"><span class="trace-key">provider</span> ' +
+            escapeHtml(provider) + '</span>';
+        traceSources.appendChild(providerEl);
     }
 
     if (!sources || sources.length === 0) {

@@ -239,6 +239,62 @@ function getRetrievalTopKForCourtMember(member) {
     return Math.max(1, Math.min(MAX_COURT_MEMBER_RETRIEVAL_TOP_K, Math.floor(member.retrieval.topK)));
 }
 
+const COURT_PROMPT_POSTURES = {
+    builder: {
+        reasoningPosture: 'Systemic and implementation-aware; expose dependencies, constraints, and continuity scaffolding.',
+        preferredFraming: 'Ground abstractions in systems, tools, infrastructure, embodied practice, and survivability.',
+        practicalAssumptions: 'Assume constraints are real and sequence matters; prioritize what can be built, carried, and maintained.',
+    },
+    warrior: {
+        reasoningPosture: 'Strategic and disciplined; prioritize continuity decisions under pressure.',
+        preferredFraming: 'Frame choices around duty, risk, resilience, and what must hold through disruption.',
+        practicalAssumptions: 'Assume limited bandwidth and stakes under collapse; favor decisive, testable action.',
+    },
+    scholar: {
+        reasoningPosture: 'Comparative and evidence-aware; distinguish speculation from grounded interpretation.',
+        preferredFraming: 'Compare structures carefully and make relationships between systems explicit.',
+        practicalAssumptions: 'Assume ambiguity is normal; qualify uncertainty and keep causal claims explicit.',
+    },
+    scribe: {
+        reasoningPosture: 'Narrative-structural; preserve continuity while improving transmissibility.',
+        preferredFraming: 'Shape material into memorable, living forms without sacrificing precision.',
+        practicalAssumptions: 'Assume the work must be remembered and reused; optimize for clarity, cadence, and recall.',
+    },
+    mystic: {
+        reasoningPosture: 'Symbol-sensitive and pattern-seeking while remaining reality-grounded.',
+        preferredFraming: 'Interpret symbols carefully without abandoning coherence, mechanism, or context.',
+        practicalAssumptions: 'Assume symbolic insight must stay accountable to practical interpretation and continuity outcomes.',
+    },
+};
+
+function buildCourtPromptModifier(member) {
+    if (!member) return '';
+    const profile = COURT_PROMPT_POSTURES[member.id] || COURT_PROMPT_POSTURES.scribe;
+    const domains = Array.isArray(member.priorityDomains) ? member.priorityDomains : [];
+    const sources = Array.isArray(member.prioritySources) ? member.prioritySources : [];
+    const voiceBias = member.voiceBias || member.toneCadence || '';
+    return [
+        '=== COURT LENS: ' + (member.name || member.id) + ' ===',
+        'Reasoning posture: ' + profile.reasoningPosture,
+        'Preferred framing: ' + profile.preferredFraming,
+        'Tone/cadence: ' + (voiceBias || 'Grounded, disciplined, and source-aware.'),
+        'Practical assumptions: ' + profile.practicalAssumptions,
+        'Priority domains: ' + (domains.length > 0 ? domains.join(', ') : 'none'),
+        'Priority sources: ' + (sources.length > 0 ? sources.join(', ') : 'none'),
+        'Do not roleplay this lens; use it to route interpretation and evidence weighting.',
+        '=== END COURT LENS ===',
+    ].join('\n');
+}
+
+function normalizeDisplaySourceName(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return raw;
+    return raw
+        .split(/[-_]+/)
+        .map(part => part ? (part[0].toUpperCase() + part.slice(1)) : part)
+        .join(' ');
+}
+
 /**
  * Maximum number of pinned-source chunks prepended to retrieval results
  * when a user attaches sources to Hearth Chat.  Kept small to avoid
@@ -339,6 +395,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 cartridgeId,
                 topK: retrievalTopK,
                 routeHint: detectedRoute,
+                courtMember: selectedCourtMember,
             });
         } catch (retrieveErr) {
             console.warn('[/api/chat] retrieval failed:', retrieveErr.message);
@@ -414,7 +471,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         // [4] Archetype overlay — last modifier, appended after retrieval
         let archetypeObj = null;
-        if (activeArchetypeId && typeof activeArchetypeId === 'string') {
+        if (!selectedCourtMember && activeArchetypeId && typeof activeArchetypeId === 'string') {
             archetypeObj = loadArchetype(activeArchetypeId);
         }
 
@@ -422,7 +479,9 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // Bootstrap → Forge Core prepended before retrieval; Archetype appended after
         const bootstrapPart = formatBootstrapForPrompt(bootstrap);
         const forgePart     = formatForgeCoreForPrompt(forgeCore);
-        const archetypePart = archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '';
+        const archetypePart = selectedCourtMember
+            ? buildCourtPromptModifier(selectedCourtMember)
+            : (archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '');
 
         const identityPreamble = [bootstrapPart, forgePart]
             .filter(Boolean)
@@ -501,6 +560,14 @@ state: ${retrievalState}
                 .map(String)
                 .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
             : [];
+        const courtDomains = selectedCourtMember && Array.isArray(selectedCourtMember.priorityDomains)
+            ? selectedCourtMember.priorityDomains.map(String).slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
+            : [];
+        const courtPrioritySourcesConsidered = Array.isArray(retrieved[0] && retrieved[0].courtPrioritySourcesConsidered)
+            ? retrieved[0].courtPrioritySourcesConsidered
+                .map(String)
+                .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
+            : [];
         const sourcesActuallyUsed = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
             .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST);
         const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
@@ -508,17 +575,24 @@ state: ${retrievalState}
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
             routeDetected: detectedRoute || 'general',
+            courtLens: selectedCourtMember ? (selectedCourtMember.name || selectedCourtMember.id) : 'Ember Prime',
+            courtDomains,
+            courtPrioritySourcesConsidered: courtPrioritySourcesConsidered.map(normalizeDisplaySourceName),
             conceptRoute,
             relatedDomains,
-            prioritySourcesConsidered,
+            prioritySourcesConsidered: prioritySourcesConsidered.map(normalizeDisplaySourceName),
             sourcesActuallyUsed,
             sourcesUsed: uniqueSourceCount,
             chunksUsed: retrieved.length,
             sourceList,
+            model: heart.model,
+            provider: 'Ollama',
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
         };
 
-        const activeArchetype = archetypeObj ? archetypeObj.id : null;
+        const activeArchetype = selectedCourtMember
+            ? selectedCourtMember.id
+            : (archetypeObj ? archetypeObj.id : null);
         console.log(
             '[/api/chat] room=' + activeRoom +
             ' grounded=' + (sources.length > 0) +

@@ -25,14 +25,29 @@ function normalizeMember(raw) {
     const topK = raw.retrieval && Number.isFinite(raw.retrieval.topK)
         ? Math.max(1, Math.min(MAX_COURT_MEMBER_RETRIEVAL_TOP_K, Math.floor(raw.retrieval.topK)))
         : 12;
+    const priorityDomains = Array.isArray(raw.priorityDomains)
+        ? raw.priorityDomains.map(String)
+        : (Array.isArray(raw.priority_domains) ? raw.priority_domains.map(String) : []);
+    const prioritySources = Array.isArray(raw.prioritySources)
+        ? raw.prioritySources.map(String)
+        : (Array.isArray(raw.priority_sources) ? raw.priority_sources.map(String) : []);
+    const voiceBias = raw.voiceBias || raw.voice_bias || raw.toneCadence || raw.tone || '';
+
     return {
         id,
         name: raw.name || id,
         role: raw.role || '',
         shortDescription: raw.shortDescription || '',
-        primaryDomains: Array.isArray(raw.primaryDomains) ? raw.primaryDomains.map(String) : [],
-        preferredSources: Array.isArray(raw.preferredSources) ? raw.preferredSources.map(String) : [],
-        toneCadence: raw.toneCadence || raw.tone || '',
+        priorityDomains,
+        prioritySources,
+        voiceBias,
+        primaryDomains: priorityDomains.length > 0
+            ? priorityDomains
+            : (Array.isArray(raw.primaryDomains) ? raw.primaryDomains.map(String) : []),
+        preferredSources: prioritySources.length > 0
+            ? prioritySources
+            : (Array.isArray(raw.preferredSources) ? raw.preferredSources.map(String) : []),
+        toneCadence: voiceBias,
         retrieval: { topK },
     };
 }
