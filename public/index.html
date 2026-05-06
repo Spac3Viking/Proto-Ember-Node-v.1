@@ -120,7 +120,7 @@
                 <div class="chat-input-row" style="padding: 0.75rem 1rem;">
                   <textarea
                     id="message-input"
-                    placeholder="Speak to the Heart… (Enter sends, Shift+Enter newline)"
+                    placeholder="Speak with Ember Prime… (Enter sends, Shift+Enter newline)"
                     aria-label="Message input"
                     autocomplete="off"
                     rows="2"
@@ -181,7 +181,7 @@
             <div class="system-layout">
               <div class="system-grid">
                 <div class="ember-card system-block">
-                  <div class="system-block-title">Heart Configuration</div>
+                  <div class="system-block-title">Ember Prime Configuration</div>
                   <div class="system-row">
                     <span class="system-key">Model</span>
                     <span class="system-val" id="sys-model">—</span>
@@ -312,18 +312,18 @@
                 </div>
               </div>
 
-              <!-- Active Heart Assignment -->
+              <!-- Active Ember Prime Assignment -->
               <div class="ember-card system-block">
-                <div class="system-block-title">Active Heart</div>
+                <div class="system-block-title">Active Ember Prime</div>
                 <p style="font-size:0.8rem; opacity:0.65; margin:0 0 0.75rem;">
-                  Select which trusted tool acts as the Heart for chat. Only one tool can be active at a time.
+                  Select which trusted tool acts as Ember Prime for chat. Only one tool can be active at a time.
                   Switching does not remove previous tools.
                 </p>
                 <div id="sys-heart-list" style="display:flex; flex-direction:column; gap:0.5rem;">
                   <span class="message-system" id="sys-heart-empty">No trusted tools available. Trust tools in Threshold → AI first.</span>
                 </div>
                 <div class="system-row" style="margin-top:0.75rem;">
-                  <span class="system-key">Active Heart</span>
+                  <span class="system-key">Active Ember Prime</span>
                   <span class="system-val" id="sys-active-heart">—</span>
                 </div>
               </div>
@@ -446,17 +446,17 @@
                 </div>
               </div>
 
-              <!-- RIGHT: Heart companion panel -->
+              <!-- RIGHT: Ember Prime companion panel -->
               <aside class="scribe-heart-panel">
                 <div class="scribe-heart-header">
-                  <span class="scribe-sidebar-title">ᚺ Heart</span>
+                  <span class="scribe-sidebar-title">ᚺ Ember Prime</span>
                 </div>
                 <div class="scribe-heart-actions">
-                  <button class="primary scribe-action-btn" id="scribe-send-to-heart-btn" title="Send current document to Heart">Send to Heart</button>
-                  <button class="secondary scribe-action-btn" id="scribe-insert-response-btn" title="Insert Heart response into document" style="display:none;">Insert Response</button>
+                  <button class="primary scribe-action-btn" id="scribe-send-to-heart-btn" title="Send current document to Ember Prime">Send to Ember Prime</button>
+                  <button class="secondary scribe-action-btn" id="scribe-insert-response-btn" title="Insert Ember Prime response into document" style="display:none;">Insert Response</button>
                 </div>
                 <div class="scribe-heart-chat" id="scribe-heart-chat">
-                  <span class="message-system scribe-heart-hint">Send your writing to the Heart for reflection, expansion, or refinement.</span>
+                  <span class="message-system scribe-heart-hint">Send your writing to Ember Prime for reflection, expansion, or refinement.</span>
                 </div>
               </aside>
 
@@ -564,18 +564,19 @@
             </div>
           </div>
 
-          <!-- Workshop / Tools — trusted AI tools for classification -->
+          <!-- Workshop / Tools — Ember Court -->
           <div class="sub-panel" id="ws-tools">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
-                Trusted tools appear here for classification. Assign each a role:
-                <strong>Mythic Mirror</strong> (generative / reflective) or <strong>Forge Node</strong> (processing / execution).
+                Ember Prime convenes the Ember Court as specialist lenses.
+                Select one member to guide tone, domain focus, and retrieval posture.
               </p>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
-              <div class="workshop-section-title">Trusted Tools</div>
-              <div id="ws-tool-list" class="ws-sources-list">
-                <span class="message-system">No trusted tools. Trust tools in Threshold → AI.</span>
+              <div class="workshop-section-title">Ember Court</div>
+              <div class="message-system" id="ws-court-active">Loading court selection…</div>
+              <div id="ws-court-list" class="ws-sources-list">
+                <span class="message-system">Loading Ember Court…</span>
               </div>
             </div>
           </div>

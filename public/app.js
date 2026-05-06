@@ -10,6 +10,37 @@
 /** Default model name — used as fallback if local config is unavailable. */
 const DEFAULT_MODEL_LABEL = 'gemma3:4b';
 let activeModelLabel = DEFAULT_MODEL_LABEL;
+const EMBER_COURT_STORAGE_KEY = 'ember-court-active-member';
+let _activeCourtMemberId = null;
+
+function normalizeCourtMemberId(value) {
+    if (!value || typeof value !== 'string') return null;
+    const normalized = value.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
+    return normalized || null;
+}
+
+function getActiveCourtMemberId() {
+    if (_activeCourtMemberId) return _activeCourtMemberId;
+    try {
+        _activeCourtMemberId = normalizeCourtMemberId(window.localStorage.getItem(EMBER_COURT_STORAGE_KEY));
+    } catch {
+        _activeCourtMemberId = null;
+    }
+    return _activeCourtMemberId;
+}
+
+function setActiveCourtMemberId(memberId) {
+    const normalized = normalizeCourtMemberId(memberId);
+    _activeCourtMemberId = normalized;
+    try {
+        if (normalized) {
+            window.localStorage.setItem(EMBER_COURT_STORAGE_KEY, normalized);
+        } else {
+            window.localStorage.removeItem(EMBER_COURT_STORAGE_KEY);
+        }
+    } catch { /* ignore storage failures */ }
+    return _activeCourtMemberId;
+}
 
 /* ================================================================
    Utility
@@ -358,7 +389,7 @@ function displayMessage(container, text, className) {
 }
 
 const HEART_TECHNICAL_ERROR = (
-    'The Heart could not complete the response.\n' +
+    'Ember Prime could not complete the response.\n' +
     'Check local AI status and try again.'
 );
 
@@ -797,7 +828,7 @@ async function sendMessage() {
         if (_isChatGenerating && _chatState === CHAT_STATES.THINKING) {
             displayMessage(
                 chatContainer,
-                'The Heart is taking longer than usual. You may wait or still the signal.',
+                'Ember Prime is taking longer than usual. You may wait or still the signal.',
                 'message-system',
             );
             chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -805,6 +836,7 @@ async function sendMessage() {
     }, LONG_WAIT_THRESHOLD_MS);
 
     try {
+        const activeCourtMember = getActiveCourtMemberId();
         const response = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -812,6 +844,7 @@ async function sendMessage() {
             body:    JSON.stringify({
                 query:     message,
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
+                archetype: activeCourtMember || undefined,
                 requestId: _activeChatRequestId,
             }),
         });
@@ -827,7 +860,7 @@ async function sendMessage() {
         } else if (response.status === 504 || (data && data.timeout)) {
             displayMessage(
                 chatContainer,
-                data.message || 'The Heart is taking longer than usual. You may wait or still the signal.',
+                data.message || 'Ember Prime is taking longer than usual. You may wait or still the signal.',
                 'message-system',
             );
             setTraceStatus('timed out');
@@ -1483,8 +1516,8 @@ function scheduleAutosave() {
 }
 
 /**
- * Send the current document content to the Heart for scribe assistance.
- * Renders the response in the Scribe Heart panel.
+ * Send the current document content to Ember Prime for scribe assistance.
+ * Renders the response in the Scribe Ember Prime panel.
  */
 async function sendDocumentToHeart() {
     if (!_activeDocId) {
@@ -1540,7 +1573,10 @@ async function sendDocumentToHeart() {
         const res  = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ query }),
+            body:    JSON.stringify({
+                query,
+                archetype: getActiveCourtMemberId() || undefined,
+            }),
         });
         const data = await res.json();
         cleanupThinkingIndicator(chatEl, thinkingEl, cancelAnim);
@@ -1563,14 +1599,14 @@ async function sendDocumentToHeart() {
         console.warn('[scribe] request to /api/chat failed while sending document');
         cleanupThinkingIndicator(chatEl, thinkingEl, cancelAnim);
         if (chatEl) chatEl.innerHTML = '<span class="message-system">' + HEART_TECHNICAL_ERROR + '</span>';
-        showFlashMessage('The Heart could not complete the response.');
+        showFlashMessage('Ember Prime could not complete the response.');
     } finally {
         if (sendBtn) sendBtn.disabled = false;
     }
 }
 
 /**
- * Insert the last Heart response into the current document (appended).
+ * Insert the last Ember Prime response into the current document (appended).
  */
 function insertHeartResponse() {
     if (!_lastHeartResponse) return;
@@ -1582,7 +1618,7 @@ function insertHeartResponse() {
     contentEl.scrollTop = contentEl.scrollHeight;
     contentEl.focus();
     scheduleAutosave();
-    showFlashMessage('Heart response inserted ✓');
+    showFlashMessage('Ember Prime response inserted ✓');
 }
 
 /** Initialize Scribe panel event listeners. */
@@ -3763,132 +3799,79 @@ function renderThresholdToolRow(tool, active, container) {
 
 /* ── Workshop / Tools tab ───────────────────────────────────── */
 
-/**
- * Load and render the Workshop → Tools panel.
- * Shows only trusted tools.
- */
-async function loadWorkshopTools() {
-    const listEl = document.getElementById('ws-tool-list');
+function renderEmberCourtMembers(court) {
+    const listEl = document.getElementById('ws-court-list');
+    const activeEl = document.getElementById('ws-court-active');
     if (!listEl) return;
-    listEl.innerHTML = '<span class="message-system">Loading…</span>';
 
-    try {
-        const { tools, active } = await fetchToolRegistry();
-        const trusted = tools.filter(t => t.trusted);
+    const members = Array.isArray(court && court.members) ? court.members : [];
+    if (members.length === 0) {
+        listEl.innerHTML = '<span class="message-system">No Ember Court members configured.</span>';
+        if (activeEl) activeEl.textContent = 'No active Ember Court member.';
+        return;
+    }
 
-        if (trusted.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No trusted tools. Trust tools in Threshold → AI.</span>';
-            return;
-        }
+    const configuredDefault = normalizeCourtMemberId(court && court.defaultMember);
+    const activeMemberId = getActiveCourtMemberId() || configuredDefault || normalizeCourtMemberId(members[0].id);
+    setActiveCourtMemberId(activeMemberId);
 
-        listEl.innerHTML = '';
-        trusted.forEach(tool => renderWorkshopToolRow(tool, active, listEl));
-    } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load trusted tools.</span>';
+    listEl.innerHTML = '';
+    members.forEach(member => {
+        const memberId = normalizeCourtMemberId(member.id);
+        const button = document.createElement('button');
+        button.className = memberId === activeMemberId ? 'primary threshold-file-row' : 'secondary threshold-file-row';
+        button.type = 'button';
+        button.dataset.courtMember = memberId || '';
+        button.setAttribute('aria-pressed', String(memberId === activeMemberId));
+        button.style.cssText = 'display:flex; flex-direction:column; align-items:flex-start; gap:0.25rem; width:100%; text-align:left;';
+        button.innerHTML =
+            '<span class="threshold-file-name">' + escapeHtml(member.name || member.id || 'Court Member') + '</span>' +
+            '<span class="source-card-filename">Role: ' + escapeHtml(member.role || '—') + '</span>' +
+            '<span class="source-card-description">' + escapeHtml(member.shortDescription || '—') + '</span>' +
+            '<span class="message-system">Domains: ' + escapeHtml((member.primaryDomains || []).join(', ') || '—') + '</span>' +
+            '<span class="message-system">Sources: ' + escapeHtml((member.preferredSources || []).join(', ') || '—') + '</span>' +
+            '<span class="message-system">Tone/Cadence: ' + escapeHtml(member.toneCadence || member.tone || '—') + '</span>';
+        button.addEventListener('click', () => {
+            if (!memberId) return;
+            setActiveCourtMemberId(memberId);
+            renderEmberCourtMembers(court);
+            showFlashMessage('Ember Court lens set to ' + escapeHtml(member.name || memberId) + ' ✓');
+        });
+        listEl.appendChild(button);
+    });
+
+    const activeMember = members.find(m => normalizeCourtMemberId(m.id) === activeMemberId) || null;
+    if (activeEl) {
+        activeEl.textContent = activeMember
+            ? 'Active Court Member: ' + (activeMember.name || activeMember.id)
+            : 'Active Court Member: none';
     }
 }
 
-function renderWorkshopToolRow(tool, active, container) {
-    const row = document.createElement('div');
-    row.className = 'threshold-file-row';
-    row.dataset.toolId = tool.id;
+/**
+ * Load and render the Workshop → Ember Court panel.
+ */
+async function loadWorkshopTools() {
+    const listEl = document.getElementById('ws-court-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<span class="message-system">Loading Ember Court…</span>';
+    const activeEl = document.getElementById('ws-court-active');
+    if (activeEl) activeEl.textContent = 'Loading court selection…';
 
-    const isHeart = active && active.heart === tool.id;
-
-    const nameEl = document.createElement('div');
-    nameEl.style.cssText = 'flex:1; min-width:0;';
-    nameEl.innerHTML =
-        '<div class="threshold-file-name">' + escapeHtml(tool.name) +
-            (isHeart ? ' <span class="status-badge remembered">Heart</span>' : '') +
-            ' <span class="status-badge ' + toolStatusClass(tool) + '">' + escapeHtml(toolStatusLabel(tool)) + '</span>' +
-            toolRunningBadge(tool) +
-            '</div>' +
-        '<div class="source-card-filename">' + escapeHtml(tool.type) + ' · ' + escapeHtml(tool.interface) + '</div>' +
-        (tool.role ? '<div class="source-card-description">' + escapeHtml(roleLabel(tool.role)) + '</div>' : '');
-
-    const actions = document.createElement('span');
-    actions.className = 'threshold-file-actions';
-
-    // Role selector
-    const roleSelect = document.createElement('select');
-    roleSelect.className = 'secondary';
-    roleSelect.style.cssText = 'font-size:0.78rem; padding:0.2rem 0.4rem; background:var(--surface-2,#111); color:var(--fg,#ccc); border:1px solid hsla(140,80%,60%,0.25); border-radius:4px;';
-    roleSelect.setAttribute('aria-label', 'Assign role for ' + tool.name);
-    [
-        { value: '', label: 'No role' },
-        { value: 'mirror', label: 'Mythic Mirror' },
-        { value: 'forge',  label: 'Forge Node' },
-    ].forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt.value;
-        o.textContent = opt.label;
-        if ((tool.role || '') === opt.value) o.selected = true;
-        roleSelect.appendChild(o);
-    });
-    roleSelect.addEventListener('change', async () => {
-        const role = roleSelect.value || null;
-        try {
-            const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/role', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ role }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                showFlashMessage(escapeHtml(tool.name) + ' role updated ✓');
-                loadWorkshopTools();
-                loadHearthToolRegistry();
-            } else {
-                showFlashMessage('Role update failed: ' + (data.error || 'unknown'));
-            }
-        } catch {
-            showFlashMessage('Could not reach server.');
-        }
-    });
-
-    // Inspect button
-    const inspBtn = document.createElement('button');
-    inspBtn.className = 'secondary threshold-action-btn';
-    inspBtn.textContent = 'Inspect';
-    inspBtn.addEventListener('click', () => openToolInspector(tool, active));
-
-    // Revoke trust button
-    const revokeBtn = document.createElement('button');
-    revokeBtn.className = 'secondary threshold-action-btn';
-    revokeBtn.textContent = 'Revoke';
-    revokeBtn.title = 'Revoke trust — returns tool to Threshold';
-    revokeBtn.addEventListener('click', async () => {
-        if (!confirm('Revoke trust for "' + tool.name + '"? It will return to Threshold.')) return;
-        try {
-            const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ trusted: false }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                showFlashMessage(escapeHtml(tool.name) + ' trust revoked.');
-                loadWorkshopTools();
-                loadThresholdTools();
-                loadHearthToolRegistry();
-            }
-        } catch {
-            showFlashMessage('Could not reach server.');
-        }
-    });
-
-    actions.appendChild(roleSelect);
-    actions.appendChild(inspBtn);
-    actions.appendChild(revokeBtn);
-    row.appendChild(nameEl);
-    row.appendChild(actions);
-    container.appendChild(row);
+    try {
+        const res = await fetch('/api/court');
+        const data = await res.json();
+        renderEmberCourtMembers(data && data.court ? data.court : null);
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load Ember Court.</span>';
+        if (activeEl) activeEl.textContent = 'Court unavailable.';
+    }
 }
 
 /* ── Hearth / System: Heart Assignment ──────────────────────── */
 
 /**
- * Load the Heart assignment UI in Hearth → System tab.
+ * Load the Ember Prime assignment UI in Hearth → System tab.
  */
 async function loadHearthToolRegistry() {
     const listEl   = document.getElementById('sys-heart-list');
@@ -3922,12 +3905,12 @@ async function loadHearthToolRegistry() {
             label.innerHTML =
                 escapeHtml(tool.name) +
                 (tool.role ? ' <span class="status-badge indexed" style="font-size:0.68rem;">' + escapeHtml(roleLabel(tool.role)) + '</span>' : '') +
-                (isHeart ? ' <span class="status-badge remembered" style="font-size:0.68rem;">Active Heart</span>' : '');
+                (isHeart ? ' <span class="status-badge remembered" style="font-size:0.68rem;">Active Ember Prime</span>' : '');
 
             const btn = document.createElement('button');
             btn.className = isHeart ? 'secondary' : 'primary';
             btn.style.cssText = 'font-size:0.75rem; padding:0.2rem 0.6rem;';
-            btn.textContent = isHeart ? 'Clear' : 'Set as Heart';
+            btn.textContent = isHeart ? 'Clear' : 'Set as Ember Prime';
             btn.addEventListener('click', async () => {
                 btn.disabled = true;
                 try {
@@ -3940,11 +3923,11 @@ async function loadHearthToolRegistry() {
                     const data = await res.json();
                     if (data.success) {
                         showFlashMessage(heartId
-                            ? escapeHtml(tool.name) + ' is now the active Heart ✓'
-                            : 'Heart assignment cleared.');
+                            ? escapeHtml(tool.name) + ' is now active as Ember Prime ✓'
+                            : 'Ember Prime assignment cleared.');
                         loadHearthToolRegistry();
                     } else {
-                        showFlashMessage('Heart update failed: ' + (data.error || 'unknown'));
+                        showFlashMessage('Ember Prime update failed: ' + (data.error || 'unknown'));
                         btn.disabled = false;
                     }
                 } catch {
@@ -3988,7 +3971,7 @@ function openToolInspector(tool, active) {
         statusEl.innerHTML =
             '<span class="status-badge ' + toolStatusClass(tool) + '">' +
             escapeHtml(toolStatusLabel(tool)) + '</span>' +
-            (isHeart ? ' <span class="status-badge remembered">Active Heart</span>' : '');
+            (isHeart ? ' <span class="status-badge remembered">Active Ember Prime</span>' : '');
     }
 
     set('tool-insp-type',      tool.type);
@@ -4044,7 +4027,7 @@ function openToolInspector(tool, active) {
 
         if (tool.trusted && !isHeart) {
             actions.push({
-                label: 'Set as Heart',
+                label: 'Set as Ember Prime',
                 primary: true,
                 fn: async () => {
                     try {
@@ -4056,7 +4039,7 @@ function openToolInspector(tool, active) {
                         const data = await res.json();
                         if (data.success) {
                             closeToolInspector();
-                            showFlashMessage(escapeHtml(tool.name) + ' is now the active Heart ✓');
+                            showFlashMessage(escapeHtml(tool.name) + ' is now active as Ember Prime ✓');
                             loadHearthToolRegistry();
                         }
                     } catch {
@@ -4478,7 +4461,7 @@ async function loadStartupCheck() {
         } else if (data.activeHeart && !data.activeHeartAvailable) {
             summaryParts.push('Heart offline');
         } else {
-            summaryParts.push('no Heart set');
+            summaryParts.push('no Ember Prime set');
         }
         if (totalIntake > 0) summaryParts.push(totalIntake + ' file' + (totalIntake === 1 ? '' : 's') + ' awaiting review');
         if (data.offlineTools > 0) summaryParts.push(data.offlineTools + ' AI offline');
@@ -4519,17 +4502,17 @@ async function loadStartupCheck() {
             stats.push({ label: 'new tools detected', value: data.newTools, style: 'warn', group: 'Tools' });
         }
 
-        // Active Heart
+        // Active Ember Prime
         const noHeart = !data.activeHeart;
         if (data.activeHeart) {
             stats.push({
-                label: 'heart',
+                label: 'ember prime',
                 value: data.activeHeart + (data.activeHeartAvailable ? ' ✓' : ' (offline)'),
                 style: data.activeHeartAvailable ? 'ok' : 'error',
                 group: 'Tools',
             });
         } else {
-            stats.push({ label: 'heart', value: 'none set', style: 'zero', group: 'Tools' });
+            stats.push({ label: 'ember prime', value: 'none set', style: 'zero', group: 'Tools' });
         }
 
         // ── Render grouped stats ─────────────────────────────────────
@@ -4553,10 +4536,10 @@ async function loadStartupCheck() {
         if (setupGuideBtn) setupGuideBtn.style.display = noHeart ? '' : 'none';
     }
 
-    // Warnings — merge server warnings with local no-Heart notice
+    // Warnings — merge server warnings with local no-Ember-Prime notice
     if (warningsEl) {
         const warnings = [...(data.warnings || [])];
-        if (!data.activeHeart) warnings.unshift('No active Heart detected — Recommended local AI: Ollama');
+        if (!data.activeHeart) warnings.unshift('No active Ember Prime detected — Recommended local AI: Ollama');
         if (warnings.length > 0) {
             warningsEl.style.display = '';
             warningsEl.innerHTML = warnings.map(w =>
@@ -4594,8 +4577,8 @@ function renderSystemStartupSummary(data) {
                 { key: 'New tools',      val: data.newTools      || 0 },
                 { key: 'Running tools',  val: data.runningTools  || 0 },
                 { key: 'Offline tools',  val: data.offlineTools  || 0 },
-                { key: 'Active Heart',   val: data.activeHeart   || '—' },
-                { key: 'Heart ready',    val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
+                { key: 'Active Ember Prime', val: data.activeHeart || '—' },
+                { key: 'Ember Prime ready',  val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
             ],
         },
         {

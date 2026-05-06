@@ -9,6 +9,7 @@
  * GET /api/intake-state
  * GET /api/ai/models
  * POST /api/ai/models/select
+ * GET /api/court
  * POST /api/system/shutdown
  */
 
@@ -30,6 +31,7 @@ const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCartridges }                            = require('../cartridgeLoader');
 const { loadIntakeState }                           = require('../intakeState');
 const { loadBootstrap }                             = require('../bootstrap');
+const { loadCourtConfig }                           = require('../courtConfig');
 // Reuse canonical archive cache logic for installed/update status.
 const { compareInstalledWithUpstream } = require('../archiveCacheService');
 
@@ -346,6 +348,18 @@ function createSystemRouter({ migrationResult }) {
      */
     router.get('/api/intake-state', readLimiter, (req, res) => {
         res.json(loadIntakeState());
+    });
+
+    /**
+     * GET /api/court
+     * Returns Ember Court member configuration.
+     */
+    router.get('/api/court', readLimiter, (req, res) => {
+        const court = loadCourtConfig();
+        if (!court) {
+            return res.status(500).json({ error: 'Could not load Ember Court configuration.' });
+        }
+        return res.json({ court });
     });
 
     /**
