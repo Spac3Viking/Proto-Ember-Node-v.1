@@ -1,10 +1,10 @@
 /**
- * Ember Node v.ᚠ — Phase 8.75 app shell
+ * Ember Node v.ᚠ — Phase 15.9E app shell
  *
- * Covers all three rooms (Hearth / Workshop / Threshold) with sub-tab navigation,
+ * Covers all three rooms (Hearth / Ember Council / Threshold) with sub-tab navigation,
  * file lifecycle (Waiting/Indexed/Remembered), intake discipline (Threshold airlock),
- * chat threads, source inspector, tool registry, startup checklist, and project
- * management.  All UI logic communicates only with the local Express server.
+ * chat threads, source inspector, runtime registry, and startup checklist.
+ * All UI logic communicates only with the local Express server.
  */
 
 /** Default model name — used as fallback if local config is unavailable. */
@@ -55,7 +55,7 @@ function getEffectiveCourtMemberForApi() {
 }
 
 const COURT_MEMBER_TRANSITIONS = Object.freeze({
-    builder: 'Grounding signal in structure, tools, and practical sequence.',
+    builder: 'Grounding signal in structure, systems, and practical sequence.',
     warrior: 'Clarifying stakes, terrain, risk, and disciplined action.',
     scholar: 'Mapping distinctions, connections, and conceptual structure.',
     scribe: 'Shaping fragments into coherent chapters and transmissible language.',
@@ -968,7 +968,7 @@ async function sendMessage() {
 }
 
 /* ================================================================
-   Workshop — Council Chat
+   Ember Council — Council Chat
    ================================================================ */
 
 (function initCouncilChat() {
@@ -1456,7 +1456,7 @@ async function loadArchiveSignalPanel() {
 })();
 
 /* ================================================================
-   Workshop — Draft / Notepad
+   Ember Council — Draft / Notepad
    ================================================================ */
 
 (function initWorkshop() {
@@ -1824,68 +1824,6 @@ function insertHeartResponse() {
     });
 })();
 
-/* ================================================================
-   Workshop — Index sub-tab
-   ================================================================ */
-
-async function loadWorkshopSources() {
-    const listEl = document.getElementById('ws-sources-list');
-    if (!listEl) return;
-
-    try {
-        const res  = await fetch('/api/sources');
-        const data = await res.json();
-        const sources = data.sources || [];
-
-        if (sources.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No sources indexed.</span>';
-            return;
-        }
-
-        listEl.innerHTML = '';
-        sources.slice(0, 30).forEach(s => {
-            listEl.appendChild(buildSourceCard(s));
-        });
-
-        if (sources.length > 30) {
-            const more = document.createElement('div');
-            more.className = 'message-system';
-            more.textContent = '…and ' + (sources.length - 30) + ' more';
-            listEl.appendChild(more);
-        }
-    } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load sources.</span>';
-    }
-}
-
-async function loadWorkshopNotes() {
-    const listEl = document.getElementById('ws-notes-list');
-    if (!listEl) return;
-
-    try {
-        const res  = await fetch('/api/notes');
-        const data = await res.json();
-        const notes = data.notes || [];
-
-        if (notes.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No notes saved.</span>';
-            return;
-        }
-
-        listEl.innerHTML = '';
-        notes.slice(0, 10).forEach(n => {
-            const row = document.createElement('div');
-            row.className = 'ws-note-row';
-            row.innerHTML =
-                '<span class="ws-note-name">' + escapeHtml(n.filename) + '</span>' +
-                '<span class="ws-note-size message-system">' + n.size + 'B</span>';
-            listEl.appendChild(row);
-        });
-    } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load notes.</span>';
-    }
-}
-
 /** Build a source card element using Phase 4 metadata fields, with action row. */
 function buildSourceCard(s) {
     const card = document.createElement('div');
@@ -1939,8 +1877,7 @@ function buildSourceCard(s) {
             menuItems.push({ label: 'Remember to Hearth', fn: () => rememberSource(s.id) });
         }
         menuItems.push({ label: '→ Hearth Chat',  fn: () => sendSourceToChat(s) });
-        menuItems.push({ label: '→ Notepad',       fn: () => sendSourceToNotepad(s) });
-        menuItems.push({ label: '→ Project',       fn: () => attachSourceToProject(s.id, s.title || s.file) });
+        menuItems.push({ label: '→ Council Drafts', fn: () => sendSourceToCouncilDrafts(s) });
 
         menuItems.forEach(item => {
             const btn = document.createElement('button');
@@ -1970,7 +1907,7 @@ function buildSourceCard(s) {
 }
 
 /* ================================================================
-   Workshop — Caches sub-tab
+   Ember Council — Caches sub-tab
    ================================================================ */
 
 async function loadCacheShelf() {
@@ -2150,122 +2087,6 @@ async function inspectCache(id, itemEl) {
     } catch {
         if (contentEl) contentEl.textContent = 'Error loading cache content.';
     }
-}
-
-/* ================================================================
-   Workshop — Projects sub-tab
-   ================================================================ */
-
-let activeProjectId = null;
-
-(function initProjects() {
-    document.addEventListener('DOMContentLoaded', () => {
-        const newProjectBtn = document.getElementById('new-project-btn');
-        const saveBtn       = document.getElementById('save-project-btn');
-
-        if (newProjectBtn) {
-            newProjectBtn.addEventListener('click', async () => {
-                const title = prompt('Project title:');
-                if (!title) return;
-                try {
-                    const res  = await fetch('/api/projects', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ title }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        activeProjectId = data.project.id;
-                        loadProjects();
-                        openProject(data.project);
-                    }
-                } catch { /* ignore */ }
-            });
-        }
-
-        if (saveBtn) {
-            saveBtn.addEventListener('click', async () => {
-                if (!activeProjectId) return;
-                const titleInput = document.getElementById('project-title-input');
-                const notesInput = document.getElementById('project-notes-input');
-                const statusEl   = document.getElementById('project-status');
-                const title      = titleInput ? titleInput.value.trim() : '';
-                const notes      = notesInput ? notesInput.value : '';
-
-                function setProjectStatus(msg, duration) {
-                    if (!statusEl) return;
-                    statusEl.textContent = msg;
-                    if (duration) setTimeout(() => { statusEl.textContent = ''; }, duration);
-                }
-
-                if (!title) {
-                    setProjectStatus('Title required.', 2000);
-                    return;
-                }
-
-                try {
-                    await fetch('/api/projects/' + encodeURIComponent(activeProjectId), {
-                        method:  'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ title, notes }),
-                    });
-                    setProjectStatus('Saved.', 2000);
-                    loadProjects();
-                } catch {
-                    setProjectStatus('Save failed.', 2000);
-                }
-            });
-        }
-    });
-})();
-
-async function loadProjects() {
-    const listEl = document.getElementById('project-list');
-    if (!listEl) return;
-
-    try {
-        const res  = await fetch('/api/projects');
-        const data = await res.json();
-        const projects = data.projects || [];
-
-        if (projects.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No projects yet.</span>';
-            return;
-        }
-
-        listEl.innerHTML = '';
-        projects.forEach(p => {
-            const item = document.createElement('div');
-            item.className = 'project-item' + (p.id === activeProjectId ? ' active' : '');
-            item.textContent = p.title;
-            item.dataset.projectId = p.id;
-            item.addEventListener('click', () => {
-                activeProjectId = p.id;
-                document.querySelectorAll('.project-item').forEach(el => {
-                    el.classList.toggle('active', el.dataset.projectId === p.id);
-                });
-                openProject(p);
-            });
-            listEl.appendChild(item);
-        });
-    } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load projects.</span>';
-    }
-}
-
-function openProject(project) {
-    const emptyEl      = document.getElementById('project-empty');
-    const editorEl     = document.getElementById('project-editor');
-    const titleInput   = document.getElementById('project-title-input');
-    const notesInput   = document.getElementById('project-notes-input');
-
-    if (emptyEl)    emptyEl.style.display = 'none';
-    if (editorEl)   editorEl.style.display = 'flex';
-    if (titleInput) titleInput.value = project.title || '';
-    if (notesInput) notesInput.value = project.notes || '';
-
-    activeProjectId = project.id;
-    loadProjectSources(project.id);
 }
 
 /* ================================================================
@@ -3106,7 +2927,7 @@ function buildThresholdFileRow(f, isChanged) {
 
     // Only show action buttons when source is not rejected
     if (intakeState !== 'rejected') {
-        // ── PRIMARY ACTION: Admit to Workshop ────────────────────────────────
+        // ── PRIMARY ACTION: Admit to Ember Council ──────────────────────────
         // Combines inspect + index + move into one click.  Shown for non-metaOnly
         // files with a sourceId.  This is the main intake action.
         if (!f.metaOnly && f.sourceId) {
@@ -3823,11 +3644,11 @@ function updateHeaderStatus() {
 }
 
 /* ================================================================
-   Phase 7 — Tool Registry: Discovery, Trust, Role, Heart
+   Phase 7 — Runtime Registry: Discovery, Trust, Role, Heart
    ================================================================ */
 
 /**
- * Fetch all tools from the registry.
+ * Fetch all AI runtimes from the registry.
  * @returns {Promise<{ tools: object[], active: object }>}
  */
 async function fetchToolRegistry() {
@@ -3847,7 +3668,7 @@ async function scanTools() {
     return { tools: data.tools || [], active: data.active || {} };
 }
 
-/** Status label for a tool lifecycle state */
+/** Status label for an AI runtime lifecycle state. */
 function toolStatusLabel(tool) {
     if (tool.trusted && tool.role) return 'Assigned';
     if (tool.trusted)              return 'Trusted';
@@ -3855,7 +3676,7 @@ function toolStatusLabel(tool) {
     return tool.status || 'Unknown';
 }
 
-/** CSS class for tool status badge */
+/** CSS class for AI runtime status badge. */
 function toolStatusClass(tool) {
     if (tool.trusted && tool.role) return 'indexed';
     if (tool.trusted)              return 'indexed';
@@ -3863,7 +3684,7 @@ function toolStatusClass(tool) {
     return 'warn';
 }
 
-/** Running/offline badge HTML for a tool */
+/** Running/offline badge HTML for an AI runtime. */
 function toolRunningBadge(tool) {
     if (tool.status === 'not_detected' || tool.status === 'unknown') return '';
     if (tool.running === true)  return ' <span class="status-badge running">Running</span>';
@@ -3881,8 +3702,8 @@ function roleLabel(role) {
 /* ── Threshold / AI tab ─────────────────────────────────────── */
 
 /**
- * Load and render the Threshold → AI tool list.
- * Shows detected tools that are not yet trusted (excluding persistently rejected ones).
+ * Load and render the Threshold → AI runtime list.
+ * Shows detected runtimes that are not yet trusted (excluding persistently rejected ones).
  */
 async function loadThresholdTools() {
     const listEl   = document.getElementById('th-tool-list');
@@ -3893,17 +3714,17 @@ async function loadThresholdTools() {
     try {
         const { tools, active } = await fetchToolRegistry();
 
-        // Show all non-trusted detected tools (+ not_detected as dim)
-        // Persistently rejected tools are shown as a separate dim section
+        // Show all non-trusted detected runtimes (+ not_detected as dim)
+        // Persistently rejected runtimes are shown as a separate dim section
         const visible  = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
         const rejected = tools.filter(t => !t.trusted && t.intake && t.intake.state === 'rejected');
 
-        // Show guided setup if no running tools at all
+        // Show guided setup if no running runtimes at all
         const anyRunning = tools.some(t => t.running === true);
         if (guideEl) guideEl.style.display = anyRunning ? 'none' : 'flex';
 
         if (visible.length === 0 && rejected.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No untrusted tools. All detected tools have been admitted.</span>';
+            listEl.innerHTML = '<span class="message-system">No untrusted runtimes. All detected runtimes have been admitted.</span>';
             return;
         }
 
@@ -3919,7 +3740,7 @@ async function loadThresholdTools() {
         }
         loadThresholdAiModelGuidance(tools);
     } catch {
-        listEl.innerHTML = '<span class="message-system threshold-error">Could not load tools.</span>';
+        listEl.innerHTML = '<span class="message-system threshold-error">Could not load runtimes.</span>';
         loadThresholdAiModelGuidance([]);
     }
 }
@@ -3982,7 +3803,7 @@ function renderThresholdToolRow(tool, active, container) {
     const intakeState = tool.intake && tool.intake.state;
     if (intakeState === 'rejected') row.className += ' intake-rejected';
 
-    // Tool last-seen timestamp
+    // Runtime last-seen timestamp
     const lastSeen = tool.lastSeen ? ' · last seen ' + new Date(tool.lastSeen).toLocaleString() : '';
 
     const nameEl = document.createElement('div');
@@ -4017,7 +3838,7 @@ function renderThresholdToolRow(tool, active, container) {
         });
         actions.appendChild(inspBtn);
 
-        // Trust button (only for detected tools)
+        // Trust button (only for detected runtimes)
         if (tool.status === 'detected') {
             const trustBtn = document.createElement('button');
             trustBtn.className = 'primary threshold-action-btn';
@@ -4071,7 +3892,7 @@ function renderThresholdToolRow(tool, active, container) {
         const rejectBtn = document.createElement('button');
         rejectBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
         rejectBtn.textContent = 'Reject';
-        rejectBtn.title = 'Persistently reject — hides tool from intake queue';
+        rejectBtn.title = 'Persistently reject — hides runtime from intake queue';
         rejectBtn.addEventListener('click', async () => {
             rejectBtn.disabled = true;
             try {
@@ -4086,7 +3907,7 @@ function renderThresholdToolRow(tool, active, container) {
         const undoBtn = document.createElement('button');
         undoBtn.className = 'secondary threshold-action-btn';
         undoBtn.textContent = 'Undo Reject';
-        undoBtn.title = 'Restore tool to intake queue';
+        undoBtn.title = 'Restore runtime to intake queue';
         undoBtn.addEventListener('click', async () => {
             undoBtn.disabled = true;
             try {
@@ -4156,7 +3977,7 @@ function renderThresholdToolRow(tool, active, container) {
     });
 })();
 
-/* ── Workshop / Tools tab ───────────────────────────────────── */
+/* ── Ember Council / Sentinel Archetypes tab ────────────────── */
 
 /**
  * Resolve a formatted archetype label for UI display.
@@ -4253,7 +4074,7 @@ function renderEmberCourtMembers(court) {
 }
 
 /**
- * Load and render the Workshop → Ember Court panel.
+ * Load and render the Ember Council → Sentinel Archetypes panel.
  */
 async function loadWorkshopTools() {
     const listEl = document.getElementById('ws-court-list');
@@ -4273,10 +4094,10 @@ async function loadWorkshopTools() {
     }
 }
 
-/* ── Hearth / System: Heart Assignment ──────────────────────── */
+/* ── Hearth / System: Ember Prime Assignment ─────────────────── */
 
 /**
- * Load the Ember Prime assignment UI in Hearth → System tab.
+ * Load the Ember Prime assignment UI in the Hearth → System tab.
  */
 async function loadHearthToolRegistry() {
     const listEl   = document.getElementById('sys-heart-list');
@@ -4290,7 +4111,7 @@ async function loadHearthToolRegistry() {
 
         if (emptyEl) emptyEl.style.display = trusted.length === 0 ? '' : 'none';
 
-        // Remove previous tool rows
+        // Remove previous runtime rows
         listEl.querySelectorAll('.heart-tool-row').forEach(el => el.remove());
 
         const currentHeart = active && active.heart;
@@ -4346,11 +4167,11 @@ async function loadHearthToolRegistry() {
             listEl.insertBefore(row, emptyEl);
         });
     } catch {
-        if (listEl) listEl.innerHTML += '<span class="message-system">Could not load tool registry.</span>';
+        if (listEl) listEl.innerHTML += '<span class="message-system">Could not load runtime registry.</span>';
     }
 }
 
-/* ── Tool Inspector Modal ────────────────────────────────────── */
+/* ── AI Runtime Inspector Modal ───────────────────────────────── */
 
 function closeToolInspector() {
     const overlay = document.getElementById('tool-inspector-overlay');
@@ -4369,7 +4190,7 @@ function openToolInspector(tool, active) {
     };
 
     const titleEl = document.getElementById('tool-insp-title');
-    if (titleEl) titleEl.textContent = tool.name || 'Tool Inspector';
+    if (titleEl) titleEl.textContent = tool.name || 'AI Runtime Inspector';
 
     const statusEl = document.getElementById('tool-insp-status');
     if (statusEl) {
@@ -4404,7 +4225,7 @@ function openToolInspector(tool, active) {
 
         if (!tool.trusted && tool.status === 'detected') {
             actions.push({
-                label: 'Trust Tool',
+                label: 'Trust Runtime',
                 primary: true,
                 fn: async () => {
                     try {
@@ -4466,7 +4287,7 @@ function openToolInspector(tool, active) {
             });
         }
 
-        // Test connection action for detected tools with an endpoint
+        // Test connection action for detected runtimes with an endpoint
         if (tool.status === 'detected' && tool.endpoint) {
             actions.push({
                 label: 'Test Connection',
@@ -4475,7 +4296,7 @@ function openToolInspector(tool, active) {
                     showFlashMessage('Testing connection to ' + tool.name + '…');
                     try {
                         await fetch('/api/tools/scan', { method: 'POST' });
-                        showFlashMessage('Scan complete — check tool status.');
+                        showFlashMessage('Scan complete — check runtime status.');
                         closeToolInspector();
                         loadThresholdTools();
                         loadWorkshopTools();
@@ -4500,7 +4321,7 @@ function openToolInspector(tool, active) {
     overlay.style.display = 'flex';
 }
 
-// Close tool inspector on overlay click or close button
+// Close runtime inspector on overlay click or close button
 (function initToolInspector() {
     const closeBtn = document.getElementById('tool-insp-close');
     const overlay  = document.getElementById('tool-inspector-overlay');
@@ -4603,8 +4424,7 @@ async function inspectSource(sourceId) {
             actions.push({ label: 'Remember to Hearth', fn: () => { closeInspector(); rememberSource(source.id); } });
         }
         actions.push({ label: '→ Hearth Chat',  fn: () => { closeInspector(); sendSourceToChat(source); } });
-        actions.push({ label: '→ Notepad',       fn: () => { closeInspector(); sendSourceToNotepad(source); } });
-        actions.push({ label: '→ Project',       fn: () => { closeInspector(); attachSourceToProject(source.id, source.title || source.file); } });
+        actions.push({ label: '→ Council Drafts', fn: () => { closeInspector(); sendSourceToCouncilDrafts(source); } });
 
         actions.forEach(a => {
             const btn = document.createElement('button');
@@ -4635,7 +4455,6 @@ async function rememberSource(sourceId) {
             if (data.alreadyRemembered) {
                 showFlashMessage('Already in Hearth.');
             } else {
-                loadWorkshopSources();
                 loadHearthArchive();
                 refreshSystemStatus();
                 showFlashMessage('Remembered → Hearth ✓');
@@ -4668,11 +4487,11 @@ function sendSourceToChat(source) {
 }
 
 /**
- * Insert a labeled reference block for the source into the Workshop Notepad.
+ * Insert a labeled reference block for the source into Council Drafts.
  * Appends to existing content — does not overwrite.
  */
-function sendSourceToNotepad(source) {
-    // Switch to Workshop > Drafts
+function sendSourceToCouncilDrafts(source) {
+    // Switch to Ember Council > Drafts
     const workshopTab  = document.querySelector('.room-tab[data-room="workshop"]');
     if (workshopTab) workshopTab.click();
     const notepadTab   = document.querySelector('.sub-tab[data-subtab="ws-drafts"]');
@@ -4696,125 +4515,6 @@ function sendSourceToNotepad(source) {
     showFlashMessage('Reference inserted into Drafts');
 }
 
-/**
- * Attach a source to a Workshop project.
- * Presents a project picker, then calls POST /api/projects/:id/sources.
- */
-async function attachSourceToProject(sourceId, sourceTitle) {
-    let projects = [];
-    try {
-        const res  = await fetch('/api/projects');
-        const data = await res.json();
-        projects   = data.projects || [];
-    } catch {
-        showFlashMessage('Could not load projects.');
-        return;
-    }
-
-    if (projects.length === 0) {
-        showFlashMessage('No projects — create one in Ember Council → Projects first.');
-        return;
-    }
-
-    const options = projects.map((p, i) => (i + 1) + '. ' + p.title).join('\n');
-    const choice  = prompt(
-        'Attach "' + (sourceTitle || sourceId) + '" to which project?\n\n' +
-        options + '\n\nEnter number:'
-    );
-    if (!choice) return;
-
-    const idx = parseInt(choice, 10) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= projects.length) {
-        showFlashMessage('Invalid selection.');
-        return;
-    }
-
-    const project = projects[idx];
-    try {
-        const res  = await fetch('/api/projects/' + encodeURIComponent(project.id) + '/sources', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ sourceId }),
-        });
-        const data = await res.json();
-        if (data.success) {
-            showFlashMessage('Attached to "' + project.title + '" ✓');
-            // Refresh linked sources if the project is currently open
-            if (activeProjectId === project.id) {
-                loadProjectSources(project.id);
-            }
-        } else {
-            showFlashMessage('Attach failed: ' + (data.error || 'Unknown error'));
-        }
-    } catch {
-        showFlashMessage('Could not reach server.');
-    }
-}
-
-/**
- * Render the linked sources section in the active project detail panel.
- */
-async function loadProjectSources(projectId) {
-    const listEl  = document.getElementById('project-sources-list');
-    const emptyEl = document.getElementById('project-sources-empty');
-    if (!listEl) return;
-
-    // Remove previous source rows (keep the empty placeholder)
-    listEl.querySelectorAll('.project-source-row').forEach(el => el.remove());
-    if (emptyEl) emptyEl.style.display = '';
-
-    try {
-        const res  = await fetch('/api/projects/' + encodeURIComponent(projectId));
-        const data = await res.json();
-        if (!data.project) return;
-
-        const linked = data.project.linkedSources || [];
-        if (linked.length === 0) return;
-
-        if (emptyEl) emptyEl.style.display = 'none';
-
-        linked.forEach(ls => {
-            const sid    = typeof ls === 'string' ? ls : ls.sourceId;
-            const title  = typeof ls === 'string' ? ls : (ls.title  || ls.sourceId || '—');
-            const room   = typeof ls === 'string' ? ''  : (ls.room   || '');
-            const status = typeof ls === 'string' ? ''  : (ls.status || '');
-            const desc   = typeof ls === 'string' ? ''  : (ls.description || '');
-
-            const row = document.createElement('div');
-            row.className = 'project-source-row';
-
-            let inner = '<span class="project-source-title">' + escapeHtml(title) + '</span>';
-            if (room)   inner += '<span class="trace-badge"><span class="trace-key">room</span> ' + escapeHtml(room) + '</span>';
-            if (status) inner += '<span class="status-badge ' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>';
-            if (desc)   inner += '<span class="source-card-description" style="margin-left:0.3rem;">' + escapeHtml(desc) + '</span>';
-            row.innerHTML = inner;
-
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'secondary source-action-btn';
-            removeBtn.title = 'Remove from project';
-            removeBtn.textContent = '✕';
-            removeBtn.addEventListener('click', async () => {
-                try {
-                    await fetch('/api/projects/' + encodeURIComponent(projectId) + '/sources/' + encodeURIComponent(sid), {
-                        method: 'DELETE',
-                    });
-                    loadProjectSources(projectId);
-                } catch { /* ignore */ }
-            });
-
-            row.appendChild(removeBtn);
-            listEl.insertBefore(row, emptyEl);
-        });
-    } catch {
-        if (listEl) {
-            const errEl = document.createElement('span');
-            errEl.className = 'message-system';
-            errEl.textContent = 'Could not load sources.';
-            listEl.appendChild(errEl);
-        }
-    }
-}
-
 /** Show a brief flash message at the bottom of the viewport. */
 let _flashTimeout = null;
 function showFlashMessage(msg) {
@@ -4832,7 +4532,7 @@ function showFlashMessage(msg) {
 }
 
 /* ================================================================
-   Phase 8 — Startup Checklist, Airlock UI, Tool Readiness
+   Phase 8 — Startup Checklist, Airlock UI, AI Setup Readiness
    ================================================================ */
 
 /**
@@ -4870,7 +4570,7 @@ async function loadStartupCheck() {
         }
         if (totalIntake > 0) summaryParts.push(totalIntake + ' file' + (totalIntake === 1 ? '' : 's') + ' awaiting review');
         if (data.offlineTools > 0) summaryParts.push(data.offlineTools + ' AI offline');
-        if (data.newTools > 0) summaryParts.push(data.newTools + ' new tool' + (data.newTools === 1 ? '' : 's') + ' detected');
+        if (data.newTools > 0) summaryParts.push(data.newTools + ' new runtime' + (data.newTools === 1 ? '' : 's') + ' detected');
 
         const summaryEl = document.getElementById('startup-banner-summary');
         if (summaryEl) {
@@ -4896,15 +4596,15 @@ async function loadStartupCheck() {
             stats.push({ label: 'threshold clear', value: '✓', style: 'ok', group: 'Intake' });
         }
 
-        // ── Tools group ──────────────────────────────────────────────
+        // ── AI Setup group ───────────────────────────────────────────
         if (data.runningTools > 0) {
-            stats.push({ label: 'tools running', value: data.runningTools, style: 'ok', group: 'Tools' });
+            stats.push({ label: 'runtimes online', value: data.runningTools, style: 'ok', group: 'AI Setup' });
         }
         if (data.offlineTools > 0) {
-            stats.push({ label: 'tools offline', value: data.offlineTools, style: 'error', group: 'Tools' });
+            stats.push({ label: 'runtimes offline', value: data.offlineTools, style: 'error', group: 'AI Setup' });
         }
         if (data.newTools > 0) {
-            stats.push({ label: 'new tools detected', value: data.newTools, style: 'warn', group: 'Tools' });
+            stats.push({ label: 'new runtimes detected', value: data.newTools, style: 'warn', group: 'AI Setup' });
         }
 
         // Active Ember Prime
@@ -4914,10 +4614,10 @@ async function loadStartupCheck() {
                 label: 'ember prime',
                 value: data.activeHeart + (data.activeHeartAvailable ? ' ✓' : ' (offline)'),
                 style: data.activeHeartAvailable ? 'ok' : 'error',
-                group: 'Tools',
+                group: 'AI Setup',
             });
         } else {
-            stats.push({ label: 'ember prime', value: 'none set', style: 'zero', group: 'Tools' });
+            stats.push({ label: 'ember prime', value: 'none set', style: 'zero', group: 'AI Setup' });
         }
 
         // ── Render grouped stats ─────────────────────────────────────
@@ -4977,11 +4677,11 @@ function renderSystemStartupSummary(data) {
             ],
         },
         {
-            title: 'Tools',
+            title: 'AI Setup',
             rows: [
-                { key: 'New tools',      val: data.newTools      || 0 },
-                { key: 'Running tools',  val: data.runningTools  || 0 },
-                { key: 'Offline tools',  val: data.offlineTools  || 0 },
+                { key: 'New runtimes',      val: data.newTools      || 0 },
+                { key: 'Running runtimes',  val: data.runningTools  || 0 },
+                { key: 'Offline runtimes',  val: data.offlineTools  || 0 },
                 { key: 'Active Ember Prime', val: data.activeHeart || '—' },
                 { key: 'Ember Prime ready',  val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
             ],

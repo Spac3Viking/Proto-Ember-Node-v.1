@@ -9,6 +9,9 @@ caches, and offline resilience.
 The AI inside the system is called **The Heart** — a grounded resident intelligence that
 answers from remembered local knowledge, not just the base model.
 
+Legacy cleanup note: older Workshop/tool/cartridge language has been retired in favor of
+Ember Council, AI setup, and caches.
+
 ---
 
 ## Architecture: Shell over a User-Owned Archive
@@ -90,15 +93,14 @@ workspace rather than a static retrieval viewer.
 
 ### What changed
 
-**Indexed sources are now actionable.**  Every source card in Workshop → Index and
+**Indexed sources are now actionable.**  Every source card in Ember Council and
 Hearth → Archive now exposes an action row with:
 
 - **Inspect** — opens the Source Inspector panel
 - **▾ Actions** dropdown:
-  - *Remember to Hearth* — promotes a Workshop/Threshold source to Hearth
+  - *Remember to Hearth* — promotes an Ember Council/Threshold source to Hearth
   - *→ Hearth Chat* — attaches the source as active reference context for the chat
-  - *→ Notepad* — inserts a labeled reference block into the Workshop Notepad
-  - *→ Project* — attaches the source to a Workshop project
+  - *→ Council Drafts* — inserts a labeled reference block into Council Drafts
 
 **Explicit Remember to Hearth is available.**  Users can explicitly promote any indexed
 source to Hearth with a single action.  The source file is copied to `hearth/`, the
@@ -111,7 +113,7 @@ user action.
 - Source filename in monospace
 - Collapsible *Path & Storage* section with storage-root-relative path and Source ID
 - Plaintext preview excerpt (txt/md files)
-- Quick action buttons: Remember, Send to Chat/Notepad/Project
+- Quick action buttons: Remember, Send to Chat/Notepad
 
 **Sources can be sent to Hearth Chat.**  Attaching a source to Hearth Chat adds it to
 an active-references bar above the input.  These source IDs are passed to `/api/chat`
@@ -119,14 +121,10 @@ as `sourceIds`, which pins their chunks into the grounded retrieval context even
 not semantically top-ranked.
 
 **Sources can be sent to Notepad.**  Inserts a labeled reference block (title, ID, room)
-into the Workshop Notepad textarea.  Appends — does not overwrite existing content.
-
-**Projects support linked sources.**  Attaching a source to a project records it in
-`project.linkedSources` (title, room, status, description).  The project detail panel
-now shows the linked sources list with room and status badges and a remove button.
+into the Council Drafts textarea.  Appends — does not overwrite existing content.
 
 **Archive items are usable references.**  Hearth → Archive items are rendered with the
-same action row as Workshop index items (minus Remember, since they are already Hearth
+same action row as Ember Council indexed items (minus Remember, since they are already Hearth
 sources).
 
 **Path visibility exists.**  The Source Inspector's collapsible *Path & Storage* section
@@ -364,7 +362,7 @@ On first run, Ember Node creates the full directory tree automatically.
     bootstrap/      — Active bootstrap state
     config/         — System configuration
     prompts/        — System prompts
-    tools/          — Tool registry state
+    tools/          — AI runtime registry state
   archive/
     core/           — Default trusted archive (Green Fire Core)
       codices/      — Green Fire Codices
@@ -458,8 +456,8 @@ It is not implemented in the current runtime.
 | `GET`  | `/api/sources/:id` | Get single source manifest + preview (Phase 6) |
 | `POST` | `/api/sources/:id/exclude` | Toggle source exclusion from retrieval |
 | `POST` | `/api/sources/:id/remember` | Promote source to Hearth — copies file and re-indexes (Phase 6) |
-| `POST` | `/api/notes` | Save a Workshop note (deterministic filename; creates manifest entry) |
-| `GET`  | `/api/notes` | List Workshop notes |
+| `POST` | `/api/notes` | Save an Ember Council note (deterministic filename; creates manifest entry) |
+| `GET`  | `/api/notes` | List Ember Council notes |
 | `GET`  | `/api/threshold/list` | List files in Threshold intake |
 | `GET`  | `/api/status` | System status (chunks, sources, embeddings, storage root, cache breakdown) |
 | `GET`  | `/api/storage-info` | Active data root, directory layout, migration state, cache counts |
@@ -471,7 +469,7 @@ It is not implemented in the current runtime.
 | `POST` | `/api/threads` | Create a new chat thread |
 | `GET`  | `/api/threads/:id` | Get thread with messages |
 | `POST` | `/api/threads/:id/messages` | Add message to thread |
-| `GET`  | `/api/projects` | List Workshop projects |
+| `GET`  | `/api/projects` | List Ember Council projects |
 | `POST` | `/api/projects` | Create a project |
 | `GET`  | `/api/projects/:id` | Get a project |
 | `PUT`  | `/api/projects/:id` | Update a project |
@@ -483,9 +481,9 @@ It is not implemented in the current runtime.
 ### Phase 7 (new)
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/api/tools`                   | List all tools in the registry |
+| `GET`  | `/api/tools`                   | List all AI runtimes in the registry |
 | `POST` | `/api/tools/scan`              | Trigger a discovery scan |
-| `POST` | `/api/tools/:id/trust`         | Trust or revoke a tool |
+| `POST` | `/api/tools/:id/trust`         | Trust or revoke an AI runtime |
 | `POST` | `/api/tools/:id/role`          | Assign a role (mirror / forge) |
 | `GET`  | `/api/tools/active`            | Get current Heart assignment |
 | `POST` | `/api/tools/active`            | Set the active Heart |
@@ -550,13 +548,13 @@ Trace indicates: *base model — no local sources*.
 | Phase 1 ✓ | Local Node/Express + Ollama chat + basic cache endpoints |
 | Phase 2 ✓ | Green Fire UI shell + Cache Shelf + room navigation |
 | Phase 3 ✓ | Document ingestion, chunking, embeddings, retrieval, signal trace |
-| Phase 3.2 ✓ | Deterministic source IDs, embeddings endpoint fallback, room-transfer file moves, Workshop notes indexing, tiered rate limiting |
+| Phase 3.2 ✓ | Deterministic source IDs, embeddings endpoint fallback, room-transfer file moves, Ember Council notes indexing, tiered rate limiting |
 | Phase 4 ✓ | Threads, projects, user caches, Threshold intake, PDF/DOCX support |
 | Phase 5 ✓ | Storage stabilization: external data root, legacy migration, storage-root-native paths, cache ownership clarity, portability readiness |
 | Phase 6 ✓ | Mobility layer: actionable source cards, source inspector, Remember to Hearth, Send To (Chat/Notepad/Project), project linked sources, path visibility, cross-room reference flow |
-| Phase 7 ✓ | AI/tool discovery, trust flow, role assignment, Heart selection, tool registry |
-| Phase 8 ✓ | Startup checklist, airlock discipline, tool readiness, changed-file detection |
-| Phase 8.5 ✓ | Intake persistence, durable reject, changed-file flow, tool setup polish |
+| Phase 7 ✓ | AI runtime discovery, trust flow, role assignment, Heart selection, runtime registry |
+| Phase 8 ✓ | Startup checklist, airlock discipline, AI setup readiness, changed-file detection |
+| Phase 8.5 ✓ | Intake persistence, durable reject, changed-file flow, AI setup polish |
 | Phase 8.75 ✓ | Cleanup pass: redundancy removal, DATA_DIR alias eliminated, path consolidation, duplicate constant consolidation, documentation update |
 | Phase 8.95 ✓ | Backend modularization: `server.js` reduced to ~140 lines; routes split by domain into `app/routes/`; intake state extracted to `app/intakeState.js`; startup summary to `app/startupCheck.js`; tool registry to `app/toolRegistry.js` |
 | Phase 10 ✓ | Launcher + local install experience: `Awaken-Ember-Node.bat` one-click launcher, optional Ollama auto-start, startup ritual banner, no-Heart setup guide, desktop shortcut docs, future installer groundwork |
@@ -573,8 +571,8 @@ in dedicated modules:
 
 | Module | Responsibility |
 |---|---|
-| `app/intakeState.js` | Threshold intake state: load, save, upsert file/tool entries |
-| `app/toolRegistry.js` | Tool registry: load, save, merge discovered tools, resolve active Heart |
+| `app/intakeState.js` | Threshold intake state: load, save, upsert file/runtime entries |
+| `app/toolRegistry.js` | AI runtime registry: load, save, merge discovered runtimes, resolve active Heart |
 | `app/startupCheck.js` | Startup summary: triageFile, changed-file scan, launch summary generator |
 | `app/rateLimiters.js` | Shared rate limiter instances (read / write / index / chat) |
 
@@ -615,9 +613,9 @@ in dedicated modules:
   - `writeLimiter` (60 req/min) — ingest, note saving, source exclude
   - `indexLimiter` (10 req/min) — cache and file indexing
 
-- **Workshop notes are first-class Workshop sources.** Each saved note registers a
+- **Ember Council notes are first-class Ember Council sources.** Each saved note registers a
   manifest entry so it can be indexed via `POST /api/index/file` and retrieved by
-  Hearth as a Workshop source.  Notes with the same title overwrite their prior file,
+  Hearth as an Ember Council source.  Notes with the same title overwrite their prior file,
   keeping source identity stable.
 
 - **Reindexing cleans up stale embeddings.** Before replacing chunks for a source,

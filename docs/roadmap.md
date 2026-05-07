@@ -8,9 +8,9 @@
 
 ## Phase 2 ✓ — Green Fire UI Shell
 - Green Fire Archive design system
-- Five-room navigation (Hearth, Workshop, Threshold, Caches, System)
+- Legacy five-room navigation (Hearth, Workshop, Threshold, Caches, System), now consolidated into Hearth, Ember Council, and Threshold
 - Cache Shelf — browse, inspect, and read installed caches
-- Workshop draft panel
+- Ember Council drafts panel
 - Threshold intake scaffold
 - System room with live Ollama/model status
 - data/ directory scaffold
@@ -23,17 +23,17 @@
 - Room-aware retrieval — Hearth prioritised, Threshold excluded by default
 - Grounded Heart chat via `/api/chat`
 - Signal Trace — visible source provenance on every response
-- Cache indexing from Workshop
-- Workshop note saving
+- Cache indexing from Ember Council
+- Ember Council note saving
 - Threshold file intake (drag-and-drop, file browse)
 - caches/*/docs/ recursive reading and indexing
 - `/api/sources`, `/api/index/cache/:id`, `/api/index/file` endpoints
 
 ## Phase 4 — Remember / Archive Mechanics
-- Formal "Remember" action to promote Workshop material to Hearth
+- Formal "Remember" action to promote Ember Council material to Hearth
 - Curated Hearth writes with user approval
 - Archive management — browse, annotate, retire
-- Workshop snapshot persistence
+- Ember Council snapshot persistence
 
 ## Phase 5 — Local Storage Root + Data Separation
 - `app/storageConfig.js` — configurable data root module

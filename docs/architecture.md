@@ -77,14 +77,14 @@ Ember Node is structured around three primary rooms:
 | Room | Rune | Identity |
 |------|------|----------|
 | Hearth | ᚺ | Reflection and Remembered Signal |
-| Workshop | ᚹ | Crafting, Coding, and Refinement |
+| Ember Council | ᚹ | Archetypal perspectives for crafting, coding, and refinement |
 | Threshold | ᚦ | Boundary of Exchange |
 
 These three rooms replace the previous five-room model. The Caches room and System room
 are dissolved as separate spaces:
 
 - **System identity** belongs inside Hearth
-- **Caches** belong inside Workshop
+- **Caches** belong inside Ember Council
 
 This creates a simpler and more meaningful architecture where each room has a distinct and
 coherent purpose.
@@ -112,7 +112,7 @@ preserved knowledge.
 ### Hearth Is Reflective and Generative
 
 Hearth does not only preserve knowledge — it also helps generate future knowledge.
-Remembered works can be intentionally drawn back into Workshop to serve as high-quality
+Remembered works can be intentionally drawn back into Ember Council to serve as high-quality
 context for new creation. This is a core principle of the system.
 
 ### Remembered Works Feed Future Creation
@@ -160,28 +160,28 @@ intentional curation and clear navigation.
 
 ---
 
-## Workshop — Room of Crafting, Coding, and Refinement
+## Ember Council — Room of Crafting, Coding, and Refinement
 
-Workshop is the active creation environment. It is where the user and the Heart shape works
-together. Workshop should feel like a forge, a lab, and a drafting studio — a place of
+Ember Council is the active creation environment. It is where the user and the Heart shape works
+together. Ember Council should feel like a forge, a lab, and a drafting studio — a place of
 active making.
 
-### What Workshop Contains
+### What Ember Council Contains
 
 - notepad and scratchpad
 - draft writing area
 - code editing and experimentation
 - cache shelf and cache development
-- tools and manuals
+- sentinel archetypes and manuals
 - works in progress
 - review queues
 - build experiments
 - branch-like project states
 - snapshot and iteration workflows
 
-### Workshop Is Where Remembered Signal Is Recombined
+### Ember Council Is Where Remembered Signal Is Recombined
 
-Remembered works from Hearth can be brought into Workshop to:
+Remembered works from Hearth can be brought into Ember Council to:
 
 - inspire new writing
 - serve as AI context
@@ -191,11 +191,11 @@ Remembered works from Hearth can be brought into Workshop to:
 - build new caches
 - generate export packages
 
-Workshop is where remembered signal becomes new signal.
+Ember Council is where remembered signal becomes new signal.
 
 ### Code and Symbolic Systems
 
-Workshop is explicitly a space for:
+Ember Council is explicitly a space for:
 
 - learning code
 - shaping code with AI assistance
@@ -205,11 +205,11 @@ Workshop is explicitly a space for:
 The system supports collaborative development between user and Heart. Code is not a separate
 domain — it is another form of signal subject to the same refinement process.
 
-### Workshop Shelves
+### Ember Council Shelves
 
 | Shelf | Purpose |
 |-------|---------|
-| Tool Shelf | active utilities and scripts |
+| Sentinel Archetypes Shelf | active archetypal perspectives and runtime roles |
 | Manual Shelf | technical references and guides |
 | Draft Shelf | works in progress |
 | Build Shelf | active build experiments and project states |
@@ -271,9 +271,9 @@ Material enters the node through Threshold. Examples include documents, research
 external AI responses, returned drafts, and source texts. All incoming material lands in
 Threshold first. Nothing bypasses this boundary.
 
-### Step 2 — Examination in Workshop
+### Step 2 — Examination in Ember Council
 
-Selected material is pulled from Threshold into Workshop. There it may be examined,
+Selected material is pulled from Threshold into Ember Council. There it may be examined,
 annotated, refined, merged, coded, turned into new writing, converted into caches, or
 discarded.
 
@@ -288,11 +288,11 @@ requires an explicit user action — nothing moves into Hearth automatically.
 The user interacts with remembered works and the Heart. This reflective space supports
 deeper thinking, synthesis, and deliberate engagement with the node's accumulated signal.
 
-### Step 5 — Return to Workshop
+### Step 5 — Return to Ember Council
 
-Remembered works may be intentionally pulled back into Workshop. This allows recombination,
+Remembered works may be intentionally pulled back into Ember Council. This allows recombination,
 new drafts, philosophical development, new code, cache creation, and further refinement.
-The act of returning remembered works to Workshop is one of the key creative gestures of the
+The act of returning remembered works to Ember Council is one of the key creative gestures of the
 node.
 
 ### Step 6 — Export Through Threshold
@@ -303,12 +303,12 @@ packages, caches, AI context bundles, and publication outputs.
 ### Step 7 — External Responses Return Through Threshold
 
 External systems may generate responses or transformations. Those responses return through
-Threshold and re-enter Workshop for further refinement.
+Threshold and re-enter Ember Council for further refinement.
 
 ### The Recursive Loop
 
 ```
-Threshold → Workshop → Hearth → Workshop → Threshold
+Threshold → Ember Council → Hearth → Ember Council → Threshold
 ```
 
 Each cycle ideally produces more refined signal. There is no endpoint — the loop continues
@@ -370,7 +370,7 @@ structural element of the node's identity.
 - nothing writes to Hearth automatically
 - network is an expedition, not a dependency
 - chat is a pane, not the whole room
-- caches live in Workshop, not a separate room
+- caches live in Ember Council, not a separate room
 - system identity lives in Hearth, not a separate room
 - all AI-generated changes require user review before being remembered
 - remembered works fuel future creation
@@ -383,7 +383,7 @@ structural element of the node's identity.
 | Phase | Focus |
 |-------|-------|
 | Phase 1 ✓ | Local Node/Express + Ollama chat + basic cache endpoints |
-| Phase 2 ✓ | Green Fire UI shell + Workshop Cache Shelf + three-room navigation |
+| Phase 2 ✓ | Green Fire UI shell + Ember Council Cache Shelf + three-room navigation |
 | Phase 3   | Document ingestion, chunking, embeddings, retrieval, signal trace |
 | Phase 4   | Remember / Archive mechanics, curated Hearth writes |
 | Phase 5   | Offline cache engine, portable export/import, desktop shell |

@@ -207,14 +207,7 @@ function createSystemRouter({ migrationResult }) {
             ollamaBaseUrl:     OLLAMA_BASE_URL,
             port:              3477,
             cacheCount:    bundledCacheCount,
-            // Deprecated compatibility fields.
-            // TODO(phase-15-9c): remove legacy cartridge aliases.
-            cartridgeCount: bundledCacheCount,
             caches: {
-                bundled:       bundledCacheCount,
-                user:          userCacheCount,
-            },
-            cartridges: {
                 bundled:       bundledCacheCount,
                 user:          userCacheCount,
             },
@@ -342,7 +335,6 @@ function createSystemRouter({ migrationResult }) {
                 projects:   PROJECTS_DIR,
                 threads:    THREADS_DIR,
                 caches: USER_CACHES_DIR,
-                cartridges: USER_CACHES_DIR,
                 system:     SYSTEM_DIR,
                 exports:    EXPORTS_DIR,
             },
@@ -353,10 +345,6 @@ function createSystemRouter({ migrationResult }) {
                 errors:    migrationResult.errors,
             },
             caches: {
-                bundled: listCaches().length,
-                user:    userCacheCount,
-            },
-            cartridges: {
                 bundled: listCaches().length,
                 user:    userCacheCount,
             },
