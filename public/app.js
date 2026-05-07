@@ -684,6 +684,7 @@ function startExtendedRuneAettirAnimation(containerEl) {
                 allRunes[index].classList.add('visible');
                 index += 1;
             } else {
+                // Once fully visible, traverse the same rune order to fade out.
                 mode = 'hide';
                 index = 0;
             }
@@ -3922,6 +3923,7 @@ async function loadThresholdTools() {
 }
 
 const THRESHOLD_AI_SUGGESTED_COMMANDS = [
+    // Lightweight-to-mid local defaults that are broadly practical on consumer hardware.
     'ollama pull gemma3:4b',
     'ollama pull llama3.1:8b',
     'ollama pull mistral:7b',
@@ -4237,7 +4239,7 @@ function renderEmberCourtMembers(court) {
 
     const activeMember = members.find(m => normalizeCourtMemberId(m.id) === activeMemberId) || null;
     if (activeEl) {
-        if (!activeMember || activeMemberId === EMBER_PRIME_MEMBER_ID) {
+        if (activeMemberId === EMBER_PRIME_MEMBER_ID || !activeMember) {
             activeEl.textContent = 'Active archetype: Ember Prime';
         } else {
             const normalizedActiveId = normalizeCourtMemberId(activeMember.id);
