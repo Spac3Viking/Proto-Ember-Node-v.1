@@ -168,7 +168,7 @@ Phase 3 implements the first true memory-and-retrieval loop:
 | Room | Rune | Purpose |
 |------|------|---------|
 | Hearth | ᚺ | Reflection and remembered signal — grounded Heart chat with Signal Trace |
-| Ember Council | ᚹ | Archetypal perspectives for shaping, testing, and refining the signal |
+| Ember Council | ᚹ | Archetypal perspectives for shaping, testing, and refining the signal (notes, projects, documents, source management) |
 | Threshold | ᚦ | Boundary of exchange — file intake, staging, inspection before Hearth access |
 
 Cartridges live inside Ember Council. System identity lives inside Hearth.
@@ -396,6 +396,8 @@ On first run, Ember Node creates the full directory tree automatically.
   cartridges/       — User-created cartridge metadata
   exports/          — Outbound packages
 ```
+
+Note: the internal storage folder remains `workshop/` for backward compatibility with existing data and routes, while the visible UI name is **Ember Council**.
 
 ### Content Layer Distinctions
 
