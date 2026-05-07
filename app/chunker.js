@@ -11,21 +11,21 @@ const DEFAULT_CHUNK_SIZE    = 500;   // characters per chunk
 const DEFAULT_CHUNK_OVERLAP = 100;   // character overlap between chunks
 
 /**
- * Generate a deterministic chunk ID from room, cartridge, file, and position.
+ * Generate a deterministic chunk ID from room, cache, file, and position.
  *
  * @param {object} opts
  * @param {string}      opts.room
- * @param {string|null} opts.cartridgeId
+ * @param {string|null} opts.cacheId
  * @param {string}      opts.file
  * @param {number}      opts.index
  * @returns {string}
  */
-function makeChunkId({ room, cartridgeId, file, index }) {
+function makeChunkId({ room, cacheId, file, index }) {
     const safeName       = file.replace(/[^a-z0-9]/gi, '-').toLowerCase();
-    const safeCartridge  = cartridgeId
-        ? cartridgeId.replace(/[^a-z0-9]/gi, '-').toLowerCase()
+    const safeCache  = cacheId
+        ? cacheId.replace(/[^a-z0-9]/gi, '-').toLowerCase()
         : null;
-    const parts = [room, safeCartridge, safeName, String(index).padStart(3, '0')];
+    const parts = [room, safeCache, safeName, String(index).padStart(3, '0')];
     return parts.filter(Boolean).join('-');
 }
 
@@ -47,14 +47,14 @@ function chunkText({
 }) {
     const {
         room,
-        cartridgeId,
+        cacheId,
         file,
         path:       filePath,
         sourceType,
         id:         sourceId,
     } = sourceRecord;
 
-    const shelf  = cartridgeId || 'default';
+    const shelf  = cacheId || 'default';
     const chunks = [];
     let start    = 0;
     let index    = 0;
@@ -65,11 +65,11 @@ function chunkText({
 
         if (chunkBody.length > 0) {
             chunks.push({
-                id:          makeChunkId({ room, cartridgeId, file, index }),
+                id:          makeChunkId({ room, cacheId, file, index }),
                 room,
                 shelf,
                 sourceType,
-                cartridgeId: cartridgeId || null,
+                cacheId: cacheId || null,
                 file,
                 path:        filePath,
                 text:        chunkBody,

@@ -79,12 +79,12 @@ describe('GET /api/status', () => {
         setSelectedModel('gemma3:4b');
     });
 
-    test('returns 200 with model, cartridgeCount, and port', async () => {
+    test('returns 200 with model, cacheCount, and port', async () => {
         const res = await request(app).get('/api/status');
         expect(res.status).toBe(200);
         expect(res.body.model).toBe('gemma3:4b');
-        expect(typeof res.body.cartridgeCount).toBe('number');
-        expect(res.body.cartridgeCount).toBeGreaterThan(0);
+        expect(typeof res.body.cacheCount).toBe('number');
+        expect(res.body.cacheCount).toBeGreaterThan(0);
         expect(res.body.port).toBe(3477);
     });
 });

@@ -44,7 +44,7 @@
  *         sagas/               — Green Fire Sagas
  *         reference/           — Reference materials
  *       caches/                — Future downloadable archive expansions
- *       cartridges/            — Future modular functional/content modules
+ *       legacy-caches/         — deprecated legacy cache modules (cleanup target)
  *       literature/            — curated literary sources (legacy shelf)
  *       history/               — curated historical sources (legacy shelf)
  *       science/               — curated scientific sources (legacy shelf)
@@ -52,7 +52,7 @@
  *     indexes/                 — local knowledge index (chunks, embeddings, manifests)
  *     projects/                — Workshop project files
  *     threads/                 — chat thread records
- *     cartridges/              — user-created cartridge metadata (NOT bundled cartridges)
+ *     caches/              — user-created cache metadata (NOT bundled caches)
  *     system/                  — system state
  *     exports/                 — outbound packages
  *
@@ -140,7 +140,7 @@ const THRESHOLD_FLAGGED_DIR  = path.join(DATA_ROOT, 'threshold', 'flagged');
 const INDEXES_DIR         = path.join(DATA_ROOT, 'indexes');
 const PROJECTS_DIR        = path.join(DATA_ROOT, 'projects');
 const THREADS_DIR         = path.join(DATA_ROOT, 'threads');
-const USER_CARTRIDGES_DIR = path.join(DATA_ROOT, 'cartridges');
+const USER_CACHES_DIR = path.join(DATA_ROOT, 'caches');
 const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
 const EXPORTS_DIR         = path.join(DATA_ROOT, 'exports');
 const DOCUMENTS_DIR       = path.join(DATA_ROOT, 'documents');
@@ -190,11 +190,11 @@ const ARCHIVE_CORE_DIRS = {
 const ARCHIVE_CACHES_DIR      = path.join(ARCHIVE_DIR, 'caches');
 
 /**
- * Modular functional/content cartridges.
+ * Modular functional/content caches.
  * Distinct from caches — may contain documents, prompts, assets, or
  * specialized node modules.
  */
-const ARCHIVE_CARTRIDGES_DIR  = path.join(ARCHIVE_DIR, 'cartridges');
+const ARCHIVE_LEGACY_CACHES_DIR  = path.join(ARCHIVE_DIR, 'legacy-caches');
 
 /**
  * Subdirectories within the Trusted Archive (legacy flat shelf layout).
@@ -229,6 +229,10 @@ const MAPS_DIRS = {
     workshop:  path.join(ROOM_DIRS.workshop, 'maps'),
     threshold: path.join(ROOM_DIRS.threshold, 'maps'),
 };
+
+// Ember Council terminology note:
+// Runtime room key remains "workshop" for compatibility with existing data and routes.
+// TODO(phase-15-9c): evaluate a full storage migration from workshop/ to council/.
 
 // Placeholder files that should not be treated as real user content
 const SEED_TEMPLATE_MARKER = '.ember-seed-template.json';
@@ -280,7 +284,7 @@ function ensureDataRoot() {
         INDEXES_DIR,
         PROJECTS_DIR,
         THREADS_DIR,
-        USER_CARTRIDGES_DIR,
+        USER_CACHES_DIR,
         SYSTEM_DIR,
         EXPORTS_DIR,
         DOCUMENTS_DIR,
@@ -300,7 +304,7 @@ function ensureDataRoot() {
         // Phase 11.7: Core Archive + Cache Structure
         ARCHIVE_CORE_DIR,
         ARCHIVE_CACHES_DIR,
-        ARCHIVE_CARTRIDGES_DIR,
+        ARCHIVE_LEGACY_CACHES_DIR,
         SYSTEM_CONFIG_DIR,
         SYSTEM_PROMPTS_DIR,
         SYSTEM_TOOLS_DIR,
@@ -560,7 +564,7 @@ module.exports = {
     INDEXES_DIR,
     PROJECTS_DIR,
     THREADS_DIR,
-    USER_CARTRIDGES_DIR,
+    USER_CACHES_DIR,
     SYSTEM_DIR,
     EXPORTS_DIR,
     DOCUMENTS_DIR,
@@ -579,7 +583,7 @@ module.exports = {
     ARCHIVE_CORE_DIR,
     ARCHIVE_CORE_DIRS,
     ARCHIVE_CACHES_DIR,
-    ARCHIVE_CARTRIDGES_DIR,
+    ARCHIVE_LEGACY_CACHES_DIR,
     SYSTEM_CONFIG_DIR,
     SYSTEM_PROMPTS_DIR,
     SYSTEM_TOOLS_DIR,
@@ -600,3 +604,8 @@ module.exports = {
     seedDataRoot,
     resolveSourcePath,
 };
+
+// Deprecated compatibility aliases.
+// TODO(phase-15-9c): remove after all modules/tests fully migrate to cache naming.
+module.exports.USER_CARTRIDGES_DIR = USER_CACHES_DIR;
+module.exports.ARCHIVE_CARTRIDGES_DIR = ARCHIVE_LEGACY_CACHES_DIR;

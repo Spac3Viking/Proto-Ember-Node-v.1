@@ -80,11 +80,11 @@ Ember Node is structured around three primary rooms:
 | Workshop | ᚹ | Crafting, Coding, and Refinement |
 | Threshold | ᚦ | Boundary of Exchange |
 
-These three rooms replace the previous five-room model. The Cartridges room and System room
+These three rooms replace the previous five-room model. The Caches room and System room
 are dissolved as separate spaces:
 
 - **System identity** belongs inside Hearth
-- **Cartridges** belong inside Workshop
+- **Caches** belong inside Workshop
 
 This creates a simpler and more meaningful architecture where each room has a distinct and
 coherent purpose.
@@ -171,7 +171,7 @@ active making.
 - notepad and scratchpad
 - draft writing area
 - code editing and experimentation
-- cartridge shelf and cartridge development
+- cache shelf and cache development
 - tools and manuals
 - works in progress
 - review queues
@@ -188,7 +188,7 @@ Remembered works from Hearth can be brought into Workshop to:
 - guide coding and design
 - support research
 - refine philosophical ideas
-- build new cartridges
+- build new caches
 - generate export packages
 
 Workshop is where remembered signal becomes new signal.
@@ -213,7 +213,7 @@ domain — it is another form of signal subject to the same refinement process.
 | Manual Shelf | technical references and guides |
 | Draft Shelf | works in progress |
 | Build Shelf | active build experiments and project states |
-| Cartridge Shelf | installed and in-development cartridges |
+| Cache Shelf | installed and in-development caches |
 | Notes Shelf | scratchpad material and quick captures |
 | To-Read Shelf | queued incoming material |
 | Review Shelf | items awaiting user inspection or approval |
@@ -241,7 +241,7 @@ Outbound — material leaving the node:
 - staging of export artifacts
 - packaging of outward material
 - knowledge packages
-- cartridges and AI context bundles
+- caches and AI context bundles
 - publication outputs
 
 Nothing that enters through Threshold writes itself into Hearth automatically. All incoming
@@ -274,7 +274,7 @@ Threshold first. Nothing bypasses this boundary.
 ### Step 2 — Examination in Workshop
 
 Selected material is pulled from Threshold into Workshop. There it may be examined,
-annotated, refined, merged, coded, turned into new writing, converted into cartridges, or
+annotated, refined, merged, coded, turned into new writing, converted into caches, or
 discarded.
 
 ### Step 3 — Remembering in Hearth
@@ -291,14 +291,14 @@ deeper thinking, synthesis, and deliberate engagement with the node's accumulate
 ### Step 5 — Return to Workshop
 
 Remembered works may be intentionally pulled back into Workshop. This allows recombination,
-new drafts, philosophical development, new code, cartridge creation, and further refinement.
+new drafts, philosophical development, new code, cache creation, and further refinement.
 The act of returning remembered works to Workshop is one of the key creative gestures of the
 node.
 
 ### Step 6 — Export Through Threshold
 
 Refined works may be staged in Threshold for export. Examples include documents, knowledge
-packages, cartridges, AI context bundles, and publication outputs.
+packages, caches, AI context bundles, and publication outputs.
 
 ### Step 7 — External Responses Return Through Threshold
 
@@ -370,7 +370,7 @@ structural element of the node's identity.
 - nothing writes to Hearth automatically
 - network is an expedition, not a dependency
 - chat is a pane, not the whole room
-- cartridges live in Workshop, not a separate room
+- caches live in Workshop, not a separate room
 - system identity lives in Hearth, not a separate room
 - all AI-generated changes require user review before being remembered
 - remembered works fuel future creation
@@ -382,9 +382,9 @@ structural element of the node's identity.
 
 | Phase | Focus |
 |-------|-------|
-| Phase 1 ✓ | Local Node/Express + Ollama chat + basic cartridge endpoints |
-| Phase 2 ✓ | Green Fire UI shell + Workshop Cartridge Shelf + three-room navigation |
+| Phase 1 ✓ | Local Node/Express + Ollama chat + basic cache endpoints |
+| Phase 2 ✓ | Green Fire UI shell + Workshop Cache Shelf + three-room navigation |
 | Phase 3   | Document ingestion, chunking, embeddings, retrieval, signal trace |
 | Phase 4   | Remember / Archive mechanics, curated Hearth writes |
-| Phase 5   | Offline cartridge engine, portable export/import, desktop shell |
+| Phase 5   | Offline cache engine, portable export/import, desktop shell |
 | Phase 6   | Symbolic interface language, runic room markers, trust boundary visualization |

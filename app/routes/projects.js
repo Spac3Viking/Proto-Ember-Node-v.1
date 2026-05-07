@@ -9,10 +9,10 @@
  * PUT    /api/projects/:id
  * POST   /api/projects/:id/sources
  * DELETE /api/projects/:id/sources/:sourceId
- * GET    /api/user-cartridges
- * POST   /api/user-cartridges
- * GET    /cartridges
- * GET    /cartridges/:name
+ * GET    /api/user-caches
+ * POST   /api/user-caches
+ * GET    /caches
+ * GET    /caches/:name
  */
 
 const crypto  = require('crypto');
@@ -20,9 +20,9 @@ const express = require('express');
 const fs      = require('fs');
 const path    = require('path');
 const { readLimiter, writeLimiter }        = require('../rateLimiters');
-const { PROJECTS_DIR, USER_CARTRIDGES_DIR } = require('../storageConfig');
+const { PROJECTS_DIR, USER_CACHES_DIR } = require('../storageConfig');
 const { loadManifests }                     = require('../indexStore');
-const { listCartridges, loadCartridge }     = require('../cartridgeLoader');
+const { listCaches, loadCache }     = require('../cacheLoader');
 
 const router = express.Router();
 
@@ -151,55 +151,98 @@ router.delete('/api/projects/:id/sources/:sourceId', writeLimiter, (req, res) =>
     res.json({ success: true, project });
 });
 
-// ── User cartridges ───────────────────────────────────────────────────────────
+// ── User caches ───────────────────────────────────────────────────────────
 
 /**
- * GET /api/user-cartridges
+ * GET /api/user-caches
  */
-router.get('/api/user-cartridges', readLimiter, (req, res) => {
-    const cartridges = fs.readdirSync(USER_CARTRIDGES_DIR)
+router.get('/api/user-caches', readLimiter, (req, res) => {
+    const caches = fs.readdirSync(USER_CACHES_DIR)
         .filter(f => f.endsWith('.json'))
         .map(f => {
-            try { return JSON.parse(fs.readFileSync(path.join(USER_CARTRIDGES_DIR, f), 'utf8')); }
+            try { return JSON.parse(fs.readFileSync(path.join(USER_CACHES_DIR, f), 'utf8')); }
             catch { return null; }
         })
         .filter(Boolean)
         .sort(function(a, b) { return b.createdAt.localeCompare(a.createdAt); });
-    res.json({ cartridges });
+    res.json({ caches });
+});
+
+// Deprecated compatibility alias.
+// TODO(phase-15-9c): remove after downstream clients migrate to /api/user-caches.
+router.get('/api/user-cartridges', readLimiter, (req, res) => {
+    const caches = fs.readdirSync(USER_CACHES_DIR)
+        .filter(f => f.endsWith('.json'))
+        .map(f => {
+            try { return JSON.parse(fs.readFileSync(path.join(USER_CACHES_DIR, f), 'utf8')); }
+            catch { return null; }
+        })
+        .filter(Boolean)
+        .sort(function(a, b) { return b.createdAt.localeCompare(a.createdAt); });
+    res.json({ caches, cartridges: caches });
 });
 
 /**
- * POST /api/user-cartridges
+ * POST /api/user-caches
  * Body: { title, description?, sources?, notes? }
  */
+router.post('/api/user-caches', writeLimiter, (req, res) => {
+    const { title, description = '', sources = [], notes = '' } = req.body || {};
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    const id        = 'cache-' + crypto.randomUUID();
+    const now       = new Date().toISOString();
+    const cache = { id, title, description, sources, notes, createdAt: now, updatedAt: now, ownership: 'user' };
+    fs.writeFileSync(path.join(USER_CACHES_DIR, id + '.json'), JSON.stringify(cache, null, 2), 'utf8');
+    res.json({ success: true, cache });
+});
+
+// Deprecated compatibility alias.
+// TODO(phase-15-9c): remove after downstream clients migrate to /api/user-caches.
 router.post('/api/user-cartridges', writeLimiter, (req, res) => {
     const { title, description = '', sources = [], notes = '' } = req.body || {};
     if (!title) return res.status(400).json({ error: 'title is required' });
-    const id        = 'cartridge-' + crypto.randomUUID();
+    const id        = 'cache-' + crypto.randomUUID();
     const now       = new Date().toISOString();
-    const cartridge = { id, title, description, sources, notes, createdAt: now, updatedAt: now, ownership: 'user' };
-    fs.writeFileSync(path.join(USER_CARTRIDGES_DIR, id + '.json'), JSON.stringify(cartridge, null, 2), 'utf8');
-    res.json({ success: true, cartridge });
+    const cache = { id, title, description, sources, notes, createdAt: now, updatedAt: now, ownership: 'user' };
+    fs.writeFileSync(path.join(USER_CACHES_DIR, id + '.json'), JSON.stringify(cache, null, 2), 'utf8');
+    return res.json({ success: true, cache, cartridge: cache });
 });
 
-// ── Bundled cartridges ────────────────────────────────────────────────────────
+// ── Bundled caches ────────────────────────────────────────────────────────
 
 /**
- * GET /cartridges
+ * GET /caches
  */
+router.get('/caches', (req, res) => {
+    res.json({ caches: listCaches() });
+});
+
+// Deprecated compatibility alias.
+// TODO(phase-15-9c): remove after downstream clients migrate to /caches.
 router.get('/cartridges', (req, res) => {
-    res.json({ cartridges: listCartridges() });
+    const caches = listCaches();
+    res.json({ caches, cartridges: caches });
 });
 
 /**
- * GET /cartridges/:name
+ * GET /caches/:name
  */
-router.get('/cartridges/:name', (req, res) => {
-    const cartridge = loadCartridge(req.params.name);
-    if (!cartridge) {
-        return res.status(404).json({ error: 'Cartridge "' + req.params.name + '" not found.' });
+router.get('/caches/:name', (req, res) => {
+    const cache = loadCache(req.params.name);
+    if (!cache) {
+        return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
     }
-    res.json(cartridge);
+    res.json(cache);
+});
+
+// Deprecated compatibility alias.
+// TODO(phase-15-9c): remove after downstream clients migrate to /caches/:name.
+router.get('/cartridges/:name', (req, res) => {
+    const cache = loadCache(req.params.name);
+    if (!cache) {
+        return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
+    }
+    return res.json({ ...cache, cartridgeId: cache.name || req.params.name });
 });
 
 module.exports = router;

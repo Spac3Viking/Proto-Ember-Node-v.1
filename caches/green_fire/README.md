@@ -1,6 +1,6 @@
-# Green Fire Cartridge
+# Green Fire Cache
 
-This cartridge holds knowledge related to green fire — sustainable energy, natural combustion, bioluminescence, and the alchemical symbolism of living flame.
+This cache holds knowledge related to green fire — sustainable energy, natural combustion, bioluminescence, and the alchemical symbolism of living flame.
 
 ## Topics
 - Sustainable fire-starting techniques

@@ -4,7 +4,7 @@ A local-first sovereign AI console descended from the Green Fire Archive.
 
 Ember Node is a recursive refinement engine — a personal workstation built around local
 models, local knowledge, local memory discipline, explicit user control, modular
-cartridges, and offline resilience.
+caches, and offline resilience.
 
 The AI inside the system is called **The Heart** — a grounded resident intelligence that
 answers from remembered local knowledge, not just the base model.
@@ -19,7 +19,7 @@ that owns the data.
 This means:
 
 - **App code** and **user data** live in entirely separate locations.
-- The user archive (rooms, threads, projects, indexes, user cartridges) lives in an
+- The user archive (rooms, threads, projects, indexes, user caches) lives in an
   external **data root** that belongs entirely to the user.
 - Updating or reinstalling Ember Node never touches the user's data root.
 - Moving an archive to a new machine is a folder copy — no special export needed.
@@ -54,18 +54,18 @@ All path reads and writes go through the data root.  No `__dirname`-based traver
 in stored records.  Legacy `data/...` paths in existing manifests are handled
 transparently via a normalisation step.
 
-### 3. Cartridge Ownership Clarity
+### 3. Cache Ownership Clarity
 
-Cartridges are now explicitly classified:
+Caches are now explicitly classified:
 
 | Class | Location | Ownership |
 |-------|----------|-----------|
-| **Bundled** | `cartridges/` inside the app folder | App-owned. May change on update. |
-| **User** | `<data-root>/cartridges/` | User-owned. Travels with the archive. |
+| **Bundled** | `caches/` inside the app folder | App-owned. May change on update. |
+| **User** | `<data-root>/caches/` | User-owned. Travels with the archive. |
 
-- `GET /cartridges` returns bundled cartridges, each with `ownership: "bundled"`.
-- `GET /api/user-cartridges` / `POST /api/user-cartridges` manage user-owned cartridges.
-- `GET /api/status` and `GET /api/storage-info` report a cartridge breakdown
+- `GET /caches` returns bundled caches, each with `ownership: "bundled"`.
+- `GET /api/user-caches` / `POST /api/user-caches` manage user-owned caches.
+- `GET /api/status` and `GET /api/storage-info` report a cache breakdown
   (`bundled` count and `user` count).
 
 ### 4. Machine-to-Machine Portability
@@ -78,8 +78,8 @@ To move an Ember Node archive to a new machine:
 3. Set `EMBER_DATA_ROOT` to the copied directory path.
 4. Start the server.
 
-Rooms, threads, projects, indexes, and user cartridges resume intact.
-Bundled cartridges come from the new app install (they are not user data).
+Rooms, threads, projects, indexes, and user caches resume intact.
+Bundled caches come from the new app install (they are not user data).
 
 ---
 
@@ -157,7 +157,7 @@ Phase 3 implements the first true memory-and-retrieval loop:
 - **Room-aware retrieval** — Hearth sources are prioritised over Ember Council; Threshold excluded by default
 - **Grounded Heart responses** — The Heart answers from local remembered sources
 - **Signal Trace** — compact trace includes Active archetype, Route, Context, Model, and Provider
-- **Cartridge indexing** — cartridges can be indexed from Ember Council; their docs/ become retrievable knowledge
+- **Cache indexing** — caches can be indexed from Ember Council; their docs/ become retrievable knowledge
 - **Ember Council notes** — draft text can be saved as local Markdown and optionally indexed
 - **Threshold file intake** — drag-and-drop `.txt`/`.md` intake with inspect and index controls
 
@@ -171,7 +171,7 @@ Phase 3 implements the first true memory-and-retrieval loop:
 | Ember Council | ᚹ | Archetypal perspectives for shaping, testing, and refining the signal (notes, projects, documents, source management) |
 | Threshold | ᚦ | Boundary of exchange — file intake, staging, inspection before Hearth access |
 
-Cartridges live inside Ember Council. System identity lives inside Hearth.
+Caches live inside Ember Council. System identity lives inside Hearth.
 See [docs/architecture.md](docs/architecture.md) for the full design charter.
 
 ---
@@ -283,7 +283,7 @@ For development checkouts, the root `Awaken-Ember-Node.bat` remains available fo
 - nothing writes to Hearth automatically
 - network is an expedition, not a dependency
 - chat is a pane, not the whole room
-- cartridges are knowledge packs, indexed intentionally
+- caches are knowledge packs, indexed intentionally
 - all AI-generated changes require user review before being remembered
 - remembered works fuel future creation
 - retrieval must remain transparent — Signal Trace shows all sources
@@ -292,18 +292,18 @@ For development checkouts, the root `Awaken-Ember-Node.bat` remains available fo
 
 ---
 
-## Cartridge System
+## Cache System
 
-Cartridges are modular knowledge packs.
+Caches are modular knowledge packs.
 
-### Bundled cartridges
+### Bundled caches
 
-Shipped with the app code in `./cartridges/`.  These are starter reference packs and
+Shipped with the app code in `./caches/`.  These are starter reference packs and
 built-in seeds.  They may be updated or replaced when the app is updated.  They live
 inside the app folder and are **not** part of the user archive.
 
 ```
-cartridges/
+caches/
   green_fire/
     manifest.json
     README.md
@@ -319,13 +319,13 @@ cartridges/
   journals/
 ```
 
-### User cartridges
+### User caches
 
-Created, edited, or imported by the user.  Stored in `<data-root>/cartridges/` as JSON
+Created, edited, or imported by the user.  Stored in `<data-root>/caches/` as JSON
 files.  These travel with the archive and survive app updates.
 
-Use `POST /api/user-cartridges` to create one.
-Use `GET /api/user-cartridges` to list them.
+Use `POST /api/user-caches` to create one.
+Use `GET /api/user-caches` to list them.
 
 ---
 
@@ -373,7 +373,7 @@ On first run, Ember Node creates the full directory tree automatically.
       reference/    — Reference materials
       manifest.json — Core archive manifest (id, version, trusted, auto_load)
     caches/         — Downloadable archive expansions (one sub-dir per cache)
-    cartridges/     — Modular functional/content modules (one sub-dir each)
+    caches/     — Modular functional/content modules (one sub-dir each)
   hearth/           — Curated Hearth sources (remembered knowledge)
     remembered-threads/
     maps/
@@ -393,7 +393,7 @@ On first run, Ember Node creates the full directory tree automatically.
     workshop/
     threshold/
   indexes/          — Local knowledge index (chunks, embeddings, manifests)
-  cartridges/       — User-created cartridge metadata
+  caches/       — User-created cache metadata
   exports/          — Outbound packages
 ```
 
@@ -406,7 +406,7 @@ Note: the internal storage folder remains `workshop/` for backward compatibility
 | **System identity** | `system/forge/` | Forge archetype and identity files. Not archive content. |
 | **Core trusted archive** | `archive/core/` | Default knowledge body for every new node. Trusted, archive-native, bypasses Threshold by default. |
 | **Archive caches** | `archive/caches/` | Future downloadable archive expansions. Each cache is a self-contained sub-directory with its own `manifest.json`. Use the term *cache* / *caches* — not *pack* / *packs*. |
-| **Archive cartridges** | `archive/cartridges/` | Future modular functional or content modules. Distinct from caches — may contain documents, prompts, assets, or specialised node modules. |
+| **Archive caches** | `archive/caches/` | Future modular functional or content modules. Distinct from caches — may contain documents, prompts, assets, or specialised node modules. |
 
 The data root is entirely user-owned. Updating or reinstalling Ember Node never touches it.
 Use `GET /api/storage-info` to confirm which data root is active and see migration status.
@@ -444,15 +444,15 @@ It is not implemented in the current runtime.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/chat` | Forward message to Ollama (backward-compatible) |
-| `GET`  | `/cartridges` | List all bundled cartridges |
-| `GET`  | `/cartridges/:name` | Inspect a bundled cartridge's manifest and content |
+| `GET`  | `/caches` | List all bundled caches |
+| `GET`  | `/caches/:name` | Inspect a bundled cache's manifest and content |
 
 ### Phase 3 (new)
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/chat` | Grounded chat — returns `{ answer, sources, grounded }`; accepts optional `sourceIds` to pin sources |
 | `POST` | `/api/ingest` | Ingest a file into a room |
-| `POST` | `/api/index/cartridge/:id` | Index all docs in a bundled cartridge |
+| `POST` | `/api/index/cache/:id` | Index all docs in a bundled cache |
 | `POST` | `/api/index/file` | Index / re-index a file; pass `targetRoom` to transfer rooms |
 | `GET`  | `/api/sources` | List indexed source manifests |
 | `GET`  | `/api/sources/:id` | Get single source manifest + preview (Phase 6) |
@@ -461,8 +461,8 @@ It is not implemented in the current runtime.
 | `POST` | `/api/notes` | Save a Workshop note (deterministic filename; creates manifest entry) |
 | `GET`  | `/api/notes` | List Workshop notes |
 | `GET`  | `/api/threshold/list` | List files in Threshold intake |
-| `GET`  | `/api/status` | System status (chunks, sources, embeddings, storage root, cartridge breakdown) |
-| `GET`  | `/api/storage-info` | Active data root, directory layout, migration state, cartridge counts |
+| `GET`  | `/api/status` | System status (chunks, sources, embeddings, storage root, cache breakdown) |
+| `GET`  | `/api/storage-info` | Active data root, directory layout, migration state, cache counts |
 
 ### Phase 4 (new)
 | Method | Path | Description |
@@ -477,8 +477,8 @@ It is not implemented in the current runtime.
 | `PUT`  | `/api/projects/:id` | Update a project |
 | `POST` | `/api/projects/:id/sources` | Attach a source to a project (Phase 6) |
 | `DELETE` | `/api/projects/:id/sources/:sourceId` | Remove a linked source from a project (Phase 6) |
-| `GET`  | `/api/user-cartridges` | List user-owned cartridges |
-| `POST` | `/api/user-cartridges` | Create a user cartridge |
+| `GET`  | `/api/user-caches` | List user-owned caches |
+| `POST` | `/api/user-caches` | Create a user cache |
 
 ### Phase 7 (new)
 | Method | Path | Description |
@@ -528,7 +528,7 @@ sources that informed the answer:
     {
       "room": "hearth",
       "shelf": "green_fire",
-      "cartridgeId": "green_fire",
+      "cacheId": "green_fire",
       "file": "first-codex.md",
       "chunkId": "hearth-green-fire-first-codex-md-000",
       "score": 0.87
@@ -547,12 +547,12 @@ Trace indicates: *base model — no local sources*.
 
 | Phase | Focus |
 |-------|-------|
-| Phase 1 ✓ | Local Node/Express + Ollama chat + basic cartridge endpoints |
-| Phase 2 ✓ | Green Fire UI shell + Cartridge Shelf + room navigation |
+| Phase 1 ✓ | Local Node/Express + Ollama chat + basic cache endpoints |
+| Phase 2 ✓ | Green Fire UI shell + Cache Shelf + room navigation |
 | Phase 3 ✓ | Document ingestion, chunking, embeddings, retrieval, signal trace |
 | Phase 3.2 ✓ | Deterministic source IDs, embeddings endpoint fallback, room-transfer file moves, Workshop notes indexing, tiered rate limiting |
-| Phase 4 ✓ | Threads, projects, user cartridges, Threshold intake, PDF/DOCX support |
-| Phase 5 ✓ | Storage stabilization: external data root, legacy migration, storage-root-native paths, cartridge ownership clarity, portability readiness |
+| Phase 4 ✓ | Threads, projects, user caches, Threshold intake, PDF/DOCX support |
+| Phase 5 ✓ | Storage stabilization: external data root, legacy migration, storage-root-native paths, cache ownership clarity, portability readiness |
 | Phase 6 ✓ | Mobility layer: actionable source cards, source inspector, Remember to Hearth, Send To (Chat/Notepad/Project), project linked sources, path visibility, cross-room reference flow |
 | Phase 7 ✓ | AI/tool discovery, trust flow, role assignment, Heart selection, tool registry |
 | Phase 8 ✓ | Startup checklist, airlock discipline, tool readiness, changed-file detection |
@@ -587,7 +587,7 @@ in dedicated modules:
 | `threshold.js` | `/api/threshold/list`, `/api/detected-files*` |
 | `tools.js` | `/api/tools/*` |
 | `chat.js` | `POST /chat` (legacy), `POST /api/chat` |
-| `projects.js` | `/api/projects/*`, `/api/user-cartridges`, `/cartridges*` |
+| `projects.js` | `/api/projects/*`, `/api/user-caches`, `/caches*` |
 | `threads.js` | `/api/threads/*` |
 | `system.js` | `/api/status`, `/api/ollama-status`, `/api/storage-info`, `/api/intake-state` |
 | `archive.js` | `/api/archive*`, `/api/archive/caches*` |
@@ -601,7 +601,7 @@ in dedicated modules:
   `source.path`, and persists the manifest before indexing.
 
 - **Source IDs are deterministic.** `buildSourceRecord` derives its ID from
-  `room + cartridgeId + normalized-relative-path` — no `Date.now()`.  Re-ingesting
+  `room + cacheId + normalized-relative-path` — no `Date.now()`.  Re-ingesting
   the same file always produces the same identity; duplicate records do not accumulate.
 
 - **Embeddings endpoint fallback.** The embedding layer tries `/api/embeddings` first,
@@ -613,7 +613,7 @@ in dedicated modules:
   - `readLimiter` (120 req/min) — GET status, notes, threshold list
   - `chatLimiter` (30 req/min) — `POST /api/chat`
   - `writeLimiter` (60 req/min) — ingest, note saving, source exclude
-  - `indexLimiter` (10 req/min) — cartridge and file indexing
+  - `indexLimiter` (10 req/min) — cache and file indexing
 
 - **Workshop notes are first-class Workshop sources.** Each saved note registers a
   manifest entry so it can be indexed via `POST /api/index/file` and retrieved by

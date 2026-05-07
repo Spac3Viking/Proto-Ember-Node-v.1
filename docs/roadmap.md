@@ -3,13 +3,13 @@
 ## Phase 1 ✓ — Local Node Foundation
 - Local Node/Express server
 - Ollama chat integration (gemma3:4b)
-- Basic cartridge endpoints
+- Basic cache endpoints
 - Room tab navigation scaffold
 
 ## Phase 2 ✓ — Green Fire UI Shell
 - Green Fire Archive design system
-- Five-room navigation (Hearth, Workshop, Threshold, Cartridges, System)
-- Cartridge Shelf — browse, inspect, and read installed cartridges
+- Five-room navigation (Hearth, Workshop, Threshold, Caches, System)
+- Cache Shelf — browse, inspect, and read installed caches
 - Workshop draft panel
 - Threshold intake scaffold
 - System room with live Ollama/model status
@@ -23,11 +23,11 @@
 - Room-aware retrieval — Hearth prioritised, Threshold excluded by default
 - Grounded Heart chat via `/api/chat`
 - Signal Trace — visible source provenance on every response
-- Cartridge indexing from Workshop
+- Cache indexing from Workshop
 - Workshop note saving
 - Threshold file intake (drag-and-drop, file browse)
-- cartridges/*/docs/ recursive reading and indexing
-- `/api/sources`, `/api/index/cartridge/:id`, `/api/index/file` endpoints
+- caches/*/docs/ recursive reading and indexing
+- `/api/sources`, `/api/index/cache/:id`, `/api/index/file` endpoints
 
 ## Phase 4 — Remember / Archive Mechanics
 - Formal "Remember" action to promote Workshop material to Hearth
@@ -44,8 +44,8 @@
 - `GET /api/storage-info` endpoint — inspect active data root at runtime
 - `ingest.js`, `indexStore.js`, and `server.js` all resolve paths via storageConfig
 
-## Phase 6 — Offline Cartridge Engine + Export
-- True offline cartridge engine
-- Portable export/import for cartridges and remembered signal
+## Phase 6 — Offline Cache Engine + Export
+- True offline cache engine
+- Portable export/import for caches and remembered signal
 - Export packaging via Threshold
 - Desktop shell packaging

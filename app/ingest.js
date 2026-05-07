@@ -27,7 +27,7 @@ const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
 const SOURCE_CLASSES = {
     TRUSTED_ARCHIVE:    'trusted-archive',
     ARCHIVE_CACHE:      'archive-cache',
-    ARCHIVE_CARTRIDGE:  'archive-cartridge',
+    ARCHIVE_LEGACY_CACHE: 'archive-legacy-cache',
     WORKSHOP_DRAFT:     'workshop-draft',
     HEARTH_REMEMBERED:  'hearth-remembered',
     THRESHOLD_INTAKE:   'threshold-intake',
@@ -123,14 +123,14 @@ async function extractTextAsync(filePath) {
  * @param {object} opts
  * @param {string} opts.filePath       - Absolute path to the file
  * @param {string} opts.room           - Target room (hearth | workshop | threshold)
- * @param {string|null} opts.cartridgeId
+ * @param {string|null} opts.cacheId
  * @param {string|null} opts.manifestId
  * @param {string|null} opts.title     - Human-readable title for the source
  * @param {string|null} opts.description - Short description of the source
  * @param {string|null} opts.shelf     - Category or shelf tag
  * @returns {object}
  */
-function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = null, title = null, description = null, shelf = null }) {
+function buildSourceRecord({ filePath, room, cacheId = null, manifestId = null, title = null, description = null, shelf = null }) {
     const fileName = path.basename(filePath);
     const ext      = path.extname(filePath).toLowerCase().slice(1);
 
@@ -139,7 +139,7 @@ function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = nu
     const relPath  = path.relative(DATA_DIR, filePath).replace(/\\/g, '/');
 
     // Deterministic ID: stable across re-ingestion of the same file.
-    // Uses room + cartridgeId + normalised relative path — no timestamps.
+    // Uses room + cacheId + normalised relative path — no timestamps.
     const safePath = relPath
         .replace(/\\/g, '/')          // normalise Windows separators
         .replace(/[^a-z0-9/]/gi, '-') // sanitise non-alphanumeric chars
@@ -148,14 +148,14 @@ function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = nu
         .replace(/-+/g, '-')          // collapse consecutive dashes
         .replace(/^-|-$/g, '');       // trim leading/trailing dashes
 
-    const id = [room, cartridgeId, safePath].filter(Boolean).join('-');
+    const id = [room, cacheId, safePath].filter(Boolean).join('-');
 
     return {
         id,
         room,
         file:             fileName,
         path:             relPath,
-        cartridgeId:      cartridgeId  || null,
+        cacheId:      cacheId  || null,
         manifestId:       manifestId   || null,
         ingestTimestamp:  new Date().toISOString(),
         sourceType:       ext,
@@ -178,11 +178,11 @@ function buildSourceRecord({ filePath, room, cartridgeId = null, manifestId = nu
  * @param {object} opts
  * @returns {{ source: object, text: string }|null}
  */
-function ingestFile({ filePath, room, cartridgeId = null, manifestId = null, title = null, description = null, shelf = null }) {
+function ingestFile({ filePath, room, cacheId = null, manifestId = null, title = null, description = null, shelf = null }) {
     if (!fs.existsSync(filePath)) return null;
     const text = extractText(filePath);
     if (text === null) return null;
-    const source = buildSourceRecord({ filePath, room, cartridgeId, manifestId, title, description, shelf });
+    const source = buildSourceRecord({ filePath, room, cacheId, manifestId, title, description, shelf });
     return { source, text };
 }
 
@@ -216,19 +216,19 @@ function collectFiles(dir) {
 }
 
 /**
- * Ingest all supported files from a cartridge directory.
+ * Ingest all supported files from a cache directory.
  * Returns an array of { source, text } records.
  *
  * @param {object} opts
- * @param {string} opts.cartridgeDir
- * @param {string} opts.cartridgeId
+ * @param {string} opts.cacheDir
+ * @param {string} opts.cacheId
  * @param {string} [opts.room='workshop']
  * @returns {Array<{ source: object, text: string }>}
  */
-function ingestCartridge({ cartridgeDir, cartridgeId, room = 'workshop' }) {
-    const files = collectFiles(cartridgeDir);
+function ingestCache({ cacheDir, cacheId, room = 'workshop' }) {
+    const files = collectFiles(cacheDir);
     return files
-        .map(filePath => ingestFile({ filePath, room, cartridgeId }))
+        .map(filePath => ingestFile({ filePath, room, cacheId }))
         .filter(Boolean);
 }
 
@@ -237,7 +237,7 @@ module.exports = {
     extractTextAsync,
     buildSourceRecord,
     ingestFile,
-    ingestCartridge,
+    ingestCache,
     collectFiles,
     SOURCE_CLASSES,
     sourceClassForRoom,

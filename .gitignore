@@ -143,7 +143,7 @@ data/hearth/*
 data/workshop/*
 data/threshold/*
 data/system/*
-data/cartridges/*
+data/caches/*
 data/indexes/*
 data/exports/*
 !data/**/.gitkeep

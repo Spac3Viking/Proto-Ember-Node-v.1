@@ -84,12 +84,12 @@ function getChunksByRoom(room) {
 }
 
 /**
- * Return all chunks belonging to a given cartridge.
- * @param {string} cartridgeId
+ * Return all chunks belonging to a given cache.
+ * @param {string} cacheId
  * @returns {object[]}
  */
-function getChunksByCartridge(cartridgeId) {
-    return loadChunks().filter(c => c.cartridgeId === cartridgeId);
+function getChunksByCache(cacheId) {
+    return loadChunks().filter(c => c.cacheId === cacheId);
 }
 
 // ── Embeddings ────────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ module.exports = {
     saveChunks,
     upsertChunks,
     getChunksByRoom,
-    getChunksByCartridge,
+    getChunksByCache,
     loadEmbeddings,
     saveEmbeddings,
     upsertEmbeddings,

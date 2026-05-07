@@ -54,19 +54,19 @@ describe('ingest — buildSourceRecord', () => {
 
     test('returns required fields', () => {
         const filePath = '/tmp/test-ember/hearth/doc.md';
-        const record   = buildSourceRecord({ filePath, room: 'hearth', cartridgeId: 'green_fire' });
+        const record   = buildSourceRecord({ filePath, room: 'hearth', cacheId: 'green_fire' });
         expect(typeof record.id).toBe('string');
         expect(record.room).toBe('hearth');
         expect(record.file).toBe('doc.md');
-        expect(record.cartridgeId).toBe('green_fire');
+        expect(record.cacheId).toBe('green_fire');
         expect(record.sourceType).toBe('md');
         expect(typeof record.ingestTimestamp).toBe('string');
     });
 
-    test('cartridgeId defaults to null', () => {
+    test('cacheId defaults to null', () => {
         const filePath = '/tmp/test-ember/workshop/note.txt';
         const record   = buildSourceRecord({ filePath, room: 'workshop' });
-        expect(record.cartridgeId).toBeNull();
+        expect(record.cacheId).toBeNull();
     });
 });
 
@@ -122,8 +122,8 @@ describe('ingest — collectFiles', () => {
 describe('chunker — makeChunkId', () => {
     const { makeChunkId } = require('../app/chunker');
 
-    test('produces a deterministic ID from room, cartridge, file, and index', () => {
-        const id = makeChunkId({ room: 'hearth', cartridgeId: 'green_fire', file: 'codex.md', index: 0 });
+    test('produces a deterministic ID from room, cache, file, and index', () => {
+        const id = makeChunkId({ room: 'hearth', cacheId: 'green_fire', file: 'codex.md', index: 0 });
         expect(typeof id).toBe('string');
         expect(id).toContain('hearth');
         expect(id).toContain('green');   // green_fire becomes green-fire
@@ -131,15 +131,15 @@ describe('chunker — makeChunkId', () => {
         expect(id).toContain('000');
     });
 
-    test('works without cartridgeId', () => {
-        const id = makeChunkId({ room: 'workshop', cartridgeId: null, file: 'note.txt', index: 1 });
+    test('works without cacheId', () => {
+        const id = makeChunkId({ room: 'workshop', cacheId: null, file: 'note.txt', index: 1 });
         expect(id).toContain('workshop');
         expect(id).toContain('001');
     });
 
     test('two chunks with different indexes have different IDs', () => {
-        const id0 = makeChunkId({ room: 'hearth', cartridgeId: null, file: 'doc.md', index: 0 });
-        const id1 = makeChunkId({ room: 'hearth', cartridgeId: null, file: 'doc.md', index: 1 });
+        const id0 = makeChunkId({ room: 'hearth', cacheId: null, file: 'doc.md', index: 0 });
+        const id1 = makeChunkId({ room: 'hearth', cacheId: null, file: 'doc.md', index: 1 });
         expect(id0).not.toBe(id1);
     });
 });
@@ -150,7 +150,7 @@ describe('chunker — chunkText', () => {
     const sourceRecord = {
         id:          'test-source-1',
         room:        'hearth',
-        cartridgeId: 'green_fire',
+        cacheId: 'green_fire',
         file:        'codex.md',
         path:        'data/hearth/codex.md',
         sourceType:  'md',
@@ -171,7 +171,7 @@ describe('chunker — chunkText', () => {
         chunks.forEach(chunk => {
             expect(typeof chunk.id).toBe('string');
             expect(chunk.room).toBe('hearth');
-            expect(chunk.cartridgeId).toBe('green_fire');
+            expect(chunk.cacheId).toBe('green_fire');
             expect(chunk.file).toBe('codex.md');
             expect(typeof chunk.text).toBe('string');
             expect(chunk.text.length).toBeGreaterThan(0);
@@ -367,7 +367,7 @@ describe('signalTrace — buildSignalTrace', () => {
                     id:          'hearth-green-fire-codex-md-000',
                     room:        'hearth',
                     shelf:       'green_fire',
-                    cartridgeId: 'green_fire',
+                    cacheId: 'green_fire',
                     file:        'codex.md',
                 },
                 score: 0.876,
@@ -396,19 +396,19 @@ describe('signalTrace — formatSignalTraceSummary', () => {
     });
 });
 
-// ── cartridgeLoader docs/ support ─────────────────────────────────────────────
+// ── cacheLoader docs/ support ─────────────────────────────────────────────
 
-describe('cartridgeLoader — docs/ subdirectory support', () => {
-    const { loadCartridge } = require('../app/cartridgeLoader');
+describe('cacheLoader — docs/ subdirectory support', () => {
+    const { loadCache } = require('../app/cacheLoader');
 
     test('green_fire content includes docs/ content', () => {
-        const result = loadCartridge('green_fire');
+        const result = loadCache('green_fire');
         expect(result).not.toBeNull();
         expect(result.content).toContain('Green Fire');
     });
 
     test('content length is greater when docs/ files are present', () => {
-        const result = loadCartridge('green_fire');
+        const result = loadCache('green_fire');
         // We added docs/ — content should be substantially longer than README alone
         expect(result.content.length).toBeGreaterThan(500);
     });

@@ -546,16 +546,16 @@ input:focus, textarea:focus {
   font-size: 0.875rem;
 }
 
-/* ── Cartridge Shelf ───────────────────────────────────────── */
+/* ── Cache Shelf ───────────────────────────────────────── */
 
-.cartridge-layout {
+.cache-layout {
   display: flex;
   gap: 1rem;
   flex: 1;
   min-height: 0;
 }
 
-.cartridge-shelf {
+.cache-shelf {
   width: 280px;
   flex-shrink: 0;
   display: flex;
@@ -563,7 +563,7 @@ input:focus, textarea:focus {
   gap: 0.5rem;
 }
 
-.cartridge-shelf-title {
+.cache-shelf-title {
   font-family: 'Cinzel', serif;
   font-size: 0.8rem;
   color: var(--archive-muted);
@@ -574,14 +574,14 @@ input:focus, textarea:focus {
   margin-bottom: 0.25rem;
 }
 
-.cartridge-list {
+.cache-list {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   overflow-y: auto;
 }
 
-.cartridge-item {
+.cache-item {
   padding: 0.65rem 0.875rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -590,32 +590,32 @@ input:focus, textarea:focus {
   background: hsla(120, 15%, 5%, 0.5);
 }
 
-.cartridge-item:hover {
+.cache-item:hover {
   border-color: hsla(140, 100%, 70%, 0.2);
   background: hsla(120, 15%, 7%, 0.8);
 }
 
-.cartridge-item.active {
+.cache-item.active {
   border-color: hsla(38, 100%, 70%, 0.35);
   background: hsla(120, 15%, 8%, 0.9);
   box-shadow: 0 0 8px hsla(38, 100%, 70%, 0.1);
 }
 
-.cartridge-item-name {
+.cache-item-name {
   font-family: 'Cinzel', serif;
   font-size: 0.8rem;
   color: var(--gf-wire-amber);
   margin-bottom: 0.2rem;
 }
 
-.cartridge-item-type {
+.cache-item-type {
   font-size: 0.68rem;
   color: var(--archive-muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.cartridge-inspector {
+.cache-inspector {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -956,7 +956,7 @@ input:focus, textarea:focus {
   margin-bottom: 0.4rem;
 }
 
-.ws-cartridge-list,
+.ws-cache-list,
 .ws-sources-list,
 .ws-notes-list {
   display: flex;
@@ -966,7 +966,7 @@ input:focus, textarea:focus {
   overflow-y: auto;
 }
 
-.ws-cartridge-row {
+.ws-cache-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -977,7 +977,7 @@ input:focus, textarea:focus {
   gap: 0.5rem;
 }
 
-.ws-cartridge-name {
+.ws-cache-name {
   font-size: 0.78rem;
   color: var(--archive-text);
   flex: 1;
