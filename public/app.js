@@ -1,5 +1,5 @@
 /**
- * Ember Node v.ᚠ — Phase 8.75 app shell
+ * Ember Node v.ᚠ — Phase 15.9E app shell
  *
  * Covers all three rooms (Hearth / Ember Council / Threshold) with sub-tab navigation,
  * file lifecycle (Waiting/Indexed/Remembered), intake discipline (Threshold airlock),
@@ -1877,7 +1877,7 @@ function buildSourceCard(s) {
             menuItems.push({ label: 'Remember to Hearth', fn: () => rememberSource(s.id) });
         }
         menuItems.push({ label: '→ Hearth Chat',  fn: () => sendSourceToChat(s) });
-        menuItems.push({ label: '→ Notepad',       fn: () => sendSourceToNotepad(s) });
+        menuItems.push({ label: '→ Council Drafts', fn: () => sendSourceToCouncilDrafts(s) });
 
         menuItems.forEach(item => {
             const btn = document.createElement('button');
@@ -4424,7 +4424,7 @@ async function inspectSource(sourceId) {
             actions.push({ label: 'Remember to Hearth', fn: () => { closeInspector(); rememberSource(source.id); } });
         }
         actions.push({ label: '→ Hearth Chat',  fn: () => { closeInspector(); sendSourceToChat(source); } });
-        actions.push({ label: '→ Notepad',       fn: () => { closeInspector(); sendSourceToNotepad(source); } });
+        actions.push({ label: '→ Council Drafts', fn: () => { closeInspector(); sendSourceToCouncilDrafts(source); } });
 
         actions.forEach(a => {
             const btn = document.createElement('button');
@@ -4490,7 +4490,7 @@ function sendSourceToChat(source) {
  * Insert a labeled reference block for the source into Council Drafts.
  * Appends to existing content — does not overwrite.
  */
-function sendSourceToNotepad(source) {
+function sendSourceToCouncilDrafts(source) {
     // Switch to Ember Council > Drafts
     const workshopTab  = document.querySelector('.room-tab[data-room="workshop"]');
     if (workshopTab) workshopTab.click();

@@ -8,7 +8,7 @@
 
 ## Phase 2 ✓ — Green Fire UI Shell
 - Green Fire Archive design system
-- Five-room navigation (legacy naming; now consolidated into Hearth, Ember Council, and Threshold)
+- Legacy five-room navigation (Hearth, Workshop, Threshold, Caches, System), now consolidated into Hearth, Ember Council, and Threshold
 - Cache Shelf — browse, inspect, and read installed caches
 - Ember Council drafts panel
 - Threshold intake scaffold

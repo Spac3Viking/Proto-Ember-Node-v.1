@@ -100,7 +100,7 @@ Hearth → Archive now exposes an action row with:
 - **▾ Actions** dropdown:
   - *Remember to Hearth* — promotes an Ember Council/Threshold source to Hearth
   - *→ Hearth Chat* — attaches the source as active reference context for the chat
-  - *→ Notepad* — inserts a labeled reference block into Council Drafts
+  - *→ Council Drafts* — inserts a labeled reference block into Council Drafts
 
 **Explicit Remember to Hearth is available.**  Users can explicitly promote any indexed
 source to Hearth with a single action.  The source file is copied to `hearth/`, the
