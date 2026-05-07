@@ -47,6 +47,7 @@ const router = express.Router();
 
 const VALID_SHELVES = Object.keys(ARCHIVE_DIRS);
 const ALLOWED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
+// Restrict cache IDs to simple filesystem-safe names to prevent traversal/injection via dynamic cache paths.
 const CACHE_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 function stripMarkdownFrontmatter(text) {
@@ -59,8 +60,12 @@ function toPosixRelative(baseDir, absPath) {
 }
 
 function isPathInside(baseDir, targetPath) {
-    const root = path.resolve(baseDir);
-    const target = path.resolve(targetPath);
+    const normalize = (value) => {
+        const resolved = path.resolve(value);
+        return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    };
+    const root = normalize(baseDir);
+    const target = normalize(targetPath);
     return target === root || target.startsWith(root + path.sep);
 }
 

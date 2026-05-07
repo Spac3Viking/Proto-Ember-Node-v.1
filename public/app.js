@@ -2091,7 +2091,10 @@ async function inspectCache(id, itemEl) {
 }
 
 const GF_READER_PROGRESS_KEY = 'gf-reader-progress';
+// Only show resume prompts once the user has made meaningful progress through a document.
 const GF_READER_RESUME_THRESHOLD = 8;
+// Ignore tiny documents where scrolling is effectively negligible.
+const GF_READER_MIN_SCROLLABLE_HEIGHT = 80;
 let _greenFireReader = null;
 
 function stripLeadingFrontmatter(text) {
@@ -2146,7 +2149,7 @@ function persistReaderProgress(entryId, scrollPercent) {
 function sanitizeReaderHref(href) {
     const value = typeof href === 'string' ? href.trim() : '';
     if (!value) return '#';
-    if (/^(https?:|mailto:|\/|#)/i.test(value)) return value;
+    if (/^(https?:|mailto:|#)/i.test(value)) return value;
     return '#';
 }
 
@@ -2167,8 +2170,8 @@ function renderInlineMarkdown(input) {
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/__([^_]+)__/g, '<strong>$1</strong>');
     const italicized = bolded
-        .replace(/(^|[\s(])\*([^*]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>')
-        .replace(/(^|[\s(])_([^_]+)_(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>');
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+        .replace(/_([^_\n]+)_/g, '<em>$1</em>');
     return codeTokens.reduce(function(out, html, idx) {
         return out.replace('__GF_CODE_' + idx + '__', html);
     }, italicized);
@@ -2439,7 +2442,7 @@ function getGreenFireReader() {
             clearTimeout(scrollSaveTimer);
             scrollSaveTimer = setTimeout(() => {
                 const maxScroll = bodyEl.scrollHeight - bodyEl.clientHeight;
-                if (maxScroll <= 80) return;
+                if (maxScroll <= GF_READER_MIN_SCROLLABLE_HEIGHT) return;
                 const percent = (bodyEl.scrollTop / maxScroll) * 100;
                 persistReaderProgress(state.entryId, percent);
             }, 450);
@@ -2498,7 +2501,10 @@ async function loadArchiveReaderCatalog() {
         const coreFiles = Array.isArray(coreRoot.files) ? coreRoot.files : [];
         const cacheGroups = Array.isArray(cachesRoot.caches) ? cachesRoot.caches : [];
 
-        if (coreFiles.length === 0 && cacheGroups.every(group => !group.files || group.files.length === 0)) {
+        if (
+            coreFiles.length === 0 &&
+            (cacheGroups.length === 0 || cacheGroups.every(group => !group.files || group.files.length === 0))
+        ) {
             listEl.innerHTML = '<span class="message-system">No markdown files found in archive/core or archive/caches.</span>';
             return;
         }
