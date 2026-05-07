@@ -386,7 +386,7 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, room?, rooms?, cartridgeId?, sourceIds?, archetype?, courtMember?, history? }
+ * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history? }
  * Response: { answer, sources, grounded }
  *
  * room (optional)      — active room for context-bounded chat ('hearth' | 'workshop' | 'threshold')
@@ -403,7 +403,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             query,
             room      = null,
             rooms     = null,
-            cartridgeId = null,
+            cacheId = null,
             sourceIds = null,
             archetype = null,
             courtMember = null,
@@ -449,7 +449,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             retrieved = await retrieve({
                 query,
                 rooms: retrievalRooms,
-                cartridgeId,
+                cacheId,
                 topK: retrievalTopK,
                 routeHint: detectedRoute,
                 courtMember: selectedCourtMember,
@@ -603,7 +603,7 @@ state: ${retrievalState}
             ? response.data.message.content
             : '';
         const uniqueSourceCount = new Set(
-            (sources || []).map(s => [s.room, s.file, s.cartridgeId || '', s.shelf || ''].join('|')),
+            (sources || []).map(s => [s.room, s.file, s.cacheId || '', s.shelf || ''].join('|')),
         ).size;
         const conceptRoute = retrieved[0] && retrieved[0].conceptDomain
             ? String(retrieved[0].conceptDomain)

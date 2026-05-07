@@ -4,7 +4,7 @@
  * Ember Node v.ᚠ — Phase 5 Tests
  *
  * Tests for: storageConfig (data root resolution, ensureDataRoot layout,
- * legacy migration), cartridge ownership, and the GET /api/storage-info and
+ * legacy migration), cache ownership, and the GET /api/storage-info and
  * GET /api/status server endpoints.
  */
 
@@ -55,9 +55,9 @@ describe('storageConfig — default data root', () => {
         expect(THREADS_DIR).toBe(path.join(DATA_ROOT, 'threads'));
     });
 
-    test('USER_CARTRIDGES_DIR is a sub-path of DATA_ROOT', () => {
-        const { DATA_ROOT, USER_CARTRIDGES_DIR } = storageConfig;
-        expect(USER_CARTRIDGES_DIR).toBe(path.join(DATA_ROOT, 'cartridges'));
+    test('USER_CACHES_DIR is a sub-path of DATA_ROOT', () => {
+        const { DATA_ROOT, USER_CACHES_DIR } = storageConfig;
+        expect(USER_CACHES_DIR).toBe(path.join(DATA_ROOT, 'caches'));
     });
 });
 
@@ -116,7 +116,7 @@ describe('storageConfig — ensureDataRoot', () => {
             storageConfig.INDEXES_DIR,
             storageConfig.PROJECTS_DIR,
             storageConfig.THREADS_DIR,
-            storageConfig.USER_CARTRIDGES_DIR,
+            storageConfig.USER_CACHES_DIR,
             storageConfig.SYSTEM_DIR,
             storageConfig.EXPORTS_DIR,
         ];
@@ -272,27 +272,27 @@ describe('storageConfig — migrateLegacyData', () => {
     });
 });
 
-// ── cartridgeLoader — ownership ───────────────────────────────────────────────
+// ── cacheLoader — ownership ───────────────────────────────────────────────
 
-describe('cartridgeLoader — bundled cartridge ownership', () => {
-    test('BUNDLED_CARTRIDGES_DIR is exported', () => {
+describe('cacheLoader — bundled cache ownership', () => {
+    test('BUNDLED_CACHES_DIR is exported', () => {
         jest.resetModules();
-        const loader = require('../app/cartridgeLoader');
-        expect(typeof loader.BUNDLED_CARTRIDGES_DIR).toBe('string');
+        const loader = require('../app/cacheLoader');
+        expect(typeof loader.BUNDLED_CACHES_DIR).toBe('string');
     });
 
-    test('CARTRIDGES_DIR is still exported as a backward-compatible alias', () => {
+    test('CACHES_DIR is still exported as a backward-compatible alias', () => {
         jest.resetModules();
-        const loader = require('../app/cartridgeLoader');
-        expect(loader.CARTRIDGES_DIR).toBe(loader.BUNDLED_CARTRIDGES_DIR);
+        const loader = require('../app/cacheLoader');
+        expect(loader.CACHES_DIR).toBe(loader.BUNDLED_CACHES_DIR);
     });
 
-    test('listCartridges() returns entries with ownership: "bundled"', () => {
+    test('listCaches() returns entries with ownership: "bundled"', () => {
         jest.resetModules();
-        const { listCartridges } = require('../app/cartridgeLoader');
-        const cartridges = listCartridges();
-        expect(cartridges.length).toBeGreaterThan(0);
-        for (const c of cartridges) {
+        const { listCaches } = require('../app/cacheLoader');
+        const caches = listCaches();
+        expect(caches.length).toBeGreaterThan(0);
+        for (const c of caches) {
             expect(c.ownership).toBe('bundled');
         }
     });
@@ -336,7 +336,7 @@ describe('GET /api/storage-info', () => {
         expect(dirs).toHaveProperty('indexes');
         expect(dirs).toHaveProperty('projects');
         expect(dirs).toHaveProperty('threads');
-        expect(dirs).toHaveProperty('cartridges');
+        expect(dirs).toHaveProperty('caches');
         expect(dirs).toHaveProperty('system');
         expect(dirs).toHaveProperty('exports');
     });
@@ -359,16 +359,16 @@ describe('GET /api/storage-info', () => {
         expect(Array.isArray(migration.errors)).toBe(true);
     });
 
-    test('response includes cartridges ownership summary', async () => {
+    test('response includes caches ownership summary', async () => {
         const res = await request(app).get('/api/storage-info');
-        expect(res.body).toHaveProperty('cartridges');
-        expect(typeof res.body.cartridges.bundled).toBe('number');
-        expect(typeof res.body.cartridges.user).toBe('number');
-        expect(res.body.cartridges.bundled).toBeGreaterThan(0);
+        expect(res.body).toHaveProperty('caches');
+        expect(typeof res.body.caches.bundled).toBe('number');
+        expect(typeof res.body.caches.user).toBe('number');
+        expect(res.body.caches.bundled).toBeGreaterThan(0);
     });
 });
 
-// ── GET /api/status — storage and cartridge fields ───────────────────────────
+// ── GET /api/status — storage and cache fields ───────────────────────────
 
 describe('GET /api/status — Phase 5 fields', () => {
     let app;
@@ -399,17 +399,17 @@ describe('GET /api/status — Phase 5 fields', () => {
         expect(res.body.storageRootSource).toBe('EMBER_DATA_ROOT');
     });
 
-    test('returns cartridges breakdown with bundled and user counts', async () => {
+    test('returns caches breakdown with bundled and user counts', async () => {
         const res = await request(app).get('/api/status');
-        expect(res.body).toHaveProperty('cartridges');
-        expect(typeof res.body.cartridges.bundled).toBe('number');
-        expect(typeof res.body.cartridges.user).toBe('number');
-        expect(res.body.cartridges.bundled).toBeGreaterThan(0);
+        expect(res.body).toHaveProperty('caches');
+        expect(typeof res.body.caches.bundled).toBe('number');
+        expect(typeof res.body.caches.user).toBe('number');
+        expect(res.body.caches.bundled).toBeGreaterThan(0);
     });
 
-    test('cartridgeCount is still present for backward compatibility', async () => {
+    test('cacheCount is still present for backward compatibility', async () => {
         const res = await request(app).get('/api/status');
-        expect(typeof res.body.cartridgeCount).toBe('number');
-        expect(res.body.cartridgeCount).toBe(res.body.cartridges.bundled);
+        expect(typeof res.body.cacheCount).toBe('number');
+        expect(res.body.cacheCount).toBe(res.body.caches.bundled);
     });
 });

@@ -1,4 +1,4 @@
-# Philosophy Cartridge — Core Notes
+# Philosophy Cache — Core Notes
 
 ## On Knowledge and Signal
 

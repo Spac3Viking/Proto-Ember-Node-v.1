@@ -4,7 +4,7 @@
  * Ember Node v.ᚠ — Source Routes
  *
  * POST /api/ingest
- * POST /api/index/cartridge/:id
+ * POST /api/index/cache/:id
  * POST /api/index/file
  * GET  /api/sources
  * POST /api/sources/:id/exclude
@@ -22,8 +22,8 @@ const fs      = require('fs');
 const path    = require('path');
 const { readLimiter, writeLimiter, indexLimiter } = require('../rateLimiters');
 const { DATA_ROOT, resolveSourcePath }            = require('../storageConfig');
-const { BUNDLED_CARTRIDGES_DIR }                  = require('../cartridgeLoader');
-const { ingestFile, ingestCartridge, extractTextAsync, buildSourceRecord } = require('../ingest');
+const { BUNDLED_CACHES_DIR }                  = require('../cacheLoader');
+const { ingestFile, ingestCache, extractTextAsync, buildSourceRecord } = require('../ingest');
 const { chunkText }                                   = require('../chunker');
 const { generateEmbedding }                           = require('../embeddings');
 const {
@@ -55,7 +55,7 @@ function removeStaleEmbeddingsForSource(sourceId) {
 
 /**
  * POST /api/ingest
- * Body: { filename, content, room?, cartridgeId?, title?, description?, shelf?, encoding? }
+ * Body: { filename, content, room?, cacheId?, title?, description?, shelf?, encoding? }
  */
 router.post('/api/ingest', writeLimiter, async (req, res) => {
     try {
@@ -63,7 +63,7 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
             filename,
             content,
             room        = 'threshold',
-            cartridgeId = null,
+            cacheId = null,
             title       = null,
             description = null,
             shelf       = null,
@@ -94,7 +94,7 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
         const filePath = path.join(roomDir, safeName);
 
         if (!ALLOWED_EXTENSIONS.includes(ext)) {
-            const safeId = [room, cartridgeId, safeName.replace(/[^a-z0-9]/gi, '-').toLowerCase()]
+            const safeId = [room, cacheId, safeName.replace(/[^a-z0-9]/gi, '-').toLowerCase()]
                 .filter(Boolean)
                 .join('-')
                 .replace(/-+/g, '-')
@@ -104,7 +104,7 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
                 room,
                 file:             safeName,
                 path:             room + '/' + safeName,
-                cartridgeId:      cartridgeId || null,
+                cacheId:      cacheId || null,
                 manifestId:       null,
                 ingestTimestamp:  new Date().toISOString(),
                 sourceType:       ext.slice(1) || 'unknown',
@@ -125,7 +125,7 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
             fs.writeFileSync(filePath, content, 'utf8');
         }
 
-        const source = buildSourceRecord({ filePath, room, cartridgeId, title, description, shelf });
+        const source = buildSourceRecord({ filePath, room, cacheId, title, description, shelf });
         upsertManifest(source.id, source);
 
         res.json({ success: true, source });
@@ -138,21 +138,21 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
 // ── Phase 3: indexing ─────────────────────────────────────────────────────────
 
 /**
- * POST /api/index/cartridge/:id
+ * POST /api/index/cache/:id
  * Body: { room? }
  */
-router.post('/api/index/cartridge/:id', indexLimiter, async (req, res) => {
+router.post('/api/index/cache/:id', indexLimiter, async (req, res) => {
     try {
-        const cartridgeId  = req.params.id;
-        const cartridgeDir = path.join(BUNDLED_CARTRIDGES_DIR, cartridgeId);
+        const cacheId  = req.params.id;
+        const cacheDir = path.join(BUNDLED_CACHES_DIR, cacheId);
 
-        if (!fs.existsSync(cartridgeDir)) {
-            return res.status(404).json({ error: 'Cartridge "' + cartridgeId + '" not found' });
+        if (!fs.existsSync(cacheDir)) {
+            return res.status(404).json({ error: 'Cache "' + cacheId + '" not found' });
         }
 
         const room = (req.body && req.body.room) || 'workshop';
 
-        const ingested = ingestCartridge({ cartridgeDir, cartridgeId, room });
+        const ingested = ingestCache({ cacheDir, cacheId, room });
 
         let totalChunks   = 0;
         let totalEmbedded = 0;
@@ -181,13 +181,13 @@ router.post('/api/index/cartridge/:id', indexLimiter, async (req, res) => {
 
         res.json({
             success:             true,
-            cartridgeId,
+            cacheId,
             filesIngested:       ingested.length,
             chunksCreated:       totalChunks,
             embeddingsGenerated: totalEmbedded,
         });
     } catch (error) {
-        console.error('Error indexing cartridge:', error.message);
+        console.error('Error indexing cache:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -295,13 +295,13 @@ router.post('/api/index/file', indexLimiter, async (req, res) => {
 
 /**
  * GET /api/sources
- * Query params: room?, cartridgeId?
+ * Query params: room?, cacheId?
  */
 router.get('/api/sources', (req, res) => {
-    const { room, cartridgeId } = req.query;
+    const { room, cacheId } = req.query;
     let sources = Object.values(loadManifests());
     if (room)        sources = sources.filter(s => s.room === room);
-    if (cartridgeId) sources = sources.filter(s => s.cartridgeId === cartridgeId);
+    if (cacheId) sources = sources.filter(s => s.cacheId === cacheId);
     res.json({ sources });
 });
 

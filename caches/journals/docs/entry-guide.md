@@ -1,8 +1,8 @@
-# Journal Cartridge — Entry Format Guide
+# Journal Cache — Entry Format Guide
 
 ## Purpose
 
-This cartridge holds personal journal entries, logs, and reflections indexed for local
+This cache holds personal journal entries, logs, and reflections indexed for local
 retrieval. Entries are timestamped notes that the Heart can reference in reflective
 conversation.
 
@@ -36,7 +36,7 @@ Tags: observation, reflection, project, technical, personal
 
 - Unverified external material (use Threshold)
 - Active working drafts (use Workshop)
-- Reference documents (use appropriate knowledge cartridge)
+- Reference documents (use appropriate knowledge cache)
 
 ---
 

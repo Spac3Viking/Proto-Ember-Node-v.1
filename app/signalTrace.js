@@ -30,7 +30,7 @@ function buildSignalTrace(retrievedChunks) {
             title,
             room:        chunk.room,
             shelf:       chunk.shelf,
-            cartridgeId: chunk.cartridgeId || null,
+            cacheId: chunk.cacheId || null,
             file:        chunk.file,
             chunkId:     chunk.id,
             score:       Math.round(score * 100) / 100,

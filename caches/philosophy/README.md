@@ -1,6 +1,6 @@
-# Philosophy Cartridge
+# Philosophy Cache
 
-This cartridge holds philosophical reflections, frameworks, and questions explored through the Ember Node.
+This cache holds philosophical reflections, frameworks, and questions explored through the Ember Node.
 
 ## Topics
 - Stoicism and resilience

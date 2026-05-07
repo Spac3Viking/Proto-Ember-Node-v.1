@@ -15,7 +15,7 @@
  *   app/routes/threshold.js — Threshold intake queue, detected-files
  *   app/routes/tools.js     — Tool registry API
  *   app/routes/chat.js      — Chat (legacy + grounded)
- *   app/routes/projects.js  — Projects, user-cartridges, bundled cartridges
+ *   app/routes/projects.js  — Projects, user-caches, bundled caches
  *   app/routes/threads.js   — Thread persistence
  *   app/routes/system.js    — System status, storage info, intake state
  */
@@ -32,9 +32,10 @@ const {
 const { installBundledCoreCache } = require('./archiveCacheService');
 const { ensureUserConceptIndex } = require('./conceptIndex');
 const { ensureCourtConfig } = require('./courtConfig');
+const { runLegacyCleanupPass } = require('./system/nodeMaintenance');
 
 // Re-export legacy symbols for backward compatibility with tests
-const { listCartridges, loadCartridge }               = require('./cartridgeLoader');
+const { listCaches, loadCache, listCartridges, loadCartridge } = require('./cacheLoader');
 const { loadToolRegistry, saveToolRegistry,
         mergeDetectedTools, resolveActiveHeart,
         MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL, getHeartModel,
@@ -53,6 +54,7 @@ installBundledCoreCache();
 ensureCanonicalDataFiles();
 ensureCourtConfig();
 ensureUserConceptIndex();
+runLegacyCleanupPass();
 
 // ── Route modules ─────────────────────────────────────────────────────────────
 
@@ -167,6 +169,8 @@ module.exports = {
     MODEL,
     OLLAMA_CHAT_URL,
     OLLAMA_BASE_URL,
+    listCaches,
+    loadCache,
     listCartridges,
     loadCartridge,
     loadToolRegistry,

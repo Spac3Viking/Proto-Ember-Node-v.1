@@ -138,8 +138,8 @@ function escapeHtml(str) {
                     loadWorkshopSources();
                     loadWorkshopNotes();
                 }
-                if (panelId === 'ws-cartridges' && !window._cartridgesLoaded) {
-                    loadCartridgeShelf();
+                if (panelId === 'ws-caches' && !window._cachesLoaded) {
+                    loadCacheShelf();
                 }
                 if (panelId === 'ws-projects') {
                     loadProjects();
@@ -671,13 +671,14 @@ function renderSignalTrace(sources, signalTrace = null) {
     const contextSummary = sourceSummary.length > 0
         ? sourceSummary
         : (courtSourcesConsidered.length > 0 ? courtSourcesConsidered : courtDomains);
+    const dedupedContextSummary = Array.from(new Set(contextSummary.map(item => String(item))));
     const compactRoute = dedupedConceptRoute.length > 0
         ? dedupedConceptRoute.join(' → ')
         : null;
     const rows = [
         { key: 'Active archetype', value: courtLens || 'Ember Prime' },
         { key: 'Route', value: compactRoute },
-        { key: 'Context', value: contextSummary.length > 0 ? boundedListText(contextSummary) : null },
+        { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
         { key: 'Model', value: model },
         { key: 'Provider', value: provider },
     ];
@@ -1739,72 +1740,72 @@ function buildSourceCard(s) {
 }
 
 /* ================================================================
-   Workshop — Cartridges sub-tab
+   Workshop — Caches sub-tab
    ================================================================ */
 
-async function loadCartridgeShelf() {
-    window._cartridgesLoaded = true;
+async function loadCacheShelf() {
+    window._cachesLoaded = true;
 
-    const listEl    = document.getElementById('cartridge-list');
-    const loadingEl = document.getElementById('cartridge-loading');
+    const listEl    = document.getElementById('cache-list');
+    const loadingEl = document.getElementById('cache-loading');
 
     try {
-        const res  = await fetch('/cartridges');
+        const res  = await fetch('/caches');
         const data = await res.json();
-        const cartridges = data.cartridges || [];
+        const caches = data.caches || [];
 
         if (loadingEl) loadingEl.remove();
 
-        if (cartridges.length === 0) {
-            listEl.innerHTML = '<div class="message-system">No cartridges found.</div>';
-            updateSystemCartridgeCount(0);
+        if (caches.length === 0) {
+            listEl.innerHTML = '<div class="message-system">No caches found.</div>';
+            updateSystemCacheCount(0);
             return;
         }
 
         listEl.innerHTML = '';
-        cartridges.forEach(c => {
+        caches.forEach(c => {
             const item = document.createElement('div');
-            item.className = 'cartridge-item';
-            item.dataset.cartridgeId = c.id;
+            item.className = 'cache-item';
+            item.dataset.cacheId = c.id;
             item.innerHTML =
-                '<div class="cartridge-item-name">' + escapeHtml(c.name) + '</div>' +
-                '<div class="cartridge-item-type">' + escapeHtml(c.type || 'cartridge') + '</div>';
-            item.addEventListener('click', () => inspectCartridge(c.id, item));
+                '<div class="cache-item-name">' + escapeHtml(c.name) + '</div>' +
+                '<div class="cache-item-type">' + escapeHtml(c.type || 'cache') + '</div>';
+            item.addEventListener('click', () => inspectCache(c.id, item));
             listEl.appendChild(item);
         });
 
-        updateSystemCartridgeCount(cartridges.length);
+        updateSystemCacheCount(caches.length);
     } catch {
         if (loadingEl) loadingEl.remove();
-        if (listEl) listEl.innerHTML = '<div class="message-system">Could not load cartridges.</div>';
+        if (listEl) listEl.innerHTML = '<div class="message-system">Could not load caches.</div>';
     }
 
-    // Also load user cartridges
-    loadUserCartridges();
+    // Also load user caches
+    loadUserCaches();
 }
 
-async function loadUserCartridges() {
-    const listEl = document.getElementById('user-cartridge-list');
+async function loadUserCaches() {
+    const listEl = document.getElementById('user-cache-list');
     if (!listEl) return;
 
     try {
-        const res  = await fetch('/api/user-cartridges');
+        const res  = await fetch('/api/user-caches');
         const data = await res.json();
-        const cartridges = data.cartridges || [];
+        const caches = data.caches || [];
 
-        if (cartridges.length === 0) {
+        if (caches.length === 0) {
             listEl.innerHTML = '<span class="message-system">None created yet.</span>';
             return;
         }
 
         listEl.innerHTML = '';
-        cartridges.forEach(c => {
+        caches.forEach(c => {
             const item = document.createElement('div');
-            item.className = 'cartridge-item';
+            item.className = 'cache-item';
             item.innerHTML =
-                '<div class="cartridge-item-name">' + escapeHtml(c.title) + '</div>' +
-                '<div class="cartridge-item-type">user cartridge</div>';
-            item.addEventListener('click', () => inspectUserCartridge(c));
+                '<div class="cache-item-name">' + escapeHtml(c.title) + '</div>' +
+                '<div class="cache-item-type">user cache</div>';
+            item.addEventListener('click', () => inspectUserCache(c));
             listEl.appendChild(item);
         });
     } catch {
@@ -1813,26 +1814,26 @@ async function loadUserCartridges() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const newCartridgeBtn = document.getElementById('new-cartridge-btn');
-    if (newCartridgeBtn) {
-        newCartridgeBtn.addEventListener('click', async () => {
-            const title = prompt('Cartridge title:');
+    const newCacheBtn = document.getElementById('new-cache-btn');
+    if (newCacheBtn) {
+        newCacheBtn.addEventListener('click', async () => {
+            const title = prompt('Cache title:');
             if (!title) return;
             const description = prompt('Short description (optional):') || '';
             try {
-                const res  = await fetch('/api/user-cartridges', {
+                const res  = await fetch('/api/user-caches', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ title, description }),
                 });
                 const data = await res.json();
-                if (data.success) loadUserCartridges();
+                if (data.success) loadUserCaches();
             } catch { /* ignore */ }
         });
     }
 });
 
-function inspectUserCartridge(c) {
+function inspectUserCache(c) {
     const emptyEl     = document.getElementById('inspector-empty');
     const contentArea = document.getElementById('inspector-content-area');
     const nameEl      = document.getElementById('inspector-name');
@@ -1845,13 +1846,13 @@ function inspectUserCartridge(c) {
     if (contentArea) contentArea.style.display = 'flex';
     if (nameEl) nameEl.textContent = c.title;
     if (descEl) descEl.textContent = c.description || '';
-    if (metaEl) metaEl.innerHTML = '<span class="meta-badge"><strong>user</strong>&nbsp;cartridge</span>';
+    if (metaEl) metaEl.innerHTML = '<span class="meta-badge"><strong>user</strong>&nbsp;cache</span>';
     if (permsEl) permsEl.innerHTML = '';
     if (contentEl) contentEl.textContent = c.notes || '(no notes)';
 }
 
-async function inspectCartridge(id, itemEl) {
-    document.querySelectorAll('.cartridge-item').forEach(el => {
+async function inspectCache(id, itemEl) {
+    document.querySelectorAll('.cache-item').forEach(el => {
         el.classList.toggle('active', el === itemEl);
     });
 
@@ -1878,7 +1879,7 @@ async function inspectCartridge(id, itemEl) {
     }
 
     try {
-        const res  = await fetch('/cartridges/' + encodeURIComponent(id));
+        const res  = await fetch('/caches/' + encodeURIComponent(id));
         const data = await res.json();
         const m    = data.manifest || {};
 
@@ -1914,10 +1915,10 @@ async function inspectCartridge(id, itemEl) {
         }
 
         if (contentEl) {
-            contentEl.textContent = data.content || '(no readable documents in this cartridge)';
+            contentEl.textContent = data.content || '(no readable documents in this cache)';
         }
     } catch {
-        if (contentEl) contentEl.textContent = 'Error loading cartridge content.';
+        if (contentEl) contentEl.textContent = 'Error loading cache content.';
     }
 }
 
@@ -3089,7 +3090,7 @@ async function refreshSystemStatus() {
         const data = await res.json();
         if (chunksEl)  chunksEl.textContent  = String(data.indexedChunks  ?? 0);
         if (sourcesEl) sourcesEl.textContent = String(data.indexedSources ?? 0);
-        updateSystemCartridgeCount(data.cartridgeCount ?? 0);
+        updateSystemCacheCount(data.cacheCount ?? 0);
         if (nodeRuntimeStatusEl) {
             nodeRuntimeStatusEl.textContent = data.nodeRuntimeStatus || 'Missing';
             if (data.nodeRuntimeSource === 'bundled') {
@@ -3255,6 +3256,101 @@ async function requestSystemShutdown(buttonEl) {
     });
 })();
 
+function setMaintenanceStatus(message, cssClass = '') {
+    const statusEl = document.getElementById('sys-maintenance-status');
+    if (!statusEl) return;
+    statusEl.textContent = message || '';
+    statusEl.className = cssClass ? ('message-system ' + cssClass) : 'message-system';
+}
+
+async function requestRefreshNode(buttonEl) {
+    const btn = buttonEl || document.getElementById('sys-refresh-node-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    setMaintenanceStatus('Refreshing node state…');
+    try {
+        const res = await fetch('/api/system/refresh-node', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'refresh failed');
+        setMaintenanceStatus('Node refreshed. Reloading interface…');
+        await refreshSystemStatus();
+        setTimeout(() => window.location.reload(), 350);
+    } catch (err) {
+        setMaintenanceStatus(err.message || 'Refresh failed.', 'error');
+        btn.disabled = false;
+    }
+}
+
+function _incinerationWarningText() {
+    return (
+        'This will permanently erase local Node memory, conversations, drafts, and temporary structures.\n' +
+        'Installed Archive caches may optionally be preserved.\n' +
+        'This action cannot be undone.'
+    );
+}
+
+async function requestIncinerateNodeMemory(buttonEl) {
+    const btn = buttonEl || document.getElementById('sys-incinerate-node-btn');
+    if (!btn) return;
+
+    const choice = window.prompt(
+        'Incinerate Node Memory\n\n' +
+        '1) Purge Temporary Memory Only (recommended)\n' +
+        '2) Full Incineration\n\n' +
+        'Enter 1 or 2:',
+        '1',
+    );
+    if (!choice) return;
+
+    const normalized = String(choice).trim();
+    const mode = normalized === '2' ? 'full' : 'temporary';
+    let includeArchive = false;
+    if (mode === 'full') {
+        includeArchive = window.confirm(
+            'Include archive/core and archive/caches in this full incineration?\n\n' +
+            'Cancel preserves installed archive caches.',
+        );
+    }
+
+    if (!window.confirm(_incinerationWarningText())) return;
+
+    btn.disabled = true;
+    setMaintenanceStatus('Incineration in progress…');
+    try {
+        const res = await fetch('/api/system/incinerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, includeArchive }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'incineration failed');
+        const removedCount = data.result && Number.isFinite(data.result.removedCount)
+            ? data.result.removedCount
+            : 0;
+        setMaintenanceStatus(
+            (mode === 'full' ? 'Full incineration complete.' : 'Temporary memory purge complete.') +
+            ' Removed ' + removedCount + ' path(s).',
+        );
+        await refreshSystemStatus();
+    } catch (err) {
+        setMaintenanceStatus(err.message || 'Incineration failed.', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+(function initSystemMaintenanceButtons() {
+    document.addEventListener('click', (e) => {
+        if (!e.target) return;
+        if (e.target.id === 'sys-refresh-node-btn') {
+            requestRefreshNode(e.target);
+        }
+        if (e.target.id === 'sys-incinerate-node-btn') {
+            requestIncinerateNodeMemory(e.target);
+        }
+    });
+})();
+
 function mapStatusToCssClass(status) {
     if (status === 'Coming soon') return 'system-val warn';
     return 'system-val';
@@ -3337,8 +3433,8 @@ async function loadNodeStatusUpdates() {
     }
 }
 
-function updateSystemCartridgeCount(count) {
-    const el = document.getElementById('sys-cartridge-count');
+function updateSystemCacheCount(count) {
+    const el = document.getElementById('sys-cache-count');
     if (el) el.textContent = String(count);
 }
 

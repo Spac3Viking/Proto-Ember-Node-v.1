@@ -230,14 +230,14 @@
                   </div>
                 </div>
                 <div class="ember-card system-block">
-                  <div class="system-block-title">Cartridge Shelf</div>
+                  <div class="system-block-title">Cache Shelf</div>
                   <div class="system-row">
-                    <span class="system-key">Cartridges loaded</span>
-                    <span class="system-val" id="sys-cartridge-count">—</span>
+                    <span class="system-key">Caches loaded</span>
+                    <span class="system-val" id="sys-cache-count">—</span>
                   </div>
                   <div class="system-row">
                     <span class="system-key">Bundled location</span>
-                    <span class="system-val">./cartridges/ (app folder)</span>
+                    <span class="system-val">./caches/ (app folder)</span>
                   </div>
                 </div>
                 <div class="ember-card system-block">
@@ -310,6 +310,17 @@
                     Checking update guidance…
                   </p>
                 </div>
+                <div class="ember-card system-block">
+                  <div class="system-block-title">Node Maintenance</div>
+                  <p class="system-future-note" style="margin-top:0;">
+                    Refresh Node performs a safe reload and cleanup pass without wiping memory. Incinerate Node Memory removes local transient memory and legacy structures.
+                  </p>
+                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="secondary" id="sys-refresh-node-btn">Refresh Node</button>
+                    <button class="secondary" id="sys-incinerate-node-btn">Incinerate Node Memory</button>
+                  </div>
+                  <div id="sys-maintenance-status" class="message-system" style="margin-top:0.6rem;"></div>
+                </div>
               </div>
 
               <!-- Active Ember Prime Assignment -->
@@ -333,7 +344,7 @@
                 <p class="system-future-note">
                   Phase 3 ✓ — document ingestion, chunking, embeddings, retrieval, signal trace<br>
                   Phase 4 ✓ — sub-tab navigation, file lifecycle, thread system, PDF/DOCX support<br>
-                  Phase 5 ✓ — external data root, portability, cartridge ownership<br>
+                  Phase 5 ✓ — external data root, portability, cache ownership<br>
                   Phase 6 ✓ — source actions, cross-room mobility, Hearth Chat references<br>
                   Phase 7 ✓ — AI/tool discovery, trust flow, role assignment, Ember Prime selection<br>
                   Phase 8 ✓ — startup checklist, airlock discipline, tool readiness<br>
@@ -382,7 +393,7 @@
 
       <!-- ═══════════════════════════════════════════════════════════
             EMBER COUNCIL — Indexed Sources & Working Notes
-           Sub-tabs: Notepad | Index | Cartridges | Projects
+           Sub-tabs: Notepad | Index | Caches | Projects
            ═══════════════════════════════════════════════════════════ -->
       <section class="room-panel" id="room-workshop" role="tabpanel">
         <div class="room-panel-inner workshop-layout">
@@ -393,7 +404,7 @@
               <button class="sub-tab active" data-subtab="ws-scribe"     aria-selected="true">ᛋ Scribe</button>
               <button class="sub-tab"        data-subtab="ws-notepad"    aria-selected="false">Notepad</button>
               <button class="sub-tab"        data-subtab="ws-index"      aria-selected="false">Index</button>
-              <button class="sub-tab"        data-subtab="ws-cartridges" aria-selected="false">Cartridges</button>
+              <button class="sub-tab"        data-subtab="ws-caches" aria-selected="false">Caches</button>
               <button class="sub-tab"        data-subtab="ws-projects"   aria-selected="false">Projects</button>
               <button class="sub-tab"        data-subtab="ws-tools"      aria-selected="false">Tools</button>
             </nav>
@@ -496,28 +507,28 @@
             </div>
           </div>
 
-          <!-- Workshop / Cartridges -->
-          <div class="sub-panel" id="ws-cartridges">
-            <div class="cartridge-layout">
+          <!-- Workshop / Caches -->
+          <div class="sub-panel" id="ws-caches">
+            <div class="cache-layout">
               <!-- Shelf list -->
-              <div class="ember-card cartridge-shelf" style="padding: 1rem;">
-                <div class="cartridge-shelf-title">Installed Cartridges</div>
-                <div class="cartridge-list" id="cartridge-list" aria-label="Cartridge list">
-                  <div class="message-system loading-rune" id="cartridge-loading">Loading</div>
+              <div class="ember-card cache-shelf" style="padding: 1rem;">
+                <div class="cache-shelf-title">Installed Caches</div>
+                <div class="cache-list" id="cache-list" aria-label="Cache list">
+                  <div class="message-system loading-rune" id="cache-loading">Loading</div>
                 </div>
                 <div style="margin-top: 1rem; border-top: 1px solid hsla(140,100%,70%,0.08); padding-top: 0.75rem;">
-                  <div class="cartridge-shelf-title">User Cartridges</div>
-                  <div class="cartridge-list" id="user-cartridge-list">
+                  <div class="cache-shelf-title">User Caches</div>
+                  <div class="cache-list" id="user-cache-list">
                     <span class="message-system">None created yet.</span>
                   </div>
-                  <button class="secondary" id="new-cartridge-btn" style="margin-top: 0.5rem; width: 100%;">+ New Cartridge</button>
+                  <button class="secondary" id="new-cache-btn" style="margin-top: 0.5rem; width: 100%;">+ New Cache</button>
                 </div>
               </div>
               <!-- Inspector -->
-              <div class="ember-card cartridge-inspector" id="cartridge-inspector" style="padding: 0;">
+              <div class="ember-card cache-inspector" id="cache-inspector" style="padding: 0;">
                 <div class="inspector-empty" id="inspector-empty">
                   <span class="inspector-rune">ᚲ</span>
-                  Select a cartridge to inspect
+                  Select a cache to inspect
                 </div>
                 <div id="inspector-content-area" style="display:none; flex-direction:column; height:100%;">
                   <div class="inspector-name"        id="inspector-name"></div>

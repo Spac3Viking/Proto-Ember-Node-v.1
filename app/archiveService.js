@@ -18,7 +18,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { ARCHIVE_DIR, ARCHIVE_DIRS, ARCHIVE_CORE_DIR, ARCHIVE_CORE_DIRS, ARCHIVE_CACHES_DIR, ARCHIVE_CARTRIDGES_DIR, DATA_ROOT } = require('./storageConfig');
+const { ARCHIVE_DIR, ARCHIVE_DIRS, ARCHIVE_CACHES_DIR, ARCHIVE_LEGACY_CACHES_DIR, DATA_ROOT } = require('./storageConfig');
 const { buildSourceRecord, collectFiles }       = require('./ingest');
 const {
     upsertManifest, loadManifests,
@@ -35,8 +35,8 @@ const SOURCE_CLASS_ARCHIVE = 'trusted-archive';
 /** Source class identifier for archive cache sources (downloadable expansions) */
 const SOURCE_CLASS_ARCHIVE_CACHE = 'archive-cache';
 
-/** Source class identifier for archive cartridge sources (modular modules) */
-const SOURCE_CLASS_ARCHIVE_CARTRIDGE = 'archive-cartridge';
+/** Source class identifier for deprecated legacy cache sources. */
+const SOURCE_CLASS_ARCHIVE_LEGACY_CACHE = 'archive-legacy-cache';
 
 /**
  * Shelf name derived from the archive subdirectory name.
@@ -76,7 +76,7 @@ function removeStaleEmbeddingsForSource(sourceId) {
  *   - archive/core/*  (trusted-archive, core trusted knowledge)
  *   - archive/*       (legacy flat shelves — backward compat)
  *   - archive/caches/**  (archive-cache, downloadable expansions)
- *   - archive/cartridges/**  (archive-cartridge, modular modules)
+ *   - archive/legacy-caches/**  (archive-legacy-cache, deprecated)
  *
  * Returns an array of { filePath, shelf, sourceClass } objects.
  *
@@ -127,18 +127,18 @@ function detectArchiveFiles() {
         }
     }
 
-    // Scan archive/cartridges/ — each cartridge is a sub-directory with its own content
-    if (fs.existsSync(ARCHIVE_CARTRIDGES_DIR)) {
-        let cartridgeEntries;
-        try { cartridgeEntries = fs.readdirSync(ARCHIVE_CARTRIDGES_DIR, { withFileTypes: true }); }
-        catch { cartridgeEntries = []; }
-        for (const cartridgeEntry of cartridgeEntries) {
-            if (!cartridgeEntry.isDirectory()) continue;
-            const cartridgeDir = path.join(ARCHIVE_CARTRIDGES_DIR, cartridgeEntry.name);
-            const files = collectFiles(cartridgeDir);
+    // Scan archive/legacy-caches/ conservatively for backward compatibility.
+    if (fs.existsSync(ARCHIVE_LEGACY_CACHES_DIR)) {
+        let cacheEntries;
+        try { cacheEntries = fs.readdirSync(ARCHIVE_LEGACY_CACHES_DIR, { withFileTypes: true }); }
+        catch { cacheEntries = []; }
+        for (const cacheEntry of cacheEntries) {
+            if (!cacheEntry.isDirectory()) continue;
+            const cacheDir = path.join(ARCHIVE_LEGACY_CACHES_DIR, cacheEntry.name);
+            const files = collectFiles(cacheDir);
             for (const filePath of files) {
                 if (path.basename(filePath) === 'manifest.json') continue;
-                found.push({ filePath, shelf: cartridgeEntry.name, sourceClass: SOURCE_CLASS_ARCHIVE_CARTRIDGE });
+                found.push({ filePath, shelf: cacheEntry.name, sourceClass: SOURCE_CLASS_ARCHIVE_LEGACY_CACHE });
             }
         }
     }
@@ -262,7 +262,7 @@ async function bootstrapArchive() {
  */
 function listArchiveSources(sourceClass) {
     const manifests = loadManifests();
-    const ARCHIVE_CLASSES = new Set([SOURCE_CLASS_ARCHIVE, SOURCE_CLASS_ARCHIVE_CACHE, SOURCE_CLASS_ARCHIVE_CARTRIDGE]);
+    const ARCHIVE_CLASSES = new Set([SOURCE_CLASS_ARCHIVE, SOURCE_CLASS_ARCHIVE_CACHE, SOURCE_CLASS_ARCHIVE_LEGACY_CACHE]);
     return Object.values(manifests).filter(m => {
         if (sourceClass) return m.sourceClass === sourceClass;
         return ARCHIVE_CLASSES.has(m.sourceClass);
@@ -272,7 +272,7 @@ function listArchiveSources(sourceClass) {
 module.exports = {
     SOURCE_CLASS_ARCHIVE,
     SOURCE_CLASS_ARCHIVE_CACHE,
-    SOURCE_CLASS_ARCHIVE_CARTRIDGE,
+    SOURCE_CLASS_ARCHIVE_LEGACY_CACHE,
     detectArchiveFiles,
     registerArchiveSource,
     bootstrapArchive,

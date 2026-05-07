@@ -10,6 +10,9 @@
  * GET /api/ai/models
  * POST /api/ai/models/select
  * GET /api/court
+ * GET /api/system/purge-manifest
+ * POST /api/system/refresh-node
+ * POST /api/system/incinerate
  * POST /api/system/shutdown
  */
 
@@ -21,19 +24,25 @@ const { readLimiter, writeLimiter } = require('../rateLimiters');
 const {
     DATA_ROOT, ROOM_DIRS,
     INDEXES_DIR, PROJECTS_DIR, THREADS_DIR,
-    USER_CARTRIDGES_DIR, SYSTEM_DIR, EXPORTS_DIR,
-    FORGE_DIR,
+    USER_CACHES_DIR, SYSTEM_DIR, EXPORTS_DIR,
+    FORGE_DIR, ensureDataRoot, ensureCanonicalDataFiles,
 } = require('../storageConfig');
 const { OLLAMA_BASE_URL } = require('../toolRegistry');
 const { getSelectedModel, setSelectedModel } = require('../aiConfig');
 const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
 const { getEmbeddingStatus }                        = require('../embeddings');
-const { listCartridges }                            = require('../cartridgeLoader');
+const { listCaches }                            = require('../cacheLoader');
 const { loadIntakeState }                           = require('../intakeState');
-const { loadBootstrap }                             = require('../bootstrap');
+const { loadBootstrap, refreshBootstrap }           = require('../bootstrap');
 const { loadCourtConfig }                           = require('../courtConfig');
 // Reuse canonical archive cache logic for installed/update status.
 const { compareInstalledWithUpstream } = require('../archiveCacheService');
+const {
+    PURGE_MANIFEST,
+    PURGE_MODES,
+    purgeNodeMemory,
+    runLegacyCleanupPass,
+} = require('../system/nodeMaintenance');
 
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
@@ -181,9 +190,9 @@ function createSystemRouter({ migrationResult }) {
         const packageConfig = _loadPackageConfig();
         const runtimeStatus = _detectNodeRuntimeStatus();
 
-        const bundledCartridgeCount = listCartridges().length;
-        const userCartridgeCount    = fs.existsSync(USER_CARTRIDGES_DIR)
-            ? fs.readdirSync(USER_CARTRIDGES_DIR).filter(f => f.endsWith('.json')).length
+        const bundledCacheCount = listCaches().length;
+        const userCacheCount    = fs.existsSync(USER_CACHES_DIR)
+            ? fs.readdirSync(USER_CACHES_DIR).filter(f => f.endsWith('.json')).length
             : 0;
 
         // Phase 11.5: Forge + Bootstrap status
@@ -197,10 +206,17 @@ function createSystemRouter({ migrationResult }) {
             model:             getSelectedModel(),
             ollamaBaseUrl:     OLLAMA_BASE_URL,
             port:              3477,
-            cartridgeCount:    bundledCartridgeCount,
+            cacheCount:    bundledCacheCount,
+            // Deprecated compatibility fields.
+            // TODO(phase-15-9c): remove legacy cartridge aliases.
+            cartridgeCount: bundledCacheCount,
+            caches: {
+                bundled:       bundledCacheCount,
+                user:          userCacheCount,
+            },
             cartridges: {
-                bundled:       bundledCartridgeCount,
-                user:          userCartridgeCount,
+                bundled:       bundledCacheCount,
+                user:          userCacheCount,
             },
             indexedChunks:     chunks.length,
             indexedSources:    Object.keys(manifests).length,
@@ -309,8 +325,8 @@ function createSystemRouter({ migrationResult }) {
      * GET /api/storage-info
      */
     router.get('/api/storage-info', readLimiter, (req, res) => {
-        const userCartridgeCount = fs.existsSync(USER_CARTRIDGES_DIR)
-            ? fs.readdirSync(USER_CARTRIDGES_DIR).filter(f => f.endsWith('.json')).length
+        const userCacheCount = fs.existsSync(USER_CACHES_DIR)
+            ? fs.readdirSync(USER_CACHES_DIR).filter(f => f.endsWith('.json')).length
             : 0;
 
         res.json({
@@ -325,7 +341,8 @@ function createSystemRouter({ migrationResult }) {
                 indexes:    INDEXES_DIR,
                 projects:   PROJECTS_DIR,
                 threads:    THREADS_DIR,
-                cartridges: USER_CARTRIDGES_DIR,
+                caches: USER_CACHES_DIR,
+                cartridges: USER_CACHES_DIR,
                 system:     SYSTEM_DIR,
                 exports:    EXPORTS_DIR,
             },
@@ -335,9 +352,13 @@ function createSystemRouter({ migrationResult }) {
                 mode:      migrationResult.mode,
                 errors:    migrationResult.errors,
             },
+            caches: {
+                bundled: listCaches().length,
+                user:    userCacheCount,
+            },
             cartridges: {
-                bundled: listCartridges().length,
-                user:    userCartridgeCount,
+                bundled: listCaches().length,
+                user:    userCacheCount,
             },
         });
     });
@@ -374,6 +395,80 @@ function createSystemRouter({ migrationResult }) {
             res.status(500).json({
                 success: false,
                 error: 'Could not load node status updates: ' + err.message,
+            });
+        }
+    });
+
+    router.get('/api/system/purge-manifest', readLimiter, (req, res) => {
+        res.json({
+            success: true,
+            purgeManifest: PURGE_MANIFEST,
+        });
+    });
+
+    router.post('/api/system/refresh-node', writeLimiter, (req, res) => {
+        if (!_isLocalRequest(req)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Refresh endpoint is local-only.',
+            });
+        }
+
+        try {
+            ensureDataRoot();
+            ensureCanonicalDataFiles();
+            const cleanup = runLegacyCleanupPass();
+            let bootstrapStatus = 'unchanged';
+            try {
+                refreshBootstrap();
+                bootstrapStatus = 'refreshed';
+            } catch {
+                bootstrapStatus = 'refresh-failed';
+            }
+
+            return res.json({
+                success: true,
+                message: 'Node refreshed. Local memory remains intact.',
+                bootstrapStatus,
+                cleanup,
+                checkedAt: new Date().toISOString(),
+            });
+        } catch (err) {
+            return res.status(500).json({
+                success: false,
+                error: 'Could not refresh node: ' + err.message,
+            });
+        }
+    });
+
+    router.post('/api/system/incinerate', writeLimiter, (req, res) => {
+        if (!_isLocalRequest(req)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Incineration endpoint is local-only.',
+            });
+        }
+
+        const requestedMode = req.body && typeof req.body.mode === 'string'
+            ? req.body.mode.trim().toLowerCase()
+            : PURGE_MODES.TEMPORARY;
+        const mode = requestedMode === PURGE_MODES.FULL ? PURGE_MODES.FULL : PURGE_MODES.TEMPORARY;
+        const includeArchive = Boolean(req.body && req.body.includeArchive === true);
+
+        try {
+            const result = purgeNodeMemory({ mode, includeArchive });
+            return res.json({
+                success: true,
+                message: mode === PURGE_MODES.FULL
+                    ? 'Full incineration complete.'
+                    : 'Temporary memory purge complete.',
+                result,
+                checkedAt: new Date().toISOString(),
+            });
+        } catch (err) {
+            return res.status(500).json({
+                success: false,
+                error: 'Could not incinerate node memory: ' + err.message,
             });
         }
     });

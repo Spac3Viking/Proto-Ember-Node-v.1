@@ -126,7 +126,7 @@ function buildSourceMetaText(chunk, manifestsById) {
         chunk.file,
         chunk.shelf,
         chunk.path,
-        chunk.cartridgeId,
+        chunk.cacheId,
     ].filter(Boolean).join(' '));
 }
 
@@ -391,7 +391,7 @@ async function retrieve({
     query,
     topK = DEFAULT_TOP_K,
     rooms = null,
-    cartridgeId = null,
+    cacheId = null,
     sourceClass = null,
     routeHint = null,
     targetSources = DEFAULT_TARGET_SOURCES,
@@ -416,8 +416,8 @@ async function retrieve({
 
     candidates = normalizeRoomCandidates(candidates, rooms, sourceClassById);
 
-    if (cartridgeId) {
-        candidates = candidates.filter(c => c.cartridgeId === cartridgeId);
+    if (cacheId) {
+        candidates = candidates.filter(c => c.cacheId === cacheId);
     }
 
     if (candidates.length === 0) return [];

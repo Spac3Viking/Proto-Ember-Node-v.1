@@ -1,0 +1,72 @@
+# Ember Node Structure
+
+## Elemental Rooms
+
+- **🜂 Hearth** → Ember Prime continuity layer and remembered conversation.
+- **🜁 Ember Council** → archetypal perspectives that shape interpretation, never replace continuity.
+- **🜃 Archive** → installed memory, including `archive/core/` and portable Archive caches.
+- **🜄 Threshold** → intake, research triage, and cache forging workflow.
+- **🜔 Signal Threads** → reserved for future persistent lines of thought (not implemented yet).
+
+## Cache Philosophy
+
+Caches are portable memory bundles.
+
+Examples include:
+
+- Core Cache
+- Codices Cache
+- Sagas Cache
+- Grimoires Cache
+- Reference Cache
+- Field Cache
+- Community Cache
+- Personal Cache
+- Archive Mirror Cache
+
+Caches may be downloaded, mirrored, shared via USB, forged locally, or transmitted between Nodes.
+
+## Maintenance Controls
+
+### Refresh Node
+
+Refresh Node performs a safe reload pass:
+
+- reloads app state
+- refreshes cache/index state
+- reloads configuration
+- runs conservative legacy cleanup
+- performs a soft UI restart
+
+Refresh never wipes memory by itself.
+
+### Incinerate Node Memory
+
+Incineration permanently removes local transient memory and working state with explicit confirmation.
+
+#### Recommended default: Purge Temporary Memory Only
+
+Deletes:
+
+- chats / threads
+- drafts
+- logs
+- temporary indexes
+- legacy cleanup targets
+
+Preserves:
+
+- `archive/core/`
+- `archive/caches/`
+- `system/config/`
+
+#### Full Incineration
+
+Deletes the temporary memory set plus broader local working files.
+
+Optionally includes complete archive wipe when explicitly selected:
+
+- `archive/core/`
+- `archive/caches/`
+
+No automatic archive cache deletion occurs without explicit confirmation.

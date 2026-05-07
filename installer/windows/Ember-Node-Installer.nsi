@@ -50,7 +50,7 @@ Section "Install Ember Node" SEC_MAIN
     ; Replace app files only. External Ember-Node-Data remains untouched.
     RMDir /r "$INSTDIR\app"
     RMDir /r "$INSTDIR\public"
-    RMDir /r "$INSTDIR\cartridges"
+    RMDir /r "$INSTDIR\caches"
     RMDir /r "$INSTDIR\data"
     RMDir /r "$INSTDIR\runtime"
     RMDir /r "$INSTDIR\node_modules"
@@ -62,7 +62,7 @@ Section "Install Ember Node" SEC_MAIN
     ; Core runtime files
     File /r "..\..\app"
     File /r "..\..\public"
-    File /r "..\..\cartridges"
+    File /r "..\..\caches"
     File /r "..\..\runtime"
     ; Bundled seed scaffold + canonical archive baseline for first-run initialization.
     File /r "..\..\data"

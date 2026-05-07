@@ -1,6 +1,6 @@
-# Survival Cartridge
+# Survival Cache
 
-This cartridge holds practical survival knowledge — wilderness skills, preparedness, and self-reliance.
+This cache holds practical survival knowledge — wilderness skills, preparedness, and self-reliance.
 
 ## Topics
 - Fire-making and shelter construction
