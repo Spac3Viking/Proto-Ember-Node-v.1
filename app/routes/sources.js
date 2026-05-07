@@ -22,7 +22,7 @@ const fs      = require('fs');
 const path    = require('path');
 const { readLimiter, writeLimiter, indexLimiter } = require('../rateLimiters');
 const { DATA_ROOT, resolveSourcePath }            = require('../storageConfig');
-const { BUNDLED_CACHES_DIR }                  = require('../cacheLoader');
+const { resolveBundledCacheDir } = require('../cacheLoader');
 const { ingestFile, ingestCache, extractTextAsync, buildSourceRecord } = require('../ingest');
 const { chunkText }                                   = require('../chunker');
 const { generateEmbedding }                           = require('../embeddings');
@@ -144,9 +144,9 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
 router.post('/api/index/cache/:id', indexLimiter, async (req, res) => {
     try {
         const cacheId  = req.params.id;
-        const cacheDir = path.join(BUNDLED_CACHES_DIR, cacheId);
+        const cacheDir = resolveBundledCacheDir(cacheId);
 
-        if (!fs.existsSync(cacheDir)) {
+        if (!cacheDir || !fs.existsSync(cacheDir)) {
             return res.status(404).json({ error: 'Cache "' + cacheId + '" not found' });
         }
 

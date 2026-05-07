@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const CACHE_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 /**
  * Bundled caches — shipped with the app code.
@@ -32,6 +33,15 @@ function loadManifest(cacheDir) {
     } catch {
         return null;
     }
+}
+
+function resolveBundledCacheDir(name) {
+    const cacheName = typeof name === 'string' ? name.trim() : '';
+    if (!cacheName || !CACHE_ID_PATTERN.test(cacheName)) return null;
+    const resolved = path.resolve(BUNDLED_CACHES_DIR, cacheName);
+    const root = path.resolve(BUNDLED_CACHES_DIR);
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
+    return resolved;
 }
 
 /**
@@ -75,8 +85,8 @@ function listCaches() {
  * @returns {{ name: string, manifest: object|null, content: string } | null}
  */
 function loadCache(name) {
-    const cacheDir = path.join(BUNDLED_CACHES_DIR, name);
-    if (!fs.existsSync(cacheDir)) return null;
+    const cacheDir = resolveBundledCacheDir(name);
+    if (!cacheDir || !fs.existsSync(cacheDir)) return null;
 
     const manifest = loadManifest(cacheDir);
 
@@ -117,6 +127,7 @@ module.exports = {
     loadCache,
     BUNDLED_CACHES_DIR,
     CACHES_DIR,
+    resolveBundledCacheDir,
     listCartridges,
     loadCartridge,
     BUNDLED_CARTRIDGES_DIR,
