@@ -90,6 +90,7 @@ app.use(sourcesRouter);
 app.use(thresholdRouter);
 app.use(toolsRouter);
 app.use(threadsRouter);
+// Legacy compatibility: project/cache APIs remain mounted for existing data and tests.
 app.use(projectsRouter);
 app.use(documentsRouter);
 app.use(contextMapsRouter);

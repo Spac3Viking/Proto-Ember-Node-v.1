@@ -2293,6 +2293,7 @@ function getGreenFireReader() {
     const overlay = document.getElementById('gf-reader-overlay');
     const bodyEl = document.getElementById('gf-reader-body');
     const titleEl = document.getElementById('gf-reader-title');
+    const sourceEl = document.getElementById('gf-reader-source');
     const toggleBtn = document.getElementById('gf-reader-toggle-btn');
     const copyBtn = document.getElementById('gf-reader-copy-btn');
     const downloadBtn = document.getElementById('gf-reader-download-btn');
@@ -2310,8 +2311,11 @@ function getGreenFireReader() {
         contentType: 'text/markdown',
         entryId: '',
         rawView: false,
+        rawOnly: false,
+        stripFrontmatter: true,
         backAction: null,
         pendingResumePercent: 0,
+        sourceLabel: '',
     };
 
     let scrollSaveTimer = null;
@@ -2342,7 +2346,16 @@ function getGreenFireReader() {
             bodyEl.innerHTML = '';
             bodyEl.appendChild(div);
         }
-        if (toggleBtn) toggleBtn.textContent = state.rawView ? 'Rendered View' : 'Raw Markdown';
+        if (toggleBtn) {
+            toggleBtn.style.display = state.rawOnly ? 'none' : '';
+            toggleBtn.textContent = state.rawView ? 'Rendered View' : 'Raw Markdown';
+        }
+        if (copyBtn) {
+            copyBtn.textContent = state.contentType === 'text/markdown' ? 'Copy Markdown' : 'Copy Text';
+        }
+        if (downloadBtn) {
+            downloadBtn.textContent = state.contentType === 'text/markdown' ? 'Download .md' : 'Download File';
+        }
         bodyEl.scrollTop = 0;
     }
 
@@ -2354,13 +2367,19 @@ function getGreenFireReader() {
         const options = opts || {};
         state.title = options.title || 'Green Fire Reader';
         state.sourcePath = options.sourcePath || '';
-        state.content = stripLeadingFrontmatter(options.content || '');
+        state.stripFrontmatter = options.stripFrontmatter !== false;
+        state.content = state.stripFrontmatter
+            ? stripLeadingFrontmatter(options.content || '')
+            : (options.content || '');
         state.contentType = options.contentType || 'text/markdown';
         state.entryId = options.entryId || '';
         state.backAction = typeof options.backAction === 'function' ? options.backAction : null;
-        state.rawView = false;
+        state.rawOnly = options.rawOnly === true;
+        state.rawView = state.rawOnly ? true : options.initialRawView === true;
+        state.sourceLabel = options.sourceLabel || '';
 
         if (titleEl) titleEl.textContent = state.title;
+        if (sourceEl) sourceEl.textContent = state.sourceLabel ? ('Source: ' + state.sourceLabel) : '';
         renderBody();
 
         const saved = getReaderProgress(state.entryId);
@@ -2416,11 +2435,16 @@ function getGreenFireReader() {
                 .replace(/[^a-z0-9._-]+/g, '-')
                 .replace(/-+/g, '-')
                 .replace(/^-|-$/g, '') || 'green-fire-entry';
-            const blob = new Blob([state.content || ''], { type: 'text/markdown;charset=utf-8' });
+            const ext = state.contentType === 'application/json'
+                ? '.json'
+                : state.contentType === 'text/plain'
+                    ? '.txt'
+                    : '.md';
+            const blob = new Blob([state.content || ''], { type: (state.contentType || 'text/plain') + ';charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = safeBase + '.md';
+            a.download = safeBase + ext;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -2468,6 +2492,8 @@ async function openArchiveReaderEntry(entry) {
             content: data.content || '',
             contentType: data.contentType || 'text/markdown',
             entryId: data.entryId || entry.entryId,
+            sourceLabel: 'Archive Cache',
+            stripFrontmatter: true,
         });
     } catch {
         showFlashMessage('Could not open markdown entry.');
@@ -2575,7 +2601,8 @@ async function loadArchiveReaderCatalog() {
 let _intakeQueue = [];
 let _importingAll = false;
 
-const INTAKE_SUPPORTED = new Set(['.txt', '.md', '.pdf', '.docx']);
+// Keep this list aligned with THRESHOLD_IMPORT_EXTS in app/routes/threshold.js.
+const INTAKE_SUPPORTED = new Set(['.txt', '.md', '.json', '.pdf']);
 
 /** Derive a readable title from a filename. */
 function fileBaseName(name) {
@@ -2584,66 +2611,25 @@ function fileBaseName(name) {
     return base.replace(/[_-]+/g, ' ').trim();
 }
 
-/** Read a File into a base64 or UTF-8 string suitable for /api/ingest. */
-function readFileForIngest(file) {
-    return new Promise((resolve) => {
-        const ext      = file.name.split('.').pop().toLowerCase();
-        const isBinary = ext === 'pdf' || ext === 'docx';
-        const reader   = new FileReader();
-
-        reader.onload = (e) => {
-            if (isBinary) {
-                const bytes  = new Uint8Array(e.target.result);
-                const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
-                resolve({ content: btoa(binary), encoding: 'base64' });
-            } else {
-                resolve({ content: e.target.result, encoding: 'utf8' });
-            }
-        };
-        reader.onerror = () => resolve(null);
-
-        if (isBinary) {
-            reader.readAsArrayBuffer(file);
-        } else {
-            reader.readAsText(file);
-        }
-    });
-}
-
-/** POST a single queue entry to /api/ingest.  Updates entry.status in place. */
+/** POST a single queue entry to /api/threshold/import. Updates entry.status in place. */
 async function ingestQueueEntry(entry) {
     entry.status = 'importing';
     renderIntakeQueue();
 
-    const read = await readFileForIngest(entry.file);
-    if (!read) {
-        entry.status = 'failed';
-        entry.error  = 'Could not read file';
-        renderIntakeQueue();
-        return;
-    }
-
     try {
-        const res  = await fetch('/api/ingest', {
+        const form = new FormData();
+        form.append('files', entry.file, entry.file.name);
+        const res  = await fetch('/api/threshold/import', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-                filename:    entry.file.name,
-                content:     read.content,
-                room:        'threshold',
-                title:       entry.title,
-                description: entry.description,
-                shelf:       entry.shelf,
-                encoding:    read.encoding,
-            }),
+            body:    form,
         });
         const data = await res.json();
-        if (data.success) {
+        if (res.ok && Array.isArray(data.imported) && data.imported.length > 0) {
             entry.status = 'imported';
             entry.error  = null;
         } else {
             entry.status = 'failed';
-            entry.error  = data.error || 'Ingestion failed';
+            entry.error  = data.error || 'Import failed';
         }
     } catch {
         entry.status = 'failed';
@@ -3224,372 +3210,151 @@ function loadDetectedIntoQueue(unmanaged, changed) {
 async function loadThresholdList() {
     const listEl = document.getElementById('threshold-file-list');
     if (!listEl) return;
-
-    let files     = [];
-    let changedPaths = new Set();
-
     try {
-        const [listRes, detectedRes] = await Promise.all([
-            fetch('/api/threshold/list'),
-            fetch('/api/detected-files'),
-        ]);
-        const listData     = await listRes.json();
-        const detectedData = await detectedRes.json();
-        files = listData.files || [];
-        (detectedData.changed || []).forEach(f => changedPaths.add(f.path));
+        const listRes = await fetch('/api/threshold/files');
+        const listData = await listRes.json();
+        const files = listData.files || [];
+        if (!listRes.ok) throw new Error(listData.error || 'Could not load Threshold files.');
+
+        if (files.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No imported files in Threshold inbox.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        const head = document.createElement('div');
+        head.className = 'threshold-import-header';
+        head.innerHTML =
+            '<span>Name</span>' +
+            '<span>Type</span>' +
+            '<span>Size</span>' +
+            '<span>Imported</span>' +
+            '<span>Status</span>' +
+            '<span>Actions</span>';
+        listEl.appendChild(head);
+        files.forEach(file => listEl.appendChild(buildThresholdImportedRow(file)));
     } catch {
         listEl.innerHTML = '<span class="message-system threshold-error">Could not load Threshold files.</span>';
-        return;
-    }
-
-    if (files.length === 0) {
-        listEl.innerHTML = '<span class="message-system">No files in Threshold.</span>';
-        return;
-    }
-
-    listEl.innerHTML = '';
-
-    // ── Batch action bar ─────────────────────────────────────────────────────
-    // Collect non-rejected, non-metaOnly files with sourceIds for batch ops
-    const batchable = files.filter(f =>
-        f.sourceId && !f.metaOnly && (!f.intake || f.intake.state !== 'rejected')
-    );
-
-    if (batchable.length > 1) {
-        const batchBar = document.createElement('div');
-        batchBar.className = 'threshold-batch-bar';
-
-        const admitAllBtn = document.createElement('button');
-        admitAllBtn.className = 'threshold-action-btn threshold-admit-btn';
-        admitAllBtn.textContent = 'Admit All (' + batchable.length + ')';
-        admitAllBtn.title = 'Admit all waiting files to Ember Council';
-        admitAllBtn.addEventListener('click', async () => {
-            admitAllBtn.disabled = true;
-            admitAllBtn.textContent = 'Admitting…';
-            let successCount = 0;
-            let failCount    = 0;
-            for (const f of batchable) {
-                try {
-                    const r = await fetch('/api/threshold/admit', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: f.sourceId }),
-                    });
-                    const d = await r.json();
-                    if (d.success) { successCount++; } else { failCount++; }
-                } catch { failCount++; }
-            }
-            const msg = successCount + ' admitted' + (failCount > 0 ? ', ' + failCount + ' failed' : '') + '.';
-            showFlashMessage(msg);
-            refreshSystemStatus();
-            loadThresholdList();
-        });
-
-        const rejectAllBtn = document.createElement('button');
-        rejectAllBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
-        rejectAllBtn.textContent = 'Reject All (' + batchable.length + ')';
-        rejectAllBtn.title = 'Persistently reject all waiting files';
-        rejectAllBtn.addEventListener('click', async () => {
-            rejectAllBtn.disabled = true;
-            rejectAllBtn.textContent = 'Rejecting…';
-            for (const f of batchable) {
-                try {
-                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/reject', {
-                        method: 'POST',
-                    });
-                } catch { /* ignore individual failures */ }
-            }
-            showFlashMessage(batchable.length + ' files rejected.');
-            loadThresholdList();
-        });
-
-        batchBar.appendChild(admitAllBtn);
-        batchBar.appendChild(rejectAllBtn);
-        listEl.appendChild(batchBar);
-    }
-
-    // Split into sections
-    const flaggedFiles  = files.filter(f => f.status === 'flagged');
-    const changedFiles  = files.filter(f => changedPaths.has(f.path));
-    const waitingFiles  = files.filter(f =>
-        (!f.status || f.status === 'waiting') && !changedPaths.has(f.path)
-    );
-    const otherFiles    = files.filter(f =>
-        f.status && f.status !== 'waiting' && f.status !== 'flagged' && !changedPaths.has(f.path)
-    );
-
-    function renderSection(title, items) {
-        if (items.length === 0) return;
-
-        const header = document.createElement('div');
-        header.className = 'threshold-section-header';
-        header.textContent = title + ' (' + items.length + ')';
-        listEl.appendChild(header);
-
-        items.forEach(f => listEl.appendChild(buildThresholdFileRow(f, changedPaths.has(f.path))));
-    }
-
-    renderSection('Flagged', flaggedFiles);
-    renderSection('Changed', changedFiles);
-    renderSection('Waiting', waitingFiles);
-    if (otherFiles.length > 0) {
-        renderSection('Other', otherFiles);
     }
 }
 
-/** Build a single threshold file row with flag/unflag and action buttons. */
-function buildThresholdFileRow(f, isChanged) {
+async function openThresholdImportedFile(file) {
+    if (!file || !file.path) return;
+    if (file.type === 'pdf') {
+        showFlashMessage('PDF stored — reader support later.');
+        return;
+    }
+    try {
+        const res = await fetch('/api/threshold/files/content?path=' + encodeURIComponent(file.path));
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showFlashMessage(data.error || 'Could not open file in reader.');
+            return;
+        }
+        const isMarkdown = data.contentType === 'text/markdown';
+        getGreenFireReader().open({
+            title: data.title || file.name || 'Green Fire Reader',
+            sourcePath: data.path || file.path,
+            content: data.content || '',
+            contentType: data.contentType || 'text/plain',
+            entryId: 'threshold:' + (data.path || file.path),
+            sourceLabel: data.sourceLabel || 'Threshold',
+            stripFrontmatter: isMarkdown,
+            rawOnly: !isMarkdown,
+            initialRawView: !isMarkdown,
+        });
+    } catch {
+        showFlashMessage('Could not open file in reader.');
+    }
+}
+
+async function copyThresholdPath(pathText) {
+    try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+            showFlashMessage('Clipboard unavailable.');
+            return;
+        }
+        await navigator.clipboard.writeText(pathText || '');
+        showFlashMessage('Path copied.');
+    } catch {
+        showFlashMessage('Could not copy path.');
+    }
+}
+
+async function deleteThresholdImportedFile(file) {
+    if (!file || !file.path) return;
+    const ok = window.confirm('Delete "' + (file.name || file.path) + '" from Threshold inbox?');
+    if (!ok) return;
+    try {
+        const res = await fetch('/api/threshold/files', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: file.path }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showFlashMessage(data.error || 'Delete failed.');
+            return;
+        }
+        showFlashMessage('File deleted.');
+        loadThresholdList();
+    } catch {
+        showFlashMessage('Could not delete file.');
+    }
+}
+
+function buildThresholdImportedRow(file) {
     const row = document.createElement('div');
-    row.className = 'threshold-file-row';
+    row.className = 'threshold-file-row threshold-import-row';
 
-    // Dim rejected rows
-    const intakeState = f.intake && f.intake.state;
-    if (intakeState === 'rejected') {
-        row.className += ' intake-rejected';
-    }
+    const nameEl = document.createElement('span');
+    nameEl.className = 'threshold-file-name';
+    nameEl.textContent = file.name || 'unknown';
 
-    const titleText = f.title || f.filename;
+    const typeEl = document.createElement('span');
+    typeEl.textContent = file.type || 'unknown';
 
-    const nameEl = document.createElement('div');
-    nameEl.style.cssText = 'flex:1; min-width:0;';
+    const sizeEl = document.createElement('span');
+    sizeEl.textContent = formatBytes(file.size);
 
-    let nameHtml = '<div class="threshold-file-name">' + escapeHtml(titleText);
-    if (f.status === 'flagged') {
-        nameHtml += ' <span class="status-badge flagged">Flagged</span>';
-    } else if (isChanged) {
-        nameHtml += ' <span class="status-badge changed">Changed</span>';
-    }
-    if (intakeState === 'rejected') {
-        nameHtml += ' <span class="status-badge rejected">Rejected</span>';
-    } else if (intakeState === 'inspected') {
-        nameHtml += ' <span class="status-badge inspected">Inspected</span>';
-    }
-    nameHtml += '</div>';
+    const importedEl = document.createElement('span');
+    importedEl.textContent = formatIsoDate(file.imported_at);
 
-    if (f.shelf) {
-        nameHtml += '<div class="source-card-filename">Shelf: ' + escapeHtml(f.shelf) + '</div>';
-    }
-    if (f.description) {
-        nameHtml += '<div class="source-card-description">' + escapeHtml(f.description) + '</div>';
-    }
-    nameHtml += '<div class="source-card-filename">' + escapeHtml(f.filename) + '</div>';
-
-    // Show timestamps for changed files
-    if (isChanged) {
-        if (f.ingestTimestamp) {
-            nameHtml += '<div class="source-card-filename tq-changed-note">Last indexed: ' +
-                escapeHtml(new Date(f.ingestTimestamp).toLocaleString()) + '</div>';
-        }
-        if (f.mtime) {
-            nameHtml += '<div class="source-card-filename tq-changed-note">Last modified: ' +
-                escapeHtml(new Date(f.mtime).toLocaleString()) + '</div>';
-        }
-    }
-
-    nameEl.innerHTML = nameHtml;
+    const statusEl = document.createElement('span');
+    statusEl.textContent = file.type === 'pdf' ? 'PDF stored — reader support later' : 'ready';
 
     const actions = document.createElement('span');
     actions.className = 'threshold-file-actions';
 
-    // Status badge (for non-flagged files without an explicit intake badge)
-    if (f.status && f.status !== 'flagged' && intakeState !== 'rejected' && intakeState !== 'inspected') {
-        const statusBadge = document.createElement('span');
-        statusBadge.className = 'status-badge ' + (f.status || 'waiting');
-        statusBadge.textContent = (f.status || 'waiting').charAt(0).toUpperCase() + (f.status || 'waiting').slice(1);
-        actions.appendChild(statusBadge);
-    }
-
-    // Only show action buttons when source is not rejected
-    if (intakeState !== 'rejected') {
-        // ── PRIMARY ACTION: Admit to Ember Council ──────────────────────────
-        // Combines inspect + index + move into one click.  Shown for non-metaOnly
-        // files with a sourceId.  This is the main intake action.
-        if (!f.metaOnly && f.sourceId) {
-            const admitBtn = document.createElement('button');
-            admitBtn.className = 'threshold-action-btn threshold-admit-btn';
-            admitBtn.textContent = 'Admit to Ember Council';
-            admitBtn.title = 'Inspect, index, and move to Ember Council in one step';
-            admitBtn.addEventListener('click', async () => {
-                admitBtn.disabled = true;
-                admitBtn.textContent = 'Admitting…';
-                try {
-                    const r = await fetch('/api/threshold/admit', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: f.sourceId }),
-                    });
-                    const d = await r.json();
-                    if (d.success) {
-                        showFlashMessage(
-                            d.indexWarning
-                                ? 'Admitted to Ember Council (index skipped: ' + d.indexWarning + ')'
-                                : 'Admitted to Ember Council ✓',
-                        );
-                        refreshSystemStatus();
-                        loadThresholdList();
-                    } else {
-                        admitBtn.textContent = 'Failed';
-                        admitBtn.title = d.error || 'Admit failed';
-                        admitBtn.disabled = false;
-                        showFlashMessage('Admit failed: ' + (d.error || 'Unknown error'));
-                    }
-                } catch {
-                    admitBtn.textContent = 'Error';
-                    admitBtn.disabled = false;
-                    showFlashMessage('Could not reach server — Admit failed.');
-                }
-            });
-            actions.appendChild(admitBtn);
-        }
-
-        // ── SECONDARY: Inspect (deep view, auto-marks inspected) ─────────────
-        if (f.sourceId) {
-            const inspBtn = document.createElement('button');
-            inspBtn.className = 'secondary threshold-action-btn';
-            inspBtn.textContent = 'Inspect';
-            inspBtn.title = 'View file details (marks as inspected)';
-            inspBtn.addEventListener('click', async () => {
-                inspBtn.disabled = true;
-                try {
-                    // Auto-mark inspected on preview open
-                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/inspect', {
-                        method: 'POST',
-                    });
-                    inspectSource(f.sourceId);
-                    loadThresholdList();
-                } catch {
-                    inspBtn.disabled = false;
-                }
-            });
-            actions.appendChild(inspBtn);
-        }
-
-        // Flag / Unflag button
-        if (f.sourceId) {
-            const flagBtn = document.createElement('button');
-            flagBtn.className = 'secondary threshold-action-btn';
-            if (f.status === 'flagged') {
-                flagBtn.textContent = 'Unflag';
-                flagBtn.title = 'Remove flag — return to Waiting';
-                flagBtn.addEventListener('click', () => flagSource(f.sourceId, false));
-            } else {
-                flagBtn.textContent = 'Flag';
-                flagBtn.title = 'Flag for review';
-                flagBtn.addEventListener('click', () => flagSource(f.sourceId, true));
-            }
-            actions.appendChild(flagBtn);
-        }
-
-        // Advanced: Index-only and Move-only (shown as secondary actions)
-        if (!f.metaOnly && f.sourceId) {
-            const indexBtn = document.createElement('button');
-            indexBtn.className = 'secondary threshold-action-btn';
-            indexBtn.textContent = 'Index';
-            indexBtn.title = 'Index file without moving';
-            indexBtn.addEventListener('click', async () => {
-                indexBtn.disabled = true;
-                indexBtn.textContent = 'Indexing…';
-                try {
-                    const r    = await fetch('/api/index/file', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: f.sourceId }),
-                    });
-                    const d = await r.json();
-                    if (d.success) {
-                        indexBtn.textContent = 'Indexed';
-                        refreshSystemStatus();
-                        loadThresholdList();
-                    } else {
-                        indexBtn.textContent = 'Failed';
-                        indexBtn.title = d.error || 'Indexing failed';
-                        indexBtn.disabled = false;
-                        showFlashMessage('Indexing failed: ' + (d.error || 'Unknown error'));
-                    }
-                } catch {
-                    indexBtn.textContent = 'Error';
-                    indexBtn.disabled = false;
-                    showFlashMessage('Could not reach server — indexing failed.');
-                }
-            });
-
-            const moveBtn = document.createElement('button');
-            moveBtn.className = 'secondary threshold-action-btn';
-            moveBtn.textContent = '→ Ember Council';
-            moveBtn.title = 'Move to Ember Council without re-indexing';
-            moveBtn.addEventListener('click', async () => {
-                if (!f.sourceId) return;
-                moveBtn.disabled = true;
-                try {
-                    const r = await fetch('/api/index/file', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: f.sourceId, targetRoom: 'workshop' }),
-                    });
-                    const d = await r.json();
-                    if (d.success) {
-                        moveBtn.textContent = '✓ Ember Council';
-                        loadThresholdList();
-                    } else {
-                        moveBtn.disabled = false;
-                        showFlashMessage('Move failed: ' + (d.error || 'Unknown error'));
-                    }
-                } catch {
-                    moveBtn.disabled = false;
-                    showFlashMessage('Could not reach server — move failed.');
-                }
-            });
-
-            actions.appendChild(indexBtn);
-            actions.appendChild(moveBtn);
-        }
-
-        // Reject button — persistent rejection
-        if (f.sourceId) {
-            const rejectBtn = document.createElement('button');
-            rejectBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
-            rejectBtn.textContent = 'Reject';
-            rejectBtn.title = 'Persistently reject — removes from intake queue until file changes';
-            rejectBtn.addEventListener('click', async () => {
-                rejectBtn.disabled = true;
-                try {
-                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/reject', {
-                        method: 'POST',
-                    });
-                    showFlashMessage('File rejected — will not resurface unless changed.');
-                    loadThresholdList();
-                } catch {
-                    rejectBtn.disabled = false;
-                    showFlashMessage('Could not reach server — reject failed.');
-                }
-            });
-            actions.appendChild(rejectBtn);
-        }
+    const openBtn = document.createElement('button');
+    openBtn.className = 'secondary threshold-action-btn';
+    openBtn.textContent = 'Open in Reader';
+    if (file.type === 'pdf') {
+        openBtn.disabled = true;
+        openBtn.title = 'PDF stored — reader support later';
     } else {
-        // Rejected — offer an "Undo reject" button via re-inspect
-        if (f.sourceId) {
-            const undoBtn = document.createElement('button');
-            undoBtn.className = 'secondary threshold-action-btn';
-            undoBtn.textContent = 'Undo Reject';
-            undoBtn.title = 'Return to Waiting state';
-            undoBtn.addEventListener('click', async () => {
-                undoBtn.disabled = true;
-                try {
-                    await fetch('/api/sources/' + encodeURIComponent(f.sourceId) + '/inspect', {
-                        method: 'POST',
-                    });
-                    showFlashMessage('Rejection cleared — file returned to intake.');
-                    loadThresholdList();
-                } catch {
-                    undoBtn.disabled = false;
-                    showFlashMessage('Could not reach server — undo failed.');
-                }
-            });
-            actions.appendChild(undoBtn);
-        }
+        openBtn.addEventListener('click', () => openThresholdImportedFile(file));
     }
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'secondary threshold-action-btn';
+    copyBtn.textContent = 'Copy Path';
+    copyBtn.addEventListener('click', () => copyThresholdPath(file.path || ''));
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => deleteThresholdImportedFile(file));
+
+    actions.appendChild(openBtn);
+    actions.appendChild(copyBtn);
+    actions.appendChild(deleteBtn);
 
     row.appendChild(nameEl);
+    row.appendChild(typeEl);
+    row.appendChild(sizeEl);
+    row.appendChild(importedEl);
+    row.appendChild(statusEl);
     row.appendChild(actions);
     return row;
 }
@@ -3928,7 +3693,7 @@ async function loadNodeStatusUpdates() {
 
         if (guidanceEl) {
             const updateLine = 'Updates are distributed through the Green Fire Archive. Download the latest Ember Node build and install it over the current version.';
-            const preservationLine = 'Your Ember-Node-Data folder will be preserved. Archive caches, chats, drafts, projects, and remembered threads live outside the app folder.';
+            const preservationLine = 'Your Ember-Node-Data folder will be preserved. Archive caches, chats, drafts, and remembered threads live outside the app folder.';
             const hearthLine = 'The app can be replaced. The hearth remains.';
             guidanceEl.textContent = updateLine + ' ' + preservationLine + ' ' + hearthLine;
         }

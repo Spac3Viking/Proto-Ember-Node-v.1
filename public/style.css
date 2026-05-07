@@ -1191,6 +1191,26 @@ button.secondary:disabled {
   gap: 0.5rem;
 }
 
+.threshold-import-header,
+.threshold-import-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) 0.8fr 0.8fr 1.2fr 1.4fr minmax(220px, 1.6fr);
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.threshold-import-header {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--archive-muted);
+  padding: 0.2rem 0.4rem;
+}
+
+.threshold-import-row {
+  justify-content: unset;
+}
+
 .threshold-file-name {
   font-size: 0.78rem;
   color: var(--archive-text);
@@ -1839,6 +1859,11 @@ button.secondary:disabled {
 
 .gf-reader-header {
   gap: 0.8rem;
+}
+
+.gf-reader-source {
+  font-size: 0.72rem;
+  opacity: 0.72;
 }
 
 .gf-reader-controls {
