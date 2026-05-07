@@ -553,17 +553,24 @@
                 aria-label="Drop zone for file intake"
               >
                 <span class="drop-zone-rune">ᚦ</span>
-                Drop <strong>.txt</strong>, <strong>.md</strong>, <strong>.pdf</strong>, or <strong>.docx</strong> files here, or
+                Drop files into the Threshold — <strong>.md</strong>, <strong>.txt</strong>, <strong>.json</strong>, <strong>.pdf</strong> — or
                 <label for="threshold-file-input" class="drop-zone-browse-label">browse</label>
                 <input
                   type="file"
                   id="threshold-file-input"
-                  accept=".txt,.md,.pdf,.docx"
+                  accept=".md,.txt,.json,.pdf"
                   multiple
                   style="display:none;"
                   aria-label="Choose files to ingest"
                 >
-                <span style="font-size:0.72rem; opacity:0.55;">Select multiple files — each will appear in the queue below for review before import.</span>
+                <span style="font-size:0.72rem; opacity:0.55;">Files are stored in <code>threshold/inbox/</code> before any deeper archive action.</span>
+              </div>
+
+              <div class="ember-card" style="padding:0.8rem 0.9rem;">
+                <button class="secondary" disabled title="Coming soon" style="margin-bottom:0.45rem;">Inspect with Active Archetype</button>
+                <div class="message-system" style="font-size:0.78rem;">
+                  Coming soon: the Ember Council will review imported files, suggest tags, applications, and cache placement.
+                </div>
               </div>
 
               <!-- Intake Queue (multi-file) -->
@@ -582,7 +589,7 @@
 
               <!-- Indexed File List — sectioned: Waiting / Flagged / (Changed handled by intake queue) -->
               <div class="threshold-file-section">
-                <div class="workshop-section-title">Threshold Files</div>
+                <div class="workshop-section-title">Imported Files</div>
                 <div id="threshold-file-list" class="threshold-file-list">
                   <span class="message-system">No files in Threshold.</span>
                 </div>
@@ -783,7 +790,10 @@
       <div class="source-inspector-header gf-reader-header">
         <div style="display:flex; gap:0.5rem; align-items:center; min-width:0;">
           <button class="secondary" id="gf-reader-back-btn" style="padding:0.3rem 0.7rem;">← Back</button>
-          <span class="source-inspector-title" id="gf-reader-title">Green Fire Reader</span>
+          <div style="display:flex; flex-direction:column; min-width:0;">
+            <span class="source-inspector-title" id="gf-reader-title">Green Fire Reader</span>
+            <span class="gf-reader-source" id="gf-reader-source"></span>
+          </div>
         </div>
         <div class="gf-reader-controls">
           <button class="secondary" id="gf-reader-toggle-btn">Raw Markdown</button>

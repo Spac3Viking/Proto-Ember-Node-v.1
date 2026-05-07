@@ -309,3 +309,60 @@ describe('POST /api/detected-files/acknowledge', () => {
         expect(res.status).toBe(404);
     });
 });
+
+describe('Threshold inbox import + reader endpoints', () => {
+    let importedPath = null;
+
+    test('POST /api/threshold/import imports markdown upload', async () => {
+        const res = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from('# Field Notes\n\nHello Threshold\n', 'utf8'), 'field-notes.md');
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body.imported)).toBe(true);
+        expect(res.body.imported.length).toBe(1);
+        expect(res.body.imported[0].type).toBe('markdown');
+        expect(res.body.imported[0].path).toMatch(/^threshold\/inbox\/.+\.md$/);
+        importedPath = res.body.imported[0].path;
+    });
+
+    test('GET /api/threshold/files lists imported inbox files', async () => {
+        const res = await request(app).get('/api/threshold/files');
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body.files)).toBe(true);
+        const found = res.body.files.find(f => f.path === importedPath);
+        expect(found).toBeTruthy();
+        expect(found.name).toBeDefined();
+        expect(found.imported_at).toBeDefined();
+    });
+
+    test('GET /api/threshold/files/content reads markdown for reader', async () => {
+        const res = await request(app)
+            .get('/api/threshold/files/content')
+            .query({ path: importedPath });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.sourceLabel).toBe('Threshold');
+        expect(res.body.contentType).toBe('text/markdown');
+        expect(res.body.content).toMatch(/Field Notes/);
+    });
+
+    test('DELETE /api/threshold/files deletes imported inbox file', async () => {
+        const del = await request(app)
+            .delete('/api/threshold/files')
+            .send({ path: importedPath });
+        expect(del.status).toBe(200);
+        expect(del.body.success).toBe(true);
+
+        const list = await request(app).get('/api/threshold/files');
+        const found = (list.body.files || []).find(f => f.path === importedPath);
+        expect(found).toBeFalsy();
+    });
+
+    test('POST /api/threshold/import rejects unsupported extension', async () => {
+        const res = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from('bad', 'utf8'), 'bad.exe');
+        expect(res.status).toBe(400);
+        expect(String(res.body.error || '')).toMatch(/Unsupported file type/i);
+    });
+});

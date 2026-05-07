@@ -4,9 +4,16 @@
 
 - **🜂 Hearth** → Ember Prime continuity layer and remembered conversation.
 - **🜁 Ember Council** → archetypal perspectives that shape interpretation, never replace continuity.
-- **🜃 Archive** → installed memory, including `archive/core/` and portable Archive caches.
-- **🜄 Threshold** → intake, research triage, and cache forging workflow.
-- **🜔 Signal Threads** → reserved for future persistent lines of thought (not implemented yet).
+- **🜃 Archive** → installed memory, including `archive/core/`, `archive/caches/`, and `archive/mirror/`.
+- **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/`.
+- **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
+
+## Reader Surface
+
+- **Green Fire Reader** is the universal human-readable surface for imported and archive-readable files.
+- Reader source labels identify origin, including **Source: Threshold** and **Source: Archive Cache**.
+- Markdown is rendered for reading (with frontmatter removed), while `.txt` and `.json` open in raw mode.
+- PDF files may be stored/listed in Threshold now; full PDF reading is a future phase.
 
 ## Cache Philosophy
 

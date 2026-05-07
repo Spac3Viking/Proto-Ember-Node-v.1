@@ -9,8 +9,7 @@ caches, and offline resilience.
 The AI inside the system is called **The Heart** — a grounded resident intelligence that
 answers from remembered local knowledge, not just the base model.
 
-Legacy cleanup note: older Workshop/tool/cartridge language has been retired in favor of
-Ember Council, AI setup, and caches.
+Current room language is Hearth, Ember Council, Threshold, and Archive, with caches as portable memory bundles.
 
 ---
 
@@ -22,7 +21,7 @@ that owns the data.
 This means:
 
 - **App code** and **user data** live in entirely separate locations.
-- The user archive (rooms, threads, projects, indexes, user caches) lives in an
+- The user archive (rooms, threads, drafts, indexes, user caches) lives in an
   external **data root** that belongs entirely to the user.
 - Updating or reinstalling Ember Node never touches the user's data root.
 - Moving an archive to a new machine is a folder copy — no special export needed.
@@ -81,7 +80,7 @@ To move an Ember Node archive to a new machine:
 3. Set `EMBER_DATA_ROOT` to the copied directory path.
 4. Start the server.
 
-Rooms, threads, projects, indexes, and user caches resume intact.
+Rooms, threads, drafts, indexes, and user caches resume intact.
 Bundled caches come from the new app install (they are not user data).
 
 ---
@@ -157,7 +156,8 @@ Phase 3 implements the first true memory-and-retrieval loop:
 - **Signal Trace** — compact trace includes Active archetype, Route, Context, Model, and Provider
 - **Cache indexing** — caches can be indexed from Ember Council; their docs/ become retrievable knowledge
 - **Ember Council notes** — draft text can be saved as local Markdown and optionally indexed
-- **Threshold file intake** — drag-and-drop `.txt`/`.md` intake with inspect and index controls
+- **Threshold file intake** — drag-and-drop `.md`/`.txt`/`.json`/`.pdf` import into `threshold/inbox/`
+- **Green Fire Reader** — unified reading surface for Archive and Threshold files with source labeling
 
 ---
 
@@ -422,8 +422,7 @@ Preserve:
 Optional clear (if present):
 - `Ember-Node-Data/chats/`
 - `Ember-Node-Data/threads/`
-- `Ember-Node-Data/projects/`
-- `Ember-Node-Data/workshop/`
+- `Ember-Node-Data/threshold/inbox/`
 - `Ember-Node-Data/drafts/`
 - `Ember-Node-Data/logs/`
 
@@ -458,7 +457,11 @@ It is not implemented in the current runtime.
 | `POST` | `/api/sources/:id/remember` | Promote source to Hearth — copies file and re-indexes (Phase 6) |
 | `POST` | `/api/notes` | Save an Ember Council note (deterministic filename; creates manifest entry) |
 | `GET`  | `/api/notes` | List Ember Council notes |
-| `GET`  | `/api/threshold/list` | List files in Threshold intake |
+| `GET`  | `/api/threshold/list` | List Threshold intake queue files (legacy compatibility) |
+| `POST` | `/api/threshold/import` | Import uploaded files into `threshold/inbox/` |
+| `GET`  | `/api/threshold/files` | List imported Threshold inbox files |
+| `GET`  | `/api/threshold/files/content` | Read a Threshold inbox file for Green Fire Reader |
+| `DELETE` | `/api/threshold/files` | Delete a Threshold inbox file |
 | `GET`  | `/api/status` | System status (chunks, sources, embeddings, storage root, cache breakdown) |
 | `GET`  | `/api/storage-info` | Active data root, directory layout, migration state, cache counts |
 
