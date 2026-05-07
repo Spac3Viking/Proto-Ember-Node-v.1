@@ -76,13 +76,14 @@ function escapeHtml(str) {
    Room Tab Switching  (3 rooms only)
    ================================================================ */
 
+let _activeRoomId = 'hearth';
+
 (function initRoomTabs() {
     const tabs   = document.querySelectorAll('.room-tab');
     const panels = document.querySelectorAll('.room-panel');
 
     function activateRoom(roomId) {
-        const activeRoomTab = document.querySelector('.room-tab.active');
-        const previousRoomId = activeRoomTab ? activeRoomTab.dataset.room : null;
+        const previousRoomId = _activeRoomId;
         if (_isChatGenerating && previousRoomId && previousRoomId !== roomId) {
             stillTheSignal();
         }
@@ -112,6 +113,7 @@ function escapeHtml(str) {
             loadArchiveSignalPanel();
             refreshSystemStatus();
         }
+        _activeRoomId = roomId;
     }
 
     tabs.forEach(tab => {
@@ -4657,8 +4659,7 @@ function sendSourceToNotepad(source) {
     // Switch to Workshop > Drafts
     const workshopTab  = document.querySelector('.room-tab[data-room="workshop"]');
     if (workshopTab) workshopTab.click();
-    const notepadTab   = document.querySelector('.sub-tab[data-subtab="ws-drafts"]')
-        || document.querySelector('.sub-tab[data-subtab="ws-notepad"]');
+    const notepadTab   = document.querySelector('.sub-tab[data-subtab="ws-drafts"]');
     if (notepadTab) notepadTab.click();
 
     const draftArea = document.getElementById('workshop-draft');
