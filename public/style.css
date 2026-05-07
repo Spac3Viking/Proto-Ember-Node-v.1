@@ -1297,6 +1297,38 @@ button.secondary:disabled {
   color: var(--archive-muted);
 }
 
+.extended-rune-aettir {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.45rem;
+  opacity: 0.84;
+}
+
+.rune-aettir-row {
+  font-family: 'Courier New', 'Courier', monospace;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  letter-spacing: 0.05em;
+  color: var(--gf-wire-green);
+  white-space: pre;
+}
+
+.rune-aettir-char {
+  opacity: 0.18;
+  transition: opacity 0.18s ease;
+}
+
+.rune-aettir-char.visible {
+  opacity: 0.76;
+}
+
+#ws-index,
+#ws-projects,
+#ws-tools {
+  display: none !important;
+}
+
 /* ── Phase 4 — Chat Threads ──────────────────────────────────────────────────── */
 
 .thread-layout {

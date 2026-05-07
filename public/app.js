@@ -11,6 +11,7 @@
 const DEFAULT_MODEL_LABEL = 'gemma3:4b';
 let activeModelLabel = DEFAULT_MODEL_LABEL;
 const EMBER_COURT_STORAGE_KEY = 'ember-court-active-member';
+const EMBER_PRIME_MEMBER_ID = 'ember-prime';
 let _activeCourtMemberId = null;
 
 function normalizeCourtMemberId(value) {
@@ -49,6 +50,13 @@ const COURT_MEMBER_TRANSITIONS = Object.freeze({
     scribe: 'Shaping fragments into coherent chapters and transmissible language.',
     mystic: 'Reading symbolic thresholds while staying practical and clear.',
 });
+const COURT_MEMBER_RUNES = Object.freeze({
+    builder: 'ᛒ',
+    warrior: 'ᛏ',
+    scholar: 'ᛋ',
+    scribe: 'ᛋ',
+    mystic: 'ᛗ',
+});
 
 /* ================================================================
    Utility
@@ -73,6 +81,11 @@ function escapeHtml(str) {
     const panels = document.querySelectorAll('.room-panel');
 
     function activateRoom(roomId) {
+        const activeRoomTab = document.querySelector('.room-tab.active');
+        const previousRoomId = activeRoomTab ? activeRoomTab.dataset.room : null;
+        if (_isChatGenerating && previousRoomId && previousRoomId !== roomId) {
+            stillTheSignal();
+        }
         tabs.forEach(t => {
             const isActive = t.dataset.room === roomId;
             t.classList.toggle('active', isActive);
@@ -131,21 +144,14 @@ function escapeHtml(str) {
                 });
 
                 // Lazy-load on sub-tab activation
-                if (panelId === 'ws-scribe') {
-                    loadDocuments();
+                if (panelId === 'ws-council-chat') {
+                    updateCouncilChatActiveArchetype();
                 }
-                if (panelId === 'ws-index') {
-                    loadWorkshopSources();
-                    loadWorkshopNotes();
+                if (panelId === 'ws-archetypes') {
+                    loadWorkshopTools();
                 }
                 if (panelId === 'ws-caches' && !window._cachesLoaded) {
                     loadCacheShelf();
-                }
-                if (panelId === 'ws-projects') {
-                    loadProjects();
-                }
-                if (panelId === 'ws-tools') {
-                    loadWorkshopTools();
                 }
                 if (panelId === 'hearth-archive') {
                     loadHearthArchive();
@@ -421,6 +427,7 @@ let _activeChatRevealToken = { cancelled: false };
 let _activeChatLongWaitTimer = null;
 let _activeChatResponseEl = null;
 let _activeChatContainer = null;
+let _stopExtendedRuneAettirLoop = null;
 let _chatRequestSeq = 0;
 let _chatCancelledByUser = false;
 
@@ -439,10 +446,14 @@ function nextChatRequestId() {
 
 function setChatGenerationUi(active) {
     _isChatGenerating = Boolean(active);
-    const sendButton = document.getElementById('send-button');
-    const stopButton = document.getElementById('stop-response-button');
-    if (sendButton) sendButton.disabled = _isChatGenerating;
-    if (stopButton) stopButton.style.display = _isChatGenerating ? '' : 'none';
+    const hearthSendButton = document.getElementById('send-button');
+    const hearthStopButton = document.getElementById('stop-response-button');
+    const councilSendButton = document.getElementById('ws-council-send-button');
+    const councilStopButton = document.getElementById('ws-stop-response-button');
+    if (hearthSendButton) hearthSendButton.disabled = _isChatGenerating;
+    if (hearthStopButton) hearthStopButton.style.display = _isChatGenerating ? '' : 'none';
+    if (councilSendButton) councilSendButton.disabled = _isChatGenerating;
+    if (councilStopButton) councilStopButton.style.display = _isChatGenerating ? '' : 'none';
 }
 
 function clearChatLongWaitTimer() {
@@ -454,6 +465,7 @@ function clearChatLongWaitTimer() {
 
 function resetActiveChatState() {
     clearChatLongWaitTimer();
+    stopExtendedRuneAettirAnimation();
     _activeChatAbortController = null;
     _activeChatRequestId = null;
     _activeChatRevealToken = { cancelled: false };
@@ -467,6 +479,7 @@ async function stillTheSignal() {
     if (!_isChatGenerating) return;
     _chatCancelledByUser = true;
     _activeChatRevealToken.cancelled = true;
+    stopExtendedRuneAettirAnimation();
     if (_activeChatAbortController) {
         try { _activeChatAbortController.abort(); } catch { /* ignore */ }
     }
@@ -483,6 +496,7 @@ async function stillTheSignal() {
 
 function cleanupThinkingIndicator(container, thinkingEl, cancelAnim) {
     if (typeof cancelAnim === 'function') cancelAnim();
+    stopExtendedRuneAettirAnimation();
     if (container && thinkingEl && container.contains(thinkingEl)) container.removeChild(thinkingEl);
 }
 
@@ -606,6 +620,69 @@ function startRuneAnimation(el) {
         el.textContent = HEART_SYMBOLS[idx];
     }, 120);
     return () => clearInterval(id);
+}
+
+const EXTENDED_AETTIR_ROWS = Object.freeze([
+    '᛬ᚠᚢᚦᚨᚱᚲᚷᚹ᛬',
+    '᛬ᚺᚾᛁᛃᛇᛈᛉᛋ᛬',
+    '᛬ᛏᛒᛖᛗᛚᛝᛞᛟ᛬',
+]);
+
+function stopExtendedRuneAettirAnimation() {
+    if (typeof _stopExtendedRuneAettirLoop === 'function') {
+        _stopExtendedRuneAettirLoop();
+    }
+    _stopExtendedRuneAettirLoop = null;
+}
+
+function startExtendedRuneAettirAnimation(containerEl) {
+    if (!containerEl) return () => {};
+    stopExtendedRuneAettirAnimation();
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'extended-rune-aettir';
+    const allRunes = [];
+    EXTENDED_AETTIR_ROWS.forEach(rowText => {
+        const row = document.createElement('div');
+        row.className = 'rune-aettir-row';
+        Array.from(rowText).forEach(ch => {
+            const span = document.createElement('span');
+            span.className = 'rune-aettir-char';
+            span.textContent = ch;
+            row.appendChild(span);
+            allRunes.push(span);
+        });
+        wrapper.appendChild(row);
+    });
+    containerEl.appendChild(wrapper);
+
+    let index = 0;
+    let mode = 'show';
+    const stepMs = 165;
+    const timer = setInterval(() => {
+        if (mode === 'show') {
+            if (index < allRunes.length) {
+                allRunes[index].classList.add('visible');
+                index += 1;
+            } else {
+                mode = 'hide';
+                index = 0;
+            }
+        } else if (index < allRunes.length) {
+            allRunes[index].classList.remove('visible');
+            index += 1;
+        } else {
+            mode = 'show';
+            index = 0;
+        }
+    }, stepMs);
+
+    const stop = () => {
+        clearInterval(timer);
+        if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+    };
+    _stopExtendedRuneAettirLoop = stop;
+    return stop;
 }
 
 
@@ -776,17 +853,15 @@ async function sendMessage() {
     if (traceSources) traceSources.innerHTML = '';
     _activeChatLongWaitTimer = setTimeout(() => {
         if (_isChatGenerating && _chatState === CHAT_STATES.THINKING) {
-            displayMessage(
-                chatContainer,
-                'Ember Prime is taking longer than usual. You may wait or still the signal.',
-                'message-system',
-            );
+            thinkingLabel.textContent = 'Ember Prime is taking longer than usual. You may wait or still the signal.';
+            startExtendedRuneAettirAnimation(thinking);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
     }, LONG_WAIT_THRESHOLD_MS);
 
     try {
         const activeCourtMember = getActiveCourtMemberId();
+        const effectiveCourtMember = activeCourtMember === EMBER_PRIME_MEMBER_ID ? null : activeCourtMember;
         const response = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -794,7 +869,7 @@ async function sendMessage() {
             body:    JSON.stringify({
                 query:     message,
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
-                courtMember: activeCourtMember || undefined,
+                courtMember: effectiveCourtMember || undefined,
                 requestId: _activeChatRequestId,
             }),
         });
@@ -864,6 +939,140 @@ async function sendMessage() {
         } else {
             displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
             setTraceStatus('connection lost');
+            setChatState(CHAT_STATES.ERROR);
+        }
+    } finally {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        resetActiveChatState();
+    }
+}
+
+/* ================================================================
+   Workshop — Council Chat
+   ================================================================ */
+
+(function initCouncilChat() {
+    const sendButton = document.getElementById('ws-council-send-button');
+    const stopButton = document.getElementById('ws-stop-response-button');
+    const input = document.getElementById('ws-council-input');
+    if (sendButton) sendButton.addEventListener('click', sendCouncilMessage);
+    if (stopButton) stopButton.addEventListener('click', () => { stillTheSignal(); });
+    if (input) {
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!_isChatGenerating) sendCouncilMessage();
+            }
+        });
+    }
+})();
+
+function updateCouncilChatActiveArchetype() {
+    const statusEl = document.getElementById('ws-council-active-archetype');
+    if (!statusEl) return;
+    const memberId = getActiveCourtMemberId();
+    const memberLabel = getCourtMemberDisplayLabel(memberId);
+    statusEl.textContent = 'Active archetype: ' + memberLabel;
+}
+
+async function sendCouncilMessage() {
+    const chatContainer = document.getElementById('ws-council-messages');
+    const messageInput = document.getElementById('ws-council-input');
+    if (!chatContainer || !messageInput) return;
+    if (_isChatGenerating) return;
+
+    const message = messageInput.value.trim();
+    if (!message) return;
+
+    displayMessage(chatContainer, message, 'message-user');
+    messageInput.value = '';
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    setChatState(CHAT_STATES.THINKING);
+    setChatGenerationUi(true);
+    _chatCancelledByUser = false;
+    _activeChatContainer = chatContainer;
+    _activeChatRequestId = nextChatRequestId();
+    _activeChatAbortController = new AbortController();
+
+    const thinking = document.createElement('div');
+    thinking.className = 'message-heart loading-rune thinking-bubble';
+    const runeSpan = document.createElement('span');
+    runeSpan.className = 'rune-symbol';
+    const thinkingLabel = document.createElement('span');
+    thinkingLabel.className = 'thinking-label';
+    thinkingLabel.textContent = 'Signal resolving...';
+    thinking.appendChild(runeSpan);
+    thinking.appendChild(thinkingLabel);
+    const cancelAnim = startRuneAnimation(runeSpan);
+    chatContainer.appendChild(thinking);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    _activeChatLongWaitTimer = setTimeout(() => {
+        if (_isChatGenerating && _chatState === CHAT_STATES.THINKING) {
+            thinkingLabel.textContent = 'Ember Prime is taking longer than usual. You may wait or still the signal.';
+            startExtendedRuneAettirAnimation(thinking);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    }, LONG_WAIT_THRESHOLD_MS);
+
+    try {
+        const activeCourtMember = getActiveCourtMemberId();
+        const effectiveCourtMember = activeCourtMember === EMBER_PRIME_MEMBER_ID ? null : activeCourtMember;
+        const response = await fetch('/api/chat', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: _activeChatAbortController.signal,
+            body: JSON.stringify({
+                query: message,
+                room: 'workshop',
+                courtMember: effectiveCourtMember || undefined,
+                requestId: _activeChatRequestId,
+            }),
+        });
+        const data = await response.json().catch(() => ({}));
+        cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
+        clearChatLongWaitTimer();
+
+        if (response.status === 499 || (data && data.cancelled)) {
+            displayMessage(chatContainer, 'Signal stilled by user.', 'message-system');
+            setChatState(CHAT_STATES.INTERRUPTED);
+        } else if (response.status === 504 || (data && data.timeout)) {
+            displayMessage(
+                chatContainer,
+                data.message || 'Ember Prime is taking longer than usual. You may wait or still the signal.',
+                'message-system',
+            );
+            setChatState(CHAT_STATES.ERROR);
+        } else if (data && typeof data.answer === 'string') {
+            const responseEl = displayMessage(chatContainer, '', 'message-heart message-heart-live');
+            _activeChatResponseEl = responseEl;
+            _activeChatRevealToken = { cancelled: false };
+            setChatState(CHAT_STATES.RESOLVING);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            setChatState(CHAT_STATES.RESPONDING);
+            const revealResult = await resolveGlyphText(responseEl, data.answer, {
+                glyphEffect: _glyphResolveEnabled,
+                onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
+                shouldStop: () => _activeChatRevealToken.cancelled,
+            });
+            if (revealResult && revealResult.interrupted) {
+                displayMessage(chatContainer, 'Signal stilled by user.', 'message-system');
+                setChatState(CHAT_STATES.INTERRUPTED);
+            } else {
+                setChatState(CHAT_STATES.COMPLETE);
+            }
+        } else {
+            displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
+            setChatState(CHAT_STATES.ERROR);
+        }
+    } catch (err) {
+        clearChatLongWaitTimer();
+        cleanupThinkingIndicator(chatContainer, thinking, cancelAnim);
+        if (_chatCancelledByUser || (err && err.name === 'AbortError')) {
+            displayMessage(chatContainer, 'Signal stilled by user.', 'message-system');
+            setChatState(CHAT_STATES.INTERRUPTED);
+        } else {
+            displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
             setChatState(CHAT_STATES.ERROR);
         }
     } finally {
@@ -1273,8 +1482,8 @@ async function loadArchiveSignalPanel() {
 
 function loadWorkshopPanel() {
     window._workshopLoaded = true;
-    // Scribe is the default Workshop sub-tab — load documents on panel open
-    loadDocuments();
+    loadWorkshopTools();
+    updateCouncilChatActiveArchetype();
 }
 
 /* ================================================================
@@ -1525,7 +1734,12 @@ async function sendDocumentToHeart() {
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
                 query,
-                courtMember: getActiveCourtMemberId() || undefined,
+                courtMember: (() => {
+                    const activeCourtMember = getActiveCourtMemberId();
+                    return activeCourtMember && activeCourtMember !== EMBER_PRIME_MEMBER_ID
+                        ? activeCourtMember
+                        : undefined;
+                })(),
             }),
         });
         const data = await res.json();
@@ -3687,8 +3901,58 @@ async function loadThresholdTools() {
             listEl.appendChild(sep);
             rejected.forEach(tool => renderThresholdToolRow(tool, active, listEl));
         }
+        loadThresholdAiModelGuidance(tools);
     } catch {
         listEl.innerHTML = '<span class="message-system threshold-error">Could not load tools.</span>';
+        loadThresholdAiModelGuidance([]);
+    }
+}
+
+const THRESHOLD_AI_SUGGESTED_COMMANDS = [
+    'ollama pull gemma3:4b',
+    'ollama pull llama3.1:8b',
+    'ollama pull mistral:7b',
+    'ollama list',
+].join('\n');
+
+async function loadThresholdAiModelGuidance(tools) {
+    const ollamaStatusEl = document.getElementById('th-ai-ollama-status');
+    const modelsListEl = document.getElementById('th-ai-models-list');
+    const selectedModelEl = document.getElementById('th-ai-selected-model');
+    const commandsEl = document.getElementById('th-ai-suggested-commands');
+
+    if (commandsEl && !commandsEl.textContent.trim()) {
+        commandsEl.textContent = THRESHOLD_AI_SUGGESTED_COMMANDS;
+    }
+
+    const toolList = Array.isArray(tools) ? tools : [];
+    const ollamaTool = toolList.find(t => t && t.id === 'ollama-local');
+    const ollamaDetected = Boolean(
+        ollamaTool &&
+        ollamaTool.status &&
+        ollamaTool.status !== 'not_detected' &&
+        ollamaTool.status !== 'unknown',
+    );
+    if (ollamaStatusEl) {
+        ollamaStatusEl.textContent = ollamaDetected ? 'Detected' : 'Not detected';
+        ollamaStatusEl.className = ollamaDetected ? 'system-val ok' : 'system-val error';
+    }
+    if (modelsListEl) modelsListEl.textContent = 'loading…';
+    if (selectedModelEl) selectedModelEl.textContent = '—';
+
+    try {
+        const res = await fetch('/api/ai/models');
+        const data = await res.json();
+        const modelNames = Array.isArray(data.models) ? data.models.map(m => m.name).filter(Boolean) : [];
+        if (modelsListEl) {
+            modelsListEl.textContent = modelNames.length > 0 ? modelNames.join(', ') : 'None detected';
+        }
+        if (selectedModelEl) {
+            selectedModelEl.textContent = data.selected_model || '—';
+        }
+    } catch {
+        if (modelsListEl) modelsListEl.textContent = 'Unavailable';
+        if (selectedModelEl) selectedModelEl.textContent = 'Unavailable';
     }
 }
 
@@ -3751,7 +4015,7 @@ function renderThresholdToolRow(tool, active, container) {
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Ember Council → Tools');
+                        showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Ember Council');
                         loadThresholdTools();
                         loadWorkshopTools();
                         loadHearthToolRegistry();
@@ -3842,7 +4106,56 @@ function renderThresholdToolRow(tool, active, container) {
     });
 })();
 
+(function initThresholdAiGuidanceButtons() {
+    document.addEventListener('click', async e => {
+        if (!e.target) return;
+        if (e.target.id === 'th-ai-refresh-models-btn') {
+            const btn = e.target;
+            btn.disabled = true;
+            btn.textContent = 'Refreshing…';
+            try {
+                await loadThresholdTools();
+                showFlashMessage('Local model list refreshed.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Refresh Local Models';
+            }
+        }
+        if (e.target.id === 'th-ai-open-ollama-btn') {
+            window.open('https://ollama.com/download', '_blank', 'noopener,noreferrer');
+        }
+        if (e.target.id === 'th-ai-copy-commands-btn') {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(THRESHOLD_AI_SUGGESTED_COMMANDS);
+                } else {
+                    const tmp = document.createElement('textarea');
+                    tmp.value = THRESHOLD_AI_SUGGESTED_COMMANDS;
+                    document.body.appendChild(tmp);
+                    tmp.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tmp);
+                }
+                showFlashMessage('Suggested Ollama commands copied.');
+            } catch {
+                showFlashMessage('Could not copy commands.');
+            }
+        }
+    });
+})();
+
 /* ── Workshop / Tools tab ───────────────────────────────────── */
+
+function getCourtMemberDisplayLabel(memberId) {
+    if (!memberId || memberId === EMBER_PRIME_MEMBER_ID) return 'Ember Prime';
+    const button = document.querySelector('#ws-court-list button[data-court-member="' + memberId + '"]');
+    if (button) {
+        const titleEl = button.querySelector('.threshold-file-name');
+        if (titleEl && titleEl.textContent) return titleEl.textContent.trim();
+    }
+    const rune = COURT_MEMBER_RUNES[memberId] || '᛬';
+    return rune + ' ' + memberId.charAt(0).toUpperCase() + memberId.slice(1);
+}
 
 function renderEmberCourtMembers(court) {
     const listEl = document.getElementById('ws-court-list');
@@ -3852,19 +4165,39 @@ function renderEmberCourtMembers(court) {
     const members = Array.isArray(court && court.members) ? court.members : [];
     if (members.length === 0) {
         listEl.innerHTML = '<span class="message-system">No Ember Court members configured.</span>';
-        if (activeEl) activeEl.textContent = 'No active Ember Court member.';
+        if (activeEl) activeEl.textContent = 'Active archetype: Ember Prime';
+        updateCouncilChatActiveArchetype();
         return;
     }
 
     const configuredDefault = normalizeCourtMemberId(court && court.defaultMember);
     const persistedMember = getActiveCourtMemberId();
     const firstMemberId = normalizeCourtMemberId(members[0] && members[0].id);
-    const activeMemberId = persistedMember || configuredDefault || firstMemberId;
+    const activeMemberId = persistedMember || configuredDefault || firstMemberId || EMBER_PRIME_MEMBER_ID;
     setActiveCourtMemberId(activeMemberId);
 
     listEl.innerHTML = '';
+
+    const emberPrimeButton = document.createElement('button');
+    emberPrimeButton.className = activeMemberId === EMBER_PRIME_MEMBER_ID ? 'primary threshold-file-row' : 'secondary threshold-file-row';
+    emberPrimeButton.type = 'button';
+    emberPrimeButton.dataset.courtMember = EMBER_PRIME_MEMBER_ID;
+    emberPrimeButton.setAttribute('aria-pressed', String(activeMemberId === EMBER_PRIME_MEMBER_ID));
+    emberPrimeButton.style.cssText = 'display:flex; flex-direction:column; align-items:flex-start; gap:0.25rem; width:100%; text-align:left;';
+    emberPrimeButton.innerHTML =
+        '<span class="threshold-file-name">Ember Prime</span>' +
+        '<span class="source-card-filename">No archetype lens</span>' +
+        '<span class="source-card-description">Use baseline Ember Prime response behavior.</span>';
+    emberPrimeButton.addEventListener('click', () => {
+        setActiveCourtMemberId(EMBER_PRIME_MEMBER_ID);
+        renderEmberCourtMembers(court);
+        showFlashMessage('Active archetype: Ember Prime');
+    });
+    listEl.appendChild(emberPrimeButton);
+
     members.forEach(member => {
         const memberId = normalizeCourtMemberId(member.id);
+        const rune = COURT_MEMBER_RUNES[memberId] || '᛬';
         const button = document.createElement('button');
         button.className = memberId === activeMemberId ? 'primary threshold-file-row' : 'secondary threshold-file-row';
         button.type = 'button';
@@ -3872,7 +4205,7 @@ function renderEmberCourtMembers(court) {
         button.setAttribute('aria-pressed', String(memberId === activeMemberId));
         button.style.cssText = 'display:flex; flex-direction:column; align-items:flex-start; gap:0.25rem; width:100%; text-align:left;';
         button.innerHTML =
-            '<span class="threshold-file-name">' + escapeHtml(member.name || member.id || 'Court Member') + '</span>' +
+            '<span class="threshold-file-name">' + escapeHtml(rune + ' ' + (member.name || member.id || 'Court Member')) + '</span>' +
             '<span class="source-card-filename">Role: ' + escapeHtml(member.role || '—') + '</span>' +
             '<span class="source-card-description">' + escapeHtml(member.shortDescription || '—') + '</span>' +
             '<span class="message-system">Domains: ' + escapeHtml((member.primaryDomains || []).join(', ') || '—') + '</span>' +
@@ -3882,7 +4215,7 @@ function renderEmberCourtMembers(court) {
             if (!memberId) return;
             setActiveCourtMemberId(memberId);
             renderEmberCourtMembers(court);
-            const memberLabel = member.name ? escapeHtml(member.name) : escapeHtml(memberId);
+            const memberLabel = rune + ' ' + (member.name || memberId);
             showFlashMessage('Active archetype set to ' + memberLabel + ' ✓');
         });
         listEl.appendChild(button);
@@ -3890,17 +4223,15 @@ function renderEmberCourtMembers(court) {
 
     const activeMember = members.find(m => normalizeCourtMemberId(m.id) === activeMemberId) || null;
     if (activeEl) {
-        if (!activeMember) {
+        if (!activeMember || activeMemberId === EMBER_PRIME_MEMBER_ID) {
             activeEl.textContent = 'Active archetype: Ember Prime';
-            return;
+        } else {
+            const normalizedActiveId = normalizeCourtMemberId(activeMember.id);
+            const rune = COURT_MEMBER_RUNES[normalizedActiveId] || '᛬';
+            activeEl.textContent = 'Active archetype: ' + rune + ' ' + (activeMember.name || activeMember.id);
         }
-        const transitionSubline = COURT_MEMBER_TRANSITIONS[normalizeCourtMemberId(activeMember.id)] || '';
-        activeEl.innerHTML =
-            '<strong>Active archetype: ' + escapeHtml(activeMember.name || activeMember.id) + '</strong>' +
-            (transitionSubline
-                ? '<br><span class="message-system">' + escapeHtml(transitionSubline) + '</span>'
-                : '');
     }
+    updateCouncilChatActiveArchetype();
 }
 
 /**
@@ -3909,17 +4240,18 @@ function renderEmberCourtMembers(court) {
 async function loadWorkshopTools() {
     const listEl = document.getElementById('ws-court-list');
     if (!listEl) return;
-    listEl.innerHTML = '<span class="message-system">Loading Ember Court…</span>';
+    listEl.innerHTML = '<span class="message-system">Loading archetypes…</span>';
     const activeEl = document.getElementById('ws-court-active');
-    if (activeEl) activeEl.textContent = 'Loading court selection…';
+    if (activeEl) activeEl.textContent = 'Loading archetype selection…';
 
     try {
         const res = await fetch('/api/court');
         const data = await res.json();
         renderEmberCourtMembers(data && data.court ? data.court : null);
     } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load Ember Court.</span>';
-        if (activeEl) activeEl.textContent = 'Court unavailable.';
+        listEl.innerHTML = '<span class="message-system">Could not load archetypes.</span>';
+        if (activeEl) activeEl.textContent = 'Active archetype: Ember Prime';
+        updateCouncilChatActiveArchetype();
     }
 }
 
@@ -4322,10 +4654,11 @@ function sendSourceToChat(source) {
  * Appends to existing content — does not overwrite.
  */
 function sendSourceToNotepad(source) {
-    // Switch to Workshop > Notepad
+    // Switch to Workshop > Drafts
     const workshopTab  = document.querySelector('.room-tab[data-room="workshop"]');
     if (workshopTab) workshopTab.click();
-    const notepadTab   = document.querySelector('.sub-tab[data-subtab="ws-notepad"]');
+    const notepadTab   = document.querySelector('.sub-tab[data-subtab="ws-drafts"]')
+        || document.querySelector('.sub-tab[data-subtab="ws-notepad"]');
     if (notepadTab) notepadTab.click();
 
     const draftArea = document.getElementById('workshop-draft');
@@ -4343,7 +4676,7 @@ function sendSourceToNotepad(source) {
     draftArea.value = (draftArea.value || '') + refBlock;
     draftArea.scrollTop = draftArea.scrollHeight;
     draftArea.focus();
-    showFlashMessage('Reference inserted into Notepad');
+    showFlashMessage('Reference inserted into Drafts');
 }
 
 /**
@@ -4801,6 +5134,7 @@ async function launchOllama(toolId) {
     loadArchiveCacheManager();
     loadArchiveSignalPanel();
     loadStartupCheck();
+    updateCouncilChatActiveArchetype();
 
     // Close all source action dropdown menus when clicking outside
     document.addEventListener('click', () => {
