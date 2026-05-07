@@ -311,7 +311,7 @@ router.post('/api/threshold/import', writeLimiter, async (req, res) => {
             const ext = path.extname(upload.filename || '').toLowerCase();
             if (!THRESHOLD_IMPORT_EXTS.has(ext)) {
                 return res.status(400).json({
-                    error: 'Unsupported file type "' + ext + '". Allowed: .md, .txt, .json, .pdf',
+                    error: 'Unsupported file type "' + ext + '". Allowed: ' + [...THRESHOLD_IMPORT_EXTS].join(', '),
                 });
             }
             const finalName = uniqueInboxName(upload.filename);
