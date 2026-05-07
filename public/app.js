@@ -2601,6 +2601,7 @@ async function loadArchiveReaderCatalog() {
 let _intakeQueue = [];
 let _importingAll = false;
 
+// Keep this list aligned with THRESHOLD_IMPORT_EXTS in app/routes/threshold.js.
 const INTAKE_SUPPORTED = new Set(['.txt', '.md', '.json', '.pdf']);
 
 /** Derive a readable title from a filename. */

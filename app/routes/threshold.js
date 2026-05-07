@@ -67,12 +67,13 @@ function uniqueInboxName(filename) {
     const ext = path.extname(safe).toLowerCase();
     const stem = path.basename(safe, ext);
     let candidate = safe;
+    const timestamp = Date.now();
     let i = 1;
     while (fs.existsSync(path.join(THRESHOLD_INBOX_DIR, candidate))) {
         if (i === 1) {
-            candidate = stem + '-' + Date.now() + ext;
+            candidate = stem + '-' + timestamp + ext;
         } else {
-            candidate = stem + '-' + Date.now() + '-' + i + ext;
+            candidate = stem + '-' + timestamp + '-' + i + ext;
         }
         i++;
     }
