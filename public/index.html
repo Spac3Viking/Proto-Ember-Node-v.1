@@ -392,8 +392,8 @@
       </section>
 
       <!-- ═══════════════════════════════════════════════════════════
-            EMBER COUNCIL — Indexed Sources & Working Notes
-           Sub-tabs: Notepad | Index | Caches | Projects
+            EMBER COUNCIL — Circle of Perspectives
+           Sub-tabs: Archetypes | Council Chat | Drafts | Caches
            ═══════════════════════════════════════════════════════════ -->
       <section class="room-panel" id="room-workshop" role="tabpanel">
         <div class="room-panel-inner workshop-layout">
@@ -401,87 +401,60 @@
           <div class="room-header-row">
             <h2 class="room-heading"><span class="room-rune">ᚹ</span> Ember Council <span class="lifecycle-pill indexed">Indexed</span></h2>
             <nav class="sub-tabs" role="tablist" aria-label="Ember Council tabs">
-              <button class="sub-tab active" data-subtab="ws-scribe"     aria-selected="true">ᛋ Scribe</button>
-              <button class="sub-tab"        data-subtab="ws-notepad"    aria-selected="false">Notepad</button>
-              <button class="sub-tab"        data-subtab="ws-index"      aria-selected="false">Index</button>
-              <button class="sub-tab"        data-subtab="ws-caches" aria-selected="false">Caches</button>
-              <button class="sub-tab"        data-subtab="ws-projects"   aria-selected="false">Projects</button>
-              <button class="sub-tab"        data-subtab="ws-tools"      aria-selected="false">Tools</button>
+              <button class="sub-tab active" data-subtab="ws-archetypes"  aria-selected="true">Sentinel Archetypes</button>
+              <button class="sub-tab"        data-subtab="ws-council-chat" aria-selected="false">Council Chat</button>
+              <button class="sub-tab"        data-subtab="ws-drafts"      aria-selected="false">Drafts</button>
+              <button class="sub-tab"        data-subtab="ws-caches"      aria-selected="false">Caches</button>
             </nav>
           </div>
 
-          <!-- Workshop / Scribe — Document Editor (Phase 9) -->
-          <div class="sub-panel active" id="ws-scribe">
-            <div class="scribe-layout">
-
-              <!-- LEFT: Document list -->
-              <aside class="scribe-sidebar">
-                <div class="scribe-sidebar-header">
-                  <span class="scribe-sidebar-title">Documents</span>
-                  <button class="secondary scribe-btn-icon" id="scribe-new-doc-btn" title="New document">+</button>
-                </div>
-                <div class="scribe-doc-list" id="scribe-doc-list">
-                  <span class="message-system">No documents yet.</span>
-                </div>
-              </aside>
-
-              <!-- CENTER: Document editor -->
-              <div class="scribe-editor-area">
-                <div class="scribe-editor-toolbar">
-                  <input
-                    type="text"
-                    id="scribe-doc-title"
-                    class="scribe-title-input"
-                    placeholder="Document title…"
-                    autocomplete="off"
-                    aria-label="Document title"
-                  >
-                  <select id="scribe-doc-type" class="scribe-type-select" aria-label="Document type">
-                    <option value="note">Note</option>
-                    <option value="saga">Saga</option>
-                    <option value="codex">Codex</option>
-                    <option value="grimoire">Grimoire</option>
-                  </select>
-                  <button class="primary scribe-action-btn" id="scribe-save-btn" title="Save document">Save</button>
-                  <button class="secondary scribe-action-btn" id="scribe-delete-btn" title="Delete document" style="display:none;">Delete</button>
-                  <span class="scribe-save-status" id="scribe-save-status"></span>
-                </div>
-                <div class="scribe-editor-body">
-                  <textarea
-                    id="scribe-doc-content"
-                    class="scribe-content-area"
-                    placeholder="Begin writing here. Your work is yours alone — stored locally, never sent to the cloud."
-                    spellcheck="true"
-                    aria-label="Document content"
-                  ></textarea>
-                </div>
+          <!-- Workshop / Sentinel Archetypes -->
+          <div class="sub-panel active" id="ws-archetypes">
+            <div class="ember-card" style="padding: 1rem 1.25rem;">
+              <p class="threshold-notice">
+                Ember Council is a circle of perspectives.
+                <br>
+                Select an archetype lens, or choose Ember Prime with no lens.
+              </p>
+            </div>
+            <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
+              <div class="workshop-section-title">Sentinel Archetypes</div>
+              <div class="message-system" id="ws-court-active">Loading court selection…</div>
+              <div id="ws-court-list" class="ws-sources-list">
+                <span class="message-system">Loading Ember Court…</span>
               </div>
-
-              <!-- RIGHT: Ember Prime companion panel -->
-              <aside class="scribe-heart-panel">
-                <div class="scribe-heart-header">
-                  <span class="scribe-sidebar-title">ᚺ Ember Prime</span>
-                </div>
-                <div class="scribe-heart-actions">
-                  <button class="primary scribe-action-btn" id="scribe-send-to-heart-btn" title="Send current document to Ember Prime">Send to Ember Prime</button>
-                  <button class="secondary scribe-action-btn" id="scribe-insert-response-btn" title="Insert Ember Prime response into document" style="display:none;">Insert Response</button>
-                </div>
-                <div class="scribe-heart-chat" id="scribe-heart-chat">
-                  <span class="message-system scribe-heart-hint">Send your writing to Ember Prime for reflection, expansion, or refinement.</span>
-                </div>
-              </aside>
-
             </div>
           </div>
 
-          <!-- Workshop / Notepad -->
-          <div class="sub-panel" id="ws-notepad">
+          <!-- Workshop / Council Chat -->
+          <div class="sub-panel" id="ws-council-chat">
+            <div class="ember-card" style="padding: 1rem 1.25rem;">
+              <div class="workshop-section-title" style="margin:0 0 0.5rem 0;">Council Chat</div>
+              <div class="message-system" id="ws-council-active-archetype">Active archetype: Ember Prime</div>
+            </div>
+            <div class="ember-card" style="padding: 1rem; display:flex; flex-direction:column; gap:0.75rem; min-height:420px;">
+              <div id="ws-council-messages" class="messages-container">
+                <span class="message-system">Speak to the active archetype. If none is selected, Ember Prime responds directly.</span>
+              </div>
+              <div class="input-row" style="margin-top:auto;">
+                <textarea id="ws-council-input" placeholder="Speak into Council Chat..." rows="2"></textarea>
+              </div>
+              <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+                <button class="secondary" id="ws-stop-response-button" style="display:none;">Still the Signal</button>
+                <button class="primary" id="ws-council-send-button">Send</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Workshop / Drafts -->
+          <div class="sub-panel" id="ws-drafts">
             <div class="ember-card workshop-draft-card" style="padding: 1rem;">
+              <div class="workshop-section-title" style="margin-bottom:0.6rem;">Council Drafts</div>
               <div class="draft-area">
                 <label for="workshop-draft" class="visually-hidden">Draft area</label>
                 <textarea
                   id="workshop-draft"
-                  placeholder="Draft your signal here. Write, revise, compose. Nothing leaves this room until you say so."
+                  placeholder="Local writing space for notes, copied responses, and rough fragments."
                   spellcheck="true"
                 ></textarea>
               </div>
@@ -493,8 +466,8 @@
             </div>
           </div>
 
-          <!-- Workshop / Index -->
-          <div class="sub-panel" id="ws-index">
+          <!-- Workshop / Index (hidden in current phase) -->
+          <div class="sub-panel" id="ws-index" hidden>
             <div class="ember-card" style="padding: 1rem;">
               <div class="workshop-section-title">Indexed Sources</div>
               <div id="ws-sources-list" class="ws-sources-list">
@@ -541,8 +514,8 @@
             </div>
           </div>
 
-          <!-- Workshop / Projects -->
-          <div class="sub-panel" id="ws-projects">
+          <!-- Workshop / Projects (hidden in current phase) -->
+          <div class="sub-panel" id="ws-projects" hidden>
             <div class="project-layout">
               <div class="ember-card project-list-card" style="padding: 1rem;">
                 <div class="workshop-section-title">Projects</div>
@@ -575,22 +548,9 @@
             </div>
           </div>
 
-          <!-- Workshop / Tools — Ember Court -->
-          <div class="sub-panel" id="ws-tools">
-            <div class="ember-card" style="padding: 1rem 1.25rem;">
-              <p class="threshold-notice">
-                Ember Council
-                <br>
-                Archetypal perspectives for shaping, testing, and refining the signal.
-              </p>
-            </div>
-            <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
-              <div class="workshop-section-title">Ember Council</div>
-              <div class="message-system" id="ws-court-active">Loading court selection…</div>
-              <div id="ws-court-list" class="ws-sources-list">
-                <span class="message-system">Loading Ember Court…</span>
-              </div>
-            </div>
+          <!-- Workshop / Tools (legacy hidden panel) -->
+          <div class="sub-panel" id="ws-tools" hidden>
+            <span class="message-system">Legacy panel hidden in this phase.</span>
           </div>
 
         </div>
@@ -702,6 +662,27 @@
               <div id="th-tool-list" class="threshold-file-list">
                 <span class="message-system">No tools detected. Click Scan to search.</span>
               </div>
+            </div>
+            <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
+              <div class="workshop-section-title" style="margin:0;">Local AI Guidance</div>
+              <div class="system-row">
+                <span class="system-key">Ollama status</span>
+                <span class="system-val" id="th-ai-ollama-status">checking…</span>
+              </div>
+              <div class="system-row" style="align-items:flex-start;">
+                <span class="system-key">Installed models</span>
+                <span class="system-val" id="th-ai-models-list">loading…</span>
+              </div>
+              <div class="system-row">
+                <span class="system-key">Selected model</span>
+                <span class="system-val" id="th-ai-selected-model">—</span>
+              </div>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="secondary" id="th-ai-refresh-models-btn">Refresh Local Models</button>
+                <button class="secondary" id="th-ai-open-ollama-btn">Open Ollama Website</button>
+                <button class="secondary" id="th-ai-copy-commands-btn">Copy Suggested Ollama Commands</button>
+              </div>
+              <pre id="th-ai-suggested-commands" style="margin:0; padding:0.75rem; border:1px solid hsla(140,100%,70%,0.16); border-radius:8px; background:hsla(120,20%,4%,0.7); color:var(--archive-muted); font-size:0.78rem; line-height:1.55; white-space:pre-wrap;"></pre>
             </div>
             <!-- Guided setup — shown when no AI is running -->
             <div class="ember-card" id="th-ai-setup-guide" style="padding: 1rem 1.25rem; display:none; gap:0.5rem; flex-direction:column;">
