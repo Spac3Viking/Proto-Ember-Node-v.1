@@ -54,7 +54,7 @@
     <!-- Room Tab Row — 3 rooms only -->
     <nav class="room-tabs" role="tablist" aria-label="Rooms">
       <button class="room-tab active" role="tab" aria-selected="true"  data-room="hearth"    aria-controls="room-hearth">ᚺ Hearth</button>
-      <button class="room-tab"        role="tab" aria-selected="false" data-room="workshop"  aria-controls="room-workshop">ᚹ Workshop</button>
+      <button class="room-tab"        role="tab" aria-selected="false" data-room="workshop"  aria-controls="room-workshop">ᚹ Ember Council</button>
       <button class="room-tab"        role="tab" aria-selected="false" data-room="threshold" aria-controls="room-threshold">ᚦ Threshold</button>
     </nav>
 
@@ -335,11 +335,11 @@
                   Phase 4 ✓ — sub-tab navigation, file lifecycle, thread system, PDF/DOCX support<br>
                   Phase 5 ✓ — external data root, portability, cartridge ownership<br>
                   Phase 6 ✓ — source actions, cross-room mobility, Hearth Chat references<br>
-                  Phase 7 ✓ — AI/tool discovery, trust flow, role assignment, Heart selection<br>
+                  Phase 7 ✓ — AI/tool discovery, trust flow, role assignment, Ember Prime selection<br>
                   Phase 8 ✓ — startup checklist, airlock discipline, tool readiness<br>
                   Phase 8.5 ✓ — intake persistence, durable reject, changed-file flow, tool setup polish<br>
                   Phase 8.75 ✓ — cleanup pass: redundancy removal, path consolidation, modular clarity<br>
-                  Phase 9 ✓ — Scribe Forge: document editor, Heart tuning, Green Fire UI<br>
+                  Phase 9 ✓ — Scribe Forge: document editor, Ember Prime tuning, Green Fire UI<br>
                   Phase 11 ✓ — Context Architecture: archive, remembered threads, context maps, room-bounded chat<br>
                   Phase 11.5 ✓ — Forge Integration + Bootstrap System: identity layer, epistemic discipline, archetypes
                 </p>
@@ -381,15 +381,15 @@
       </section>
 
       <!-- ═══════════════════════════════════════════════════════════
-           WORKSHOP — Indexed Sources & Working Notes
+            EMBER COUNCIL — Indexed Sources & Working Notes
            Sub-tabs: Notepad | Index | Cartridges | Projects
            ═══════════════════════════════════════════════════════════ -->
       <section class="room-panel" id="room-workshop" role="tabpanel">
         <div class="room-panel-inner workshop-layout">
 
           <div class="room-header-row">
-            <h2 class="room-heading"><span class="room-rune">ᚹ</span> Workshop <span class="lifecycle-pill indexed">Indexed</span></h2>
-            <nav class="sub-tabs" role="tablist" aria-label="Workshop tabs">
+            <h2 class="room-heading"><span class="room-rune">ᚹ</span> Ember Council <span class="lifecycle-pill indexed">Indexed</span></h2>
+            <nav class="sub-tabs" role="tablist" aria-label="Ember Council tabs">
               <button class="sub-tab active" data-subtab="ws-scribe"     aria-selected="true">ᛋ Scribe</button>
               <button class="sub-tab"        data-subtab="ws-notepad"    aria-selected="false">Notepad</button>
               <button class="sub-tab"        data-subtab="ws-index"      aria-selected="false">Index</button>
@@ -489,7 +489,7 @@
               <div id="ws-sources-list" class="ws-sources-list">
                 <span class="message-system">No sources indexed.</span>
               </div>
-              <div class="workshop-section-title" style="margin-top: 1rem;">Workshop Notes</div>
+              <div class="workshop-section-title" style="margin-top: 1rem;">Council Notes</div>
               <div id="ws-notes-list" class="ws-notes-list">
                 <span class="message-system">No notes saved.</span>
               </div>
@@ -568,12 +568,13 @@
           <div class="sub-panel" id="ws-tools">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
-                Ember Prime serves as continuity mind, archive firekeeper, symbolic router, council convener, and synthesis layer.
-                Select one Court lens to guide interpretive posture, source weighting, and response structure.
+                Ember Council
+                <br>
+                Archetypal perspectives for shaping, testing, and refining the signal.
               </p>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
-              <div class="workshop-section-title">Ember Court</div>
+              <div class="workshop-section-title">Ember Council</div>
               <div class="message-system" id="ws-court-active">Loading court selection…</div>
               <div id="ws-court-list" class="ws-sources-list">
                 <span class="message-system">Loading Ember Court…</span>
@@ -606,7 +607,7 @@
               <p class="threshold-notice">
                 The Threshold is the intake room. All external material — documents, imports, and unverified signals —
                 lands here before touching the Hearth. Files start as <strong>Waiting</strong>, move to <strong>Indexed</strong>
-                in Workshop, and finally become <strong>Remembered</strong> in Hearth.
+                in Ember Council, and finally become <strong>Remembered</strong> in Hearth.
               </p>
             </div>
 
@@ -679,7 +680,7 @@
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
                 AI runtimes and tools detected on this machine appear here as <strong>AI (Waiting)</strong>.
-                Inspect each tool before trusting it. Trusted tools move to Workshop for classification.
+                Inspect each tool before trusting it. Trusted tools move to Ember Council for classification.
               </p>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
@@ -718,7 +719,7 @@
               <span class="inspector-rune" style="font-size:2rem; opacity:0.3; display:block; margin-bottom:0.75rem;">ᚠ</span>
               <p class="message-system" style="font-size:0.85rem;">
                 Exports are reserved for a future phase.<br>
-                Packaged cartridges and knowledge bundles will be assembled here.
+                Cache bundles and knowledge bundles will be assembled here.
               </p>
             </div>
           </div>
@@ -798,7 +799,7 @@
       </div>
       <div class="source-inspector-body" style="padding:1.2rem 1.3rem; overflow-y:auto; display:flex; flex-direction:column; gap:1rem;">
         <p style="margin:0; font-size:0.85rem; opacity:0.8;">
-          No active Heart was detected. Ember Node works best with a local AI model host running on your machine.
+          No active Ember Prime was detected. Ember Node works best with a local AI model host running on your machine.
           The recommended option is <strong>Ollama</strong> — a free, local, offline-capable AI runtime.
         </p>
         <div>
@@ -814,7 +815,7 @@
             <li>Visit <strong>ollama.com</strong> and download the installer for your OS.</li>
             <li>Run the installer (no admin required on most systems).</li>
             <li>Open a terminal and start the server:<br><code style="font-size:0.8rem;">ollama serve</code></li>
-            <li>Pull a model to use as your Heart:<br><code style="font-size:0.8rem;">ollama pull gemma3:4b</code></li>
+            <li>Pull a model to use for Ember Prime:<br><code style="font-size:0.8rem;">ollama pull gemma3:4b</code></li>
             <li>Return to Ember Node and click <strong>ᚹ Review Tools</strong> → <strong>↺ Scan</strong> to detect it.</li>
           </ol>
         </div>
