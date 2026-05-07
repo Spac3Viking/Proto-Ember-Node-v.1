@@ -95,6 +95,7 @@ let _activeRoomId = 'hearth';
 
     function activateRoom(roomId) {
         const previousRoomId = _activeRoomId;
+        _activeRoomId = roomId;
         if (_isChatGenerating && previousRoomId && previousRoomId !== roomId) {
             stillTheSignal();
         }
@@ -124,7 +125,6 @@ let _activeRoomId = 'hearth';
             loadArchiveSignalPanel();
             refreshSystemStatus();
         }
-        _activeRoomId = roomId;
     }
 
     tabs.forEach(tab => {
@@ -874,7 +874,8 @@ async function sendMessage() {
     _activeChatLongWaitTimer = setTimeout(() => {
         if (_isChatGenerating && _chatState === CHAT_STATES.THINKING) {
             thinkingLabel.textContent = 'Ember Prime is taking longer than usual. You may wait or still the signal.';
-            startExtendedRuneAettirAnimation(thinking);
+            const stopExtendedAnim = startExtendedRuneAettirAnimation(thinking);
+            if (typeof stopExtendedAnim === 'function') _stopExtendedRuneAettirLoop = stopExtendedAnim;
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
     }, LONG_WAIT_THRESHOLD_MS);
@@ -1031,7 +1032,8 @@ async function sendCouncilMessage() {
     _activeChatLongWaitTimer = setTimeout(() => {
         if (_isChatGenerating && _chatState === CHAT_STATES.THINKING) {
             thinkingLabel.textContent = 'Ember Prime is taking longer than usual. You may wait or still the signal.';
-            startExtendedRuneAettirAnimation(thinking);
+            const stopExtendedAnim = startExtendedRuneAettirAnimation(thinking);
+            if (typeof stopExtendedAnim === 'function') _stopExtendedRuneAettirLoop = stopExtendedAnim;
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
     }, LONG_WAIT_THRESHOLD_MS);
