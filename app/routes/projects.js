@@ -168,19 +168,6 @@ router.get('/api/user-caches', readLimiter, (req, res) => {
     res.json({ caches });
 });
 
-// Deprecated compatibility alias.
-// TODO(phase-15-9c): remove after downstream clients migrate to /api/user-caches.
-router.get('/api/user-cartridges', readLimiter, (req, res) => {
-    const caches = fs.readdirSync(USER_CACHES_DIR)
-        .filter(f => f.endsWith('.json'))
-        .map(f => {
-            try { return JSON.parse(fs.readFileSync(path.join(USER_CACHES_DIR, f), 'utf8')); }
-            catch { return null; }
-        })
-        .filter(Boolean)
-        .sort(function(a, b) { return b.createdAt.localeCompare(a.createdAt); });
-    res.json({ caches, cartridges: caches });
-});
 
 /**
  * POST /api/user-caches
@@ -196,17 +183,6 @@ router.post('/api/user-caches', writeLimiter, (req, res) => {
     res.json({ success: true, cache });
 });
 
-// Deprecated compatibility alias.
-// TODO(phase-15-9c): remove after downstream clients migrate to /api/user-caches.
-router.post('/api/user-cartridges', writeLimiter, (req, res) => {
-    const { title, description = '', sources = [], notes = '' } = req.body || {};
-    if (!title) return res.status(400).json({ error: 'title is required' });
-    const id        = 'cache-' + crypto.randomUUID();
-    const now       = new Date().toISOString();
-    const cache = { id, title, description, sources, notes, createdAt: now, updatedAt: now, ownership: 'user' };
-    fs.writeFileSync(path.join(USER_CACHES_DIR, id + '.json'), JSON.stringify(cache, null, 2), 'utf8');
-    return res.json({ success: true, cache, cartridge: cache });
-});
 
 // ── Bundled caches ────────────────────────────────────────────────────────
 
@@ -217,12 +193,6 @@ router.get('/caches', (req, res) => {
     res.json({ caches: listCaches() });
 });
 
-// Deprecated compatibility alias.
-// TODO(phase-15-9c): remove after downstream clients migrate to /caches.
-router.get('/cartridges', (req, res) => {
-    const caches = listCaches();
-    res.json({ caches, cartridges: caches });
-});
 
 /**
  * GET /caches/:name
@@ -233,16 +203,6 @@ router.get('/caches/:name', (req, res) => {
         return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
     }
     res.json(cache);
-});
-
-// Deprecated compatibility alias.
-// TODO(phase-15-9c): remove after downstream clients migrate to /caches/:name.
-router.get('/cartridges/:name', (req, res) => {
-    const cache = loadCache(req.params.name);
-    if (!cache) {
-        return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
-    }
-    return res.json({ ...cache, cartridgeId: cache.name || req.params.name });
 });
 
 module.exports = router;

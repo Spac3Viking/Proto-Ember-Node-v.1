@@ -44,7 +44,7 @@
         <div class="startup-banner-warnings" id="startup-banner-warnings" style="display:none;"></div>
         <div class="startup-banner-links">
           <button class="secondary startup-banner-link" id="sb-review-threshold">ᚦ Review Threshold</button>
-          <button class="secondary startup-banner-link" id="sb-review-tools">ᚹ Review Tools</button>
+          <button class="secondary startup-banner-link" id="sb-review-tools">ᚹ Review AI Setup</button>
           <button class="secondary startup-banner-link" id="sb-open-system">ᚺ System</button>
           <button class="secondary startup-banner-link" id="sb-setup-guide" style="display:none;">⬡ View Setup Guide</button>
         </div>
@@ -327,11 +327,11 @@
               <div class="ember-card system-block">
                 <div class="system-block-title">Active Ember Prime</div>
                 <p style="font-size:0.8rem; opacity:0.65; margin:0 0 0.75rem;">
-                  Select which trusted tool acts as Ember Prime for chat. Only one tool can be active at a time.
-                  Switching does not remove previous tools.
+                  Select which trusted runtime acts as Ember Prime for chat. Only one runtime can be active at a time.
+                  Switching does not remove previous runtimes.
                 </p>
                 <div id="sys-heart-list" style="display:flex; flex-direction:column; gap:0.5rem;">
-                  <span class="message-system" id="sys-heart-empty">No trusted tools available. Trust tools in Threshold → AI first.</span>
+                  <span class="message-system" id="sys-heart-empty">No trusted runtimes available. Complete Threshold → AI setup first.</span>
                 </div>
                 <div class="system-row" style="margin-top:0.75rem;">
                   <span class="system-key">Active Ember Prime</span>
@@ -408,7 +408,7 @@
             </nav>
           </div>
 
-          <!-- Workshop / Sentinel Archetypes -->
+          <!-- Ember Council / Sentinel Archetypes -->
           <div class="sub-panel active" id="ws-archetypes">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
@@ -426,7 +426,7 @@
             </div>
           </div>
 
-          <!-- Workshop / Council Chat -->
+          <!-- Ember Council / Council Chat -->
           <div class="sub-panel" id="ws-council-chat">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <div class="workshop-section-title" style="margin:0 0 0.5rem 0;">Council Chat</div>
@@ -446,7 +446,7 @@
             </div>
           </div>
 
-          <!-- Workshop / Drafts -->
+          <!-- Ember Council / Drafts -->
           <div class="sub-panel" id="ws-drafts">
             <div class="ember-card workshop-draft-card" style="padding: 1rem;">
               <div class="workshop-section-title" style="margin-bottom:0.6rem;">Council Drafts</div>
@@ -466,21 +466,7 @@
             </div>
           </div>
 
-          <!-- Workshop / Index (hidden in current phase) -->
-          <div class="sub-panel" id="ws-index" hidden>
-            <div class="ember-card" style="padding: 1rem;">
-              <div class="workshop-section-title">Indexed Sources</div>
-              <div id="ws-sources-list" class="ws-sources-list">
-                <span class="message-system">No sources indexed.</span>
-              </div>
-              <div class="workshop-section-title" style="margin-top: 1rem;">Council Notes</div>
-              <div id="ws-notes-list" class="ws-notes-list">
-                <span class="message-system">No notes saved.</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Workshop / Caches -->
+          <!-- Ember Council / Caches -->
           <div class="sub-panel" id="ws-caches">
             <div class="cache-layout">
               <!-- Shelf list -->
@@ -512,45 +498,6 @@
                 </div>
               </div>
             </div>
-          </div>
-
-          <!-- Workshop / Projects (hidden in current phase) -->
-          <div class="sub-panel" id="ws-projects" hidden>
-            <div class="project-layout">
-              <div class="ember-card project-list-card" style="padding: 1rem;">
-                <div class="workshop-section-title">Projects</div>
-                <div class="project-list" id="project-list">
-                  <span class="message-system">No projects yet.</span>
-                </div>
-                <button class="secondary" id="new-project-btn" style="margin-top: 0.75rem; width: 100%;">+ New Project</button>
-              </div>
-              <div class="ember-card project-detail-card" id="project-detail" style="padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
-                <div class="inspector-empty" id="project-empty">
-                  <span class="inspector-rune">ᚹ</span>
-                  Select or create a project
-                </div>
-                <div id="project-editor" style="display:none; flex-direction:column; gap:0.75rem; flex:1;">
-                  <input type="text" id="project-title-input" placeholder="Project title" style="font-size:0.95rem;">
-                  <textarea id="project-notes-input" placeholder="Project notes…" style="flex:1; min-height:120px; max-height:70vh; resize:vertical;"></textarea>
-                  <div style="display:flex; gap:0.5rem; align-items:center;">
-                    <button class="primary" id="save-project-btn">Save</button>
-                    <span class="workshop-status" id="project-status"></span>
-                  </div>
-                  <!-- Linked Sources Section -->
-                  <div class="project-sources-section">
-                    <div class="workshop-section-title" style="margin-top:0.25rem; margin-bottom:0.5rem;">Linked Sources</div>
-                    <div class="project-sources-list" id="project-sources-list">
-                      <span class="message-system" id="project-sources-empty">No sources attached.</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Workshop / Tools (legacy hidden panel) -->
-          <div class="sub-panel" id="ws-tools" hidden>
-            <span class="message-system">Legacy panel hidden in this phase.</span>
           </div>
 
         </div>
@@ -646,21 +593,21 @@
             </div>
           </div>
 
-          <!-- Threshold / AI — detected but untrusted tools -->
+          <!-- Threshold / AI — detected but untrusted runtimes -->
           <div class="sub-panel" id="th-ai">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
-                AI runtimes and tools detected on this machine appear here as <strong>AI (Waiting)</strong>.
-                Inspect each tool before trusting it. Trusted tools move to Ember Council for classification.
+                AI runtimes detected on this machine appear here as <strong>AI (Waiting)</strong>.
+                Inspect each runtime before trusting it. Trusted material can be reviewed through the Ember Council.
               </p>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div class="workshop-section-title" style="margin:0;">Detected AI &amp; Tools</div>
+                <div class="workshop-section-title" style="margin:0;">Detected AI Runtimes</div>
                 <button class="secondary" id="tool-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
               </div>
               <div id="th-tool-list" class="threshold-file-list">
-                <span class="message-system">No tools detected. Click Scan to search.</span>
+                <span class="message-system">No AI runtimes detected. Click Scan to search.</span>
               </div>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
@@ -700,7 +647,7 @@
                 </ol>
               </details>
               <p style="font-size:0.78rem; opacity:0.55; margin:0;">
-                Ember Node will never auto-install tools. All setup is manual and under your control.
+                Ember Node will never auto-install AI runtimes. All setup is manual and under your control.
               </p>
             </div>
           </div>
@@ -757,14 +704,14 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════
-       TOOL INSPECTOR MODAL
-       Shown when the user clicks "Inspect" on any tool card.
-       ═══════════════════════════════════════════════════════════ -->
-  <div class="source-inspector-overlay" id="tool-inspector-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Tool Inspector">
+       AI RUNTIME INSPECTOR MODAL
+       Shown when the user clicks "Inspect" on any runtime card.
+        ═══════════════════════════════════════════════════════════ -->
+  <div class="source-inspector-overlay" id="tool-inspector-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Runtime Inspector">
     <div class="source-inspector-panel">
       <div class="source-inspector-header">
-        <span class="source-inspector-title" id="tool-insp-title">Tool Inspector</span>
-        <button class="source-inspector-close" id="tool-insp-close" aria-label="Close tool inspector">✕</button>
+        <span class="source-inspector-title" id="tool-insp-title">AI Runtime Inspector</span>
+        <button class="source-inspector-close" id="tool-insp-close" aria-label="Close runtime inspector">✕</button>
       </div>
       <div class="source-inspector-body">
         <div class="insp-meta-grid">
@@ -808,7 +755,7 @@
             <li>Run the installer (no admin required on most systems).</li>
             <li>Open a terminal and start the server:<br><code style="font-size:0.8rem;">ollama serve</code></li>
             <li>Pull a model to use for Ember Prime:<br><code style="font-size:0.8rem;">ollama pull gemma3:4b</code></li>
-            <li>Return to Ember Node and click <strong>ᚹ Review Tools</strong> → <strong>↺ Scan</strong> to detect it.</li>
+            <li>Return to Ember Node and click <strong>ᚹ Review AI Setup</strong> → <strong>↺ Scan</strong> to detect it.</li>
           </ol>
         </div>
         <div>
@@ -819,7 +766,7 @@
           </p>
         </div>
         <p style="margin:0; font-size:0.78rem; opacity:0.5;">
-          Ember Node will never auto-install tools or fetch installers. All setup is manual and under your control.
+          Ember Node will never auto-install AI runtimes or fetch installers. All setup is manual and under your control.
         </p>
       </div>
     </div>
