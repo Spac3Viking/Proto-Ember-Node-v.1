@@ -82,6 +82,7 @@ function escapeHtml(str) {
             p.classList.toggle('active', p.id === 'room-' + roomId);
         });
 
+        // Keep internal room key as "workshop" for storage/route compatibility.
         if (roomId === 'workshop' && !window._workshopLoaded) {
             loadWorkshopPanel();
         }
@@ -667,15 +668,16 @@ function renderSignalTrace(sources, signalTrace = null) {
     const sourceSummary = sourcesActuallyUsed.length > 0
         ? sourcesActuallyUsed
         : (sourceList.length > 0 ? sourceList : prioritySourcesConsidered);
+    const contextSummary = sourceSummary.length > 0
+        ? sourceSummary
+        : (courtSourcesConsidered.length > 0 ? courtSourcesConsidered : courtDomains);
+    const compactRoute = dedupedConceptRoute.length > 0
+        ? dedupedConceptRoute.join(' → ')
+        : null;
     const rows = [
-        { key: 'Court lens', value: courtLens || 'Ember Prime' },
-        { key: 'Court domains', value: courtDomains.length > 0 ? boundedListText(courtDomains) : null },
-        {
-            key: 'Court sources considered',
-            value: courtSourcesConsidered.length > 0 ? boundedListText(courtSourcesConsidered) : null,
-        },
-        { key: 'Concept route', value: dedupedConceptRoute.length > 0 ? boundedListText(dedupedConceptRoute) : null },
-        { key: 'Sources used', value: sourceSummary.length > 0 ? boundedListText(sourceSummary) : null },
+        { key: 'Active archetype', value: courtLens || 'Ember Prime' },
+        { key: 'Route', value: compactRoute },
+        { key: 'Context', value: contextSummary.length > 0 ? boundedListText(contextSummary) : null },
         { key: 'Model', value: model },
         { key: 'Provider', value: provider },
     ];
@@ -686,7 +688,7 @@ function renderSignalTrace(sources, signalTrace = null) {
         item.className = 'signal-trace-item';
         item.innerHTML =
             '<span class="trace-badge"><span class="trace-key">' +
-            escapeHtml(row.key.toLowerCase()) + '</span> ' +
+            escapeHtml(row.key) + '</span> ' +
             escapeHtml(row.value) + '</span>';
         traceSources.appendChild(item);
     });
@@ -710,37 +712,10 @@ function renderSignalTrace(sources, signalTrace = null) {
         setTraceStatus(count + ' source' + (count === 1 ? '' : 's'));
     }
 
-    sources.forEach(s => {
-        const item = document.createElement('div');
-        item.className = 'signal-trace-item';
-
-        // Build display name from metadata if available
-        const displayName = s.title || s.file;
-        const shelfBadge  = s.shelf ? [{ label: 'shelf', val: s.shelf }] : [];
-
-        const badges = [
-            { label: 'room',  val: s.room },
-            s.cartridgeId ? { label: 'cartridge', val: s.cartridgeId } : null,
-            ...shelfBadge,
-            { label: 'file',  val: displayName },
-            { label: 'score', val: String(s.score) },
-        ].filter(Boolean);
-
-        item.innerHTML = badges
-            .map(b =>
-                '<span class="trace-badge"><span class="trace-key">' +
-                escapeHtml(b.label) + '</span> ' +
-                escapeHtml(b.val) + '</span>'
-            )
-            .join('');
-
-        traceSources.appendChild(item);
-    });
-
-    // Auto-expand when there are sources so user can see them
+    // Auto-expand when there is compact trace content.
     const panel  = document.getElementById('signal-trace-panel');
     const toggle = document.getElementById('signal-trace-toggle');
-    if (panel && count > 0) {
+    if (panel && traceSources.children.length > 0) {
         panel.classList.remove('collapsed');
         if (toggle) {
             toggle.textContent = '▾';
@@ -2761,7 +2736,7 @@ async function loadThresholdList() {
         const admitAllBtn = document.createElement('button');
         admitAllBtn.className = 'threshold-action-btn threshold-admit-btn';
         admitAllBtn.textContent = 'Admit All (' + batchable.length + ')';
-        admitAllBtn.title = 'Admit all waiting files to Workshop';
+        admitAllBtn.title = 'Admit all waiting files to Ember Council';
         admitAllBtn.addEventListener('click', async () => {
             admitAllBtn.disabled = true;
             admitAllBtn.textContent = 'Admitting…';
@@ -2906,8 +2881,8 @@ function buildThresholdFileRow(f, isChanged) {
         if (!f.metaOnly && f.sourceId) {
             const admitBtn = document.createElement('button');
             admitBtn.className = 'threshold-action-btn threshold-admit-btn';
-            admitBtn.textContent = 'Admit to Workshop';
-            admitBtn.title = 'Inspect, index, and move to Workshop in one step';
+            admitBtn.textContent = 'Admit to Ember Council';
+            admitBtn.title = 'Inspect, index, and move to Ember Council in one step';
             admitBtn.addEventListener('click', async () => {
                 admitBtn.disabled = true;
                 admitBtn.textContent = 'Admitting…';
@@ -2921,8 +2896,8 @@ function buildThresholdFileRow(f, isChanged) {
                     if (d.success) {
                         showFlashMessage(
                             d.indexWarning
-                                ? 'Admitted to Workshop (index skipped: ' + d.indexWarning + ')'
-                                : 'Admitted to Workshop ✓',
+                                ? 'Admitted to Ember Council (index skipped: ' + d.indexWarning + ')'
+                                : 'Admitted to Ember Council ✓',
                         );
                         refreshSystemStatus();
                         loadThresholdList();
@@ -3014,8 +2989,8 @@ function buildThresholdFileRow(f, isChanged) {
 
             const moveBtn = document.createElement('button');
             moveBtn.className = 'secondary threshold-action-btn';
-            moveBtn.textContent = '→ Workshop';
-            moveBtn.title = 'Move to Workshop without re-indexing';
+            moveBtn.textContent = '→ Ember Council';
+            moveBtn.title = 'Move to Ember Council without re-indexing';
             moveBtn.addEventListener('click', async () => {
                 if (!f.sourceId) return;
                 moveBtn.disabled = true;
@@ -3027,7 +3002,7 @@ function buildThresholdFileRow(f, isChanged) {
                     });
                     const d = await r.json();
                     if (d.success) {
-                        moveBtn.textContent = '✓ Workshop';
+                        moveBtn.textContent = '✓ Ember Council';
                         loadThresholdList();
                     } else {
                         moveBtn.disabled = false;
@@ -3680,7 +3655,7 @@ function renderThresholdToolRow(tool, active, container) {
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Workshop → Tools');
+                        showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Ember Council → Tools');
                         loadThresholdTools();
                         loadWorkshopTools();
                         loadHearthToolRegistry();
@@ -3812,7 +3787,7 @@ function renderEmberCourtMembers(court) {
             setActiveCourtMemberId(memberId);
             renderEmberCourtMembers(court);
             const memberLabel = member.name ? escapeHtml(member.name) : escapeHtml(memberId);
-            showFlashMessage('Ember Court lens set to ' + memberLabel + ' ✓');
+            showFlashMessage('Active archetype set to ' + memberLabel + ' ✓');
         });
         listEl.appendChild(button);
     });
@@ -3820,12 +3795,12 @@ function renderEmberCourtMembers(court) {
     const activeMember = members.find(m => normalizeCourtMemberId(m.id) === activeMemberId) || null;
     if (activeEl) {
         if (!activeMember) {
-            activeEl.textContent = 'Active lens: Ember Prime';
+            activeEl.textContent = 'Active archetype: Ember Prime';
             return;
         }
         const transitionSubline = COURT_MEMBER_TRANSITIONS[normalizeCourtMemberId(activeMember.id)] || '';
         activeEl.innerHTML =
-            '<strong>Active lens: ' + escapeHtml(activeMember.name || activeMember.id) + '</strong>' +
+            '<strong>Active archetype: ' + escapeHtml(activeMember.name || activeMember.id) + '</strong>' +
             (transitionSubline
                 ? '<br><span class="message-system">' + escapeHtml(transitionSubline) + '</span>'
                 : '');
@@ -4291,7 +4266,7 @@ async function attachSourceToProject(sourceId, sourceTitle) {
     }
 
     if (projects.length === 0) {
-        showFlashMessage('No projects — create one in Workshop → Projects first.');
+        showFlashMessage('No projects — create one in Ember Council → Projects first.');
         return;
     }
 
@@ -4441,9 +4416,9 @@ async function loadStartupCheck() {
         const totalIntake  = (data.waitingFiles || 0) + (data.changedFiles || 0) + (data.flaggedFiles || 0);
         summaryParts.push('Node awakened');
         if (data.activeHeart && data.activeHeartAvailable) {
-            summaryParts.push('Heart ready');
+            summaryParts.push('Ember Prime ready');
         } else if (data.activeHeart && !data.activeHeartAvailable) {
-            summaryParts.push('Heart offline');
+            summaryParts.push('Ember Prime offline');
         } else {
             summaryParts.push('no Ember Prime set');
         }

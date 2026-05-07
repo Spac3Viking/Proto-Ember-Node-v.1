@@ -154,11 +154,11 @@ Phase 3 implements the first true memory-and-retrieval loop:
 - **Chunking** — documents are split into retrievable overlapping chunks
 - **Embeddings** — local vector generation via Ollama (`nomic-embed-text` default)
 - **Keyword fallback** — retrieval works even without an embedding model
-- **Room-aware retrieval** — Hearth sources are prioritised over Workshop; Threshold excluded by default
+- **Room-aware retrieval** — Hearth sources are prioritised over Ember Council; Threshold excluded by default
 - **Grounded Heart responses** — The Heart answers from local remembered sources
-- **Signal Trace** — every response shows which sources informed the answer
-- **Cartridge indexing** — cartridges can be indexed from Workshop; their docs/ become retrievable knowledge
-- **Workshop notes** — draft text can be saved as local Markdown and optionally indexed
+- **Signal Trace** — compact trace includes Active archetype, Route, Context, Model, and Provider
+- **Cartridge indexing** — cartridges can be indexed from Ember Council; their docs/ become retrievable knowledge
+- **Ember Council notes** — draft text can be saved as local Markdown and optionally indexed
 - **Threshold file intake** — drag-and-drop `.txt`/`.md` intake with inspect and index controls
 
 ---
@@ -168,10 +168,10 @@ Phase 3 implements the first true memory-and-retrieval loop:
 | Room | Rune | Purpose |
 |------|------|---------|
 | Hearth | ᚺ | Reflection and remembered signal — grounded Heart chat with Signal Trace |
-| Workshop | ᚹ | Crafting, coding, and refinement — note saving, cartridge indexing, source management |
+| Ember Council | ᚹ | Archetypal perspectives for shaping, testing, and refining the signal (notes, projects, documents, source management) |
 | Threshold | ᚦ | Boundary of exchange — file intake, staging, inspection before Hearth access |
 
-Cartridges live inside Workshop. System identity lives inside Hearth.
+Cartridges live inside Ember Council. System identity lives inside Hearth.
 See [docs/architecture.md](docs/architecture.md) for the full design charter.
 
 ---
@@ -377,7 +377,7 @@ On first run, Ember Node creates the full directory tree automatically.
   hearth/           — Curated Hearth sources (remembered knowledge)
     remembered-threads/
     maps/
-  workshop/         — Workshop notes and active drafts
+  workshop/         — Ember Council notes and active drafts
     documents/
     notes/
     drafts/
@@ -387,7 +387,7 @@ On first run, Ember Node creates the full directory tree automatically.
     changed/
     flagged/
     maps/
-  projects/         — Workshop project files
+  projects/         — Ember Council project files
   threads/          — Chat thread records (partitioned by room)
     hearth/
     workshop/
@@ -396,6 +396,8 @@ On first run, Ember Node creates the full directory tree automatically.
   cartridges/       — User-created cartridge metadata
   exports/          — Outbound packages
 ```
+
+Note: the internal storage folder remains `workshop/` for backward compatibility with existing data and routes, while the visible UI name is **Ember Council**.
 
 ### Content Layer Distinctions
 
@@ -408,6 +410,31 @@ On first run, Ember Node creates the full directory tree automatically.
 
 The data root is entirely user-owned. Updating or reinstalling Ember Node never touches it.
 Use `GET /api/storage-info` to confirm which data root is active and see migration status.
+
+### Safe reset guidance (manual only)
+
+For a clean restart, users may manually clear chats/projects/drafts while preserving core memory paths.
+
+Preserve:
+- `Ember-Node-Data/archive/core/`
+- `Ember-Node-Data/archive/caches/`
+- `Ember-Node-Data/indexes/`
+- `Ember-Node-Data/system/config/`
+
+Optional clear (if present):
+- `Ember-Node-Data/chats/`
+- `Ember-Node-Data/threads/`
+- `Ember-Node-Data/projects/`
+- `Ember-Node-Data/workshop/`
+- `Ember-Node-Data/drafts/`
+- `Ember-Node-Data/logs/`
+
+No automatic deletion is performed by Ember Node.
+
+### Signal Threads (reserved)
+
+Signal Threads is a reserved term for future saved chats, research paths, saved works, and persistent lines of thought.
+It is not implemented in the current runtime.
 
 ---
 
