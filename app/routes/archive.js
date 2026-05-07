@@ -12,7 +12,13 @@ const express = require('express');
 const fs      = require('fs');
 const path    = require('path');
 const { readLimiter, writeLimiter, indexLimiter } = require('../rateLimiters');
-const { ARCHIVE_DIR, ARCHIVE_DIRS, DATA_ROOT }    = require('../storageConfig');
+const {
+    ARCHIVE_DIR,
+    ARCHIVE_DIRS,
+    ARCHIVE_CORE_DIR,
+    ARCHIVE_CACHES_DIR,
+    DATA_ROOT,
+}                                                = require('../storageConfig');
 const {
     listArchiveSources,
     bootstrapArchive,
@@ -41,6 +47,84 @@ const router = express.Router();
 
 const VALID_SHELVES = Object.keys(ARCHIVE_DIRS);
 const ALLOWED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
+const CACHE_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+function stripMarkdownFrontmatter(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(\r?\n)?/, '');
+}
+
+function toPosixRelative(baseDir, absPath) {
+    return path.relative(baseDir, absPath).replace(/\\/g, '/');
+}
+
+function isPathInside(baseDir, targetPath) {
+    const root = path.resolve(baseDir);
+    const target = path.resolve(targetPath);
+    return target === root || target.startsWith(root + path.sep);
+}
+
+function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix) {
+    if (!fs.existsSync(baseDir)) return [];
+    const out = [];
+    const stack = [baseDir];
+    while (stack.length > 0) {
+        const dir = stack.pop();
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        entries.forEach(entry => {
+            const abs = path.join(dir, entry.name);
+            if (!isPathInside(baseDir, abs)) return;
+            if (entry.isDirectory()) {
+                stack.push(abs);
+                return;
+            }
+            if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) return;
+            const rel = toPosixRelative(baseDir, abs);
+            const stat = fs.statSync(abs);
+            out.push({
+                entryId: Buffer.from(entryRootKey + '|' + rel, 'utf8').toString('base64url'),
+                title: path.basename(entry.name, path.extname(entry.name)),
+                sourcePath: sourcePrefix + '/' + rel,
+                relativePath: rel,
+                size: stat.size,
+                updatedAt: stat.mtime.toISOString(),
+            });
+        });
+    }
+    return out.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
+}
+
+function resolveReaderEntry(entryId) {
+    let decoded;
+    try {
+        decoded = Buffer.from(entryId, 'base64url').toString('utf8');
+    } catch {
+        return null;
+    }
+    const delim = decoded.indexOf('|');
+    if (delim <= 0) return null;
+    const rootKey = decoded.slice(0, delim);
+    const relativePath = decoded.slice(delim + 1).replace(/\\/g, '/');
+    if (!relativePath || relativePath.includes('..')) return null;
+    if (!relativePath.toLowerCase().endsWith('.md')) return null;
+
+    if (rootKey === 'archive-core') {
+        const abs = path.resolve(ARCHIVE_CORE_DIR, relativePath);
+        if (!isPathInside(ARCHIVE_CORE_DIR, abs)) return null;
+        return { absolutePath: abs, sourcePath: 'archive/core/' + relativePath };
+    }
+
+    if (rootKey.startsWith('archive-cache/')) {
+        const cacheId = rootKey.slice('archive-cache/'.length);
+        if (!CACHE_ID_PATTERN.test(cacheId)) return null;
+        const cacheRoot = path.join(ARCHIVE_CACHES_DIR, cacheId);
+        const abs = path.resolve(cacheRoot, relativePath);
+        if (!isPathInside(cacheRoot, abs)) return null;
+        return { absolutePath: abs, sourcePath: 'archive/caches/' + cacheId + '/' + relativePath };
+    }
+
+    return null;
+}
 
 function removeStaleEmbeddingsForSource(sourceId) {
     const oldChunkIds = loadChunks()
@@ -58,6 +142,75 @@ router.get('/api/archive', readLimiter, (req, res) => {
     let sources = listArchiveSources();
     if (shelf) sources = sources.filter(s => s.shelf === shelf);
     res.json({ sources, shelves: VALID_SHELVES });
+});
+
+/**
+ * GET /api/archive/reader/catalog
+ * Return a cache-aware markdown catalog for local archive roots.
+ */
+router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
+    const coreFiles = listMarkdownFilesRecursive(ARCHIVE_CORE_DIR, 'archive-core', 'archive/core');
+    const cacheGroups = fs.existsSync(ARCHIVE_CACHES_DIR)
+        ? fs.readdirSync(ARCHIVE_CACHES_DIR, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() && CACHE_ID_PATTERN.test(entry.name))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(entry => {
+                const cacheId = entry.name;
+                const cacheRoot = path.join(ARCHIVE_CACHES_DIR, cacheId);
+                return {
+                    cacheId,
+                    title: cacheId,
+                    sourcePath: 'archive/caches/' + cacheId,
+                    files: listMarkdownFilesRecursive(
+                        cacheRoot,
+                        'archive-cache/' + cacheId,
+                        'archive/caches/' + cacheId,
+                    ),
+                };
+            })
+        : [];
+
+    res.json({
+        success: true,
+        roots: [
+            {
+                id: 'archive-core',
+                title: 'archive/core',
+                sourcePath: 'archive/core',
+                files: coreFiles,
+            },
+            {
+                id: 'archive-caches',
+                title: 'archive/caches',
+                sourcePath: 'archive/caches',
+                caches: cacheGroups,
+            },
+        ],
+    });
+});
+
+/**
+ * GET /api/archive/reader/document/:entryId
+ * Return frontmatter-stripped markdown content for a catalog entry.
+ */
+router.get('/api/archive/reader/document/:entryId', readLimiter, (req, res) => {
+    const resolved = resolveReaderEntry(req.params.entryId);
+    if (!resolved) {
+        return res.status(400).json({ error: 'Invalid reader entry.' });
+    }
+    if (!fs.existsSync(resolved.absolutePath)) {
+        return res.status(404).json({ error: 'Reader entry not found.' });
+    }
+    const raw = fs.readFileSync(resolved.absolutePath, 'utf8');
+    const content = stripMarkdownFrontmatter(raw);
+    res.json({
+        success: true,
+        entryId: req.params.entryId,
+        sourcePath: resolved.sourcePath,
+        title: path.basename(resolved.absolutePath, '.md'),
+        contentType: 'text/markdown',
+        content,
+    });
 });
 
 /**

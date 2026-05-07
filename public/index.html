@@ -482,6 +482,12 @@
                   </div>
                   <button class="secondary" id="new-cache-btn" style="margin-top: 0.5rem; width: 100%;">+ New Cache</button>
                 </div>
+                <div style="margin-top: 1rem; border-top: 1px solid hsla(140,100%,70%,0.08); padding-top: 0.75rem;">
+                  <div class="cache-shelf-title">Archive Markdown</div>
+                  <div class="cache-list" id="archive-reader-catalog">
+                    <span class="message-system">No archive markdown indexed yet.</span>
+                  </div>
+                </div>
               </div>
               <!-- Inspector -->
               <div class="ember-card cache-inspector" id="cache-inspector" style="padding: 0;">
@@ -769,6 +775,29 @@
           Ember Node will never auto-install AI runtimes or fetch installers. All setup is manual and under your control.
         </p>
       </div>
+    </div>
+  </div>
+
+  <div class="source-inspector-overlay" id="gf-reader-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Green Fire Reader">
+    <div class="source-inspector-panel gf-reader-panel">
+      <div class="source-inspector-header gf-reader-header">
+        <div style="display:flex; gap:0.5rem; align-items:center; min-width:0;">
+          <button class="secondary" id="gf-reader-back-btn" style="padding:0.3rem 0.7rem;">← Back</button>
+          <span class="source-inspector-title" id="gf-reader-title">Green Fire Reader</span>
+        </div>
+        <div class="gf-reader-controls">
+          <button class="secondary" id="gf-reader-toggle-btn">Raw Markdown</button>
+          <button class="secondary" id="gf-reader-copy-btn">Copy Markdown</button>
+          <button class="secondary" id="gf-reader-download-btn">Download .md</button>
+          <button class="source-inspector-close" id="gf-reader-close-btn" aria-label="Close reader">✕</button>
+        </div>
+      </div>
+      <div class="gf-reader-resume" id="gf-reader-resume" style="display:none;">
+        <span id="gf-reader-resume-text">Resume from saved position?</span>
+        <button class="secondary" id="gf-reader-resume-btn">Resume</button>
+        <button class="secondary" id="gf-reader-start-btn">Start at beginning</button>
+      </div>
+      <div class="source-inspector-body gf-reader-body" id="gf-reader-body"></div>
     </div>
   </div>
 

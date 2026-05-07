@@ -615,6 +615,65 @@ input:focus, textarea:focus {
   text-transform: uppercase;
 }
 
+.archive-reader-group-title {
+  font-size: 0.65rem;
+  color: var(--archive-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.35rem 0.15rem 0.1rem;
+}
+
+.archive-reader-cache {
+  border: 1px solid hsla(140, 100%, 70%, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  background: hsla(120, 18%, 5%, 0.65);
+}
+
+.archive-reader-cache > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.72rem;
+  color: var(--gf-wire-amber);
+  letter-spacing: 0.04em;
+  padding: 0.45rem 0.65rem;
+}
+
+.archive-reader-cache > summary::-webkit-details-marker {
+  display: none;
+}
+
+.archive-reader-files {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.2rem 0.35rem 0.45rem;
+}
+
+.archive-reader-file {
+  width: 100%;
+  text-align: left;
+  background: hsla(120, 15%, 4%, 0.75);
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: 7px;
+  color: var(--archive-text);
+  font-size: 0.72rem;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+
+.archive-reader-file:hover {
+  border-color: hsla(38, 100%, 70%, 0.3);
+  color: var(--gf-wire-green);
+}
+
+.archive-reader-file-path {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--archive-muted);
+  margin-top: 0.12rem;
+}
+
 .cache-inspector {
   flex: 1;
   display: flex;
@@ -1772,6 +1831,109 @@ button.secondary:disabled {
   flex-direction: column;
   gap: 0.85rem;
   flex: 1;
+}
+
+.gf-reader-panel {
+  width: min(1020px, 95vw);
+}
+
+.gf-reader-header {
+  gap: 0.8rem;
+}
+
+.gf-reader-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.gf-reader-resume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 1.1rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+  background: hsla(120, 18%, 4%, 0.85);
+  color: var(--archive-muted);
+  font-size: 0.75rem;
+}
+
+.gf-reader-body {
+  max-height: 76vh;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: hsl(120, 40%, 72%);
+  background: linear-gradient(180deg, hsl(120, 20%, 5%), hsl(120, 18%, 4%));
+}
+
+.gf-reader-rendered h1,
+.gf-reader-rendered h2,
+.gf-reader-rendered h3,
+.gf-reader-rendered h4 {
+  color: var(--gf-wire-amber);
+  margin: 0.9rem 0 0.5rem;
+}
+
+.gf-reader-rendered p,
+.gf-reader-rendered ul,
+.gf-reader-rendered ol,
+.gf-reader-rendered blockquote,
+.gf-reader-rendered pre {
+  margin: 0.6rem 0;
+}
+
+.gf-reader-rendered ul,
+.gf-reader-rendered ol {
+  padding-left: 1.4rem;
+}
+
+.gf-reader-rendered a {
+  color: var(--gf-wire-gold);
+}
+
+.gf-reader-rendered blockquote {
+  border-left: 2px solid hsla(38, 100%, 70%, 0.45);
+  padding-left: 0.8rem;
+  color: hsl(120, 35%, 66%);
+}
+
+.gf-reader-rendered code {
+  background: hsla(120, 14%, 9%, 0.9);
+  border: 1px solid hsla(140, 100%, 70%, 0.12);
+  border-radius: 4px;
+  padding: 0.08rem 0.28rem;
+  font-family: "Courier New", monospace;
+  color: hsl(45, 88%, 72%);
+}
+
+.gf-reader-rendered pre {
+  background: hsla(120, 14%, 7%, 0.95);
+  border: 1px solid hsla(140, 100%, 70%, 0.15);
+  border-radius: 8px;
+  padding: 0.75rem 0.8rem;
+  overflow-x: auto;
+}
+
+.gf-reader-rendered pre code {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.gf-reader-raw {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Courier New", monospace;
+  color: hsl(120, 38%, 74%);
+  border: 1px solid hsla(140, 100%, 70%, 0.14);
+  border-radius: 8px;
+  padding: 0.9rem;
+  background: hsla(120, 16%, 3%, 0.95);
 }
 
 /* Inspector metadata grid */

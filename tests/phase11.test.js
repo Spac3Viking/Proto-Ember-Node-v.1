@@ -380,6 +380,8 @@ describe('Phase 11 — Context Map routes', () => {
 // ── Archive routes ────────────────────────────────────────────────────────────
 
 describe('Phase 11 — Archive routes', () => {
+    const sc = require('../app/storageConfig');
+
     test('GET /api/archive returns sources and shelves', async () => {
         const res = await request(app).get('/api/archive');
         expect(res.status).toBe(200);
@@ -423,6 +425,48 @@ describe('Phase 11 — Archive routes', () => {
         const res = await request(app).get('/api/archive?shelf=sagas');
         expect(res.status).toBe(200);
         res.body.sources.forEach(s => expect(s.shelf).toBe('sagas'));
+    });
+
+    test('GET /api/archive/reader/catalog lists markdown entries from archive/core and archive/caches', async () => {
+        const coreMd = path.join(sc.ARCHIVE_CORE_DIR, 'codices', 'reader-core.md');
+        const cacheMd = path.join(sc.ARCHIVE_CACHES_DIR, 'reader-cache', 'entry.md');
+        fs.mkdirSync(path.dirname(coreMd), { recursive: true });
+        fs.mkdirSync(path.dirname(cacheMd), { recursive: true });
+        fs.writeFileSync(coreMd, '# Core Reader\n\ncore body', 'utf8');
+        fs.writeFileSync(cacheMd, '# Cache Reader\n\ncache body', 'utf8');
+
+        const res = await request(app).get('/api/archive/reader/catalog');
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(Array.isArray(res.body.roots)).toBe(true);
+
+        const coreRoot = res.body.roots.find(r => r.id === 'archive-core');
+        const cachesRoot = res.body.roots.find(r => r.id === 'archive-caches');
+        expect(coreRoot).toBeDefined();
+        expect(cachesRoot).toBeDefined();
+        expect(coreRoot.files.some(f => f.sourcePath.endsWith('/reader-core.md'))).toBe(true);
+        expect(cachesRoot.caches.some(c => c.cacheId === 'reader-cache')).toBe(true);
+    });
+
+    test('GET /api/archive/reader/document/:entryId returns frontmatter-stripped markdown', async () => {
+        const coreMd = path.join(sc.ARCHIVE_CORE_DIR, 'sagas', 'frontmatter-reader.md');
+        fs.mkdirSync(path.dirname(coreMd), { recursive: true });
+        fs.writeFileSync(
+            coreMd,
+            '---\ntitle: Frontmatter Test\nauthor: Ember\n---\n# Reader Body\n\nSignal lives.\n',
+            'utf8',
+        );
+
+        const catalogRes = await request(app).get('/api/archive/reader/catalog');
+        const coreRoot = catalogRes.body.roots.find(r => r.id === 'archive-core');
+        const entry = (coreRoot.files || []).find(f => f.sourcePath.endsWith('/frontmatter-reader.md'));
+        expect(entry).toBeDefined();
+
+        const docRes = await request(app).get('/api/archive/reader/document/' + encodeURIComponent(entry.entryId));
+        expect(docRes.status).toBe(200);
+        expect(docRes.body.success).toBe(true);
+        expect(docRes.body.content).toContain('# Reader Body');
+        expect(docRes.body.content).not.toContain('title: Frontmatter Test');
     });
 });
 
