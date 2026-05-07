@@ -1949,6 +1949,7 @@ async function loadCacheShelf() {
 
     // Also load user caches
     loadUserCaches();
+    loadArchiveReaderCatalog();
 }
 
 async function loadUserCaches() {
@@ -2086,6 +2087,479 @@ async function inspectCache(id, itemEl) {
         }
     } catch {
         if (contentEl) contentEl.textContent = 'Error loading cache content.';
+    }
+}
+
+const GF_READER_PROGRESS_KEY = 'gf-reader-progress';
+// Only show resume prompts once the user has made meaningful progress through a document.
+const GF_READER_RESUME_THRESHOLD = 8;
+// Ignore tiny documents where scrolling is effectively negligible.
+const GF_READER_MIN_SCROLLABLE_HEIGHT = 80;
+let _greenFireReader = null;
+
+function stripLeadingFrontmatter(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(\r?\n)?/, '');
+}
+
+function loadReaderProgressMap() {
+    try {
+        const raw = window.localStorage.getItem(GF_READER_PROGRESS_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function saveReaderProgressMap(map) {
+    try {
+        window.localStorage.setItem(GF_READER_PROGRESS_KEY, JSON.stringify(map));
+    } catch { /* ignore storage failures */ }
+}
+
+function getReaderProgress(entryId) {
+    if (!entryId) return null;
+    const map = loadReaderProgressMap();
+    const value = map[entryId];
+    if (!value || typeof value !== 'object') return null;
+    return value;
+}
+
+function persistReaderProgress(entryId, scrollPercent) {
+    if (!entryId || !Number.isFinite(scrollPercent)) return;
+    if (scrollPercent < 1) return;
+    const map = loadReaderProgressMap();
+    const current = map[entryId];
+    if (
+        current &&
+        Number.isFinite(current.scrollPercent) &&
+        Math.abs(current.scrollPercent - scrollPercent) < 2
+    ) {
+        return;
+    }
+    map[entryId] = {
+        scrollPercent: Math.max(0, Math.min(100, Math.round(scrollPercent))),
+        lastRead: new Date().toISOString(),
+    };
+    saveReaderProgressMap(map);
+}
+
+function sanitizeReaderHref(href) {
+    const value = typeof href === 'string' ? href.trim() : '';
+    if (!value) return '#';
+    if (/^(https?:|mailto:|#)/i.test(value)) return value;
+    return '#';
+}
+
+function renderInlineMarkdown(input) {
+    const text = escapeHtml(input || '');
+    const codeTokens = [];
+    const tokenized = text.replace(/`([^`]+)`/g, function(_m, code) {
+        const token = '__GF_CODE_' + codeTokens.length + '__';
+        codeTokens.push('<code>' + code + '</code>');
+        return token;
+    });
+    const linked = tokenized.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_m, label, href) {
+        const safeHref = escapeHtml(sanitizeReaderHref(href));
+        return '<a href="' + safeHref + '" target="_blank" rel="noopener noreferrer">' +
+            escapeHtml(label) + '</a>';
+    });
+    const bolded = linked
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    const italicized = bolded
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+        .replace(/_([^_\n]+)_/g, '<em>$1</em>');
+    return codeTokens.reduce(function(out, html, idx) {
+        return out.replace('__GF_CODE_' + idx + '__', html);
+    }, italicized);
+}
+
+function renderMarkdownLightweight(markdown) {
+    const lines = String(markdown || '').replace(/\r\n/g, '\n').split('\n');
+    const html = [];
+    let paragraph = [];
+    let inCodeBlock = false;
+    let codeLines = [];
+    let listType = null;
+    let listItems = [];
+    let quoteLines = [];
+
+    function flushParagraph() {
+        if (!paragraph.length) return;
+        html.push('<p>' + renderInlineMarkdown(paragraph.join(' ')) + '</p>');
+        paragraph = [];
+    }
+    function flushList() {
+        if (!listItems.length || !listType) return;
+        html.push('<' + listType + '>' + listItems.map(item =>
+            '<li>' + renderInlineMarkdown(item) + '</li>'
+        ).join('') + '</' + listType + '>');
+        listType = null;
+        listItems = [];
+    }
+    function flushQuote() {
+        if (!quoteLines.length) return;
+        html.push('<blockquote>' + quoteLines.map(renderInlineMarkdown).join('<br>') + '</blockquote>');
+        quoteLines = [];
+    }
+    function flushAll() {
+        flushParagraph();
+        flushList();
+        flushQuote();
+    }
+
+    lines.forEach(line => {
+        if (/^```/.test(line)) {
+            flushAll();
+            if (!inCodeBlock) {
+                inCodeBlock = true;
+                codeLines = [];
+            } else {
+                html.push('<pre><code>' + escapeHtml(codeLines.join('\n')) + '</code></pre>');
+                inCodeBlock = false;
+                codeLines = [];
+            }
+            return;
+        }
+        if (inCodeBlock) {
+            codeLines.push(line);
+            return;
+        }
+
+        if (/^\s*$/.test(line)) {
+            flushAll();
+            return;
+        }
+
+        const hrMatch = /^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim());
+        if (hrMatch) {
+            flushAll();
+            html.push('<hr>');
+            return;
+        }
+
+        const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+        if (headingMatch) {
+            flushAll();
+            const level = headingMatch[1].length;
+            html.push('<h' + level + '>' + renderInlineMarkdown(headingMatch[2].trim()) + '</h' + level + '>');
+            return;
+        }
+
+        const quoteMatch = line.match(/^>\s?(.*)$/);
+        if (quoteMatch) {
+            flushParagraph();
+            flushList();
+            quoteLines.push(quoteMatch[1]);
+            return;
+        }
+        flushQuote();
+
+        const ulMatch = line.match(/^[-*+]\s+(.+)$/);
+        if (ulMatch) {
+            flushParagraph();
+            if (listType && listType !== 'ul') flushList();
+            listType = 'ul';
+            listItems.push(ulMatch[1]);
+            return;
+        }
+
+        const olMatch = line.match(/^\d+\.\s+(.+)$/);
+        if (olMatch) {
+            flushParagraph();
+            if (listType && listType !== 'ol') flushList();
+            listType = 'ol';
+            listItems.push(olMatch[1]);
+            return;
+        }
+
+        flushList();
+        paragraph.push(line.trim());
+    });
+
+    if (inCodeBlock) {
+        html.push('<pre><code>' + escapeHtml(codeLines.join('\n')) + '</code></pre>');
+    }
+    flushAll();
+    return html.join('\n');
+}
+
+function getGreenFireReader() {
+    if (_greenFireReader) return _greenFireReader;
+
+    const overlay = document.getElementById('gf-reader-overlay');
+    const bodyEl = document.getElementById('gf-reader-body');
+    const titleEl = document.getElementById('gf-reader-title');
+    const toggleBtn = document.getElementById('gf-reader-toggle-btn');
+    const copyBtn = document.getElementById('gf-reader-copy-btn');
+    const downloadBtn = document.getElementById('gf-reader-download-btn');
+    const backBtn = document.getElementById('gf-reader-back-btn');
+    const closeBtn = document.getElementById('gf-reader-close-btn');
+    const resumeBar = document.getElementById('gf-reader-resume');
+    const resumeText = document.getElementById('gf-reader-resume-text');
+    const resumeBtn = document.getElementById('gf-reader-resume-btn');
+    const startBtn = document.getElementById('gf-reader-start-btn');
+
+    const state = {
+        title: 'Green Fire Reader',
+        sourcePath: '',
+        content: '',
+        contentType: 'text/markdown',
+        entryId: '',
+        rawView: false,
+        backAction: null,
+        pendingResumePercent: 0,
+    };
+
+    let scrollSaveTimer = null;
+
+    function setResumePrompt(percent) {
+        state.pendingResumePercent = percent;
+        if (!resumeBar || !resumeText) return;
+        if (!Number.isFinite(percent) || percent < GF_READER_RESUME_THRESHOLD) {
+            resumeBar.style.display = 'none';
+            return;
+        }
+        resumeText.textContent = 'Resume from ' + Math.round(percent) + '%?';
+        resumeBar.style.display = 'flex';
+    }
+
+    function renderBody() {
+        if (!bodyEl) return;
+        if (state.rawView) {
+            const pre = document.createElement('pre');
+            pre.className = 'gf-reader-raw';
+            pre.textContent = state.content;
+            bodyEl.innerHTML = '';
+            bodyEl.appendChild(pre);
+        } else {
+            const div = document.createElement('div');
+            div.className = 'gf-reader-rendered';
+            div.innerHTML = renderMarkdownLightweight(state.content);
+            bodyEl.innerHTML = '';
+            bodyEl.appendChild(div);
+        }
+        if (toggleBtn) toggleBtn.textContent = state.rawView ? 'Rendered View' : 'Raw Markdown';
+        bodyEl.scrollTop = 0;
+    }
+
+    function close() {
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    function open(opts) {
+        const options = opts || {};
+        state.title = options.title || 'Green Fire Reader';
+        state.sourcePath = options.sourcePath || '';
+        state.content = stripLeadingFrontmatter(options.content || '');
+        state.contentType = options.contentType || 'text/markdown';
+        state.entryId = options.entryId || '';
+        state.backAction = typeof options.backAction === 'function' ? options.backAction : null;
+        state.rawView = false;
+
+        if (titleEl) titleEl.textContent = state.title;
+        renderBody();
+
+        const saved = getReaderProgress(state.entryId);
+        const savedPercent = saved && Number.isFinite(saved.scrollPercent) ? saved.scrollPercent : 0;
+        setResumePrompt(savedPercent);
+        if (overlay) overlay.style.display = 'flex';
+    }
+
+    function applyResume(percent) {
+        if (!bodyEl || !Number.isFinite(percent)) return;
+        const maxScroll = bodyEl.scrollHeight - bodyEl.clientHeight;
+        if (maxScroll <= 0) return;
+        bodyEl.scrollTop = Math.round(maxScroll * Math.max(0, Math.min(100, percent)) / 100);
+        setResumePrompt(0);
+    }
+
+    if (overlay) {
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) close();
+        });
+    }
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            close();
+            if (state.backAction) state.backAction();
+        });
+    }
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            state.rawView = !state.rawView;
+            renderBody();
+        });
+    }
+    if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+            try {
+                if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                    showFlashMessage('Clipboard unavailable.');
+                    return;
+                }
+                await navigator.clipboard.writeText(state.content || '');
+                showFlashMessage('Markdown copied.');
+            } catch {
+                showFlashMessage('Could not copy markdown.');
+            }
+        });
+    }
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => {
+            const safeBase = (state.title || 'green-fire-entry')
+                .toLowerCase()
+                .replace(/[^a-z0-9._-]+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '') || 'green-fire-entry';
+            const blob = new Blob([state.content || ''], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = safeBase + '.md';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    }
+    if (resumeBtn) {
+        resumeBtn.addEventListener('click', () => applyResume(state.pendingResumePercent));
+    }
+    if (startBtn) {
+        startBtn.addEventListener('click', () => {
+            if (bodyEl) bodyEl.scrollTop = 0;
+            setResumePrompt(0);
+        });
+    }
+    if (bodyEl) {
+        bodyEl.addEventListener('scroll', () => {
+            if (!state.entryId) return;
+            clearTimeout(scrollSaveTimer);
+            scrollSaveTimer = setTimeout(() => {
+                const maxScroll = bodyEl.scrollHeight - bodyEl.clientHeight;
+                if (maxScroll <= GF_READER_MIN_SCROLLABLE_HEIGHT) return;
+                const percent = (bodyEl.scrollTop / maxScroll) * 100;
+                persistReaderProgress(state.entryId, percent);
+            }, 450);
+        });
+    }
+
+    _greenFireReader = { open, close };
+    return _greenFireReader;
+}
+
+async function openArchiveReaderEntry(entry) {
+    if (!entry || !entry.entryId) return;
+    try {
+        const res = await fetch('/api/archive/reader/document/' + encodeURIComponent(entry.entryId));
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showFlashMessage(data.error || 'Could not open markdown entry.');
+            return;
+        }
+        getGreenFireReader().open({
+            title: data.title || entry.title || 'Green Fire Reader',
+            sourcePath: data.sourcePath || entry.sourcePath || '',
+            content: data.content || '',
+            contentType: data.contentType || 'text/markdown',
+            entryId: data.entryId || entry.entryId,
+        });
+    } catch {
+        showFlashMessage('Could not open markdown entry.');
+    }
+}
+
+function buildArchiveReaderFileButton(entry) {
+    const btn = document.createElement('button');
+    btn.className = 'archive-reader-file';
+    btn.innerHTML = escapeHtml(entry.title || entry.relativePath || 'entry') +
+        '<span class="archive-reader-file-path">' + escapeHtml(entry.relativePath || '') + '</span>';
+    btn.addEventListener('click', () => openArchiveReaderEntry(entry));
+    return btn;
+}
+
+async function loadArchiveReaderCatalog() {
+    const listEl = document.getElementById('archive-reader-catalog');
+    if (!listEl) return;
+    listEl.innerHTML = '<span class="message-system">Loading archive markdown…</span>';
+    try {
+        const res = await fetch('/api/archive/reader/catalog');
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            listEl.innerHTML = '<span class="message-system">Could not load archive markdown.</span>';
+            return;
+        }
+
+        const roots = Array.isArray(data.roots) ? data.roots : [];
+        const coreRoot = roots.find(r => r && r.id === 'archive-core') || { files: [] };
+        const cachesRoot = roots.find(r => r && r.id === 'archive-caches') || { caches: [] };
+        const coreFiles = Array.isArray(coreRoot.files) ? coreRoot.files : [];
+        const cacheGroups = Array.isArray(cachesRoot.caches) ? cachesRoot.caches : [];
+
+        if (
+            coreFiles.length === 0 &&
+            (cacheGroups.length === 0 || cacheGroups.every(group => !group.files || group.files.length === 0))
+        ) {
+            listEl.innerHTML = '<span class="message-system">No markdown files found in archive/core or archive/caches.</span>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+
+        const coreTitle = document.createElement('div');
+        coreTitle.className = 'archive-reader-group-title';
+        coreTitle.textContent = 'archive/core';
+        listEl.appendChild(coreTitle);
+        if (coreFiles.length === 0) {
+            const none = document.createElement('span');
+            none.className = 'message-system';
+            none.textContent = 'No core markdown files.';
+            listEl.appendChild(none);
+        } else {
+            coreFiles.forEach(entry => listEl.appendChild(buildArchiveReaderFileButton(entry)));
+        }
+
+        const cacheTitle = document.createElement('div');
+        cacheTitle.className = 'archive-reader-group-title';
+        cacheTitle.textContent = 'archive/caches';
+        listEl.appendChild(cacheTitle);
+
+        if (cacheGroups.length === 0) {
+            const none = document.createElement('span');
+            none.className = 'message-system';
+            none.textContent = 'No installed archive caches.';
+            listEl.appendChild(none);
+            return;
+        }
+
+        cacheGroups.forEach(group => {
+            const details = document.createElement('details');
+            details.className = 'archive-reader-cache';
+            const summary = document.createElement('summary');
+            const fileCount = Array.isArray(group.files) ? group.files.length : 0;
+            summary.textContent = (group.title || group.cacheId || 'cache') + ' (' + fileCount + ')';
+            details.appendChild(summary);
+
+            const filesWrap = document.createElement('div');
+            filesWrap.className = 'archive-reader-files';
+            if (fileCount === 0) {
+                const none = document.createElement('span');
+                none.className = 'message-system';
+                none.textContent = 'No markdown files in this cache.';
+                filesWrap.appendChild(none);
+            } else {
+                group.files.forEach(entry => filesWrap.appendChild(buildArchiveReaderFileButton(entry)));
+            }
+            details.appendChild(filesWrap);
+            listEl.appendChild(details);
+        });
+    } catch {
+        listEl.innerHTML = '<span class="message-system">Could not load archive markdown.</span>';
     }
 }
 
