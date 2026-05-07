@@ -43,6 +43,11 @@ function setActiveCourtMemberId(memberId) {
     return _activeCourtMemberId;
 }
 
+/**
+ * Resolve the court member value to send to API routes.
+ * Returns undefined when Ember Prime/no-lens is active.
+ * @returns {string|undefined}
+ */
 function getEffectiveCourtMemberForApi() {
     const activeCourtMember = getActiveCourtMemberId();
     if (!activeCourtMember || activeCourtMember === EMBER_PRIME_MEMBER_ID) return undefined;
@@ -636,6 +641,7 @@ const EXTENDED_AETTIR_ROWS = Object.freeze([
     '᛬ᛏᛒᛖᛗᛚᛝᛞᛟ᛬',
 ]);
 
+/** Stop and clean up any active extended rune ættir animation loop. */
 function stopExtendedRuneAettirAnimation() {
     if (typeof _stopExtendedRuneAettirLoop === 'function') {
         _stopExtendedRuneAettirLoop();
@@ -643,6 +649,11 @@ function stopExtendedRuneAettirAnimation() {
     _stopExtendedRuneAettirLoop = null;
 }
 
+/**
+ * Start the extended rune ættir animation in the provided container.
+ * @param {HTMLElement} containerEl
+ * @returns {() => void} cleanup function
+ */
 function startExtendedRuneAettirAnimation(containerEl) {
     if (!containerEl) return () => {};
     stopExtendedRuneAettirAnimation();
@@ -974,6 +985,7 @@ async function sendMessage() {
     }
 })();
 
+/** Update Council Chat with the currently active archetype label. */
 function updateCouncilChatActiveArchetype() {
     const statusEl = document.getElementById('ws-council-active-archetype');
     if (!statusEl) return;
@@ -982,6 +994,7 @@ function updateCouncilChatActiveArchetype() {
     statusEl.textContent = 'Active archetype: ' + memberLabel;
 }
 
+/** Send a Council Chat message through /api/chat using the active archetype lens. */
 async function sendCouncilMessage() {
     const chatContainer = document.getElementById('ws-council-messages');
     const messageInput = document.getElementById('ws-council-input');
@@ -3915,6 +3928,7 @@ const THRESHOLD_AI_SUGGESTED_COMMANDS = [
     'ollama list',
 ].join('\n');
 
+/** Load Ollama detection/model guidance in Threshold → AI. */
 async function loadThresholdAiModelGuidance(tools) {
     const ollamaStatusEl = document.getElementById('th-ai-ollama-status');
     const modelsListEl = document.getElementById('th-ai-models-list');
@@ -4140,6 +4154,11 @@ function renderThresholdToolRow(tool, active, container) {
 
 /* ── Workshop / Tools tab ───────────────────────────────────── */
 
+/**
+ * Resolve a formatted archetype label for UI display.
+ * @param {string|null} memberId
+ * @returns {string}
+ */
 function getCourtMemberDisplayLabel(memberId) {
     if (!memberId || memberId === EMBER_PRIME_MEMBER_ID) return 'Ember Prime';
     const button = document.querySelector('#ws-court-list button[data-court-member="' + memberId + '"]');
@@ -4151,6 +4170,7 @@ function getCourtMemberDisplayLabel(memberId) {
     return rune + ' ' + memberId.charAt(0).toUpperCase() + memberId.slice(1);
 }
 
+/** Render Sentinel Archetypes (including Ember Prime) and active selection state. */
 function renderEmberCourtMembers(court) {
     const listEl = document.getElementById('ws-court-list');
     const activeEl = document.getElementById('ws-court-active');
