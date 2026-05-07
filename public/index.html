@@ -467,7 +467,7 @@
           </div>
 
           <!-- Workshop / Index (hidden in current phase) -->
-          <div class="sub-panel" id="ws-index">
+          <div class="sub-panel" id="ws-index" hidden>
             <div class="ember-card" style="padding: 1rem;">
               <div class="workshop-section-title">Indexed Sources</div>
               <div id="ws-sources-list" class="ws-sources-list">
@@ -515,7 +515,7 @@
           </div>
 
           <!-- Workshop / Projects (hidden in current phase) -->
-          <div class="sub-panel" id="ws-projects">
+          <div class="sub-panel" id="ws-projects" hidden>
             <div class="project-layout">
               <div class="ember-card project-list-card" style="padding: 1rem;">
                 <div class="workshop-section-title">Projects</div>
@@ -549,7 +549,7 @@
           </div>
 
           <!-- Workshop / Tools (legacy hidden panel) -->
-          <div class="sub-panel" id="ws-tools">
+          <div class="sub-panel" id="ws-tools" hidden>
             <span class="message-system">Legacy panel hidden in this phase.</span>
           </div>
 
@@ -682,10 +682,7 @@
                 <button class="secondary" id="th-ai-open-ollama-btn">Open Ollama Website</button>
                 <button class="secondary" id="th-ai-copy-commands-btn">Copy Suggested Ollama Commands</button>
               </div>
-              <pre id="th-ai-suggested-commands" style="margin:0; padding:0.75rem; border:1px solid hsla(140,100%,70%,0.16); border-radius:8px; background:hsla(120,20%,4%,0.7); color:var(--archive-muted); font-size:0.78rem; line-height:1.55; white-space:pre-wrap;">ollama pull gemma3:4b
-ollama pull llama3.1:8b
-ollama pull mistral:7b
-ollama list</pre>
+              <pre id="th-ai-suggested-commands" style="margin:0; padding:0.75rem; border:1px solid hsla(140,100%,70%,0.16); border-radius:8px; background:hsla(120,20%,4%,0.7); color:var(--archive-muted); font-size:0.78rem; line-height:1.55; white-space:pre-wrap;"></pre>
             </div>
             <!-- Guided setup — shown when no AI is running -->
             <div class="ember-card" id="th-ai-setup-guide" style="padding: 1rem 1.25rem; display:none; gap:0.5rem; flex-direction:column;">

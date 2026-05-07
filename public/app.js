@@ -43,6 +43,12 @@ function setActiveCourtMemberId(memberId) {
     return _activeCourtMemberId;
 }
 
+function getEffectiveCourtMemberForApi() {
+    const activeCourtMember = getActiveCourtMemberId();
+    if (!activeCourtMember || activeCourtMember === EMBER_PRIME_MEMBER_ID) return undefined;
+    return activeCourtMember;
+}
+
 const COURT_MEMBER_TRANSITIONS = Object.freeze({
     builder: 'Grounding signal in structure, tools, and practical sequence.',
     warrior: 'Clarifying stakes, terrain, risk, and disciplined action.',
@@ -862,16 +868,15 @@ async function sendMessage() {
     }, LONG_WAIT_THRESHOLD_MS);
 
     try {
-        const activeCourtMember = getActiveCourtMemberId();
-        const effectiveCourtMember = activeCourtMember === EMBER_PRIME_MEMBER_ID ? null : activeCourtMember;
         const response = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: _activeChatAbortController.signal,
             body:    JSON.stringify({
                 query:     message,
+                room:      'hearth',
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
-                courtMember: effectiveCourtMember || undefined,
+                courtMember: getEffectiveCourtMemberForApi(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1018,8 +1023,6 @@ async function sendCouncilMessage() {
     }, LONG_WAIT_THRESHOLD_MS);
 
     try {
-        const activeCourtMember = getActiveCourtMemberId();
-        const effectiveCourtMember = activeCourtMember === EMBER_PRIME_MEMBER_ID ? null : activeCourtMember;
         const response = await fetch('/api/chat', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1027,7 +1030,7 @@ async function sendCouncilMessage() {
             body: JSON.stringify({
                 query: message,
                 room: 'workshop',
-                courtMember: effectiveCourtMember || undefined,
+                courtMember: getEffectiveCourtMemberForApi(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1736,12 +1739,7 @@ async function sendDocumentToHeart() {
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
                 query,
-                courtMember: (() => {
-                    const activeCourtMember = getActiveCourtMemberId();
-                    return activeCourtMember && activeCourtMember !== EMBER_PRIME_MEMBER_ID
-                        ? activeCourtMember
-                        : undefined;
-                })(),
+                courtMember: getEffectiveCourtMemberForApi(),
             }),
         });
         const data = await res.json();
@@ -4128,16 +4126,10 @@ function renderThresholdToolRow(tool, active, container) {
         }
         if (e.target.id === 'th-ai-copy-commands-btn') {
             try {
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(THRESHOLD_AI_SUGGESTED_COMMANDS);
-                } else {
-                    const tmp = document.createElement('textarea');
-                    tmp.value = THRESHOLD_AI_SUGGESTED_COMMANDS;
-                    document.body.appendChild(tmp);
-                    tmp.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(tmp);
+                if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                    throw new Error('Clipboard API unavailable');
                 }
+                await navigator.clipboard.writeText(THRESHOLD_AI_SUGGESTED_COMMANDS);
                 showFlashMessage('Suggested Ollama commands copied.');
             } catch {
                 showFlashMessage('Could not copy commands.');

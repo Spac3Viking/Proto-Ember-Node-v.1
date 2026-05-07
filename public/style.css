@@ -1323,12 +1323,6 @@ button.secondary:disabled {
   opacity: 0.76;
 }
 
-#ws-index,
-#ws-projects,
-#ws-tools {
-  display: none !important;
-}
-
 /* ── Phase 4 — Chat Threads ──────────────────────────────────────────────────── */
 
 .thread-layout {
