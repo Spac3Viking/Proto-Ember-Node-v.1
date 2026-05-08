@@ -34,6 +34,12 @@ const {
     formatBootstrapForPrompt,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
+const {
+    loadCacheSummaries,
+    loadDocumentSummaries,
+    getArchetypeMemoryProfile,
+    loadArchetypeMemory,
+} = require('../memoryCompression');
 
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
@@ -44,6 +50,10 @@ const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
 const MAX_SIGNAL_TRACE_SOURCES = 8;
 const MAX_SIGNAL_TRACE_ROUTING_LIST = 6;
+// Preserve a small raw grounding floor even when summaries are present.
+const MIN_RAW_CHUNKS_WITH_SUMMARY = 3;
+// Use half of the normal raw chunk budget when summary layers are available.
+const SUMMARY_RAW_CHUNK_RATIO = 0.5;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
@@ -354,6 +364,147 @@ function normalizeDisplaySourceName(value) {
         .join(' ');
 }
 
+function summaryKeyFromSourceName(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\.[a-z0-9]+$/i, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+function compactList(list, limit = 5) {
+    if (!Array.isArray(list)) return [];
+    return list.map(String).filter(Boolean).slice(0, limit);
+}
+
+/**
+ * Build summary-first compressed context blocks.
+ * This produces compact layers (Rolling Bootstrap, archetype memory, cache/document summaries)
+ * that can be prepended before raw chunks to keep prompts lean while preserving grounding.
+ *
+ * @param {object} options
+ * @param {string} options.query
+ * @param {object|null} options.rollingBootstrap
+ * @param {string|null} options.activeArchetype
+ * @param {object[]} options.sourceTrace
+ * @param {number} [options.maxSummaryChars]
+ * @returns {{ block: string, summaryLayersUsed: { archetypeMemory: number, cacheSummaries: number, documentSummaries: number } }}
+ */
+function buildSummaryFirstContext({
+    query,
+    rollingBootstrap,
+    activeArchetype,
+    sourceTrace,
+    maxSummaryChars = 2400,
+}) {
+    const blocks = [];
+    let usedChars = 0;
+    const cacheSummaries = loadCacheSummaries();
+    const documentSummaries = loadDocumentSummaries();
+    const archetypeMemory = loadArchetypeMemory();
+    const archetypeProfile = getArchetypeMemoryProfile(activeArchetype || 'ember_prime');
+
+    function pushBlock(label, text) {
+        const value = String(text || '').trim();
+        if (!value) return;
+        if (usedChars >= maxSummaryChars) return;
+        const block = `=== ${label} ===\n${value}`;
+        const next = usedChars + block.length + 2;
+        if (next > maxSummaryChars) return;
+        blocks.push(block);
+        usedChars = next;
+    }
+
+    if (rollingBootstrap) {
+        pushBlock('Rolling Bootstrap', String(rollingBootstrap.summary || '').slice(0, 550));
+    }
+
+    if (archetypeProfile) {
+        const archetypeLine = [
+            String(archetypeProfile.summary || '').slice(0, 260),
+            compactList(archetypeProfile.preferred_domains, 4).length > 0
+                ? ('Domains: ' + compactList(archetypeProfile.preferred_domains, 4).join(', '))
+                : '',
+            compactList(archetypeProfile.preferred_sources, 4).length > 0
+                ? ('Sources: ' + compactList(archetypeProfile.preferred_sources, 4).join(', '))
+                : '',
+        ].filter(Boolean).join('\n');
+        pushBlock('Archetype Memory', archetypeLine);
+    }
+
+    const sourceNames = Array.from(new Set((sourceTrace || [])
+        .map(s => s && (s.sourceName || s.title || s.file))
+        .filter(Boolean)
+        .map(summaryKeyFromSourceName)));
+    const cacheIds = Array.from(new Set((sourceTrace || [])
+        .map(s => s && s.cacheId)
+        .filter(Boolean)
+        .map(String)));
+
+    let usedCacheSummaries = 0;
+    if (cacheSummaries && cacheSummaries.caches) {
+        cacheIds.slice(0, 4).forEach(cacheId => {
+            const entry = cacheSummaries.caches[cacheId];
+            if (!entry) return;
+            pushBlock(
+                'Cache Summary · ' + cacheId,
+                [
+                    String(entry.summary || '').slice(0, 260),
+                    compactList(entry.themes, 4).length > 0 ? ('Themes: ' + compactList(entry.themes, 4).join(', ')) : '',
+                    compactList(entry.dominant_archetypes, 3).length > 0
+                        ? ('Archetypes: ' + compactList(entry.dominant_archetypes, 3).join(', '))
+                        : '',
+                ].filter(Boolean).join('\n'),
+            );
+            usedCacheSummaries++;
+        });
+    }
+
+    let usedDocumentSummaries = 0;
+    if (documentSummaries && documentSummaries.documents) {
+        sourceNames.slice(0, 8).forEach(sourceKey => {
+            const entry = documentSummaries.documents[sourceKey];
+            if (!entry) return;
+            pushBlock(
+                'Document Summary · ' + (entry.title || sourceKey),
+                [
+                    String(entry.summary || '').slice(0, 260),
+                    compactList(entry.themes, 4).length > 0 ? ('Themes: ' + compactList(entry.themes, 4).join(', ')) : '',
+                    compactList(entry.preferred_archetypes, 3).length > 0
+                        ? ('Preferred archetypes: ' + compactList(entry.preferred_archetypes, 3).join(', '))
+                        : '',
+                ].filter(Boolean).join('\n'),
+            );
+            usedDocumentSummaries++;
+        });
+    }
+
+    if (blocks.length > 0) {
+        pushBlock('Compression Note', 'Scribe posture: prioritize clarity, compression, symbolic fidelity, and transmission value.');
+    }
+
+    const archetypeName = activeArchetype || 'ember_prime';
+    const hasArchetypeMemory = Boolean(
+        archetypeMemory &&
+        archetypeMemory.archetypes &&
+        archetypeMemory.archetypes[archetypeName],
+    );
+
+    return {
+        block: blocks.length > 0 ? (blocks.join('\n\n') + '\n\n') : '',
+        summaryLayersUsed: {
+            archetypeMemory: hasArchetypeMemory ? 1 : 0,
+            cacheSummaries: usedCacheSummaries,
+            documentSummaries: usedDocumentSummaries,
+        },
+    };
+}
+
+function computeRawChunkBudgetWithSummaries() {
+    return Math.max(MIN_RAW_CHUNKS_WITH_SUMMARY, Math.floor(MAX_CHAT_CONTEXT_CHUNKS * SUMMARY_RAW_CHUNK_RATIO));
+}
+
 /**
  * Maximum number of pinned-source chunks prepended to retrieval results
  * when a user attaches sources to Hearth Chat.  Kept small to avoid
@@ -431,6 +582,9 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         const activeArchetypeId = selectedCourtMember
             ? selectedCourtMember.id
             : (typeof archetype === 'string' ? archetype : null);
+        const activeArchetypeForMemory = selectedCourtMember
+            ? selectedCourtMember.id
+            : (activeArchetypeId || 'ember_prime');
         const retrievalTopK = getRetrievalTopKForCourtMember(selectedCourtMember);
 
         // Determine active room for context pools and system prompt
@@ -455,6 +609,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 topK: retrievalTopK,
                 routeHint: detectedRoute,
                 courtMember: selectedCourtMember,
+                archetypeMemoryProfile: getArchetypeMemoryProfile(activeArchetypeForMemory),
             });
         } catch (retrieveErr) {
             console.warn('[/api/chat] retrieval failed:', retrieveErr.message);
@@ -530,18 +685,34 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         // Retrieval context (after identity/continuity layers)
         const roomPreamble = buildRoomContextPreamble(activeRoom);
+        const summaryFirst = buildSummaryFirstContext({
+            query,
+            rollingBootstrap,
+            activeArchetype: activeArchetypeForMemory,
+            sourceTrace: sources,
+        });
+        const rawChunksForPrompt = summaryFirst.block
+            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries())
+            : retrieved;
         let userContent    = buildGroundedPrompt({
             query,
-            retrievedChunks: retrieved,
+            retrievedChunks: rawChunksForPrompt,
             recentHistory: Array.isArray(history) ? history : null,
             maxContextChars: MAX_CHAT_CONTEXT_CHARS,
             maxChunkChars: MAX_CHAT_CHUNK_CHARS,
             maxHistoryChars: MAX_CHAT_HISTORY_CHARS,
         });
+        if (summaryFirst.block) {
+            userContent = summaryFirst.block + userContent;
+        }
         if (roomPreamble) {
             userContent = roomPreamble + userContent;
         }
-        console.log('[/api/chat] retrieval=' + (retrieved.length > 0 ? retrieved.length + ' chunks' : 'none'));
+        console.log(
+            '[/api/chat] retrieval=' +
+            (retrieved.length > 0 ? retrieved.length + ' chunks' : 'none') +
+            ' summaries=' + JSON.stringify(summaryFirst.summaryLayersUsed),
+        );
 
         // Optional archetype modifier
         let archetypeObj = null;
@@ -672,6 +843,13 @@ state: ${retrievalState}
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
             rollingBootstrapStatus,
             rollingBootstrapThemes,
+            memoryFlow: {
+                rollingBootstrap: rollingBootstrapStatus,
+                archetypeMemory: activeArchetypeForMemory,
+                cacheSummaries: summaryFirst.summaryLayersUsed.cacheSummaries,
+                documentSummaries: summaryFirst.summaryLayersUsed.documentSummaries,
+                rawChunks: rawChunksForPrompt.length,
+            },
         };
 
         const activeArchetype = selectedCourtMember

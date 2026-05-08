@@ -382,6 +382,21 @@
                 </div>
               </div>
 
+              <div class="ember-card system-block">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+                  <div class="system-block-title" style="margin:0;">Memory Compression</div>
+                  <div style="display:flex; gap:0.4rem; align-items:center;">
+                    <button class="secondary" id="sys-refresh-memory-compression-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">↻ Refresh Memory Compression</button>
+                    <button class="secondary" id="sys-refresh-document-summaries-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Generate Document Summaries</button>
+                    <button class="secondary" id="sys-refresh-cache-summaries-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Generate Cache Summaries</button>
+                    <button class="secondary" id="sys-refresh-archetype-memory-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Generate Archetype Memory</button>
+                  </div>
+                </div>
+                <div id="sys-memory-compression-status">
+                  <span class="message-system">Loading…</span>
+                </div>
+              </div>
+
               <!-- Startup Check Summary (System tab) -->
               <div class="ember-card system-block">
                 <div class="system-block-title">Last Startup Check</div>
@@ -524,7 +539,7 @@
             <h2 class="room-heading"><span class="room-rune">ᚦ</span> Threshold <span class="lifecycle-pill waiting">Waiting</span></h2>
             <nav class="sub-tabs" role="tablist" aria-label="Threshold tabs">
               <button class="sub-tab active" data-subtab="th-imports" aria-selected="true">Imports</button>
-              <button class="sub-tab"        data-subtab="th-ai"      aria-selected="false">AI</button>
+              <button class="sub-tab"        data-subtab="th-ai"      aria-selected="false">Runtime</button>
               <button class="sub-tab"        data-subtab="th-exports" aria-selected="false">Exports</button>
             </nav>
           </div>
@@ -606,13 +621,13 @@
           <div class="sub-panel" id="th-ai">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
-                AI runtimes detected on this machine appear here as <strong>AI (Waiting)</strong>.
-                Inspect each runtime before trusting it. Trusted material can be reviewed through the Ember Council.
+                Local AI runtimes detected on this machine appear here for <strong>Runtime Stewardship</strong>.
+                Inspect each runtime before admission. Threshold remains intake and inspection, not a toolbox.
               </p>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div class="workshop-section-title" style="margin:0;">Detected AI Runtimes</div>
+                <div class="workshop-section-title" style="margin:0;">Runtime Status</div>
                 <button class="secondary" id="tool-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
               </div>
               <div id="th-tool-list" class="threshold-file-list">

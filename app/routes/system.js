@@ -46,6 +46,10 @@ const {
     purgeNodeMemory,
     runLegacyCleanupPass,
 } = require('../system/nodeMaintenance');
+const {
+    refreshMemoryCompression,
+    getMemoryCompressionStatus,
+} = require('../memoryCompression');
 
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
@@ -205,6 +209,7 @@ function createSystemRouter({ migrationResult }) {
         const legacyLastRefresh = bootstrap ? (bootstrap.nodeState || {}).lastRefresh || null : null;
         const activeArchetype = bootstrap ? (bootstrap.nodeState || {}).activeArchetype || null : null;
         const rollingBootstrap = getRollingBootstrapStatus();
+        const memoryCompression = getMemoryCompressionStatus();
 
         res.json({
             model:             getSelectedModel(),
@@ -241,6 +246,7 @@ function createSystemRouter({ migrationResult }) {
             rollingBootstrapOpenQuestionsCount: rollingBootstrap.openQuestionsCount,
             rollingBootstrapSummary: rollingBootstrap.summary,
             rollingBootstrapThemes: rollingBootstrap.themes,
+            memoryCompression,
         });
     });
 
@@ -430,12 +436,21 @@ function createSystemRouter({ migrationResult }) {
             } catch {
                 rollingBootstrapStatus = 'refresh-failed';
             }
+            let memoryCompressionStatus = 'unchanged';
+            try {
+                const memoryRefresh = refreshMemoryCompression({ stage: 'all' });
+                const refreshed = memoryRefresh && memoryRefresh.refreshed ? memoryRefresh.refreshed : {};
+                memoryCompressionStatus = Object.values(refreshed).some(Boolean) ? 'refreshed' : 'unchanged';
+            } catch {
+                memoryCompressionStatus = 'refresh-failed';
+            }
 
             return res.json({
                 success: true,
                 message: 'Node refreshed. Local memory remains intact.',
                 bootstrapStatus,
                 rollingBootstrapStatus,
+                memoryCompressionStatus,
                 cleanup,
                 checkedAt: new Date().toISOString(),
             });
@@ -443,6 +458,34 @@ function createSystemRouter({ migrationResult }) {
             return res.status(500).json({
                 success: false,
                 error: 'Could not refresh node: ' + err.message,
+            });
+        }
+    });
+
+    router.post('/api/system/memory-compression/refresh', writeLimiter, (req, res) => {
+        if (!_isLocalRequest(req)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Refresh endpoint is local-only.',
+            });
+        }
+        const stage = req.body && typeof req.body.stage === 'string'
+            ? req.body.stage
+            : 'all';
+        try {
+            const result = refreshMemoryCompression({ stage });
+            return res.json({
+                success: true,
+                message: 'Memory Compression refreshed.',
+                stage: result.stage,
+                refreshed: result.refreshed,
+                memoryCompression: getMemoryCompressionStatus(),
+                checkedAt: new Date().toISOString(),
+            });
+        } catch (err) {
+            return res.status(500).json({
+                success: false,
+                error: 'Could not refresh memory compression: ' + err.message,
             });
         }
     });

@@ -177,6 +177,7 @@ let _activeRoomId = 'hearth';
                     loadHearthToolRegistry();
                     loadContextMapsStatus();
                     loadBootstrapStatus();
+                    loadMemoryCompressionStatus();
                 }
                 if (panelId === 'th-ai') {
                     loadThresholdTools();
@@ -710,6 +711,17 @@ function setTraceStatus(text) {
     if (el) el.textContent = text;
 }
 
+function formatMemoryFlow(memoryFlow) {
+    if (!memoryFlow) return null;
+    return [
+        'Rolling Bootstrap: ' + (memoryFlow.rollingBootstrap || 'unavailable'),
+        'Archetype Memory: ' + (memoryFlow.archetypeMemory || 'ember_prime'),
+        'Cache Summaries: ' + String(memoryFlow.cacheSummaries || 0),
+        'Document Summaries: ' + String(memoryFlow.documentSummaries || 0),
+        'Raw Chunks: ' + String(memoryFlow.rawChunks || 0),
+    ].join(' · ');
+}
+
 function renderSignalTrace(sources, signalTrace = null) {
     const MAX_SOURCE_LIST_DISPLAY_CHARS = 180;
     const MIN_TRUNCATION_POSITION = 40;
@@ -745,6 +757,9 @@ function renderSignalTrace(sources, signalTrace = null) {
         ? metadata.sourcesActuallyUsed
         : [];
     const retrievalNote = metadata && metadata.retrievalNote ? String(metadata.retrievalNote) : '';
+    const memoryFlow = metadata && metadata.memoryFlow && typeof metadata.memoryFlow === 'object'
+        ? metadata.memoryFlow
+        : null;
 
     function boundedListText(list) {
         const listText = list.join(', ');
@@ -783,6 +798,10 @@ function renderSignalTrace(sources, signalTrace = null) {
         ? dedupedConceptRoute.join(' → ')
         : null;
     const rows = [
+        {
+            key: 'Memory',
+            value: formatMemoryFlow(memoryFlow),
+        },
         {
             key: 'Rolling Bootstrap',
             value: rollingBootstrapStatus
@@ -1187,7 +1206,13 @@ async function loadHearthTrustedArchive() {
             row.innerHTML =
                 '<span class="ws-source-name">' + escapeHtml(s.title || s.file) + '</span>' +
                 shelfBadge +
-                '<span class="ws-source-type">' + escapeHtml(s.sourceType || '') + '</span>';
+                '<span class="ws-source-type">' + escapeHtml(s.sourceType || '') + '</span>' +
+                (s.abstract && Array.isArray(s.abstract.themes) && s.abstract.themes.length > 0
+                    ? '<span class="source-card-description">Themes: ' + escapeHtml(s.abstract.themes.slice(0, 3).join(', ')) + '</span>'
+                    : '') +
+                (s.abstract && Array.isArray(s.abstract.preferred_archetypes) && s.abstract.preferred_archetypes.length > 0
+                    ? '<span class="source-card-description">Preferred archetypes: ' + escapeHtml(s.abstract.preferred_archetypes.slice(0, 3).join(', ')) + '</span>'
+                    : '');
             listEl.appendChild(row);
         });
     } catch {
@@ -1862,6 +1887,21 @@ function buildSourceCard(s) {
     if (s.description) {
         html += '<div class="source-card-description">' + escapeHtml(s.description) + '</div>';
     }
+    if (s.abstract && (s.abstract.summary || (Array.isArray(s.abstract.themes) && s.abstract.themes.length > 0))) {
+        const abstractParts = [];
+        if (Array.isArray(s.abstract.themes) && s.abstract.themes.length > 0) {
+            abstractParts.push('Themes: ' + s.abstract.themes.slice(0, 3).join(', '));
+        }
+        if (Array.isArray(s.abstract.preferred_archetypes) && s.abstract.preferred_archetypes.length > 0) {
+            abstractParts.push('Preferred archetypes: ' + s.abstract.preferred_archetypes.slice(0, 3).join(', '));
+        }
+        const abstractText = abstractParts.length > 0
+            ? abstractParts.join(' · ')
+            : String(s.abstract.summary || '').slice(0, 140);
+        if (abstractText) {
+            html += '<div class="source-card-description">' + escapeHtml(abstractText) + '</div>';
+        }
+    }
     if (s.file && s.file !== title) {
         html += '<div class="source-card-filename">' + escapeHtml(s.file) + '</div>';
     }
@@ -2524,7 +2564,13 @@ function buildArchiveReaderFileButton(entry) {
     const btn = document.createElement('button');
     btn.className = 'archive-reader-file';
     btn.innerHTML = escapeHtml(entry.title || entry.relativePath || 'entry') +
-        '<span class="archive-reader-file-path">' + escapeHtml(entry.relativePath || '') + '</span>';
+        '<span class="archive-reader-file-path">' + escapeHtml(entry.relativePath || '') + '</span>' +
+        (entry.abstract && Array.isArray(entry.abstract.themes) && entry.abstract.themes.length > 0
+            ? '<span class="archive-reader-file-path">Themes: ' + escapeHtml(entry.abstract.themes.slice(0, 3).join(', ')) + '</span>'
+            : '') +
+        (entry.abstract && Array.isArray(entry.abstract.preferred_archetypes) && entry.abstract.preferred_archetypes.length > 0
+            ? '<span class="archive-reader-file-path">Preferred archetypes: ' + escapeHtml(entry.abstract.preferred_archetypes.slice(0, 3).join(', ')) + '</span>'
+            : '');
     btn.addEventListener('click', () => openArchiveReaderEntry(entry));
     return btn;
 }
@@ -2590,6 +2636,18 @@ async function loadArchiveReaderCatalog() {
             const fileCount = Array.isArray(group.files) ? group.files.length : 0;
             summary.textContent = (group.title || group.cacheId || 'cache') + ' (' + fileCount + ')';
             details.appendChild(summary);
+            if (group.abstract && Array.isArray(group.abstract.themes) && group.abstract.themes.length > 0) {
+                const abstract = document.createElement('div');
+                abstract.className = 'archive-reader-file-path';
+                abstract.textContent = 'Themes: ' + group.abstract.themes.slice(0, 3).join(', ');
+                details.appendChild(abstract);
+            }
+            if (group.abstract && Array.isArray(group.abstract.preferred_archetypes) && group.abstract.preferred_archetypes.length > 0) {
+                const abstractArchetypes = document.createElement('div');
+                abstractArchetypes.className = 'archive-reader-file-path';
+                abstractArchetypes.textContent = 'Preferred archetypes: ' + group.abstract.preferred_archetypes.slice(0, 3).join(', ');
+                details.appendChild(abstractArchetypes);
+            }
 
             const filesWrap = document.createElement('div');
             filesWrap.className = 'archive-reader-files';
@@ -3600,6 +3658,31 @@ async function loadBootstrapStatus() {
     }
 }
 
+async function loadMemoryCompressionStatus() {
+    const el = document.getElementById('sys-memory-compression-status');
+    if (!el) return;
+    el.innerHTML = '<span class="message-system">Loading…</span>';
+
+    try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const memory = data && data.memoryCompression ? data.memoryCompression : {};
+        const rows = [
+            ['Cache Summaries', (memory.cacheSummariesStatus || 'missing') + ' (' + String(memory.cacheSummariesCount || 0) + ')'],
+            ['Document Summaries', (memory.documentSummariesStatus || 'missing') + ' (' + String(memory.documentSummariesCount || 0) + ')'],
+            ['Archetype Memory', (memory.archetypeMemoryStatus || 'missing') + ' (' + String(memory.archetypeMemoryCount || 0) + ')'],
+        ];
+        el.innerHTML = rows.map(([k, v]) =>
+            '<div class="system-row">' +
+                '<span class="system-key">' + escapeHtml(k) + '</span>' +
+                '<span class="system-val">' + escapeHtml(v) + '</span>' +
+            '</div>'
+        ).join('');
+    } catch {
+        el.innerHTML = '<span class="message-system error">Could not load Memory Compression status.</span>';
+    }
+}
+
 // Refresh Bootstrap button
 (function initRefreshBootstrapBtn() {
     document.addEventListener('click', async (e) => {
@@ -3621,6 +3704,47 @@ async function loadBootstrapStatus() {
                 btn.disabled = false;
                 btn.textContent = '↻ Refresh Bootstrap';
             }
+        }
+    });
+})();
+
+(function initMemoryCompressionButtons() {
+    async function runRefresh(button, stage, doneLabel) {
+        if (!button) return;
+        button.disabled = true;
+        const prior = button.textContent;
+        button.textContent = 'Refreshing…';
+        try {
+            const res = await fetch('/api/system/memory-compression/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stage }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'refresh failed');
+            showFlashMessage(doneLabel);
+            loadMemoryCompressionStatus();
+        } catch {
+            showFlashMessage('Memory Compression refresh failed.');
+        } finally {
+            button.disabled = false;
+            button.textContent = prior;
+        }
+    }
+
+    document.addEventListener('click', async (e) => {
+        if (!e.target) return;
+        if (e.target.id === 'sys-refresh-memory-compression-btn') {
+            await runRefresh(e.target, 'all', 'Memory Compression refreshed.');
+        }
+        if (e.target.id === 'sys-refresh-document-summaries-btn') {
+            await runRefresh(e.target, 'document_summaries', 'Document summaries refreshed.');
+        }
+        if (e.target.id === 'sys-refresh-cache-summaries-btn') {
+            await runRefresh(e.target, 'cache_summaries', 'Cache summaries refreshed.');
+        }
+        if (e.target.id === 'sys-refresh-archetype-memory-btn') {
+            await runRefresh(e.target, 'archetype_memory', 'Archetype memory refreshed.');
         }
     });
 })();
@@ -3688,7 +3812,7 @@ async function scanTools() {
 /** Status label for an AI runtime lifecycle state. */
 function toolStatusLabel(tool) {
     if (tool.trusted && tool.role) return 'Assigned';
-    if (tool.trusted)              return 'Trusted';
+    if (tool.trusted)              return 'Admitted';
     if (tool.status === 'detected') return 'Waiting';
     return tool.status || 'Unknown';
 }
@@ -3731,27 +3855,27 @@ async function loadThresholdTools() {
     try {
         const { tools, active } = await fetchToolRegistry();
 
-        // Show all non-trusted detected runtimes (+ not_detected as dim)
+        // Show all non-admitted detected runtimes (+ not_detected as dim)
         // Persistently rejected runtimes are shown as a separate dim section
-        const visible  = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
+        const pendingRuntimes = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
         const rejected = tools.filter(t => !t.trusted && t.intake && t.intake.state === 'rejected');
 
         // Show guided setup if no running runtimes at all
         const anyRunning = tools.some(t => t.running === true);
         if (guideEl) guideEl.style.display = anyRunning ? 'none' : 'flex';
 
-        if (visible.length === 0 && rejected.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No untrusted runtimes. All detected runtimes have been admitted.</span>';
+        if (pendingRuntimes.length === 0 && rejected.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No pending runtimes. All detected runtimes have been admitted.</span>';
             return;
         }
 
         listEl.innerHTML = '';
-        visible.forEach(tool => renderThresholdToolRow(tool, active, listEl));
+        pendingRuntimes.forEach(tool => renderThresholdToolRow(tool, active, listEl));
 
         if (rejected.length > 0) {
             const sep = document.createElement('div');
             sep.className   = 'threshold-section-header';
-            sep.textContent = 'Rejected (' + rejected.length + ')';
+            sep.textContent = 'Rejected by stewardship (' + rejected.length + ')';
             listEl.appendChild(sep);
             rejected.forEach(tool => renderThresholdToolRow(tool, active, listEl));
         }
@@ -3855,14 +3979,14 @@ function renderThresholdToolRow(tool, active, container) {
         });
         actions.appendChild(inspBtn);
 
-        // Trust button (only for detected runtimes)
+        // Admit button (only for detected runtimes)
         if (tool.status === 'detected') {
             const trustBtn = document.createElement('button');
             trustBtn.className = 'primary threshold-action-btn';
-            trustBtn.textContent = 'Trust';
+            trustBtn.textContent = 'Admit';
             trustBtn.addEventListener('click', async () => {
                 trustBtn.disabled = true;
-                trustBtn.textContent = 'Trusting…';
+                trustBtn.textContent = 'Admitting…';
                 try {
                     const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
                         method:  'POST',
@@ -3871,19 +3995,19 @@ function renderThresholdToolRow(tool, active, container) {
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showFlashMessage(escapeHtml(tool.name) + ' trusted ✓ — now in Ember Council');
+                        showFlashMessage(escapeHtml(tool.name) + ' admitted ✓ — now in Ember Council');
                         loadThresholdTools();
                         loadWorkshopTools();
                         loadHearthToolRegistry();
                     } else {
-                        showFlashMessage('Trust failed: ' + (data.error || 'unknown'));
+                        showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
                         trustBtn.disabled = false;
-                        trustBtn.textContent = 'Trust';
+                        trustBtn.textContent = 'Admit';
                     }
                 } catch {
                     showFlashMessage('Could not reach server.');
                     trustBtn.disabled = false;
-                    trustBtn.textContent = 'Trust';
+                    trustBtn.textContent = 'Admit';
                 }
             });
             actions.appendChild(trustBtn);
@@ -4184,7 +4308,7 @@ async function loadHearthToolRegistry() {
             listEl.insertBefore(row, emptyEl);
         });
     } catch {
-        if (listEl) listEl.innerHTML += '<span class="message-system">Could not load runtime registry.</span>';
+        if (listEl) listEl.innerHTML += '<span class="message-system">Could not load runtime stewardship registry.</span>';
     }
 }
 
@@ -4221,7 +4345,7 @@ function openToolInspector(tool, active) {
     set('tool-insp-interface', tool.interface);
     set('tool-insp-endpoint',  tool.endpoint || '(none)');
     set('tool-insp-role',      tool.role ? roleLabel(tool.role) : 'None');
-    set('tool-insp-trust',     tool.trusted ? 'Trusted' : 'Untrusted');
+    set('tool-insp-trust',     tool.trusted ? 'Admitted' : 'Pending');
     set('tool-insp-lastseen',  tool.lastSeen || '—');
 
     const runningEl = document.getElementById('tool-insp-running');
@@ -4242,7 +4366,7 @@ function openToolInspector(tool, active) {
 
         if (!tool.trusted && tool.status === 'detected') {
             actions.push({
-                label: 'Trust Runtime',
+                label: 'Admit Runtime',
                 primary: true,
                 fn: async () => {
                     try {
@@ -4254,12 +4378,12 @@ function openToolInspector(tool, active) {
                         const data = await res.json();
                         if (data.success) {
                             closeToolInspector();
-                            showFlashMessage(escapeHtml(tool.name) + ' trusted ✓');
+                            showFlashMessage(escapeHtml(tool.name) + ' admitted ✓');
                             loadThresholdTools();
                             loadWorkshopTools();
                             loadHearthToolRegistry();
                         } else {
-                            showFlashMessage('Trust failed: ' + (data.error || 'unknown'));
+                            showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
                         }
                     } catch {
                         showFlashMessage('Could not reach server.');

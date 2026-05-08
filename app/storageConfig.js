@@ -165,6 +165,10 @@ const BOOTSTRAP_DIR           = path.join(SYSTEM_DIR, 'bootstrap');
 const SYSTEM_MEMORY_DIR       = path.join(SYSTEM_DIR, 'memory');
 /** Rolling Bootstrap storage path */
 const ROLLING_BOOTSTRAP_PATH  = path.join(SYSTEM_MEMORY_DIR, 'rolling-bootstrap.json');
+/** Fractal Context Compression memory paths */
+const CACHE_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-summaries.json');
+const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries.json');
+const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
 
 /** System config, prompts, and tools directories */
 const SYSTEM_CONFIG_DIR       = path.join(SYSTEM_DIR, 'config');
@@ -294,6 +298,58 @@ const DEFAULT_ROLLING_BOOTSTRAP = {
         notes: [],
     },
 };
+const DEFAULT_CACHE_SUMMARIES = {
+    version: '0.1.0',
+    updated_at: null,
+    caches: {},
+};
+const DEFAULT_DOCUMENT_SUMMARIES = {
+    version: '0.1.0',
+    updated_at: null,
+    documents: {},
+};
+const DEFAULT_ARCHETYPE_MEMORY = {
+    version: '0.1.0',
+    updated_at: null,
+    archetypes: {
+        ember_prime: {
+            summary: '',
+            preferred_domains: [],
+            preferred_sources: [],
+            compression_style: 'balanced continuity synthesis',
+        },
+        builder: {
+            summary: '',
+            preferred_domains: ['collapse_continuity', 'practice_reflection'],
+            preferred_sources: [],
+            compression_style: 'practical sequence, material constraints, grounded systems',
+        },
+        warrior: {
+            summary: '',
+            preferred_domains: ['collapse_continuity', 'sentinel_identity'],
+            preferred_sources: [],
+            compression_style: 'stakes, discipline, decision, pressure',
+        },
+        scholar: {
+            summary: '',
+            preferred_domains: ['core_orientation', 'myth_tech', 'symbolic_language'],
+            preferred_sources: [],
+            compression_style: 'taxonomy, comparison, conceptual relation',
+        },
+        scribe: {
+            summary: '',
+            preferred_domains: ['living_sagas', 'triform_system'],
+            preferred_sources: [],
+            compression_style: 'transmission, narrative coherence, signal compression',
+        },
+        mystic: {
+            summary: '',
+            preferred_domains: ['symbolic_language', 'myth_tech'],
+            preferred_sources: [],
+            compression_style: 'symbolic density, threshold resonance, hidden pattern',
+        },
+    },
+};
 
 // ── First-run initialisation ──────────────────────────────────────────────────
 
@@ -376,6 +432,9 @@ function ensureCanonicalDataFiles() {
     writeJsonIfMissing(TOOLS_REGISTRY_PATH, DEFAULT_TOOLS_REGISTRY);
     writeJsonIfMissing(INTAKE_STATE_PATH, DEFAULT_INTAKE_STATE);
     writeJsonIfMissing(ROLLING_BOOTSTRAP_PATH, DEFAULT_ROLLING_BOOTSTRAP);
+    writeJsonIfMissing(CACHE_SUMMARIES_PATH, DEFAULT_CACHE_SUMMARIES);
+    writeJsonIfMissing(DOCUMENT_SUMMARIES_PATH, DEFAULT_DOCUMENT_SUMMARIES);
+    writeJsonIfMissing(ARCHETYPE_MEMORY_PATH, DEFAULT_ARCHETYPE_MEMORY);
 }
 
 // ── Legacy migration ──────────────────────────────────────────────────────────
@@ -610,6 +669,9 @@ module.exports = {
     BOOTSTRAP_DIR,
     SYSTEM_MEMORY_DIR,
     ROLLING_BOOTSTRAP_PATH,
+    CACHE_SUMMARIES_PATH,
+    DOCUMENT_SUMMARIES_PATH,
+    ARCHETYPE_MEMORY_PATH,
     // Phase 11.7: Core Archive + Cache Structure
     ARCHIVE_CORE_DIR,
     ARCHIVE_CORE_DIRS,

@@ -42,6 +42,11 @@ const {
     compareInstalledWithUpstream,
     installArchiveCachePackage,
 }                                                  = require('../archiveCacheService');
+const {
+    buildSourceAbstract,
+    loadCacheSummaries,
+    loadDocumentSummaries,
+} = require('../memoryCompression');
 
 const router = express.Router();
 
@@ -88,7 +93,7 @@ function isPathInside(baseDir, targetPath) {
     return target === root || target.startsWith(root + path.sep);
 }
 
-function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix, sourceLabel) {
+function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix, sourceLabel, summaryContext = null) {
     if (!fs.existsSync(baseDir)) return [];
     const out = [];
     const stack = [baseDir];
@@ -113,6 +118,16 @@ function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix, sourceL
                 relativePath: rel,
                 size: stat.size,
                 updatedAt: stat.mtime.toISOString(),
+                abstract: buildSourceAbstract({
+                    sourceId: sourcePrefix + '/' + rel,
+                    sourceName: path.basename(entry.name, path.extname(entry.name)),
+                    title: path.basename(entry.name, path.extname(entry.name)),
+                    cacheId: entryRootKey.startsWith('archive-cache/')
+                        ? entryRootKey.slice('archive-cache/'.length)
+                        : null,
+                    documentSummaries: summaryContext && summaryContext.documentSummaries ? summaryContext.documentSummaries : null,
+                    cacheSummaries: summaryContext && summaryContext.cacheSummaries ? summaryContext.cacheSummaries : null,
+                }),
             });
         });
     }
@@ -172,8 +187,21 @@ function removeStaleEmbeddingsForSource(sourceId) {
  */
 router.get('/api/archive', readLimiter, (req, res) => {
     const { shelf } = req.query;
+    const documentSummaries = loadDocumentSummaries();
+    const cacheSummaries = loadCacheSummaries();
     let sources = listArchiveSources();
     if (shelf) sources = sources.filter(s => s.shelf === shelf);
+    sources = sources.map(source => ({
+        ...source,
+        abstract: buildSourceAbstract({
+            sourceId: source.id,
+            sourceName: source.title || source.file || source.id,
+            title: source.title || source.file || source.id,
+            cacheId: source.cacheId || null,
+            documentSummaries,
+            cacheSummaries,
+        }),
+    }));
     res.json({ sources, shelves: VALID_SHELVES });
 });
 
@@ -182,7 +210,16 @@ router.get('/api/archive', readLimiter, (req, res) => {
  * Return a cache-aware markdown catalog for local archive roots.
  */
 router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
-    const coreFiles = listMarkdownFilesRecursive(ARCHIVE_CORE_DIR, 'archive-core', 'archive/core', 'Core Cache');
+    const cacheSummaries = loadCacheSummaries();
+    const documentSummaries = loadDocumentSummaries();
+    const summaryContext = { documentSummaries, cacheSummaries };
+    const coreFiles = listMarkdownFilesRecursive(
+        ARCHIVE_CORE_DIR,
+        'archive-core',
+        'archive/core',
+        'Core Cache',
+        summaryContext,
+    );
     const cacheGroups = fs.existsSync(ARCHIVE_CACHES_DIR)
         ? fs.readdirSync(ARCHIVE_CACHES_DIR, { withFileTypes: true })
             .filter(entry => entry.isDirectory() && CACHE_ID_PATTERN.test(entry.name))
@@ -194,11 +231,23 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
                     cacheId,
                     title: cacheId,
                     sourcePath: 'archive/caches/' + cacheId,
+                    abstract: cacheSummaries && cacheSummaries.caches && cacheSummaries.caches[cacheId]
+                        ? {
+                            summary: cacheSummaries.caches[cacheId].summary || '',
+                            themes: Array.isArray(cacheSummaries.caches[cacheId].themes)
+                                ? cacheSummaries.caches[cacheId].themes.slice(0, 3)
+                                : [],
+                            preferred_archetypes: Array.isArray(cacheSummaries.caches[cacheId].dominant_archetypes)
+                                ? cacheSummaries.caches[cacheId].dominant_archetypes.slice(0, 3)
+                                : [],
+                        }
+                        : null,
                     files: listMarkdownFilesRecursive(
                         cacheRoot,
                         'archive-cache/' + cacheId,
                         'archive/caches/' + cacheId,
                         /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
+                        summaryContext,
                     ),
                 };
             })
