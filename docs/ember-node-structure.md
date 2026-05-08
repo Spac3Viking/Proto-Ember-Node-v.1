@@ -8,6 +8,14 @@
 - **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/`.
 - **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
 
+## Continuity Memory Layers
+
+- **Archive Memory** → enduring Green Fire source material and trusted archive/caches.
+- **Rolling Bootstrap** → evolving continuity summary at `system/memory/rolling-bootstrap.json`.
+- **Signal Threads groundwork** → remembered thread summaries used as future thread anchors.
+- **Threshold** → intake + inspection boundary before admission into remembered layers.
+- **Ember Council** → archetypal interpretation context for active work.
+
 ## Reader Surface
 
 - **Green Fire Reader** is the universal human-readable surface for imported and archive-readable files.

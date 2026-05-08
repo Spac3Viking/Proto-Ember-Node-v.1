@@ -726,6 +726,12 @@ function renderSignalTrace(sources, signalTrace = null) {
     const courtDomains = metadata && Array.isArray(metadata.courtDomains) ? metadata.courtDomains : [];
     const model = metadata && metadata.model ? String(metadata.model) : null;
     const provider = metadata && metadata.provider ? String(metadata.provider) : null;
+    const rollingBootstrapStatus = metadata && metadata.rollingBootstrapStatus
+        ? String(metadata.rollingBootstrapStatus)
+        : null;
+    const rollingBootstrapThemes = metadata && Array.isArray(metadata.rollingBootstrapThemes)
+        ? metadata.rollingBootstrapThemes.map(String).slice(0, 5)
+        : [];
     const relatedDomains = metadata && Array.isArray(metadata.relatedDomains) ? metadata.relatedDomains : [];
     const courtSourcesConsidered = metadata && Array.isArray(metadata.courtSourcesConsidered)
         ? metadata.courtSourcesConsidered
@@ -752,9 +758,14 @@ function renderSignalTrace(sources, signalTrace = null) {
     if (contextStatus) {
         const parts = ['context ' + contextStatus];
         if (sourcesUsed !== null) parts.push(String(sourcesUsed) + ' source' + (sourcesUsed === 1 ? '' : 's'));
+        if (rollingBootstrapStatus) parts.push('Rolling Bootstrap ' + rollingBootstrapStatus);
         setTraceStatus(parts.join(' · '));
     } else if (!sources || sources.length === 0) {
-        setTraceStatus('base model — no local sources');
+        if (rollingBootstrapStatus) {
+            setTraceStatus('Rolling Bootstrap ' + rollingBootstrapStatus + ' · base model — no local sources');
+        } else {
+            setTraceStatus('base model — no local sources');
+        }
     }
 
     const conceptRouteList = [conceptRoute, ...relatedDomains]
@@ -772,6 +783,16 @@ function renderSignalTrace(sources, signalTrace = null) {
         ? dedupedConceptRoute.join(' → ')
         : null;
     const rows = [
+        {
+            key: 'Rolling Bootstrap',
+            value: rollingBootstrapStatus
+                ? (
+                    rollingBootstrapThemes.length > 0
+                        ? rollingBootstrapStatus + ' — ' + boundedListText(rollingBootstrapThemes.slice(0, 5))
+                        : rollingBootstrapStatus
+                )
+                : null,
+        },
         { key: 'Active archetype', value: courtLens || 'Ember Prime' },
         { key: 'Route', value: compactRoute },
         { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
@@ -3516,7 +3537,7 @@ async function loadContextMapsStatus() {
 })();
 
 /* ================================================================
-   Bootstrap Status (Phase 11.5)
+   Rolling Bootstrap Status (Phase 16D)
    ================================================================ */
 
 async function loadBootstrapStatus() {
@@ -3531,22 +3552,17 @@ async function loadBootstrapStatus() {
 
         const rows = [];
 
-        rows.push(
-            '<div class="system-row">' +
-            '<span class="system-key">Forge v1.3</span>' +
-            '<span class="system-val ' + (data.forgeLoaded ? 'ok' : 'warn') + '">' +
-            (data.forgeLoaded ? 'loaded' : 'not found') + '</span></div>',
-        );
+        const rbStatus = data.rollingBootstrapStatus || 'not generated';
 
         rows.push(
             '<div class="system-row">' +
-            '<span class="system-key">Bootstrap</span>' +
-            '<span class="system-val ' + (data.bootstrapStatus === 'ready' ? 'ok' : 'warn') + '">' +
-            escapeHtml(data.bootstrapStatus || '—') + '</span></div>',
+            '<span class="system-key">Status</span>' +
+            '<span class="system-val ' + (rbStatus === 'ready' ? 'ok' : 'warn') + '">' +
+            escapeHtml(rbStatus) + '</span></div>',
         );
 
-        if (data.lastBootstrapRefresh) {
-            const refreshed = new Date(data.lastBootstrapRefresh).toLocaleString();
+        if (data.rollingBootstrapLastRefreshed) {
+            const refreshed = new Date(data.rollingBootstrapLastRefreshed).toLocaleString();
             rows.push(
                 '<div class="system-row">' +
                 '<span class="system-key">Last refresh</span>' +
@@ -3556,13 +3572,31 @@ async function loadBootstrapStatus() {
 
         rows.push(
             '<div class="system-row">' +
-            '<span class="system-key">Active archetype</span>' +
-            '<span class="system-val">' + escapeHtml(data.activeArchetype || 'none') + '</span></div>',
+            '<span class="system-key">Active themes</span>' +
+            '<span class="system-val">' + escapeHtml(String(data.rollingBootstrapActiveThemesCount || 0)) + '</span></div>',
+        );
+        rows.push(
+            '<div class="system-row">' +
+            '<span class="system-key">Open questions</span>' +
+            '<span class="system-val">' + escapeHtml(String(data.rollingBootstrapOpenQuestionsCount || 0)) + '</span></div>',
+        );
+        if (Array.isArray(data.rollingBootstrapThemes) && data.rollingBootstrapThemes.length > 0) {
+            rows.push(
+                '<div class="system-row">' +
+                '<span class="system-key">Themes</span>' +
+                '<span class="system-val">' + escapeHtml(data.rollingBootstrapThemes.slice(0, 5).join(', ')) + '</span></div>',
+            );
+        }
+        rows.push(
+            '<div class="system-row">' +
+            '<span class="system-key">Forge v1.3</span>' +
+            '<span class="system-val ' + (data.forgeLoaded ? 'ok' : 'warn') + '">' +
+            (data.forgeLoaded ? 'loaded' : 'not found') + '</span></div>',
         );
 
         el.innerHTML = rows.join('');
     } catch {
-        el.innerHTML = '<span class="message-system error">Could not load bootstrap status.</span>';
+        el.innerHTML = '<span class="message-system error">Could not load Rolling Bootstrap status.</span>';
     }
 }
 
@@ -3576,16 +3610,40 @@ async function loadBootstrapStatus() {
             try {
                 const res = await fetch('/api/bootstrap/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
                 if (res.ok) {
-                    showFlashMessage('Bootstrap refreshed.');
+                    showFlashMessage('Rolling Bootstrap refreshed.');
                     loadBootstrapStatus();
                 } else {
-                    showFlashMessage('Bootstrap refresh failed.');
+                    showFlashMessage('Rolling Bootstrap refresh failed.');
                 }
             } catch {
                 showFlashMessage('Could not reach server.');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '↻ Refresh Bootstrap';
+            }
+        }
+    });
+})();
+
+(function initRollingBootstrapActions() {
+    document.addEventListener('click', async (e) => {
+        if (e.target && e.target.id === 'sys-open-bootstrap-json-btn') {
+            window.open('/api/bootstrap/rolling', '_blank', 'noopener');
+            return;
+        }
+        if (e.target && e.target.id === 'sys-copy-bootstrap-summary-btn') {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const summary = (data && data.rollingBootstrapSummary) ? String(data.rollingBootstrapSummary) : '';
+                if (!summary) {
+                    showFlashMessage('No Rolling Bootstrap summary available yet.');
+                    return;
+                }
+                await navigator.clipboard.writeText(summary);
+                showFlashMessage('Rolling Bootstrap summary copied.');
+            } catch {
+                showFlashMessage('Could not copy Rolling Bootstrap summary.');
             }
         }
     });

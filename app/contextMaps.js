@@ -1,12 +1,12 @@
 /**
  * Ember Node v.ᚠ — Phase 11 Context Maps
  *
- * Context Maps are distilled context artifacts representing the current
- * state of a room, project, or thread cluster.  They allow rooms to share
- * understanding without sharing all raw memory.
+ * Context Memory maps are distilled continuity artifacts representing the
+ * current state of a room, Council context, or thread cluster. They allow
+ * rooms to share understanding without sharing all raw memory.
  *
  * Map types:
- *   working  — frequently updated lightweight summaries used as bootstraps
+ *   working  — frequently updated lightweight summaries used by Rolling Bootstrap
  *   remembered — stable curated summaries worth preserving long-term
  *
  * Storage:
@@ -174,10 +174,10 @@ function buildHearthMap() {
 }
 
 /**
- * Generate the Workshop working map.
+ * Generate the Ember Council working map (stored under workshop/ for compatibility).
  *
  * Content:
- *   - workshop sources grouped by shelf / project
+ *   - council context sources grouped by shelf
  *   - recent sources
  *
  * @returns {object}

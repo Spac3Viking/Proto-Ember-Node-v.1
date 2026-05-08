@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Ember Node v.ᚠ — Phase 11 Context Map Routes
+ * Ember Node v.ᚠ — Phase 16D Context Memory Routes
  *
  * GET  /api/context-maps/:room          — list all maps for a room
  * GET  /api/context-maps/:room/working  — get current working map

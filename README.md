@@ -360,6 +360,8 @@ On first run, Ember Node creates the full directory tree automatically.
   system/
     forge/          — Forge identity layer (archetypes, forge-core.json)
     bootstrap/      — Active bootstrap state
+    memory/
+      rolling-bootstrap.json — Rolling Bootstrap continuity summary
     config/         — System configuration
     prompts/        — System prompts
     tools/          — AI runtime registry state
@@ -402,9 +404,18 @@ Note: the internal storage folder remains `workshop/` for backward compatibility
 | Layer | Path | Role |
 |-------|------|------|
 | **System identity** | `system/forge/` | Forge archetype and identity files. Not archive content. |
+| **Rolling Bootstrap** | `system/memory/rolling-bootstrap.json` | Evolving continuity summary (active themes, projects, open questions, decisions, archetype notes). |
 | **Core trusted archive** | `archive/core/` | Default knowledge body for every new node. Trusted, archive-native, bypasses Threshold by default. |
 | **Archive caches** | `archive/caches/` | Future downloadable archive expansions. Each cache is a self-contained sub-directory with its own `manifest.json`. Use the term *cache* / *caches* — not *pack* / *packs*. |
 | **Archive caches** | `archive/caches/` | Future modular functional or content modules. Distinct from caches — may contain documents, prompts, assets, or specialised node modules. |
+
+### Memory Layer Clarification
+
+- **Archive Memory** — enduring source material under `archive/core/`, `archive/caches/`, and mirror-derived archive assets.
+- **Rolling Bootstrap** — compact continuity memory that preserves unfolding context across sessions.
+- **Signal Threads** — reserved future layer for saved conversations, research paths, and work trails.
+- **Threshold** — intake + inspection boundary for outside materials.
+- **Ember Council** — archetypal interpretation and active crafting context.
 
 The data root is entirely user-owned. Updating or reinstalling Ember Node never touches it.
 Use `GET /api/storage-info` to confirm which data root is active and see migration status.

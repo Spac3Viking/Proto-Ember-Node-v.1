@@ -1,17 +1,17 @@
 /**
- * Ember Node v.ᚠ — Phase 11.5 Bootstrap + Forge Integration
+ * Ember Node v.ᚠ — Phase 16D Rolling Bootstrap + Forge Integration
  *
  * The Forge defines how the node thinks.
- * The Bootstrap defines what it is thinking with right now.
+ * The Rolling Bootstrap defines what it is thinking with right now.
  *
  * Responsibilities:
  *   - Seed forge-core.json and archetype files on first run
  *   - Seed ember-node-forge-v1.3.md as the canonical identity document
- *   - Build / load / refresh the Active Bootstrap (dynamic context state)
+ *   - Build / load / refresh rolling continuity memory
  *
- * Bootstrap composition:
+ * Continuity composition:
  *   1. Identity — from forge-core.json (role, method, covenant, epistemic rules)
- *   2. Context Maps — Hearth (primary), Workshop (secondary), Threshold (optional)
+ *   2. Context Memory — Hearth (primary), Ember Council (secondary), Threshold (optional)
  *   3. Thread Memory — top summarized remembered threads (distilled only)
  *   4. Node State — active focus, active archetype, last refresh timestamp
  *
@@ -19,7 +19,15 @@
  *   DATA_ROOT/system/forge/ember-node-forge-v1.3.md
  *   DATA_ROOT/system/forge/forge-core.json
  *   DATA_ROOT/system/forge/archetypes/<archetype>.json
- *   DATA_ROOT/system/bootstrap/active-bootstrap.json
+ *   DATA_ROOT/system/bootstrap/active-bootstrap.json (legacy compatibility)
+ *   DATA_ROOT/system/memory/rolling-bootstrap.json
+ *
+ * Memory layer terminology:
+ *   - Archive Memory: enduring trusted archive/caches/mirror material
+ *   - Rolling Bootstrap: evolving AI/local continuity summary
+ *   - Signal Threads: future saved conversation/research path memory
+ *   - Threshold: intake and inspection boundary for outside material
+ *   - Ember Council: archetypal interpretation and active crafting context
  */
 
 'use strict';
@@ -28,7 +36,7 @@ const fs   = require('fs');
 const path = require('path');
 
 const {
-    FORGE_DIR, ARCHETYPES_DIR, BOOTSTRAP_DIR,
+    FORGE_DIR, ARCHETYPES_DIR, BOOTSTRAP_DIR, ROLLING_BOOTSTRAP_PATH,
 } = require('./storageConfig');
 const { getWorkingMap }       = require('./contextMaps');
 const { listThreadSummaries } = require('./threadMemory');
@@ -38,6 +46,7 @@ const { listThreadSummaries } = require('./threadMemory');
 const FORGE_CORE_PATH      = path.join(FORGE_DIR, 'forge-core.json');
 const FORGE_MD_PATH        = path.join(FORGE_DIR, 'ember-node-forge-v1.3.md');
 const ACTIVE_BOOTSTRAP_PATH = path.join(BOOTSTRAP_DIR, 'active-bootstrap.json');
+const ROLLING_BOOTSTRAP_STALE_MS = 1000 * 60 * 60 * 24 * 7;
 
 // ── Forge v1.3 canonical markdown ─────────────────────────────────────────────
 
@@ -369,7 +378,7 @@ function summarizeHearthMap(map) {
     };
 }
 
-/** Extract a lean summary from the Workshop working map. */
+/** Extract a lean summary from the Ember Council working map. */
 function summarizeWorkshopMap(map) {
     if (!map) return null;
     const c = map.content || {};
@@ -392,6 +401,106 @@ function summarizeThresholdMap(map) {
     };
 }
 
+/**
+ * Build the Rolling Bootstrap continuity summary.
+ *
+ * This is intentionally compact and deterministic for Phase 16D:
+ * it consolidates existing context maps + thread memory into a
+ * single continuity layer without replacing archive/caches.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.activeArchetype]
+ * @param {string[]} [opts.recentDecisions]
+ * @param {string[]} [opts.openQuestions]
+ * @returns {object}
+ */
+function buildRollingBootstrap(opts) {
+    const { activeArchetype = null, recentDecisions = [], openQuestions = [] } = opts || {};
+    const now = new Date().toISOString();
+
+    const hearthMap = getWorkingMap('hearth');
+    const workshopMap = getWorkingMap('workshop');
+    const thresholdMap = getWorkingMap('threshold');
+    const threadSummaries = listThreadSummaries().slice(0, 12);
+
+    const threadThemes = threadSummaries
+        .flatMap(s => Array.isArray(s.themes) ? s.themes : [])
+        .filter(Boolean)
+        .map(String);
+    const mapThemes = [];
+    if (hearthMap && hearthMap.content && hearthMap.content.archiveByShelf) {
+        mapThemes.push(...Object.keys(hearthMap.content.archiveByShelf));
+    }
+    if (thresholdMap && thresholdMap.content && thresholdMap.content.byStatus) {
+        const waiting = Number((thresholdMap.content.byStatus || {}).waiting || 0);
+        if (waiting > 0) mapThemes.push('threshold intake');
+    }
+    if (workshopMap && workshopMap.content && Number(workshopMap.content.totalSources || 0) > 0) {
+        mapThemes.push('ember council drafting');
+    }
+
+    const activeThemes = Array.from(new Set([...threadThemes, ...mapThemes]))
+        .slice(0, 8);
+
+    const sourceThreads = threadSummaries.map(s => ({
+        id: s.id,
+        title: s.title || 'Untitled Thread',
+        remembered_at: s.rememberedAt || null,
+    }));
+
+    const projectCandidates = threadSummaries
+        .map(s => s.title)
+        .filter(Boolean)
+        .slice(0, 6);
+    const currentProjects = Array.from(new Set(projectCandidates));
+
+    const normalizedDecisions = Array.isArray(recentDecisions)
+        ? recentDecisions.filter(Boolean).map(String).slice(0, 8)
+        : [];
+    const normalizedQuestions = Array.isArray(openQuestions)
+        ? openQuestions.filter(Boolean).map(String).slice(0, 8)
+        : [];
+
+    const archetypeNotes = {
+        ember_prime: [],
+        builder: [],
+        warrior: [],
+        scholar: [],
+        scribe: [],
+        mystic: [],
+    };
+    if (activeArchetype && archetypeNotes[activeArchetype]) {
+        archetypeNotes[activeArchetype].push('Active archetype influence noted at refresh.');
+    } else {
+        archetypeNotes.ember_prime.push('Ember Prime continuity baseline active.');
+    }
+
+    const summaryParts = [];
+    if (activeThemes.length > 0) summaryParts.push('Active themes: ' + activeThemes.slice(0, 5).join(', ') + '.');
+    if (currentProjects.length > 0) summaryParts.push('Current projects: ' + currentProjects.slice(0, 3).join(', ') + '.');
+    if (normalizedQuestions.length > 0) summaryParts.push('Open questions: ' + normalizedQuestions.slice(0, 3).join('; ') + '.');
+    if (normalizedDecisions.length > 0) summaryParts.push('Recent decisions: ' + normalizedDecisions.slice(0, 3).join('; ') + '.');
+    if (sourceThreads.length > 0) summaryParts.push('Signal Threads groundwork: ' + sourceThreads.length + ' remembered thread summaries.');
+
+    return {
+        version: '0.1.0',
+        updated_at: now,
+        summary: summaryParts.join(' '),
+        active_themes: activeThemes,
+        current_projects: currentProjects,
+        open_questions: normalizedQuestions,
+        recent_decisions: normalizedDecisions,
+        archetype_notes: archetypeNotes,
+        source_threads: sourceThreads,
+        // Reserved for future place memory attachment:
+        // place_notes, field_observations, map_regions, waypoints, routes.
+        place_memory: {
+            enabled: false,
+            notes: [],
+        },
+    };
+}
+
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 /**
@@ -404,6 +513,57 @@ function loadBootstrap() {
     if (!fs.existsSync(ACTIVE_BOOTSTRAP_PATH)) return null;
     try { return JSON.parse(fs.readFileSync(ACTIVE_BOOTSTRAP_PATH, 'utf8')); }
     catch { return null; }
+}
+
+/**
+ * Load the Rolling Bootstrap from disk.
+ * Returns null if it does not exist or is unreadable.
+ *
+ * @returns {object|null}
+ */
+function loadRollingBootstrap() {
+    if (!fs.existsSync(ROLLING_BOOTSTRAP_PATH)) return null;
+    try { return JSON.parse(fs.readFileSync(ROLLING_BOOTSTRAP_PATH, 'utf8')); }
+    catch { return null; }
+}
+
+/**
+ * Return a compact status object for Rolling Bootstrap lifecycle visibility.
+ *
+ * @returns {{status: string, lastRefreshed: string|null, activeThemesCount: number, openQuestionsCount: number, summary: string, themes: string[]}}
+ */
+function getRollingBootstrapStatus() {
+    const rb = loadRollingBootstrap();
+    if (!rb) {
+        return {
+            status: fs.existsSync(ROLLING_BOOTSTRAP_PATH) ? 'failed' : 'not generated',
+            lastRefreshed: null,
+            activeThemesCount: 0,
+            openQuestionsCount: 0,
+            summary: '',
+            themes: [],
+        };
+    }
+
+    const refreshedAt = rb.updated_at || null;
+    let status = 'ready';
+    if (!refreshedAt) {
+        status = 'stale';
+    } else {
+        const ts = Date.parse(refreshedAt);
+        if (!Number.isFinite(ts) || (Date.now() - ts) > ROLLING_BOOTSTRAP_STALE_MS) {
+            status = 'stale';
+        }
+    }
+
+    return {
+        status,
+        lastRefreshed: refreshedAt,
+        activeThemesCount: Array.isArray(rb.active_themes) ? rb.active_themes.length : 0,
+        openQuestionsCount: Array.isArray(rb.open_questions) ? rb.open_questions.length : 0,
+        summary: typeof rb.summary === 'string' ? rb.summary : '',
+        themes: Array.isArray(rb.active_themes) ? rb.active_themes.slice(0, 5).map(String) : [],
+    };
 }
 
 /**
@@ -420,6 +580,20 @@ function refreshBootstrap(opts) {
     }
     fs.writeFileSync(ACTIVE_BOOTSTRAP_PATH, JSON.stringify(bootstrap, null, 2), 'utf8');
     return bootstrap;
+}
+
+/**
+ * Refresh Rolling Bootstrap continuity memory.
+ * Manual trigger only — do not call for every message.
+ *
+ * @param {object} [opts]
+ * @returns {object}
+ */
+function refreshRollingBootstrap(opts) {
+    const rollingBootstrap = buildRollingBootstrap(opts);
+    fs.mkdirSync(path.dirname(ROLLING_BOOTSTRAP_PATH), { recursive: true });
+    fs.writeFileSync(ROLLING_BOOTSTRAP_PATH, JSON.stringify(rollingBootstrap, null, 2), 'utf8');
+    return rollingBootstrap;
 }
 
 // ── Prompt formatters ─────────────────────────────────────────────────────────
@@ -477,7 +651,7 @@ function formatBootstrapForPrompt(bootstrap) {
         );
     }
     if (maps.workshop && (maps.workshop.totalSources || 0) > 0) {
-        lines.push('Workshop: ' + maps.workshop.totalSources + ' sources.');
+        lines.push('Ember Council: ' + maps.workshop.totalSources + ' sources.');
     }
     if (maps.threshold) {
         const waiting = (maps.threshold.byStatus || {}).waiting || 0;
@@ -500,6 +674,35 @@ function formatBootstrapForPrompt(bootstrap) {
     }
 
     lines.push('=== END BOOTSTRAP ===');
+    return lines.join('\n');
+}
+
+/**
+ * Format the Rolling Bootstrap as a compact continuity section.
+ * Intentionally avoids full JSON injection.
+ *
+ * @param {object} rollingBootstrap
+ * @returns {string}
+ */
+function formatRollingBootstrapForPrompt(rollingBootstrap) {
+    if (!rollingBootstrap) return '';
+    const lines = ['=== ROLLING BOOTSTRAP (Continuity) ==='];
+    if (rollingBootstrap.summary) {
+        lines.push(String(rollingBootstrap.summary).slice(0, 900));
+    }
+    const themes = Array.isArray(rollingBootstrap.active_themes)
+        ? rollingBootstrap.active_themes.slice(0, 5).map(String)
+        : [];
+    if (themes.length > 0) {
+        lines.push('Themes: ' + themes.join(', ') + '.');
+    }
+    const openQuestions = Array.isArray(rollingBootstrap.open_questions)
+        ? rollingBootstrap.open_questions.slice(0, 3).map(String)
+        : [];
+    if (openQuestions.length > 0) {
+        lines.push('Open questions: ' + openQuestions.join(' | ') + '.');
+    }
+    lines.push('=== END ROLLING BOOTSTRAP ===');
     return lines.join('\n');
 }
 
@@ -534,8 +737,14 @@ module.exports = {
     buildBootstrap,
     loadBootstrap,
     refreshBootstrap,
+    // Rolling Bootstrap
+    buildRollingBootstrap,
+    loadRollingBootstrap,
+    refreshRollingBootstrap,
+    getRollingBootstrapStatus,
     // Prompt helpers
     formatForgeCoreForPrompt,
     formatBootstrapForPrompt,
+    formatRollingBootstrapForPrompt,
     formatArchetypeForPrompt,
 };
