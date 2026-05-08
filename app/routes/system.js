@@ -438,8 +438,9 @@ function createSystemRouter({ migrationResult }) {
             }
             let memoryCompressionStatus = 'unchanged';
             try {
-                refreshMemoryCompression({ stage: 'all' });
-                memoryCompressionStatus = 'refreshed';
+                const memoryRefresh = refreshMemoryCompression({ stage: 'all' });
+                const refreshed = memoryRefresh && memoryRefresh.refreshed ? memoryRefresh.refreshed : {};
+                memoryCompressionStatus = Object.values(refreshed).some(Boolean) ? 'refreshed' : 'unchanged';
             } catch {
                 memoryCompressionStatus = 'refresh-failed';
             }

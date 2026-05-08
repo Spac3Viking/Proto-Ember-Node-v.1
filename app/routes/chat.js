@@ -50,6 +50,10 @@ const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
 const MAX_SIGNAL_TRACE_SOURCES = 8;
 const MAX_SIGNAL_TRACE_ROUTING_LIST = 6;
+// Preserve a small raw grounding floor even when summaries are present.
+const MIN_RAW_CHUNKS_WITH_SUMMARY = 3;
+// Use half of the normal raw chunk budget when summary layers are available.
+const SUMMARY_RAW_CHUNK_RATIO = 0.5;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
@@ -374,6 +378,19 @@ function compactList(list, limit = 5) {
     return list.map(String).filter(Boolean).slice(0, limit);
 }
 
+/**
+ * Build summary-first compressed context blocks.
+ * This produces compact layers (Rolling Bootstrap, archetype memory, cache/document summaries)
+ * that can be prepended before raw chunks to keep prompts lean while preserving grounding.
+ *
+ * @param {object} options
+ * @param {string} options.query
+ * @param {object|null} options.rollingBootstrap
+ * @param {string|null} options.activeArchetype
+ * @param {object[]} options.sourceTrace
+ * @param {number} [options.maxSummaryChars]
+ * @returns {{ block: string, summaryLayersUsed: { archetypeMemory: number, cacheSummaries: number, documentSummaries: number } }}
+ */
 function buildSummaryFirstContext({
     query,
     rollingBootstrap,
@@ -482,6 +499,10 @@ function buildSummaryFirstContext({
             documentSummaries: usedDocumentSummaries,
         },
     };
+}
+
+function computeRawChunkBudgetWithSummaries() {
+    return Math.max(MIN_RAW_CHUNKS_WITH_SUMMARY, Math.floor(MAX_CHAT_CONTEXT_CHUNKS * SUMMARY_RAW_CHUNK_RATIO));
 }
 
 /**
@@ -671,7 +692,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             sourceTrace: sources,
         });
         const rawChunksForPrompt = summaryFirst.block
-            ? retrieved.slice(0, Math.max(3, Math.floor(MAX_CHAT_CONTEXT_CHUNKS / 2)))
+            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries())
             : retrieved;
         let userContent    = buildGroundedPrompt({
             query,

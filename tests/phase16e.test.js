@@ -10,11 +10,13 @@ jest.mock('axios');
 
 describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry', () => {
     let dataRoot;
+    let tempRoots;
 
     beforeEach(() => {
         jest.resetModules();
         jest.clearAllMocks();
         dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-p16e-'));
+        tempRoots = [];
         process.env.EMBER_NODE_DATA_ROOT = dataRoot;
         delete process.env.EMBER_DATA_ROOT;
     });
@@ -22,6 +24,9 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
     afterEach(() => {
         delete process.env.EMBER_NODE_DATA_ROOT;
         delete process.env.EMBER_DATA_ROOT;
+        tempRoots.forEach(root => {
+            try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* ignore */ }
+        });
         try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* ignore */ }
     });
 
@@ -42,6 +47,19 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(documentSummaries.version).toBe('0.1.0');
         expect(archetypeMemory.version).toBe('0.1.0');
         expect(archetypeMemory.archetypes).toHaveProperty('scribe');
+    });
+
+    test('data root resolution remains stable when EMBER_DATA_ROOT is absent or conflicts', () => {
+        const conflictRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-conflict-'));
+        tempRoots.push(conflictRoot);
+        process.env.EMBER_DATA_ROOT = conflictRoot;
+        let sc = require('../app/storageConfig');
+        expect(sc.getDataRoot()).toBe(dataRoot);
+
+        delete process.env.EMBER_NODE_DATA_ROOT;
+        jest.resetModules();
+        sc = require('../app/storageConfig');
+        expect(sc.getDataRoot()).toBe(conflictRoot);
     });
 
     test('memory compression refresh endpoint supports staged and full refresh', async () => {

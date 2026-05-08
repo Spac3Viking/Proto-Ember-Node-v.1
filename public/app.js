@@ -711,6 +711,17 @@ function setTraceStatus(text) {
     if (el) el.textContent = text;
 }
 
+function formatMemoryFlow(memoryFlow) {
+    if (!memoryFlow) return null;
+    return [
+        'Rolling Bootstrap: ' + (memoryFlow.rollingBootstrap || 'unavailable'),
+        'Archetype Memory: ' + (memoryFlow.archetypeMemory || 'ember_prime'),
+        'Cache Summaries: ' + String(memoryFlow.cacheSummaries || 0),
+        'Document Summaries: ' + String(memoryFlow.documentSummaries || 0),
+        'Raw Chunks: ' + String(memoryFlow.rawChunks || 0),
+    ].join(' · ');
+}
+
 function renderSignalTrace(sources, signalTrace = null) {
     const MAX_SOURCE_LIST_DISPLAY_CHARS = 180;
     const MIN_TRUNCATION_POSITION = 40;
@@ -789,15 +800,7 @@ function renderSignalTrace(sources, signalTrace = null) {
     const rows = [
         {
             key: 'Memory',
-            value: memoryFlow
-                ? [
-                    'Rolling Bootstrap: ' + (memoryFlow.rollingBootstrap || 'missing'),
-                    'Archetype Memory: ' + (memoryFlow.archetypeMemory || 'ember_prime'),
-                    'Cache Summaries: ' + String(memoryFlow.cacheSummaries || 0),
-                    'Document Summaries: ' + String(memoryFlow.documentSummaries || 0),
-                    'Raw Chunks: ' + String(memoryFlow.rawChunks || 0),
-                ].join(' · ')
-                : null,
+            value: formatMemoryFlow(memoryFlow),
         },
         {
             key: 'Rolling Bootstrap',
@@ -3854,20 +3857,20 @@ async function loadThresholdTools() {
 
         // Show all non-admitted detected runtimes (+ not_detected as dim)
         // Persistently rejected runtimes are shown as a separate dim section
-        const visible  = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
+        const pendingRuntimes = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
         const rejected = tools.filter(t => !t.trusted && t.intake && t.intake.state === 'rejected');
 
         // Show guided setup if no running runtimes at all
         const anyRunning = tools.some(t => t.running === true);
         if (guideEl) guideEl.style.display = anyRunning ? 'none' : 'flex';
 
-        if (visible.length === 0 && rejected.length === 0) {
+        if (pendingRuntimes.length === 0 && rejected.length === 0) {
             listEl.innerHTML = '<span class="message-system">No pending runtimes. All detected runtimes have been admitted.</span>';
             return;
         }
 
         listEl.innerHTML = '';
-        visible.forEach(tool => renderThresholdToolRow(tool, active, listEl));
+        pendingRuntimes.forEach(tool => renderThresholdToolRow(tool, active, listEl));
 
         if (rejected.length > 0) {
             const sep = document.createElement('div');

@@ -37,6 +37,9 @@ const THEME_RULES = [
     { id: 'core_orientation', label: 'core orientation', match: ['orientation', 'framework', 'ontology', 'principle'] },
     { id: 'sentinel_identity', label: 'sentinel identity', match: ['warrior', 'builder', 'scholar', 'scribe', 'mystic', 'sentinel'] },
 ];
+// Use a minimum boundary so clipped summaries do not collapse into ultra-short fragments.
+const MIN_WORD_BOUNDARY_POSITION = 60;
+const SYMBOLIC_GLYPHS_REGEX = /[ᚠ-ᛯ🜂🜁🜃🜄]/g;
 
 function readJson(pathname) {
     if (!fs.existsSync(pathname)) return null;
@@ -65,7 +68,8 @@ function summarizeText(rawText, maxChars = 320) {
     if (text.length <= maxChars) return text;
     const clipped = text.slice(0, maxChars);
     const cut = clipped.lastIndexOf(' ');
-    return (cut > 60 ? clipped.slice(0, cut) : clipped).trim() + '…';
+    const shouldRespectWordBoundary = cut > MIN_WORD_BOUNDARY_POSITION;
+    return (shouldRespectWordBoundary ? clipped.slice(0, cut) : clipped).trim() + '…';
 }
 
 function detectThemes(text, limit = 5) {
@@ -112,7 +116,7 @@ function buildDocumentSummaries() {
         const mergedText = [source.description, source.shelf, source.path, textSample].filter(Boolean).join(' ');
         const themes = detectThemes(mergedText, 4);
         const preferredArchetypes = inferPreferredArchetypes(themes);
-        const symbolMatches = Array.from(new Set((mergedText.match(/[ᚠ-ᛯ🜂🜁🜃🜄]/g) || [])));
+        const symbolMatches = Array.from(new Set((mergedText.match(SYMBOLIC_GLYPHS_REGEX) || [])));
 
         documents[docKey] = {
             title: title || docKey,
@@ -193,6 +197,15 @@ function buildCacheSummaries(documentSummaries) {
     };
 }
 
+/**
+ * Build archetype memory geometry from compressed document/cache maps.
+ * The output keeps archetypes as retrieval geometries (domains, source priorities,
+ * compression posture), not personalities.
+ *
+ * @param {object} documentSummaries
+ * @param {object} cacheSummaries
+ * @returns {{version: string, updated_at: string, archetypes: object}}
+ */
 function buildArchetypeMemory(documentSummaries, cacheSummaries) {
     const docs = Object.values((documentSummaries && documentSummaries.documents) || {});
     const caches = Object.values((cacheSummaries && cacheSummaries.caches) || {});
@@ -278,6 +291,14 @@ function normalizeStage(stage) {
     return STAGES.ALL;
 }
 
+/**
+ * Manually refresh memory compression layers.
+ * Supports staged runs (`document_summaries`, `cache_summaries`, `archetype_memory`)
+ * or a full pass (`all`).
+ *
+ * @param {{stage?: string}} [options]
+ * @returns {{stage: string, refreshed: {documentSummaries: boolean, cacheSummaries: boolean, archetypeMemory: boolean}, documentSummaries: object|null, cacheSummaries: object|null, archetypeMemory: object|null}}
+ */
 function refreshMemoryCompression({ stage = STAGES.ALL } = {}) {
     const normalizedStage = normalizeStage(stage);
     let documentSummaries = loadDocumentSummaries();
@@ -330,6 +351,12 @@ function loadArchetypeMemory() {
     return readJson(ARCHETYPE_MEMORY_PATH);
 }
 
+/**
+ * Resolve the archetype memory profile used for lightweight retrieval influence.
+ *
+ * @param {string} archetypeId
+ * @returns {{preferredSources: string[], preferredDomains: string[]}|object|null}
+ */
 function getArchetypeMemoryProfile(archetypeId) {
     const id = String(archetypeId || 'ember_prime').trim().toLowerCase() || 'ember_prime';
     const memory = loadArchetypeMemory();
@@ -360,16 +387,16 @@ function getMemoryCompressionStatus() {
     };
 }
 
-function buildSourceAbstract({ sourceId, sourceName, title, cacheId }) {
-    const documentSummaries = loadDocumentSummaries();
-    const cacheSummaries = loadCacheSummaries();
+function buildSourceAbstract({ sourceId, sourceName, title, cacheId, documentSummaries = null, cacheSummaries = null }) {
+    const docs = documentSummaries || loadDocumentSummaries();
+    const caches = cacheSummaries || loadCacheSummaries();
     const name = String(sourceName || title || sourceId || '').trim();
     const key = slugify(path.basename(name, path.extname(name))) || slugify(sourceId);
-    const docSummary = (documentSummaries && documentSummaries.documents && key)
-        ? documentSummaries.documents[key]
+    const docSummary = (docs && docs.documents && key)
+        ? docs.documents[key]
         : null;
-    const cacheSummary = (cacheId && cacheSummaries && cacheSummaries.caches)
-        ? cacheSummaries.caches[String(cacheId)]
+    const cacheSummary = (cacheId && caches && caches.caches)
+        ? caches.caches[String(cacheId)]
         : null;
 
     return {
