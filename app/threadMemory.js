@@ -9,7 +9,7 @@
  *   DATA_ROOT/hearth/remembered-threads/<threadId>.json
  *
  * These summaries become part of Hearth's long-term continuity and are
- * included in the Hearth context map.
+ * included in the Hearth context memory layer and Rolling Bootstrap groundwork.
  *
  * Summary schema:
  *   {

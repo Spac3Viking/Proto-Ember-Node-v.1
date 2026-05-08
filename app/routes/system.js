@@ -33,7 +33,10 @@ const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
 const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCaches }                            = require('../cacheLoader');
 const { loadIntakeState }                           = require('../intakeState');
-const { loadBootstrap, refreshBootstrap }           = require('../bootstrap');
+const {
+    loadBootstrap, refreshBootstrap,
+    getRollingBootstrapStatus, refreshRollingBootstrap,
+} = require('../bootstrap');
 const { loadCourtConfig }                           = require('../courtConfig');
 // Reuse canonical archive cache logic for installed/update status.
 const { compareInstalledWithUpstream } = require('../archiveCacheService');
@@ -195,12 +198,13 @@ function createSystemRouter({ migrationResult }) {
             ? fs.readdirSync(USER_CACHES_DIR).filter(f => f.endsWith('.json')).length
             : 0;
 
-        // Phase 11.5: Forge + Bootstrap status
+        // Phase 16D: Forge + Rolling Bootstrap status
         const forgeLoaded   = fs.existsSync(FORGE_CORE_PATH);
-        const bootstrap     = loadBootstrap();
+        const bootstrap = loadBootstrap();
         const bootstrapStatus = bootstrap ? 'ready' : 'not generated';
-        const lastRefresh     = bootstrap ? (bootstrap.nodeState || {}).lastRefresh || null : null;
+        const legacyLastRefresh = bootstrap ? (bootstrap.nodeState || {}).lastRefresh || null : null;
         const activeArchetype = bootstrap ? (bootstrap.nodeState || {}).activeArchetype || null : null;
+        const rollingBootstrap = getRollingBootstrapStatus();
 
         res.json({
             model:             getSelectedModel(),
@@ -229,8 +233,14 @@ function createSystemRouter({ migrationResult }) {
             // Phase 11.5
             forgeLoaded,
             bootstrapStatus,
-            lastBootstrapRefresh: lastRefresh,
+            lastBootstrapRefresh: legacyLastRefresh,
             activeArchetype,
+            rollingBootstrapStatus: rollingBootstrap.status,
+            rollingBootstrapLastRefreshed: rollingBootstrap.lastRefreshed,
+            rollingBootstrapActiveThemesCount: rollingBootstrap.activeThemesCount,
+            rollingBootstrapOpenQuestionsCount: rollingBootstrap.openQuestionsCount,
+            rollingBootstrapSummary: rollingBootstrap.summary,
+            rollingBootstrapThemes: rollingBootstrap.themes,
         });
     });
 
@@ -407,17 +417,25 @@ function createSystemRouter({ migrationResult }) {
             ensureCanonicalDataFiles();
             const cleanup = runLegacyCleanupPass();
             let bootstrapStatus = 'unchanged';
+            let rollingBootstrapStatus = 'unchanged';
             try {
                 refreshBootstrap();
                 bootstrapStatus = 'refreshed';
             } catch {
                 bootstrapStatus = 'refresh-failed';
             }
+            try {
+                refreshRollingBootstrap();
+                rollingBootstrapStatus = 'refreshed';
+            } catch {
+                rollingBootstrapStatus = 'refresh-failed';
+            }
 
             return res.json({
                 success: true,
                 message: 'Node refreshed. Local memory remains intact.',
                 bootstrapStatus,
+                rollingBootstrapStatus,
                 cleanup,
                 checkedAt: new Date().toISOString(),
             });

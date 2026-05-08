@@ -54,6 +54,7 @@
  *     threads/                 — chat thread records
  *     caches/              — user-created cache metadata (NOT bundled caches)
  *     system/                  — system state
+ *       memory/                — continuity memory artifacts (Rolling Bootstrap)
  *     exports/                 — outbound packages
  *
  * Legacy migration
@@ -160,6 +161,10 @@ const ARCHETYPES_DIR          = path.join(FORGE_DIR, 'archetypes');
 
 /** Active Bootstrap storage directory */
 const BOOTSTRAP_DIR           = path.join(SYSTEM_DIR, 'bootstrap');
+/** System continuity memory directory */
+const SYSTEM_MEMORY_DIR       = path.join(SYSTEM_DIR, 'memory');
+/** Rolling Bootstrap storage path */
+const ROLLING_BOOTSTRAP_PATH  = path.join(SYSTEM_MEMORY_DIR, 'rolling-bootstrap.json');
 
 /** System config, prompts, and tools directories */
 const SYSTEM_CONFIG_DIR       = path.join(SYSTEM_DIR, 'config');
@@ -267,6 +272,28 @@ const DEFAULT_CORE_ARCHIVE_MANIFEST = {
 
 const DEFAULT_TOOLS_REGISTRY = { tools: [], active: {} };
 const DEFAULT_INTAKE_STATE = { files: {}, tools: {} };
+const DEFAULT_ROLLING_BOOTSTRAP = {
+    version: '0.1.0',
+    updated_at: null,
+    summary: '',
+    active_themes: [],
+    current_projects: [],
+    open_questions: [],
+    recent_decisions: [],
+    archetype_notes: {
+        ember_prime: [],
+        builder: [],
+        warrior: [],
+        scholar: [],
+        scribe: [],
+        mystic: [],
+    },
+    source_threads: [],
+    place_memory: {
+        enabled: false,
+        notes: [],
+    },
+};
 
 // ── First-run initialisation ──────────────────────────────────────────────────
 
@@ -301,6 +328,7 @@ function ensureDataRoot() {
         FORGE_DIR,
         ARCHETYPES_DIR,
         BOOTSTRAP_DIR,
+        SYSTEM_MEMORY_DIR,
         // Phase 11.7: Core Archive + Cache Structure
         ARCHIVE_CORE_DIR,
         ARCHIVE_CACHES_DIR,
@@ -347,6 +375,7 @@ function ensureCanonicalDataFiles() {
     writeJsonIfMissing(CORE_ARCHIVE_MANIFEST_PATH, DEFAULT_CORE_ARCHIVE_MANIFEST);
     writeJsonIfMissing(TOOLS_REGISTRY_PATH, DEFAULT_TOOLS_REGISTRY);
     writeJsonIfMissing(INTAKE_STATE_PATH, DEFAULT_INTAKE_STATE);
+    writeJsonIfMissing(ROLLING_BOOTSTRAP_PATH, DEFAULT_ROLLING_BOOTSTRAP);
 }
 
 // ── Legacy migration ──────────────────────────────────────────────────────────
@@ -579,6 +608,8 @@ module.exports = {
     FORGE_DIR,
     ARCHETYPES_DIR,
     BOOTSTRAP_DIR,
+    SYSTEM_MEMORY_DIR,
+    ROLLING_BOOTSTRAP_PATH,
     // Phase 11.7: Core Archive + Cache Structure
     ARCHIVE_CORE_DIR,
     ARCHIVE_CORE_DIRS,

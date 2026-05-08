@@ -1,19 +1,20 @@
 'use strict';
 
 /**
- * Ember Node v.ᚠ — Chat Routes (Phase 11.5: Forge + Bootstrap identity layer)
+ * Ember Node v.ᚠ — Chat Routes (Phase 16D: Rolling Bootstrap continuity layer)
  *
  * POST /chat          (legacy Phase 2 direct-Ollama endpoint)
  * POST /api/chat      (grounded Heart chat with retrieval)
  *
  * Phase 11:   Chat context is room-bounded with cross-room context maps.
- * Phase 11.5: Chat assembly includes identity (Forge) + bootstrap + retrieval +
+ * Phase 11.5: Chat assembly includes identity (Forge) + continuity + retrieval +
  *             optional archetype overlay.
- * Phase 11.6: Enforced non-negotiable assembly order:
- *   [1] Bootstrap  — current context state (maps + thread memory + node state)
- *   [2] Forge Core — identity + epistemic rules
- *   [3] Retrieval  — sources + chunks
- *   [4] Archetype  — overlay modifier, last (optional)
+ * Phase 16D assembly order:
+ *   [1] Forge Core identity
+ *   [2] Rolling Bootstrap continuity summary
+ *   [3] Ember Prime continuity layer (legacy active bootstrap)
+ *   [4] Optional archetype modifier
+ *   [5] Retrieval context + user message
  */
 
 const express = require('express');
@@ -27,6 +28,7 @@ const { assembleRoomContext }                         = require('../contextMaps'
 const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
     loadBootstrap, refreshBootstrap,
+    loadRollingBootstrap, formatRollingBootstrapForPrompt,
     loadForgeCore, loadArchetype,
     formatForgeCoreForPrompt,
     formatBootstrapForPrompt,
@@ -90,7 +92,7 @@ const ROOM_SYSTEM_PROMPTS = {
     hearth: HEART_SYSTEM_PROMPT,
     workshop: (
         'You are Ember Prime operating in Ember Council mode — a focused drafting and weaving ' +
-        'companion. Your current context is the active Ember Council: notes, projects, drafts, ' +
+        'companion. Your current context is the active Ember Council: Council context notes, drafts, ' +
         'and documents under construction. ' +
         '\n\n' +
         'In Ember Council mode you:\n' +
@@ -495,10 +497,10 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const sources = buildSignalTrace(retrieved);
 
-        // ── Phase 11.6: Enforced prompt assembly order ────────────────────────
-        // Non-negotiable order: [1] Bootstrap → [2] Forge Core → [3] Retrieval → [4] Archetype
+        // ── Phase 16D: Prompt assembly order ───────────────────────────────────
+        // Forge Core → Rolling Bootstrap → Ember Prime continuity → Archetype → Retrieval
 
-        // [1] Bootstrap — must always load first; auto-regenerate if missing
+        // Legacy Ember Prime continuity layer (active-bootstrap)
         let bootstrap = loadBootstrap();
         if (!bootstrap) {
             console.warn('[/api/chat] Bootstrap missing — regenerating now.');
@@ -507,11 +509,26 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         }
         console.log('[/api/chat] bootstrap=' + (bootstrap ? 'loaded' : 'unavailable'));
 
-        // [2] Forge Core — must always be included; never conditional
+        const rollingBootstrap = loadRollingBootstrap();
+        let rollingBootstrapStatus = 'missing';
+        if (rollingBootstrap) {
+            const ts = Date.parse(rollingBootstrap.updated_at || '');
+            if (Number.isFinite(ts) && (Date.now() - ts) <= (1000 * 60 * 60 * 24 * 7)) {
+                rollingBootstrapStatus = 'ready';
+            } else {
+                rollingBootstrapStatus = 'stale';
+            }
+        }
+        const rollingBootstrapThemes = rollingBootstrap && Array.isArray(rollingBootstrap.active_themes)
+            ? rollingBootstrap.active_themes.map(String).slice(0, 5)
+            : [];
+        console.log('[/api/chat] rolling-bootstrap=' + rollingBootstrapStatus);
+
+        // Forge Core identity layer
         const forgeCore = loadForgeCore();
         console.log('[/api/chat] forge-core=' + (forgeCore ? 'injected' : 'unavailable'));
 
-        // [3] Retrieval — grounded source context (must follow identity, never precede it)
+        // Retrieval context (after identity/continuity layers)
         const roomPreamble = buildRoomContextPreamble(activeRoom);
         let userContent    = buildGroundedPrompt({
             query,
@@ -526,31 +543,27 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         }
         console.log('[/api/chat] retrieval=' + (retrieved.length > 0 ? retrieved.length + ' chunks' : 'none'));
 
-        // [4] Archetype overlay — last modifier, appended after retrieval
+        // Optional archetype modifier
         let archetypeObj = null;
         if (!selectedCourtMember && activeArchetypeId && typeof activeArchetypeId === 'string') {
             archetypeObj = loadArchetype(activeArchetypeId);
         }
 
         // Assemble final prompt in required order:
-        // Bootstrap → Forge Core prepended before retrieval; Archetype appended after
+        // Forge Core → Rolling Bootstrap → Ember Prime continuity → optional archetype → retrieval
+        const forgePart = formatForgeCoreForPrompt(forgeCore);
+        const rollingBootstrapPart = formatRollingBootstrapForPrompt(rollingBootstrap);
         const bootstrapPart = formatBootstrapForPrompt(bootstrap);
-        const forgePart     = formatForgeCoreForPrompt(forgeCore);
         const archetypePart = selectedCourtMember
             ? buildCourtPromptModifier(selectedCourtMember)
             : (archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '');
 
-        const identityPreamble = [bootstrapPart, forgePart]
+        const identityPreamble = [forgePart, rollingBootstrapPart, bootstrapPart, archetypePart]
             .filter(Boolean)
             .join('\n\n');
 
         if (identityPreamble) {
             userContent = identityPreamble + '\n\n' + userContent;
-        }
-
-        // Archetype is the last modifier — appended after retrieval content
-        if (archetypePart) {
-            userContent = userContent + '\n\n' + archetypePart;
         }
 
         const retrievalStateBlock = `=== Retrieval State ===
@@ -657,6 +670,8 @@ state: ${retrievalState}
             model: heart.model,
             provider: 'Ollama',
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
+            rollingBootstrapStatus,
+            rollingBootstrapThemes,
         };
 
         const activeArchetype = selectedCourtMember
