@@ -51,43 +51,29 @@ function triageFile(filename) {
  * @returns {{ changed: object[] }}
  */
 function getChangedFilesSummary(manifests) {
-    const byPath = {};
-    Object.values(manifests).forEach(m => {
-        if (m.path) byPath[m.path.replace(/\\/g, '/')] = m;
-    });
-
     const changed = [];
-
-    for (const room of ['threshold', 'workshop', 'hearth']) {
-        const roomDir = path.join(DATA_ROOT, room);
-        if (!fs.existsSync(roomDir)) continue;
-
-        let entries;
-        try { entries = fs.readdirSync(roomDir, { withFileTypes: true }); }
-        catch { continue; }
-
-        for (const entry of entries) {
-            if (!entry.isFile()) continue;
-            if (DETECT_IGNORE_FILES.has(entry.name)) continue;
-            const ext = path.extname(entry.name).toLowerCase();
-            if (!DETECT_SUPPORTED_EXTS.has(ext)) continue;
-
-            const relPath = room + '/' + entry.name;
-            const absPath = path.join(roomDir, entry.name);
-            let stats;
-            try { stats = fs.statSync(absPath); }
-            catch { continue; }
-
-            const manifest = byPath[relPath];
-            if (!manifest || !manifest.ingestTimestamp) continue;
-
-            const ingestMs = new Date(manifest.ingestTimestamp).getTime();
-            const mtimeMs  = stats.mtime.getTime();
-            if (mtimeMs > ingestMs + 2000) {
-                changed.push({ filename: entry.name, path: relPath, room, sourceId: manifest.id });
-            }
+    const monitoredPrefixes = ['threshold/inbox/', 'archive/core/', 'archive/caches/'];
+    Object.values(manifests).forEach(manifest => {
+        const relPath = String(manifest.path || '').replace(/\\/g, '/');
+        if (!manifest.ingestTimestamp || !relPath) return;
+        if (!monitoredPrefixes.some(prefix => relPath.startsWith(prefix))) return;
+        const ext = path.extname(relPath).toLowerCase();
+        if (!DETECT_SUPPORTED_EXTS.has(ext)) return;
+        const absPath = path.resolve(DATA_ROOT, relPath);
+        if (!fs.existsSync(absPath)) return;
+        let stats;
+        try { stats = fs.statSync(absPath); } catch { return; }
+        const ingestMs = new Date(manifest.ingestTimestamp).getTime();
+        const mtimeMs  = stats.mtime.getTime();
+        if (mtimeMs > ingestMs + 2000) {
+            changed.push({
+                filename: path.basename(relPath),
+                path: relPath,
+                room: relPath.startsWith('threshold/inbox/') ? 'threshold' : 'archive',
+                sourceId: manifest.id,
+            });
         }
-    }
+    });
 
     return { changed };
 }

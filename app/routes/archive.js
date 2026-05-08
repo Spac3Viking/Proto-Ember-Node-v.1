@@ -55,6 +55,25 @@ function stripMarkdownFrontmatter(text) {
     return text.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(\r?\n)?/, '');
 }
 
+function extractMarkdownDisplayTitle(content, fallbackTitle) {
+    const fallback = String(fallbackTitle || '').trim() || 'Untitled';
+    const text = typeof content === 'string' ? content : '';
+    const h1Match = text.match(/^\s*#\s+(.+?)\s*$/m);
+    if (h1Match && h1Match[1]) {
+        const title = h1Match[1].replace(/\s+/g, ' ').trim();
+        if (title) return title;
+    }
+    const frontmatterMatch = text.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+    if (frontmatterMatch && frontmatterMatch[1]) {
+        const titleMatch = frontmatterMatch[1].match(/^\s*title\s*:\s*["']?(.+?)["']?\s*$/mi);
+        if (titleMatch && titleMatch[1]) {
+            const title = titleMatch[1].replace(/\s+/g, ' ').trim();
+            if (title) return title;
+        }
+    }
+    return fallback;
+}
+
 function toPosixRelative(baseDir, absPath) {
     return path.relative(baseDir, absPath).replace(/\\/g, '/');
 }
@@ -69,7 +88,7 @@ function isPathInside(baseDir, targetPath) {
     return target === root || target.startsWith(root + path.sep);
 }
 
-function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix) {
+function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix, sourceLabel) {
     if (!fs.existsSync(baseDir)) return [];
     const out = [];
     const stack = [baseDir];
@@ -90,6 +109,7 @@ function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix) {
                 entryId: Buffer.from(entryRootKey + '|' + rel, 'utf8').toString('base64url'),
                 title: path.basename(entry.name, path.extname(entry.name)),
                 sourcePath: sourcePrefix + '/' + rel,
+                sourceLabel: sourceLabel || 'Archive',
                 relativePath: rel,
                 size: stat.size,
                 updatedAt: stat.mtime.toISOString(),
@@ -116,7 +136,11 @@ function resolveReaderEntry(entryId) {
     if (rootKey === 'archive-core') {
         const abs = path.resolve(ARCHIVE_CORE_DIR, relativePath);
         if (!isPathInside(ARCHIVE_CORE_DIR, abs)) return null;
-        return { absolutePath: abs, sourcePath: 'archive/core/' + relativePath };
+        return {
+            absolutePath: abs,
+            sourcePath: 'archive/core/' + relativePath,
+            sourceLabel: 'Core Cache',
+        };
     }
 
     if (rootKey.startsWith('archive-cache/')) {
@@ -125,7 +149,11 @@ function resolveReaderEntry(entryId) {
         const cacheRoot = path.join(ARCHIVE_CACHES_DIR, cacheId);
         const abs = path.resolve(cacheRoot, relativePath);
         if (!isPathInside(cacheRoot, abs)) return null;
-        return { absolutePath: abs, sourcePath: 'archive/caches/' + cacheId + '/' + relativePath };
+        return {
+            absolutePath: abs,
+            sourcePath: 'archive/caches/' + cacheId + '/' + relativePath,
+            sourceLabel: /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
+        };
     }
 
     return null;
@@ -154,7 +182,7 @@ router.get('/api/archive', readLimiter, (req, res) => {
  * Return a cache-aware markdown catalog for local archive roots.
  */
 router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
-    const coreFiles = listMarkdownFilesRecursive(ARCHIVE_CORE_DIR, 'archive-core', 'archive/core');
+    const coreFiles = listMarkdownFilesRecursive(ARCHIVE_CORE_DIR, 'archive-core', 'archive/core', 'Core Cache');
     const cacheGroups = fs.existsSync(ARCHIVE_CACHES_DIR)
         ? fs.readdirSync(ARCHIVE_CACHES_DIR, { withFileTypes: true })
             .filter(entry => entry.isDirectory() && CACHE_ID_PATTERN.test(entry.name))
@@ -170,6 +198,7 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
                         cacheRoot,
                         'archive-cache/' + cacheId,
                         'archive/caches/' + cacheId,
+                        /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
                     ),
                 };
             })
@@ -208,11 +237,13 @@ router.get('/api/archive/reader/document/:entryId', readLimiter, (req, res) => {
     }
     const raw = fs.readFileSync(resolved.absolutePath, 'utf8');
     const content = stripMarkdownFrontmatter(raw);
+    const fallbackTitle = path.basename(resolved.absolutePath, '.md');
     res.json({
         success: true,
         entryId: req.params.entryId,
         sourcePath: resolved.sourcePath,
-        title: path.basename(resolved.absolutePath, '.md'),
+        sourceLabel: resolved.sourceLabel || 'Archive Cache',
+        title: extractMarkdownDisplayTitle(content, fallbackTitle),
         contentType: 'text/markdown',
         content,
     });

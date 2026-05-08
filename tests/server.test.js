@@ -255,61 +255,6 @@ describe('POST /api/system/shutdown', () => {
     });
 });
 
-/* ─────────────────────────────────────────────────────────────────
-   Phase 6 — Detected Files Endpoints
-   ─────────────────────────────────────────────────────────────── */
-
-describe('GET /api/detected-files', () => {
-    test('returns 200 with unmanaged and changed arrays', async () => {
-        const res = await request(app).get('/api/detected-files');
-        expect(res.status).toBe(200);
-        expect(Array.isArray(res.body.unmanaged)).toBe(true);
-        expect(Array.isArray(res.body.changed)).toBe(true);
-    });
-});
-
-describe('POST /api/detected-files/import', () => {
-    test('returns 400 when filename is missing', async () => {
-        const res = await request(app)
-            .post('/api/detected-files/import')
-            .send({ room: 'threshold' });
-        expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(/filename/i);
-    });
-
-    test('returns 400 when room is invalid', async () => {
-        const res = await request(app)
-            .post('/api/detected-files/import')
-            .send({ filename: 'test.txt', room: 'invalid-room' });
-        expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(/room/i);
-    });
-
-    test('returns 404 when file does not exist on disk', async () => {
-        const res = await request(app)
-            .post('/api/detected-files/import')
-            .send({ filename: 'nonexistent-file-xyz.txt', room: 'threshold' });
-        expect(res.status).toBe(404);
-    });
-});
-
-describe('POST /api/detected-files/acknowledge', () => {
-    test('returns 400 when sourceId is missing', async () => {
-        const res = await request(app)
-            .post('/api/detected-files/acknowledge')
-            .send({});
-        expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(/sourceId/i);
-    });
-
-    test('returns 404 when source is not in manifest', async () => {
-        const res = await request(app)
-            .post('/api/detected-files/acknowledge')
-            .send({ sourceId: 'nonexistent-source-id-xyz' });
-        expect(res.status).toBe(404);
-    });
-});
-
 describe('Threshold inbox import + reader endpoints', () => {
     let importedPath = null;
 
@@ -343,7 +288,21 @@ describe('Threshold inbox import + reader endpoints', () => {
         expect(res.body.success).toBe(true);
         expect(res.body.sourceLabel).toBe('Threshold');
         expect(res.body.contentType).toBe('text/markdown');
+        expect(res.body.title).toBe('Field Notes');
         expect(res.body.content).toMatch(/Field Notes/);
+    });
+
+    test('GET /api/threshold/files/content falls back to frontmatter title when H1 is missing', async () => {
+        const upload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from('---\ntitle: Ember Memo\n---\nBody\n', 'utf8'), 'memo.md');
+        const memoPath = upload.body.imported[0].path;
+        const res = await request(app)
+            .get('/api/threshold/files/content')
+            .query({ path: memoPath });
+        expect(res.status).toBe(200);
+        expect(res.body.title).toBe('Ember Memo');
+        await request(app).delete('/api/threshold/files').send({ path: memoPath });
     });
 
     test('DELETE /api/threshold/files deletes imported inbox file', async () => {

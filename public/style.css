@@ -1175,55 +1175,76 @@ button.secondary:disabled {
 .threshold-file-list {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  max-height: 220px;
+  gap: 0.45rem;
+  max-height: 300px;
   overflow-y: auto;
 }
 
 .threshold-file-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.35rem 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(150px, 1fr) minmax(170px, 1.1fr);
+  align-items: start;
+  padding: 0.5rem 0.65rem;
   border-radius: var(--radius-sm);
   background: hsla(120, 15%, 5%, 0.4);
-  border: 1px solid hsla(140, 100%, 70%, 0.06);
-  gap: 0.5rem;
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  gap: 0.65rem;
 }
 
-.threshold-import-header,
-.threshold-import-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 2fr) 0.8fr 0.8fr 1.2fr 1.4fr minmax(220px, 1.6fr);
-  gap: 0.45rem;
-  align-items: center;
+.threshold-file-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
 }
 
-.threshold-import-header {
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--archive-muted);
-  padding: 0.2rem 0.4rem;
+.threshold-file-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
 }
 
-.threshold-import-row {
-  justify-content: unset;
+.threshold-file-icon {
+  color: var(--gf-wire-amber);
+  font-size: 0.83rem;
+  line-height: 1;
 }
 
-.threshold-file-name {
-  font-size: 0.78rem;
+.threshold-file-title {
+  font-size: 0.8rem;
   color: var(--archive-text);
-  flex: 1;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.threshold-file-extension {
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  color: var(--archive-muted);
+  text-transform: uppercase;
+}
+
+.threshold-file-name,
+.threshold-file-detail {
+  font-size: 0.67rem;
+  color: var(--archive-muted);
+}
+
+.threshold-file-state {
+  font-size: 0.68rem;
+  color: var(--gf-wire-green);
+  letter-spacing: 0.04em;
+  align-self: center;
+  padding-top: 0.15rem;
 }
 
 .threshold-file-actions {
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.35rem;
-  flex-shrink: 0;
 }
 
 .threshold-action-btn {
@@ -2203,48 +2224,6 @@ button.secondary:disabled {
   transform: translateX(-50%) translateY(0);
 }
 
-/* ── Phase 6 — Detected Files Notice ────────────────────────────────────────── */
-
-.detected-notice {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 1rem;
-  background: hsla(38, 100%, 50%, 0.08);
-  border: 1px solid hsla(38, 100%, 70%, 0.25);
-  border-radius: var(--radius-md);
-  font-size: 0.78rem;
-  color: var(--gf-wire-amber);
-  flex-wrap: wrap;
-}
-
-.detected-notice-icon {
-  font-size: 1rem;
-  opacity: 0.7;
-}
-
-.detected-notice-text {
-  flex: 1;
-  min-width: 120px;
-  letter-spacing: 0.03em;
-}
-
-.detected-dismiss-btn {
-  background: none;
-  border: none;
-  color: var(--archive-muted);
-  cursor: pointer;
-  font-size: 0.65rem;
-  padding: 0.1rem 0.3rem;
-  opacity: 0.6;
-  transition: opacity 0.15s;
-}
-
-.detected-dismiss-btn:hover {
-  opacity: 1;
-  color: var(--gf-ember-orange);
-}
-
 /* ── Phase 6 — Threshold Intake Queue ───────────────────────────────────────── */
 
 .threshold-queue-header {
@@ -2301,15 +2280,6 @@ button.secondary:disabled {
 .threshold-queue-entry.status-importing {
   border-color: hsla(38, 100%, 70%, 0.25);
   background: hsla(38, 15%, 6%, 0.6);
-}
-
-.threshold-queue-entry.status-detected {
-  border-color: hsla(200, 100%, 70%, 0.2);
-}
-
-.threshold-queue-entry.status-changed {
-  border-color: hsla(38, 100%, 70%, 0.3);
-  background: hsla(38, 10%, 5%, 0.6);
 }
 
 .tq-meta {
