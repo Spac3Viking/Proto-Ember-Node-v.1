@@ -9,8 +9,6 @@
  *   POST /api/sources/:id/reject       — persistent file rejection
  *   POST /api/tools/:id/inspect        — mark tool as inspected
  *   POST /api/tools/:id/reject         — persistent tool rejection
- *   GET  /api/detected-files           — rejected files filtered out
- *   POST /api/detected-files/acknowledge — persists lastKnownMtime
  *   GET  /api/threshold/list           — intake field included per file
  *   GET  /api/tools                    — intake field included per tool
  */
@@ -328,93 +326,6 @@ describe('POST /api/tools/:id/reject', () => {
         await request(app).post('/api/tools/ollama-local/reject');
         const state = loadIntakeState();
         expect(state.tools['ollama-local'].state).toBe('rejected');
-    });
-});
-
-/* ─── GET /api/detected-files filters rejected items ─────────── */
-
-describe('GET /api/detected-files — rejection filtering', () => {
-    const thresholdDir = path.join(tmpDataRoot, 'threshold');
-
-    beforeEach(() => {
-        saveIntakeState({ files: {}, tools: {} });
-        // Ensure threshold dir exists
-        fs.mkdirSync(thresholdDir, { recursive: true });
-    });
-
-    afterEach(() => {
-        // Clean up test files
-        try {
-            ['rejected-file.txt', 'normal-file.txt'].forEach(f => {
-                const p = path.join(thresholdDir, f);
-                if (fs.existsSync(p)) fs.unlinkSync(p);
-            });
-        } catch { /* ignore */ }
-    });
-
-    test('unmanaged rejected file does not appear in results', async () => {
-        // Create a file on disk
-        fs.writeFileSync(path.join(thresholdDir, 'rejected-file.txt'), 'hello', 'utf8');
-
-        // Reject it
-        const pastTime = new Date(Date.now() + 60000).toISOString(); // future timestamp
-        saveIntakeState({
-            files: {
-                'threshold/rejected-file.txt': {
-                    path:        'threshold/rejected-file.txt',
-                    state:       'rejected',
-                    lastReviewed: pastTime,
-                    lastKnownMtime: new Date(Date.now() + 60000).toISOString(),
-                },
-            },
-            tools: {},
-        });
-
-        const res = await request(app).get('/api/detected-files');
-        expect(res.status).toBe(200);
-        const filenames = (res.body.unmanaged || []).map(f => f.filename);
-        expect(filenames).not.toContain('rejected-file.txt');
-    });
-
-    test('unmanaged non-rejected file appears in results', async () => {
-        fs.writeFileSync(path.join(thresholdDir, 'normal-file.txt'), 'hello', 'utf8');
-
-        const res = await request(app).get('/api/detected-files');
-        expect(res.status).toBe(200);
-        const filenames = (res.body.unmanaged || []).map(f => f.filename);
-        expect(filenames).toContain('normal-file.txt');
-    });
-});
-
-/* ─── POST /api/detected-files/acknowledge persists mtime ─────── */
-
-describe('POST /api/detected-files/acknowledge — intake state update', () => {
-    const SOURCE_ID = 'ack-test-source';
-
-    beforeEach(() => {
-        saveIntakeState({ files: {}, tools: {} });
-        upsertManifest(SOURCE_ID, {
-            id:     SOURCE_ID,
-            room:   'threshold',
-            status: 'waiting',
-            file:   'ack-test.txt',
-            path:   'threshold/ack-test.txt',
-            ingestTimestamp: new Date(Date.now() - 10000).toISOString(),
-        });
-    });
-
-    test('updates intake state to inspected on acknowledge', async () => {
-        const res = await request(app)
-            .post('/api/detected-files/acknowledge')
-            .send({ sourceId: SOURCE_ID });
-        expect(res.status).toBe(200);
-        expect(res.body.success).toBe(true);
-
-        const state = loadIntakeState();
-        const entry = state.files['threshold/ack-test.txt'];
-        expect(entry).toBeDefined();
-        expect(entry.state).toBe('inspected');
-        expect(typeof entry.lastKnownMtime).toBe('string');
     });
 });
 

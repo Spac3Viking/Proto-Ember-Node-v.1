@@ -12,7 +12,7 @@
  * Route modules:
  *   app/routes/startup.js   — GET /api/startup-check
  *   app/routes/sources.js   — Source management, ingest, indexing
- *   app/routes/threshold.js — Threshold intake queue, detected-files
+ *   app/routes/threshold.js — Threshold intake queue and inbox reader routes
  *   app/routes/tools.js     — Tool registry API
  *   app/routes/chat.js      — Chat (legacy + grounded)
  *   app/routes/projects.js  — Projects, user-caches, bundled caches

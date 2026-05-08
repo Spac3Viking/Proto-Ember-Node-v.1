@@ -502,7 +502,6 @@ It is not implemented in the current runtime.
 | `POST` | `/api/sources/:id/reject`          | Persistently reject a source |
 | `POST` | `/api/tools/:id/inspect`           | Mark a tool as inspected |
 | `POST` | `/api/tools/:id/reject`            | Persistently reject a tool |
-| `POST` | `/api/detected-files/acknowledge`  | Acknowledge a changed file (keep current version) |
 
 ### Phase 11 / 12 (archive + cache integration)
 | Method | Path | Description |
@@ -585,7 +584,7 @@ in dedicated modules:
 |---|---|
 | `startup.js` | `GET /api/startup-check` |
 | `sources.js` | `/api/ingest`, `/api/index/*`, `/api/sources/*`, `/api/notes` |
-| `threshold.js` | `/api/threshold/list`, `/api/detected-files*` |
+| `threshold.js` | `/api/threshold/list`, `/api/threshold/import`, `/api/threshold/files*` |
 | `tools.js` | `/api/tools/*` |
 | `chat.js` | `POST /chat` (legacy), `POST /api/chat` |
 | `projects.js` | `/api/projects/*`, `/api/user-caches`, `/caches*` |

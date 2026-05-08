@@ -114,7 +114,6 @@ let _activeRoomId = 'hearth';
         }
         if (roomId === 'threshold') {
             loadThresholdList();
-            checkDetectedFiles(true);   // auto-load into queue on room entry
         }
         if (roomId === 'hearth') {
             loadHearthThreads();
@@ -2492,7 +2491,7 @@ async function openArchiveReaderEntry(entry) {
             content: data.content || '',
             contentType: data.contentType || 'text/markdown',
             entryId: data.entryId || entry.entryId,
-            sourceLabel: 'Archive Cache',
+            sourceLabel: data.sourceLabel || entry.sourceLabel || 'Archive Cache',
             stripFrontmatter: true,
         });
     } catch {
@@ -2655,24 +2654,21 @@ function renderIntakeQueue() {
 
     if (queueSection) queueSection.style.display = '';
 
-    // Batch progress (only count file-upload entries, not server-detected ones)
-    const uploadEntries = _intakeQueue.filter(e => e.file !== null);
-    const total    = uploadEntries.length;
+    const total    = _intakeQueue.length;
     const imported = _intakeQueue.filter(e => e.status === 'imported').length;
     const failed   = _intakeQueue.filter(e => e.status === 'failed').length;
     const active   = _intakeQueue.filter(e => e.status === 'importing').length;
-    const allTotal = _intakeQueue.length;
 
     if (progressEl) {
         if (active > 0) {
-            progressEl.textContent = (imported + failed) + ' of ' + allTotal + ' processing…';
-        } else if (total > 0 && imported + failed === allTotal) {
+            progressEl.textContent = (imported + failed) + ' of ' + total + ' processing…';
+        } else if (total > 0 && imported + failed === total) {
             const msg = failed > 0
                 ? imported + ' imported, ' + failed + ' failed'
                 : imported + ' imported';
             progressEl.textContent = msg;
         } else {
-            progressEl.textContent = allTotal + ' file' + (allTotal === 1 ? '' : 's') + ' queued';
+            progressEl.textContent = total + ' file' + (total === 1 ? '' : 's') + ' queued';
         }
     }
 
@@ -2685,8 +2681,6 @@ function renderIntakeQueue() {
         importing: 'Importing…',
         imported:  'Imported',
         failed:    'Failed',
-        detected:  'Detected',
-        changed:   'Changed',
     };
 
     // Render rows
@@ -2711,29 +2705,7 @@ function renderIntakeQueue() {
         }
         meta.appendChild(fname);
 
-        if (entry.status === 'changed') {
-            const note = document.createElement('div');
-            note.className   = 'tq-changed-note';
-            note.textContent = 'Changed since last import';
-            meta.appendChild(note);
-
-            // Show timestamps for changed files
-            if (entry.ingestTimestamp) {
-                const ts1 = document.createElement('div');
-                ts1.className   = 'tq-changed-note';
-                ts1.textContent = 'Last indexed: ' + new Date(entry.ingestTimestamp).toLocaleString();
-                meta.appendChild(ts1);
-            }
-            if (entry.mtime) {
-                const ts2 = document.createElement('div');
-                ts2.className   = 'tq-changed-note';
-                ts2.textContent = 'Last modified: ' + new Date(entry.mtime).toLocaleString();
-                meta.appendChild(ts2);
-            }
-        }
-
-        // Show editable fields for pending and detected entries
-        if (entry.status === 'pending' || entry.status === 'detected') {
+        if (entry.status === 'pending') {
             const fields = document.createElement('div');
             fields.className = 'tq-fields';
 
@@ -2795,111 +2767,6 @@ function renderIntakeQueue() {
             aside.appendChild(importOneBtn);
         }
 
-        // Action: import a detected (server-side) file
-        if (entry.status === 'detected' && !_importingAll) {
-            const importBtn = document.createElement('button');
-            importBtn.className   = 'secondary tq-action-btn';
-            importBtn.textContent = 'Import';
-            importBtn.addEventListener('click', async () => {
-                entry.status = 'importing';
-                renderIntakeQueue();
-                try {
-                    const r = await fetch('/api/detected-files/import', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({
-                            filename:    entry.name,
-                            room:        entry.room,
-                            title:       entry.title,
-                            description: entry.description,
-                            shelf:       entry.shelf,
-                        }),
-                    });
-                    const d = await r.json();
-                    entry.status = d.success ? 'imported' : 'failed';
-                    entry.error  = d.success ? null : (d.error || 'Import failed');
-                } catch {
-                    entry.status = 'failed';
-                    entry.error  = 'Server unreachable';
-                }
-                renderIntakeQueue();
-                loadThresholdList();
-            });
-            aside.appendChild(importBtn);
-        }
-
-        // Actions: re-import or keep current for changed files
-        if (entry.status === 'changed' && !_importingAll) {
-            const reImportBtn = document.createElement('button');
-            reImportBtn.className   = 'secondary tq-action-btn';
-            reImportBtn.textContent = 'Re-import';
-            reImportBtn.title       = 'Re-index with updated file content';
-            reImportBtn.addEventListener('click', async () => {
-                if (!entry.sourceId) return;
-                reImportBtn.disabled = true;
-                entry.status = 'importing';
-                renderIntakeQueue();
-                try {
-                    const r = await fetch('/api/index/file', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: entry.sourceId }),
-                    });
-                    const d = await r.json();
-                    entry.status = d.success ? 'imported' : 'failed';
-                    entry.error  = d.success ? null : (d.error || 'Re-import failed');
-                } catch {
-                    entry.status = 'failed';
-                    entry.error  = 'Server unreachable';
-                }
-                renderIntakeQueue();
-                loadThresholdList();
-            });
-
-            const keepBtn = document.createElement('button');
-            keepBtn.className   = 'secondary tq-action-btn';
-            keepBtn.textContent = 'Keep current';
-            keepBtn.title       = 'Mark as reviewed — keep existing indexed version';
-            keepBtn.addEventListener('click', async () => {
-                keepBtn.disabled = true;
-                try {
-                    await fetch('/api/detected-files/acknowledge', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ sourceId: entry.sourceId }),
-                    });
-                } catch { /* ignore */ }
-                _intakeQueue = _intakeQueue.filter(e => e !== entry);
-                renderIntakeQueue();
-            });
-
-            const rejectUpdateBtn = document.createElement('button');
-            rejectUpdateBtn.className   = 'secondary tq-action-btn threshold-reject-btn';
-            rejectUpdateBtn.textContent = 'Reject update';
-            rejectUpdateBtn.title       = 'Reject this file change — will not resurface until changed again';
-            rejectUpdateBtn.addEventListener('click', async () => {
-                if (!entry.sourceId) {
-                    _intakeQueue = _intakeQueue.filter(e => e !== entry);
-                    renderIntakeQueue();
-                    return;
-                }
-                rejectUpdateBtn.disabled = true;
-                try {
-                    await fetch('/api/sources/' + encodeURIComponent(entry.sourceId) + '/reject', {
-                        method: 'POST',
-                    });
-                    showFlashMessage('Update rejected — file will not resurface until changed again.');
-                } catch { /* ignore */ }
-                _intakeQueue = _intakeQueue.filter(e => e !== entry);
-                renderIntakeQueue();
-                loadThresholdList();
-            });
-
-            aside.appendChild(reImportBtn);
-            aside.appendChild(keepBtn);
-            aside.appendChild(rejectUpdateBtn);
-        }
-
         // Action: retry failed entries
         if (entry.status === 'failed' && !_importingAll) {
             const retryBtn = document.createElement('button');
@@ -2914,7 +2781,7 @@ function renderIntakeQueue() {
         }
 
         // Action: remove any non-importing entry from the queue
-        if (['pending', 'detected', 'changed', 'failed', 'imported'].includes(entry.status) && !_importingAll) {
+        if (['pending', 'failed', 'imported'].includes(entry.status) && !_importingAll) {
             const removeBtn = document.createElement('button');
             removeBtn.className   = 'secondary tq-action-btn tq-remove-btn';
             removeBtn.textContent = '✕';
@@ -3033,180 +2900,6 @@ function enqueueFiles(files) {
     }
 })();
 
-/* ================================================================
-   Detected Files — Local File Detection
-   ================================================================ */
-
-/** Session-dismissed detected-file paths (so repeated notices aren't annoying). */
-let _dismissedDetected = new Set();
-
-/**
- * Check for locally-detected files (unmanaged or changed).
- * Shows a notice banner if any are found.
- *
- * @param {boolean} [autoLoad=false]  When true, automatically loads unmanaged
- *   threshold files into the intake queue without requiring a button click.
- */
-async function checkDetectedFiles(autoLoad) {
-    try {
-        const res  = await fetch('/api/detected-files');
-        const data = await res.json();
-
-        const unmanaged = (data.unmanaged || []).filter(f => !_dismissedDetected.has(f.path));
-        const changed   = (data.changed   || []).filter(f => !_dismissedDetected.has(f.path));
-        const total     = unmanaged.length + changed.length;
-
-        // Auto-load unmanaged threshold files into the queue when entering
-        // the Threshold room — no button click required.
-        if (autoLoad) {
-            const thresholdUnmanaged = unmanaged.filter(f => f.room === 'threshold');
-            if (thresholdUnmanaged.length > 0) {
-                loadDetectedIntoQueue(thresholdUnmanaged, []);
-            }
-            // Still show changed-files notice for non-threshold or changed files
-            const nonAutoFiles = [
-                ...unmanaged.filter(f => f.room !== 'threshold'),
-                ...changed,
-            ];
-            if (nonAutoFiles.length === 0) return;
-            // Show notice only for the remaining items
-            const notice     = document.getElementById('detected-notice');
-            const noticeText = document.getElementById('detected-notice-text');
-            const reviewBtn  = document.getElementById('detected-review-btn');
-            const dismissBtn = document.getElementById('detected-dismiss-btn');
-            if (!notice) return;
-            const parts = [];
-            const nonChangedNew = nonAutoFiles.filter(f => !changed.includes(f));
-            if (nonChangedNew.length > 0) {
-                parts.push(nonChangedNew.length + ' new file' + (nonChangedNew.length === 1 ? '' : 's') + ' detected in local storage');
-            }
-            const pendingChanged = changed.filter(f => !_dismissedDetected.has(f.path));
-            if (pendingChanged.length > 0) {
-                parts.push(pendingChanged.length + ' file' + (pendingChanged.length === 1 ? '' : 's') + ' changed since last import');
-            }
-            if (parts.length === 0) { notice.style.display = 'none'; return; }
-            if (noticeText) noticeText.textContent = parts.join(' · ');
-            notice.style.display = 'flex';
-            if (reviewBtn) {
-                const newBtn = reviewBtn.cloneNode(true);
-                reviewBtn.parentNode.replaceChild(newBtn, reviewBtn);
-                newBtn.addEventListener('click', () => {
-                    loadDetectedIntoQueue(
-                        unmanaged.filter(f => f.room !== 'threshold'),
-                        changed,
-                    );
-                    notice.style.display = 'none';
-                });
-            }
-            if (dismissBtn) {
-                const newDismiss = dismissBtn.cloneNode(true);
-                dismissBtn.parentNode.replaceChild(newDismiss, dismissBtn);
-                newDismiss.addEventListener('click', () => {
-                    [...unmanaged, ...changed].forEach(f => _dismissedDetected.add(f.path));
-                    notice.style.display = 'none';
-                });
-            }
-            return;
-        }
-
-        const notice     = document.getElementById('detected-notice');
-        const noticeText = document.getElementById('detected-notice-text');
-        const reviewBtn  = document.getElementById('detected-review-btn');
-        const dismissBtn = document.getElementById('detected-dismiss-btn');
-
-        if (!notice) return;
-
-        if (total === 0) {
-            notice.style.display = 'none';
-            return;
-        }
-
-        const parts = [];
-        if (unmanaged.length > 0) {
-            parts.push(unmanaged.length + ' new file' + (unmanaged.length === 1 ? '' : 's') + ' detected in local storage');
-        }
-        if (changed.length > 0) {
-            parts.push(changed.length + ' file' + (changed.length === 1 ? '' : 's') + ' changed since last import');
-        }
-        if (noticeText) noticeText.textContent = parts.join(' · ');
-
-        notice.style.display = 'flex';
-
-        // Review: load detected files into the intake queue
-        if (reviewBtn) {
-            // Clone button to remove old listeners
-            const newBtn = reviewBtn.cloneNode(true);
-            reviewBtn.parentNode.replaceChild(newBtn, reviewBtn);
-            newBtn.addEventListener('click', () => {
-                loadDetectedIntoQueue(unmanaged, changed);
-                notice.style.display = 'none';
-            });
-        }
-
-        // Dismiss: hide for this session
-        if (dismissBtn) {
-            const newDismiss = dismissBtn.cloneNode(true);
-            dismissBtn.parentNode.replaceChild(newDismiss, dismissBtn);
-            newDismiss.addEventListener('click', () => {
-                [...unmanaged, ...changed].forEach(f => _dismissedDetected.add(f.path));
-                notice.style.display = 'none';
-            });
-        }
-    } catch { /* server unreachable — fail silently */ }
-}
-
-/**
- * Load detected files into the intake queue section.
- * Unmanaged files get a full queue entry.
- * Changed files get a "changed" queue entry with options.
- */
-function loadDetectedIntoQueue(unmanaged, changed) {
-    // Scroll to queue section
-    const queueSection = document.getElementById('threshold-queue-section');
-
-    // Add unmanaged as pending queue entries (no File object — server-side import)
-    unmanaged.forEach(f => {
-        if (_intakeQueue.some(e => e.name === f.filename)) return;
-        _intakeQueue.push({
-            file:        null,   // no File object — already on disk
-            name:        f.filename,
-            path:        f.path,
-            room:        f.room,
-            status:      'detected',
-            error:       null,
-            title:       fileBaseName(f.filename),
-            description: '',
-            shelf:       '',
-        });
-    });
-
-    // Add changed files as 'changed' entries with context
-    changed.forEach(f => {
-        if (_intakeQueue.some(e => e.name === f.filename)) return;
-        _intakeQueue.push({
-            file:        null,
-            name:        f.filename,
-            path:        f.path,
-            room:        f.room,
-            sourceId:    f.sourceId,
-            status:      'changed',
-            error:       null,
-            title:       f.title       || fileBaseName(f.filename),
-            description: f.description || '',
-            shelf:       f.shelf       || '',
-            mtime:           f.mtime           || null,
-            ingestTimestamp: f.ingestTimestamp  || null,
-        });
-    });
-
-    renderIntakeQueue();
-
-    if (queueSection) {
-        queueSection.style.display = '';
-        queueSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-}
-
 async function loadThresholdList() {
     const listEl = document.getElementById('threshold-file-list');
     if (!listEl) return;
@@ -3217,38 +2910,68 @@ async function loadThresholdList() {
         if (!listRes.ok) throw new Error(listData.error || 'Could not load Threshold files.');
 
         if (files.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No imported files in Threshold inbox.</span>';
+            listEl.innerHTML = '<span class="message-system">No files have crossed the Threshold yet.</span>';
             return;
         }
 
         listEl.innerHTML = '';
-        const head = document.createElement('div');
-        head.className = 'threshold-import-header';
-        head.innerHTML =
-            '<span>Name</span>' +
-            '<span>Type</span>' +
-            '<span>Size</span>' +
-            '<span>Imported</span>' +
-            '<span>Status</span>' +
-            '<span>Actions</span>';
-        listEl.appendChild(head);
         files.forEach(file => listEl.appendChild(buildThresholdImportedRow(file)));
     } catch {
         listEl.innerHTML = '<span class="message-system threshold-error">Could not load Threshold files.</span>';
     }
 }
 
+function thresholdTypeIcon(type) {
+    if (type === 'markdown') return 'ᚲ';
+    if (type === 'text') return 'ᚱ';
+    if (type === 'json') return 'ᚾ';
+    if (type === 'pdf') return 'ᚠ';
+    return 'ᚦ';
+}
+
+function formatRelativeTime(isoString) {
+    const value = new Date(isoString || '');
+    const diffMs = Date.now() - value.getTime();
+    if (!Number.isFinite(diffMs)) return 'just now';
+    const minutes = Math.max(1, Math.floor(diffMs / 60000));
+    if (minutes < 60) return minutes + ' minute' + (minutes === 1 ? '' : 's') + ' ago';
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + ' hour' + (hours === 1 ? '' : 's') + ' ago';
+    const days = Math.floor(hours / 24);
+    return days + ' day' + (days === 1 ? '' : 's') + ' ago';
+}
+
+function thresholdStatusLabel(file) {
+    return file.type === 'pdf'
+        ? 'PDF stored — support pending'
+        : 'Ready in Reader';
+}
+
 async function openThresholdImportedFile(file) {
     if (!file || !file.path) return;
     if (file.type === 'pdf') {
-        showFlashMessage('PDF stored — reader support later.');
+        getGreenFireReader().open({
+            title: file.name || 'PDF file',
+            sourcePath: file.path,
+            content: 'PDF support is not yet active.\nThe file is safely stored in Threshold.',
+            contentType: 'text/plain',
+            entryId: 'threshold:' + file.path,
+            sourceLabel: file.sourceLabel || 'Threshold',
+            rawOnly: true,
+            initialRawView: true,
+        });
         return;
     }
     try {
         const res = await fetch('/api/threshold/files/content?path=' + encodeURIComponent(file.path));
         const data = await res.json();
         if (!res.ok || !data.success) {
-            showFlashMessage(data.error || 'Could not open file in reader.');
+            const errorText = String(data.error || '');
+            if (/unsupported/i.test(errorText)) {
+                showFlashMessage('This file type is not yet readable within the Node.');
+            } else {
+                showFlashMessage(data.error || 'The signal could not be resolved.');
+            }
             return;
         }
         const isMarkdown = data.contentType === 'text/markdown';
@@ -3264,7 +2987,7 @@ async function openThresholdImportedFile(file) {
             initialRawView: !isMarkdown,
         });
     } catch {
-        showFlashMessage('Could not open file in reader.');
+        showFlashMessage('The signal could not be resolved.');
     }
 }
 
@@ -3305,36 +3028,36 @@ async function deleteThresholdImportedFile(file) {
 
 function buildThresholdImportedRow(file) {
     const row = document.createElement('div');
-    row.className = 'threshold-file-row threshold-import-row';
+    row.className = 'threshold-file-row';
 
-    const nameEl = document.createElement('span');
-    nameEl.className = 'threshold-file-name';
-    nameEl.textContent = file.name || 'unknown';
+    const type = (file.type || 'unknown').toLowerCase();
+    const extension = file.extension || ((file.name || '').split('.').pop() || type);
+    const displayName = file.name || 'unknown';
+    const title = file.title || file.name || 'unknown';
 
-    const typeEl = document.createElement('span');
-    typeEl.textContent = file.type || 'unknown';
-
-    const sizeEl = document.createElement('span');
-    sizeEl.textContent = formatBytes(file.size);
-
-    const importedEl = document.createElement('span');
-    importedEl.textContent = formatIsoDate(file.imported_at);
+    const metaEl = document.createElement('div');
+    metaEl.className = 'threshold-file-meta';
+    metaEl.innerHTML =
+        '<div class="threshold-file-title-row"><span class="threshold-file-icon">' + escapeHtml(thresholdTypeIcon(type)) +
+        '</span><span class="threshold-file-title">' + escapeHtml(title) + '</span><span class="threshold-file-extension">.' +
+        escapeHtml(String(extension).replace(/^\./, '')) + '</span></div>' +
+        '<div class="threshold-file-name">' + escapeHtml(displayName) + '</div>' +
+        '<div class="threshold-file-detail">' + escapeHtml((file.type || 'unknown').toUpperCase()) + ' • ' +
+        escapeHtml(formatBytes(file.size)) + '</div>' +
+        '<div class="threshold-file-detail">Imported ' + escapeHtml(formatRelativeTime(file.imported_at)) + '</div>' +
+        '<div class="threshold-file-detail">Source: ' + escapeHtml(file.sourceLabel || 'Threshold') + '</div>';
 
     const statusEl = document.createElement('span');
-    statusEl.textContent = file.type === 'pdf' ? 'PDF stored — reader support later' : 'ready';
+    statusEl.className = 'threshold-file-state';
+    statusEl.textContent = thresholdStatusLabel(file);
 
-    const actions = document.createElement('span');
+    const actions = document.createElement('div');
     actions.className = 'threshold-file-actions';
 
     const openBtn = document.createElement('button');
     openBtn.className = 'secondary threshold-action-btn';
-    openBtn.textContent = 'Open in Reader';
-    if (file.type === 'pdf') {
-        openBtn.disabled = true;
-        openBtn.title = 'PDF stored — reader support later';
-    } else {
-        openBtn.addEventListener('click', () => openThresholdImportedFile(file));
-    }
+    openBtn.textContent = file.type === 'pdf' ? 'Reveal File' : 'Open in Reader';
+    openBtn.addEventListener('click', () => openThresholdImportedFile(file));
 
     const copyBtn = document.createElement('button');
     copyBtn.className = 'secondary threshold-action-btn';
@@ -3350,10 +3073,7 @@ function buildThresholdImportedRow(file) {
     actions.appendChild(copyBtn);
     actions.appendChild(deleteBtn);
 
-    row.appendChild(nameEl);
-    row.appendChild(typeEl);
-    row.appendChild(sizeEl);
-    row.appendChild(importedEl);
+    row.appendChild(metaEl);
     row.appendChild(statusEl);
     row.appendChild(actions);
     return row;
