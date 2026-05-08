@@ -11,7 +11,7 @@
  *
  * Continuity composition:
  *   1. Identity — from forge-core.json (role, method, covenant, epistemic rules)
- *   2. Context Memory — Hearth (primary), Ember Council (secondary), Threshold (optional)
+ *   2. Context Memory — Rolling Bootstrap + Fractal Memory Compression layers
  *   3. Thread Memory — top summarized remembered threads (distilled only)
  *   4. Node State — active focus, active archetype, last refresh timestamp
  *
@@ -38,7 +38,6 @@ const path = require('path');
 const {
     FORGE_DIR, ARCHETYPES_DIR, BOOTSTRAP_DIR, ROLLING_BOOTSTRAP_PATH,
 } = require('./storageConfig');
-const { getWorkingMap }       = require('./contextMaps');
 const { listThreadSummaries } = require('./threadMemory');
 
 // ── File paths ────────────────────────────────────────────────────────────────
@@ -305,7 +304,7 @@ function listArchetypes() {
  *
  * Composition:
  *   1. Identity block — from forge-core.json
- *   2. Context Maps — Hearth (primary), Workshop (secondary), Threshold (optional)
+ *   2. Context memory placeholders sourced from continuity modules
  *   3. Thread Memory — top 5 remembered thread summaries (distilled)
  *   4. Node State — active archetype, last refresh timestamp
  *
@@ -319,16 +318,10 @@ function buildBootstrap(opts) {
     const forge  = loadForgeCore();
     const now    = new Date().toISOString();
 
-    // ── Context Maps ─────────────────────────────────────────────────────────
-
-    const hearthMap    = getWorkingMap('hearth');
-    const workshopMap  = getWorkingMap('workshop');
-    const thresholdMap = getWorkingMap('threshold');
-
     const contextMaps = {
-        hearth:    hearthMap    ? summarizeHearthMap(hearthMap)    : null,
-        workshop:  workshopMap  ? summarizeWorkshopMap(workshopMap) : null,
-        threshold: thresholdMap ? summarizeThresholdMap(thresholdMap) : null,
+        hearth: null,
+        council: null,
+        threshold: null,
     };
 
     // ── Thread Memory ─────────────────────────────────────────────────────────
@@ -405,7 +398,7 @@ function summarizeThresholdMap(map) {
  * Build the Rolling Bootstrap continuity summary.
  *
  * This is intentionally compact and deterministic for Phase 16D:
- * it consolidates existing context maps + thread memory into a
+ * it consolidates continuity memory + thread memory into a
  * single continuity layer without replacing archive/caches.
  *
  * @param {object} [opts]
@@ -418,28 +411,13 @@ function buildRollingBootstrap(opts) {
     const { activeArchetype = null, recentDecisions = [], openQuestions = [] } = opts || {};
     const now = new Date().toISOString();
 
-    const hearthMap = getWorkingMap('hearth');
-    const workshopMap = getWorkingMap('workshop');
-    const thresholdMap = getWorkingMap('threshold');
     const threadSummaries = listThreadSummaries().slice(0, 12);
 
     const threadThemes = threadSummaries
         .flatMap(s => Array.isArray(s.themes) ? s.themes : [])
         .filter(Boolean)
         .map(String);
-    const mapThemes = [];
-    if (hearthMap && hearthMap.content && hearthMap.content.archiveByShelf) {
-        mapThemes.push(...Object.keys(hearthMap.content.archiveByShelf));
-    }
-    if (thresholdMap && thresholdMap.content && thresholdMap.content.byStatus) {
-        const waiting = Number((thresholdMap.content.byStatus || {}).waiting || 0);
-        if (waiting > 0) mapThemes.push('threshold intake');
-    }
-    if (workshopMap && workshopMap.content && Number(workshopMap.content.totalSources || 0) > 0) {
-        mapThemes.push('ember council drafting');
-    }
-
-    const activeThemes = Array.from(new Set([...threadThemes, ...mapThemes]))
+    const activeThemes = Array.from(new Set([...threadThemes]))
         .slice(0, 8);
 
     const sourceThreads = threadSummaries.map(s => ({
@@ -448,11 +426,11 @@ function buildRollingBootstrap(opts) {
         remembered_at: s.rememberedAt || null,
     }));
 
-    const projectCandidates = threadSummaries
+    const activeThreadTitles = threadSummaries
         .map(s => s.title)
         .filter(Boolean)
         .slice(0, 6);
-    const currentProjects = Array.from(new Set(projectCandidates));
+    const activeThreads = Array.from(new Set(activeThreadTitles));
 
     const normalizedDecisions = Array.isArray(recentDecisions)
         ? recentDecisions.filter(Boolean).map(String).slice(0, 8)
@@ -477,7 +455,7 @@ function buildRollingBootstrap(opts) {
 
     const summaryParts = [];
     if (activeThemes.length > 0) summaryParts.push('Active themes: ' + activeThemes.slice(0, 5).join(', ') + '.');
-    if (currentProjects.length > 0) summaryParts.push('Current projects: ' + currentProjects.slice(0, 3).join(', ') + '.');
+    if (activeThreads.length > 0) summaryParts.push('Active threads: ' + activeThreads.slice(0, 3).join(', ') + '.');
     if (normalizedQuestions.length > 0) summaryParts.push('Open questions: ' + normalizedQuestions.slice(0, 3).join('; ') + '.');
     if (normalizedDecisions.length > 0) summaryParts.push('Recent decisions: ' + normalizedDecisions.slice(0, 3).join('; ') + '.');
     if (sourceThreads.length > 0) summaryParts.push('Signal Threads groundwork: ' + sourceThreads.length + ' remembered thread summaries.');
@@ -487,7 +465,7 @@ function buildRollingBootstrap(opts) {
         updated_at: now,
         summary: summaryParts.join(' '),
         active_themes: activeThemes,
-        current_projects: currentProjects,
+        active_threads: activeThreads,
         open_questions: normalizedQuestions,
         recent_decisions: normalizedDecisions,
         archetype_notes: archetypeNotes,
@@ -650,8 +628,8 @@ function formatBootstrapForPrompt(bootstrap) {
             (maps.hearth.rememberedThreadCount || 0) + ' remembered threads.',
         );
     }
-    if (maps.workshop && (maps.workshop.totalSources || 0) > 0) {
-        lines.push('Ember Council: ' + maps.workshop.totalSources + ' sources.');
+    if (maps.council && (maps.council.totalSources || 0) > 0) {
+        lines.push('Ember Council: ' + maps.council.totalSources + ' sources.');
     }
     if (maps.threshold) {
         const waiting = (maps.threshold.byStatus || {}).waiting || 0;

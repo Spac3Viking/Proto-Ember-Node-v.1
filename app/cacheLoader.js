@@ -115,21 +115,10 @@ function loadCache(name) {
     return { name, manifest, content };
 }
 
-// Deprecated compatibility aliases.
-// TODO(phase-15-9c): remove after external integrations migrate to cache naming.
-const listCartridges = listCaches;
-const loadCartridge = loadCache;
-const BUNDLED_CARTRIDGES_DIR = BUNDLED_CACHES_DIR;
-const CARTRIDGES_DIR = CACHES_DIR;
-
 module.exports = {
     listCaches,
     loadCache,
     BUNDLED_CACHES_DIR,
     CACHES_DIR,
     resolveBundledCacheDir,
-    listCartridges,
-    loadCartridge,
-    BUNDLED_CARTRIDGES_DIR,
-    CARTRIDGES_DIR,
 };

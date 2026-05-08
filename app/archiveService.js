@@ -162,7 +162,7 @@ function registerArchiveSource(filePath, shelf, sourceClass) {
         shelf: shelf || 'archive',
     });
 
-    // Tag with source class so retrieval and context maps can distinguish origin
+    // Tag with source class so retrieval and continuity layers can distinguish origin
     source.sourceClass = sourceClass || SOURCE_CLASS_ARCHIVE;
     source.status      = 'remembered';
 

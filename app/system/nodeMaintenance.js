@@ -54,9 +54,6 @@ function runLegacyCleanupPass() {
         'tmp',
         'legacy',
         'system/workshop-maps',
-        'system/project-maps',
-        'system/tool-memory',
-        'system/cartridge-memory',
         'system/legacy-context-maps',
     ];
 

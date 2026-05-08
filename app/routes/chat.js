@@ -4,9 +4,9 @@
  * Ember Node v.ᚠ — Chat Routes (Phase 16D: Rolling Bootstrap continuity layer)
  *
  * POST /chat          (legacy Phase 2 direct-Ollama endpoint)
- * POST /api/chat      (grounded Heart chat with retrieval)
+ * POST /api/chat      (grounded Ember Prime chat with retrieval)
  *
- * Phase 11:   Chat context is room-bounded with cross-room context maps.
+ * Phase 11:   Chat context is room-bounded with continuity memory overlays.
  * Phase 11.5: Chat assembly includes identity (Forge) + continuity + retrieval +
  *             optional archetype overlay.
  * Phase 16D assembly order:
@@ -20,11 +20,10 @@
 const express = require('express');
 const axios   = require('axios');
 const { chatLimiter } = require('../rateLimiters');
-const { OLLAMA_CHAT_URL, getHeartModel, resolveActiveHeart } = require('../toolRegistry');
+const { OLLAMA_CHAT_URL, getEmberPrimeModel, resolveEmberPrimeRuntime } = require('../runtimeStewardship');
 const { loadChunks }                                  = require('../indexStore');
 const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
-const { assembleRoomContext }                         = require('../contextMaps');
 const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
     loadBootstrap, refreshBootstrap,
@@ -108,7 +107,7 @@ const ROOM_SYSTEM_PROMPTS = {
         'In Ember Council mode you:\n' +
         '- assist with drafting, restructuring, and expanding documents\n' +
         '- help connect fragments into coherent structure\n' +
-        '- reference indexed Ember Council materials and project files\n' +
+        '- reference indexed Ember Council materials and active source memory\n' +
         '- maintain focus on active work rather than archive reflection\n' +
         '\n' +
         'You speak with practical precision. You are a craftsman\'s companion.'
@@ -130,48 +129,13 @@ const ROOM_SYSTEM_PROMPTS = {
 
 /**
  * Build the room context preamble to prepend to grounded prompts.
- * Includes imported context map summaries if available.
  *
  * @param {string} room
  * @returns {string}
  */
 function buildRoomContextPreamble(room) {
-    let context;
-    try {
-        context = assembleRoomContext(room);
-    } catch {
-        return '';
-    }
-
-    const lines = [];
-
-    if (context.imported && context.imported.length > 0) {
-        lines.push('=== Cross-Room Context Maps ===');
-        for (const map of context.imported) {
-            lines.push('\n[' + map.title + ']');
-            if (map.content) {
-                const c = map.content;
-                if (c.rememberedThreads && c.rememberedThreads.length > 0) {
-                    lines.push('Remembered threads: ' + c.rememberedThreads.map(t => t.title).join(', '));
-                }
-                if (c.archiveByShelf) {
-                    const shelves = Object.entries(c.archiveByShelf)
-                        .map(([s, n]) => s + ' (' + n + ')')
-                        .join(', ');
-                    if (shelves) lines.push('Archive shelves: ' + shelves);
-                }
-                if (c.recentSources && c.recentSources.length > 0) {
-                    lines.push('Recent sources: ' + c.recentSources.map(s => s.title || s.id).join(', '));
-                }
-                if (c.totalSources !== undefined) {
-                    lines.push('Total sources: ' + c.totalSources);
-                }
-            }
-        }
-        lines.push('\n==============================\n');
-    }
-
-    return lines.join('\n');
+    void room;
+    return '';
 }
 
 function optimizeRetrievedContext(retrievedChunks) {
@@ -514,13 +478,13 @@ const MAX_PINNED_CHUNKS = 8;
 
 // ── Phase 2: original chat endpoint (kept for backward compatibility) ─────────
 // This endpoint bypasses retrieval and goes directly to Ollama.
-// New code should use POST /api/chat which routes through the active Heart tool
+// New code should use POST /api/chat which routes through Ember Prime
 // with grounded retrieval.  Kept to avoid breaking any existing integrations.
 
 router.post('/chat', async (req, res) => {
     try {
         const { message, prompt, model: _ignored, ...rest } = req.body;
-        const selectedModel = getHeartModel();
+        const selectedModel = getEmberPrimeModel();
         const payload = {
             stream:   false,
             ...rest,
@@ -746,8 +710,8 @@ state: ${retrievalState}
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
-        // Resolve which Heart tool to use (falls back to built-in Ollama)
-        const heart = resolveActiveHeart();
+        // Resolve Ember Prime runtime (Ollama-first).
+        const heart = resolveEmberPrimeRuntime();
 
         const payload = {
             model:    heart.model,

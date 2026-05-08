@@ -45,11 +45,6 @@ describe('storageConfig — default data root', () => {
         expect(INDEXES_DIR).toBe(path.join(DATA_ROOT, 'indexes'));
     });
 
-    test('PROJECTS_DIR is a sub-path of DATA_ROOT', () => {
-        const { DATA_ROOT, PROJECTS_DIR } = storageConfig;
-        expect(PROJECTS_DIR).toBe(path.join(DATA_ROOT, 'projects'));
-    });
-
     test('THREADS_DIR is a sub-path of DATA_ROOT', () => {
         const { DATA_ROOT, THREADS_DIR } = storageConfig;
         expect(THREADS_DIR).toBe(path.join(DATA_ROOT, 'threads'));
@@ -114,7 +109,6 @@ describe('storageConfig — ensureDataRoot', () => {
             storageConfig.ROOM_DIRS.workshop,
             storageConfig.ROOM_DIRS.threshold,
             storageConfig.INDEXES_DIR,
-            storageConfig.PROJECTS_DIR,
             storageConfig.THREADS_DIR,
             storageConfig.USER_CACHES_DIR,
             storageConfig.SYSTEM_DIR,
@@ -334,7 +328,6 @@ describe('GET /api/storage-info', () => {
         expect(dirs).toHaveProperty('workshop');
         expect(dirs).toHaveProperty('threshold');
         expect(dirs).toHaveProperty('indexes');
-        expect(dirs).toHaveProperty('projects');
         expect(dirs).toHaveProperty('threads');
         expect(dirs).toHaveProperty('caches');
         expect(dirs).toHaveProperty('system');
