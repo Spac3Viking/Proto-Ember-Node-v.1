@@ -121,7 +121,7 @@ function generateStartupCheck(migrationResult) {
         warnings.push('Active Heart "' + (heartTool.name || heartId) + '" is offline');
     }
     if (tools.length > 0 && runningTools === 0) {
-        warnings.push('No running tools detected');
+        warnings.push('No running local AI runtimes detected');
     }
 
     return {

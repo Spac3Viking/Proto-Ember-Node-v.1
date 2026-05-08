@@ -42,6 +42,8 @@ const MIN_QUERY_TERM_LENGTH = 4;
 const MIN_PRIORITY_SOURCES_IN_SELECTION = 3;
 const COURT_PRIORITY_SOURCE_BOOST = 1.25;
 const COURT_PRIORITY_DOMAIN_BOOST = 1.12;
+const ARCHETYPE_MEMORY_SOURCE_BOOST = 1.08;
+const ARCHETYPE_MEMORY_DOMAIN_BOOST = 1.05;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -155,6 +157,20 @@ function normalizeCourtMemberConfig(courtMember) {
         name: courtMember.name ? String(courtMember.name) : null,
         prioritySources,
         priorityDomains,
+    };
+}
+
+function normalizeArchetypeMemoryProfile(profile) {
+    if (!profile || typeof profile !== 'object') return null;
+    const preferredSources = Array.isArray(profile.preferred_sources)
+        ? profile.preferred_sources.map(String)
+        : (Array.isArray(profile.preferredSources) ? profile.preferredSources.map(String) : []);
+    const preferredDomains = Array.isArray(profile.preferred_domains)
+        ? profile.preferred_domains.map(String)
+        : (Array.isArray(profile.preferredDomains) ? profile.preferredDomains.map(String) : []);
+    return {
+        preferredSources,
+        preferredDomains,
     };
 }
 
@@ -397,6 +413,7 @@ async function retrieve({
     targetSources = DEFAULT_TARGET_SOURCES,
     maxChunksPerSource = DEFAULT_MAX_CHUNKS_PER_SOURCE,
     courtMember = null,
+    archetypeMemoryProfile = null,
 }) {
     const allChunks = loadChunks();
     const embeddings = loadEmbeddings();
@@ -425,6 +442,7 @@ async function retrieve({
     const queryVector = await generateEmbedding(query);
     const routedAs = routeHint || detectRoute(query);
     const normalizedCourtMember = normalizeCourtMemberConfig(courtMember);
+    const normalizedArchetypeMemory = normalizeArchetypeMemoryProfile(archetypeMemoryProfile);
     let conceptRouting = {
         primary: 'general',
         domains: ['general'],
@@ -441,6 +459,10 @@ async function retrieve({
     const courtPrioritySources = normalizedCourtMember ? normalizedCourtMember.prioritySources : [];
     const courtPriorityDomains = normalizedCourtMember ? normalizedCourtMember.priorityDomains : [];
     const normalizedCourtDomainPrioritySources = buildPrioritySourceSetForDomains(conceptIndex, courtPriorityDomains);
+    const normalizedArchetypeDomainPrioritySources = buildPrioritySourceSetForDomains(
+        conceptIndex,
+        normalizedArchetypeMemory ? normalizedArchetypeMemory.preferredDomains : [],
+    );
 
     const baseScored = scoreChunks({ chunks: candidates, queryVector, queryText: query, embeddings });
     if (baseScored.length === 0) return [];
@@ -462,6 +484,13 @@ async function retrieve({
             const matchedCourtPrioritySources = findMatchedPrioritySources(sourceMetaText, courtPrioritySources);
             const courtPrioritySourceMatch = matchedCourtPrioritySources.length > 0;
             const courtPriorityDomainMatch = hasSourceMatch(sourceMetaText, normalizedCourtDomainPrioritySources);
+            const archetypeMemorySourceMatch = hasSourceMatch(
+                sourceMetaText,
+                new Set((normalizedArchetypeMemory && normalizedArchetypeMemory.preferredSources || [])
+                    .map(source => normalizeText(source))
+                    .filter(Boolean)),
+            );
+            const archetypeMemoryDomainMatch = hasSourceMatch(sourceMetaText, normalizedArchetypeDomainPrioritySources);
             const fp = chunkFingerprint(entry.chunk.text || '');
             const duplicatePenalty = fp && fingerprintCounts[fp] > 1
                 ? Math.min(MAX_DUPLICATE_PENALTY, (fingerprintCounts[fp] - 1) * DUPLICATE_PENALTY_PER_EXTRA)
@@ -476,7 +505,13 @@ async function retrieve({
             const postConceptScore = preConceptScore * (1 + conceptBonus);
             const courtSourceBoost = courtPrioritySourceMatch ? COURT_PRIORITY_SOURCE_BOOST : 1;
             const courtDomainBoost = courtPriorityDomainMatch ? COURT_PRIORITY_DOMAIN_BOOST : 1;
-            const finalScore = postConceptScore * courtSourceBoost * courtDomainBoost;
+            const archetypeMemorySourceBoost = archetypeMemorySourceMatch ? ARCHETYPE_MEMORY_SOURCE_BOOST : 1;
+            const archetypeMemoryDomainBoost = archetypeMemoryDomainMatch ? ARCHETYPE_MEMORY_DOMAIN_BOOST : 1;
+            const finalScore = postConceptScore *
+                courtSourceBoost *
+                courtDomainBoost *
+                archetypeMemorySourceBoost *
+                archetypeMemoryDomainBoost;
 
             return {
                 chunk: entry.chunk,
@@ -500,6 +535,10 @@ async function retrieve({
                 courtPriorityDomainMatch,
                 courtSourceBoost,
                 courtDomainBoost,
+                archetypeMemorySourceMatch,
+                archetypeMemoryDomainMatch,
+                archetypeMemorySourceBoost,
+                archetypeMemoryDomainBoost,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);

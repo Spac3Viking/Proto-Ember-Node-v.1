@@ -32,6 +32,7 @@ const {
     loadChunks, removeEmbeddingsByChunkIds,
 }                                                     = require('../indexStore');
 const { upsertIntakeFile }                            = require('../intakeState');
+const { buildSourceAbstract }                         = require('../memoryCompression');
 
 const router = express.Router();
 
@@ -302,6 +303,15 @@ router.get('/api/sources', (req, res) => {
     let sources = Object.values(loadManifests());
     if (room)        sources = sources.filter(s => s.room === room);
     if (cacheId) sources = sources.filter(s => s.cacheId === cacheId);
+    sources = sources.map(source => ({
+        ...source,
+        abstract: buildSourceAbstract({
+            sourceId: source.id,
+            sourceName: source.title || source.file || source.id,
+            title: source.title || source.file || source.id,
+            cacheId: source.cacheId || null,
+        }),
+    }));
     res.json({ sources });
 });
 
