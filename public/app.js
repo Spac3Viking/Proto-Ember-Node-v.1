@@ -175,7 +175,7 @@ let _activeRoomId = 'hearth';
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
                     loadHearthToolRegistry();
-                    loadContextMapsStatus();
+                    loadContextMemoryStatus();
                     loadBootstrapStatus();
                     loadMemoryCompressionStatus();
                 }
@@ -3531,7 +3531,7 @@ function updateSystemCacheCount(count) {
    Context Memory Status
    ================================================================ */
 
-async function loadContextMapsStatus() {
+async function loadContextMemoryStatus() {
     const el = document.getElementById('sys-context-maps-status');
     if (!el) return;
 

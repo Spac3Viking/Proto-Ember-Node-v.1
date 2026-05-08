@@ -136,6 +136,12 @@ function resolveThresholdInboxPath(relPath) {
     return absPath;
 }
 
+/**
+ * Build the current runtime stewardship view for Threshold.
+ * Returns a single Ollama runtime card plus the active Ember Prime assignment.
+ *
+ * @returns {Promise<{runtimes: object[], active: object}>}
+ */
 async function buildRuntimeStewardshipView() {
     const probe = await probeOllamaRuntime();
     const intakeState = loadIntakeState();
@@ -509,6 +515,7 @@ router.post('/api/runtimes/:id/launch', writeLimiter, async (req, res) => {
     });
 });
 
+// TODO(phase-16f): remove legacy /api/tools aliases once the UI fully migrates to /api/runtimes.
 // Legacy compatibility aliases for existing UI call sites.
 router.get('/api/tools', readLimiter, async (req, res) => {
     const view = await buildRuntimeStewardshipView();

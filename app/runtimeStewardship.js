@@ -43,7 +43,9 @@ async function launchOllamaRuntime() {
 
     try {
         const proc = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' });
-        proc.on('error', () => {});
+        proc.on('error', (err) => {
+            console.warn('[runtime] Launch error:', err.message);
+        });
         proc.unref();
     } catch (err) {
         return { success: false, status: 'error', error: err.message };

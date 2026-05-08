@@ -127,17 +127,6 @@ const ROOM_SYSTEM_PROMPTS = {
     ),
 };
 
-/**
- * Build the room context preamble to prepend to grounded prompts.
- *
- * @param {string} room
- * @returns {string}
- */
-function buildRoomContextPreamble(room) {
-    void room;
-    return '';
-}
-
 function optimizeRetrievedContext(retrievedChunks) {
     if (!Array.isArray(retrievedChunks) || retrievedChunks.length === 0) return [];
     const seenChunkIds = new Set();
@@ -648,7 +637,6 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         console.log('[/api/chat] forge-core=' + (forgeCore ? 'injected' : 'unavailable'));
 
         // Retrieval context (after identity/continuity layers)
-        const roomPreamble = buildRoomContextPreamble(activeRoom);
         const summaryFirst = buildSummaryFirstContext({
             query,
             rollingBootstrap,
@@ -668,9 +656,6 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         });
         if (summaryFirst.block) {
             userContent = summaryFirst.block + userContent;
-        }
-        if (roomPreamble) {
-            userContent = roomPreamble + userContent;
         }
         console.log(
             '[/api/chat] retrieval=' +

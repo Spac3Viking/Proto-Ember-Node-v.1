@@ -319,6 +319,7 @@ function buildBootstrap(opts) {
     const now    = new Date().toISOString();
 
     const contextMaps = {
+        // Kept as placeholders for legacy payload shape compatibility.
         hearth: null,
         council: null,
         threshold: null,
@@ -426,11 +427,11 @@ function buildRollingBootstrap(opts) {
         remembered_at: s.rememberedAt || null,
     }));
 
-    const activeThreadTitles = threadSummaries
+    const rawActiveThreadTitles = threadSummaries
         .map(s => s.title)
         .filter(Boolean)
         .slice(0, 6);
-    const activeThreads = Array.from(new Set(activeThreadTitles));
+    const activeThreads = Array.from(new Set(rawActiveThreadTitles));
 
     const normalizedDecisions = Array.isArray(recentDecisions)
         ? recentDecisions.filter(Boolean).map(String).slice(0, 8)
@@ -627,9 +628,6 @@ function formatBootstrapForPrompt(bootstrap) {
             (maps.hearth.nativeSourceCount  || 0) + ' native sources, ' +
             (maps.hearth.rememberedThreadCount || 0) + ' remembered threads.',
         );
-    }
-    if (maps.council && (maps.council.totalSources || 0) > 0) {
-        lines.push('Ember Council: ' + maps.council.totalSources + ' sources.');
     }
     if (maps.threshold) {
         const waiting = (maps.threshold.byStatus || {}).waiting || 0;

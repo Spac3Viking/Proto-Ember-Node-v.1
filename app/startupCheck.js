@@ -100,9 +100,10 @@ function generateStartupCheck(migrationResult) {
     const { changed } = getChangedFilesSummary(manifests);
     const changedFiles = changed.length;
 
-    // Runtime stewardship counts (admission state only).
+    // Runtime stewardship counts from persisted Threshold intake decisions.
     const runtimeEntries = Object.values((intakeState && intakeState.tools) || {});
-    const trustedTools = runtimeEntries.filter(t => t.state === 'trusted').length;
+    const trustedRuntimeEntries = runtimeEntries.filter(t => t.state === 'trusted');
+    const trustedTools = trustedRuntimeEntries.length;
     const newTools = runtimeEntries.filter(t => t.state === 'inspected').length;
     const runningTools = 0;
     const offlineTools = 0;
@@ -125,7 +126,7 @@ function generateStartupCheck(migrationResult) {
         trustedTools,
         runningTools,
         offlineTools,
-        activeHeart:           trustedTools > 0 ? 'ollama-local' : null,
+        activeHeart:           trustedRuntimeEntries[0] ? trustedRuntimeEntries[0].id || null : null,
         activeHeartAvailable,
         migrationState,
         warnings,
