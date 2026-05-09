@@ -4648,6 +4648,18 @@ function showFlashMessage(msg) {
  * Fetch the startup check summary and render the launch banner.
  * Dismissible for the session; collapses on toggle.
  */
+function normalizeStartupRuntimeState(data) {
+    return {
+        newRuntimes: Number(data && (data.newRuntimes != null ? data.newRuntimes : data.newTools)) || 0,
+        runningRuntimes: Number(data && (data.runningRuntimes != null ? data.runningRuntimes : data.runningTools)) || 0,
+        offlineRuntimes: Number(data && (data.offlineRuntimes != null ? data.offlineRuntimes : data.offlineTools)) || 0,
+        activeRuntime: data ? (data.activeRuntime != null ? data.activeRuntime : data.activeHeart) : null,
+        activeRuntimeAvailable: Boolean(
+            data && (data.activeRuntimeAvailable != null ? data.activeRuntimeAvailable : data.activeHeartAvailable)
+        ),
+    };
+}
+
 async function loadStartupCheck() {
     let data;
     try {
@@ -4666,13 +4678,13 @@ async function loadStartupCheck() {
     const warningsEl = document.getElementById('startup-banner-warnings');
 
     if (statsEl) {
-        const newRuntimes = Number(data.newRuntimes != null ? data.newRuntimes : data.newTools) || 0;
-        const runningRuntimes = Number(data.runningRuntimes != null ? data.runningRuntimes : data.runningTools) || 0;
-        const offlineRuntimes = Number(data.offlineRuntimes != null ? data.offlineRuntimes : data.offlineTools) || 0;
-        const activeRuntime = data.activeRuntime != null ? data.activeRuntime : data.activeHeart;
-        const activeRuntimeAvailable = Boolean(
-            data.activeRuntimeAvailable != null ? data.activeRuntimeAvailable : data.activeHeartAvailable
-        );
+        const {
+            newRuntimes,
+            runningRuntimes,
+            offlineRuntimes,
+            activeRuntime,
+            activeRuntimeAvailable,
+        } = normalizeStartupRuntimeState(data);
 
         // ── Top-line summary ────────────────────────────────────────
         const summaryParts = [];
@@ -4760,7 +4772,7 @@ async function loadStartupCheck() {
 
     // Warnings — merge server warnings with local no-Ember-Prime notice
     if (warningsEl) {
-        const activeRuntime = data.activeRuntime != null ? data.activeRuntime : data.activeHeart;
+        const { activeRuntime } = normalizeStartupRuntimeState(data);
         const warnings = [...(data.warnings || [])];
         if (!activeRuntime) warnings.unshift('No active Ember Prime detected — Recommended local AI: Ollama');
         if (warnings.length > 0) {
@@ -4785,13 +4797,13 @@ function renderSystemStartupSummary(data) {
     const el = document.getElementById('sys-startup-summary');
     if (!el) return;
 
-    const newRuntimes = Number(data.newRuntimes != null ? data.newRuntimes : data.newTools) || 0;
-    const runningRuntimes = Number(data.runningRuntimes != null ? data.runningRuntimes : data.runningTools) || 0;
-    const offlineRuntimes = Number(data.offlineRuntimes != null ? data.offlineRuntimes : data.offlineTools) || 0;
-    const activeRuntime = data.activeRuntime != null ? data.activeRuntime : data.activeHeart;
-    const activeRuntimeAvailable = Boolean(
-        data.activeRuntimeAvailable != null ? data.activeRuntimeAvailable : data.activeHeartAvailable
-    );
+    const {
+        newRuntimes,
+        runningRuntimes,
+        offlineRuntimes,
+        activeRuntime,
+        activeRuntimeAvailable,
+    } = normalizeStartupRuntimeState(data);
 
     const sections = [
         {

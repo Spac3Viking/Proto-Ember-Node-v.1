@@ -321,6 +321,22 @@ function compactList(list, limit = 5) {
     return list.map(String).filter(Boolean).slice(0, limit);
 }
 
+function getArchetypeRetrievalGeometry(archetypeProfile) {
+    if (
+        archetypeProfile &&
+        archetypeProfile.retrieval_geometry &&
+        typeof archetypeProfile.retrieval_geometry === 'object'
+    ) {
+        return archetypeProfile.retrieval_geometry;
+    }
+    return {};
+}
+
+function getGeometryLimit(value, min, max, fallback) {
+    if (!Number.isFinite(value)) return fallback;
+    return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
 /**
  * Build summary-first compressed context blocks.
  * This produces compact layers (Rolling Bootstrap, archetype memory, cache/document summaries)
@@ -347,18 +363,10 @@ function buildSummaryFirstContext({
     const documentSummaries = loadDocumentSummaries();
     const archetypeMemory = loadArchetypeMemory();
     const archetypeProfile = getArchetypeMemoryProfile(activeArchetype || 'ember_prime');
-    const geometry = archetypeProfile && archetypeProfile.retrieval_geometry && typeof archetypeProfile.retrieval_geometry === 'object'
-        ? archetypeProfile.retrieval_geometry
-        : {};
-    const cacheSummaryLimit = Number.isFinite(geometry.cache_summary_limit)
-        ? Math.max(1, Math.min(4, Math.floor(geometry.cache_summary_limit)))
-        : 3;
-    const documentSummaryLimit = Number.isFinite(geometry.document_summary_limit)
-        ? Math.max(1, Math.min(6, Math.floor(geometry.document_summary_limit)))
-        : 4;
-    const sourceLineLimit = Number.isFinite(geometry.source_line_limit)
-        ? Math.max(2, Math.min(6, Math.floor(geometry.source_line_limit)))
-        : 4;
+    const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
+    const cacheSummaryLimit = getGeometryLimit(geometry.cache_summary_limit, 1, 4, 3);
+    const documentSummaryLimit = getGeometryLimit(geometry.document_summary_limit, 1, 6, 4);
+    const sourceLineLimit = getGeometryLimit(geometry.source_line_limit, 2, 6, 4);
 
     function pushBlock(label, text) {
         const value = String(text || '').trim();
@@ -461,9 +469,7 @@ function buildSummaryFirstContext({
 }
 
 function computeRawChunkBudgetWithSummaries(archetypeProfile) {
-    const geometry = archetypeProfile && archetypeProfile.retrieval_geometry && typeof archetypeProfile.retrieval_geometry === 'object'
-        ? archetypeProfile.retrieval_geometry
-        : {};
+    const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
     const configured = Number.isFinite(geometry.raw_chunk_target)
         ? Math.floor(geometry.raw_chunk_target)
         : null;
