@@ -105,8 +105,8 @@ function generateStartupCheck(migrationResult) {
     const trustedRuntimeEntries = runtimeEntries.filter(t => t.state === 'trusted');
     const trustedTools = trustedRuntimeEntries.length;
     const newTools = runtimeEntries.filter(t => t.state === 'inspected').length;
-    const runningTools = 0;
-    const offlineTools = 0;
+    const runningTools = trustedRuntimeEntries.filter(t => t.running === true).length;
+    const offlineTools = Math.max(0, trustedTools - runningTools);
     const activeHeartAvailable = trustedTools > 0;
 
     // Migration state
@@ -114,7 +114,7 @@ function generateStartupCheck(migrationResult) {
 
     // Warnings
     const warnings = [];
-    if (runtimeEntries.length > 0 && runningTools === 0) {
+    if (trustedTools > 0 && runningTools === 0) {
         warnings.push('No running local AI runtimes detected');
     }
 
