@@ -103,18 +103,19 @@ function generateStartupCheck(migrationResult) {
     // Runtime stewardship counts from persisted Threshold intake decisions.
     const runtimeEntries = Object.values((intakeState && intakeState.tools) || {});
     const trustedRuntimeEntries = runtimeEntries.filter(t => t.state === 'trusted');
-    const trustedTools = trustedRuntimeEntries.length;
-    const newTools = runtimeEntries.filter(t => t.state === 'inspected').length;
-    const runningTools = trustedRuntimeEntries.filter(t => t.running === true).length;
-    const offlineTools = Math.max(0, trustedTools - runningTools);
-    const activeHeartAvailable = trustedTools > 0;
+    const trustedRuntimes = trustedRuntimeEntries.length;
+    const newRuntimes = runtimeEntries.filter(t => t.state === 'inspected').length;
+    const runningRuntimes = trustedRuntimeEntries.filter(t => t.running === true).length;
+    const offlineRuntimes = Math.max(0, trustedRuntimes - runningRuntimes);
+    const activeRuntimeAvailable = trustedRuntimes > 0;
+    const activeRuntime = trustedRuntimeEntries[0] ? trustedRuntimeEntries[0].id || null : null;
 
     // Migration state
     const migrationState = (migrationResult && migrationResult.performed) ? 'migrated' : 'none';
 
     // Warnings
     const warnings = [];
-    if (trustedTools > 0 && runningTools === 0) {
+    if (trustedRuntimes > 0 && runningRuntimes === 0) {
         warnings.push('No running local AI runtimes detected');
     }
 
@@ -122,12 +123,19 @@ function generateStartupCheck(migrationResult) {
         waitingFiles,
         changedFiles,
         flaggedFiles,
-        newTools,
-        trustedTools,
-        runningTools,
-        offlineTools,
-        activeHeart:           trustedRuntimeEntries[0] ? trustedRuntimeEntries[0].id || null : null,
-        activeHeartAvailable,
+        newRuntimes,
+        trustedRuntimes,
+        runningRuntimes,
+        offlineRuntimes,
+        activeRuntime,
+        activeRuntimeAvailable,
+        // Backward-compatible aliases for existing UI bindings.
+        newTools: newRuntimes,
+        trustedTools: trustedRuntimes,
+        runningTools: runningRuntimes,
+        offlineTools: offlineRuntimes,
+        activeHeart: activeRuntime,
+        activeHeartAvailable: activeRuntimeAvailable,
         migrationState,
         warnings,
         lastScan:              new Date().toISOString(),

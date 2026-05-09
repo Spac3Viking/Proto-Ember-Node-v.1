@@ -26,11 +26,9 @@ const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
 const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
-    loadBootstrap, refreshBootstrap,
     loadRollingBootstrap, formatRollingBootstrapForPrompt,
     loadForgeCore, loadArchetype,
     formatForgeCoreForPrompt,
-    formatBootstrapForPrompt,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
 const {
@@ -43,16 +41,20 @@ const {
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
 const CHAT_REQUEST_TIMEOUT_MS = 120000;
-const MAX_CHAT_CONTEXT_CHUNKS = 12;
+// Phase 16F target: keep raw grounding in the 4–8 range for faster starts.
+const MAX_CHAT_CONTEXT_CHUNKS = 8;
 const MAX_CHAT_CONTEXT_CHARS = 16000;
 const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
-const MAX_SIGNAL_TRACE_SOURCES = 8;
-const MAX_SIGNAL_TRACE_ROUTING_LIST = 6;
+// Phase 16F target: compact Signal Trace routing/context lists.
+const MAX_SIGNAL_TRACE_SOURCES = 5;
+const MAX_SIGNAL_TRACE_ROUTING_LIST = 4;
 // Preserve a small raw grounding floor even when summaries are present.
 const MIN_RAW_CHUNKS_WITH_SUMMARY = 3;
 // Use half of the normal raw chunk budget when summary layers are available.
 const SUMMARY_RAW_CHUNK_RATIO = 0.5;
+const MAX_ROLLING_BOOTSTRAP_SUMMARY_CHARS = 380;
+const MAX_SUMMARY_PREVIEW_CHARS = 220;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
@@ -288,19 +290,11 @@ function buildCourtPromptModifier(member) {
     const lens = extractCourtLensLabel(member) || member.id;
     const glyph = COURT_MEMBER_GLYPHS[member.id] || '';
     return [
-        'EMBER COURT LENS:',
-        'Active lens: ' + (glyph ? glyph + ' ' : '') + lens,
-        'Function: ' + profile.functionLine,
-        'Voice: ' + profile.voice,
-        'Reasoning posture: ' + profile.reasoningPosture,
-        'Answer structure: ' + profile.answerStructure,
-        'Source preference: ' + profile.sourcePreference,
-        'Metaphor preference: ' + profile.metaphorPreference,
-        'Practicality level: ' + profile.practicalityLevel,
+        'EMBER COURT LENS',
+        'Active archetype: ' + (glyph ? glyph + ' ' : '') + lens,
+        'Posture: ' + profile.reasoningPosture,
         'Bias: ' + profile.bias,
         'Avoid: ' + profile.avoid,
-        'Use this lens as an interpretive discipline, not a costume. Stay useful, clear, and grounded.',
-        'Do not announce lens routing unless the user asks.',
     ].join('\n');
 }
 
@@ -332,6 +326,46 @@ function compactList(list, limit = 5) {
 }
 
 /**
+ * Resolve archetype retrieval tuning geometry from profile data.
+ * Returns an empty object when geometry is absent or invalid.
+ *
+ * @param {object|null} archetypeProfile
+ * @returns {object}
+ */
+function getArchetypeRetrievalGeometry(archetypeProfile) {
+    if (
+        archetypeProfile &&
+        archetypeProfile.retrieval_geometry &&
+        typeof archetypeProfile.retrieval_geometry === 'object'
+    ) {
+        return archetypeProfile.retrieval_geometry;
+    }
+    return {};
+}
+
+/**
+ * Clamp a geometry value between bounds with fallback.
+ *
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ * @param {number} fallback
+ * @returns {number}
+ */
+function getGeometryLimit(value, min, max, fallback) {
+    if (!Number.isFinite(value)) return fallback;
+    return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function hasValidBootstrapSummary(rollingBootstrap) {
+    return Boolean(
+        rollingBootstrap &&
+        typeof rollingBootstrap.summary === 'string' &&
+        rollingBootstrap.summary.trim(),
+    );
+}
+
+/**
  * Build summary-first compressed context blocks.
  * This produces compact layers (Rolling Bootstrap, archetype memory, cache/document summaries)
  * that can be prepended before raw chunks to keep prompts lean while preserving grounding.
@@ -357,6 +391,10 @@ function buildSummaryFirstContext({
     const documentSummaries = loadDocumentSummaries();
     const archetypeMemory = loadArchetypeMemory();
     const archetypeProfile = getArchetypeMemoryProfile(activeArchetype || 'ember_prime');
+    const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
+    const cacheSummaryLimit = getGeometryLimit(geometry.cache_summary_limit, 1, 4, 3);
+    const documentSummaryLimit = getGeometryLimit(geometry.document_summary_limit, 1, 6, 4);
+    const sourceLineLimit = getGeometryLimit(geometry.source_line_limit, 2, 6, 4);
 
     function pushBlock(label, text) {
         const value = String(text || '').trim();
@@ -369,18 +407,26 @@ function buildSummaryFirstContext({
         usedChars = next;
     }
 
-    if (rollingBootstrap) {
-        pushBlock('Rolling Bootstrap', String(rollingBootstrap.summary || '').slice(0, 550));
+    if (hasValidBootstrapSummary(rollingBootstrap)) {
+        const themes = compactList(rollingBootstrap.active_themes, 4);
+        const openQuestions = compactList(rollingBootstrap.open_questions, 2);
+        const recentDecisions = compactList(rollingBootstrap.recent_decisions, 2);
+        pushBlock('Rolling Bootstrap', [
+            String(rollingBootstrap.summary || '').slice(0, MAX_ROLLING_BOOTSTRAP_SUMMARY_CHARS),
+            themes.length > 0 ? ('Themes: ' + themes.join(', ')) : '',
+            openQuestions.length > 0 ? ('Open: ' + openQuestions.join(' | ')) : '',
+            recentDecisions.length > 0 ? ('Decisions: ' + recentDecisions.join(' | ')) : '',
+        ].filter(Boolean).join('\n'));
     }
 
     if (archetypeProfile) {
         const archetypeLine = [
             String(archetypeProfile.summary || '').slice(0, 260),
-            compactList(archetypeProfile.preferred_domains, 4).length > 0
-                ? ('Domains: ' + compactList(archetypeProfile.preferred_domains, 4).join(', '))
+            compactList(archetypeProfile.preferred_domains, sourceLineLimit).length > 0
+                ? ('Domains: ' + compactList(archetypeProfile.preferred_domains, sourceLineLimit).join(', '))
                 : '',
-            compactList(archetypeProfile.preferred_sources, 4).length > 0
-                ? ('Sources: ' + compactList(archetypeProfile.preferred_sources, 4).join(', '))
+            compactList(archetypeProfile.preferred_sources, sourceLineLimit).length > 0
+                ? ('Sources: ' + compactList(archetypeProfile.preferred_sources, sourceLineLimit).join(', '))
                 : '',
         ].filter(Boolean).join('\n');
         pushBlock('Archetype Memory', archetypeLine);
@@ -397,14 +443,14 @@ function buildSummaryFirstContext({
 
     let usedCacheSummaries = 0;
     if (cacheSummaries && cacheSummaries.caches) {
-        cacheIds.slice(0, 4).forEach(cacheId => {
+        cacheIds.slice(0, cacheSummaryLimit).forEach(cacheId => {
             const entry = cacheSummaries.caches[cacheId];
             if (!entry) return;
             pushBlock(
                 'Cache Summary · ' + cacheId,
                 [
-                    String(entry.summary || '').slice(0, 260),
-                    compactList(entry.themes, 4).length > 0 ? ('Themes: ' + compactList(entry.themes, 4).join(', ')) : '',
+                    String(entry.summary || '').slice(0, MAX_SUMMARY_PREVIEW_CHARS),
+                    compactList(entry.themes, sourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, sourceLineLimit).join(', ')) : '',
                     compactList(entry.dominant_archetypes, 3).length > 0
                         ? ('Archetypes: ' + compactList(entry.dominant_archetypes, 3).join(', '))
                         : '',
@@ -416,14 +462,14 @@ function buildSummaryFirstContext({
 
     let usedDocumentSummaries = 0;
     if (documentSummaries && documentSummaries.documents) {
-        sourceNames.slice(0, 8).forEach(sourceKey => {
+        sourceNames.slice(0, documentSummaryLimit).forEach(sourceKey => {
             const entry = documentSummaries.documents[sourceKey];
             if (!entry) return;
             pushBlock(
                 'Document Summary · ' + (entry.title || sourceKey),
                 [
-                    String(entry.summary || '').slice(0, 260),
-                    compactList(entry.themes, 4).length > 0 ? ('Themes: ' + compactList(entry.themes, 4).join(', ')) : '',
+                    String(entry.summary || '').slice(0, MAX_SUMMARY_PREVIEW_CHARS),
+                    compactList(entry.themes, sourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, sourceLineLimit).join(', ')) : '',
                     compactList(entry.preferred_archetypes, 3).length > 0
                         ? ('Preferred archetypes: ' + compactList(entry.preferred_archetypes, 3).join(', '))
                         : '',
@@ -431,10 +477,6 @@ function buildSummaryFirstContext({
             );
             usedDocumentSummaries++;
         });
-    }
-
-    if (blocks.length > 0) {
-        pushBlock('Compression Note', 'Scribe posture: prioritize clarity, compression, symbolic fidelity, and transmission value.');
     }
 
     const archetypeName = activeArchetype || 'ember_prime';
@@ -454,7 +496,14 @@ function buildSummaryFirstContext({
     };
 }
 
-function computeRawChunkBudgetWithSummaries() {
+function computeRawChunkBudgetWithSummaries(archetypeProfile) {
+    const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
+    const configured = Number.isFinite(geometry.raw_chunk_target)
+        ? Math.floor(geometry.raw_chunk_target)
+        : null;
+    if (configured !== null) {
+        return Math.max(MIN_RAW_CHUNKS_WITH_SUMMARY, Math.min(MAX_CHAT_CONTEXT_CHUNKS, configured));
+    }
     return Math.max(MIN_RAW_CHUNKS_WITH_SUMMARY, Math.floor(MAX_CHAT_CONTEXT_CHUNKS * SUMMARY_RAW_CHUNK_RATIO));
 }
 
@@ -495,7 +544,7 @@ router.post('/chat', async (req, res) => {
  * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history? }
  * Response: { answer, sources, grounded }
  *
- * room (optional)      — active room for context-bounded chat ('hearth' | 'workshop' | 'threshold')
+ * room (optional)      — active room for context-bounded chat ('hearth' | 'workshop' [Ember Council] | 'threshold')
  * rooms (optional)     — explicit room filter array (overrides room's default pool)
  * sourceIds (optional) — array of source IDs whose chunks are pinned into the
  * retrieved context regardless of semantic relevance.
@@ -538,6 +587,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         const activeArchetypeForMemory = selectedCourtMember
             ? selectedCourtMember.id
             : (activeArchetypeId || 'ember_prime');
+        const archetypeMemoryProfile = getArchetypeMemoryProfile(activeArchetypeForMemory);
         const retrievalTopK = getRetrievalTopKForCourtMember(selectedCourtMember);
 
         // Determine active room for context pools and system prompt
@@ -562,7 +612,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 topK: retrievalTopK,
                 routeHint: detectedRoute,
                 courtMember: selectedCourtMember,
-                archetypeMemoryProfile: getArchetypeMemoryProfile(activeArchetypeForMemory),
+                archetypeMemoryProfile,
             });
         } catch (retrieveErr) {
             console.warn('[/api/chat] retrieval failed:', retrieveErr.message);
@@ -608,15 +658,6 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // ── Phase 16D: Prompt assembly order ───────────────────────────────────
         // Forge Core → Rolling Bootstrap → Ember Prime continuity → Archetype → Retrieval
 
-        // Legacy Ember Prime continuity layer (active-bootstrap)
-        let bootstrap = loadBootstrap();
-        if (!bootstrap) {
-            console.warn('[/api/chat] Bootstrap missing — regenerating now.');
-            try { bootstrap = refreshBootstrap({ activeArchetype: activeArchetypeId }); }
-            catch (err) { console.warn('[/api/chat] Bootstrap regeneration failed:', err.message); }
-        }
-        console.log('[/api/chat] bootstrap=' + (bootstrap ? 'loaded' : 'unavailable'));
-
         const rollingBootstrap = loadRollingBootstrap();
         let rollingBootstrapStatus = 'missing';
         if (rollingBootstrap) {
@@ -637,15 +678,16 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         console.log('[/api/chat] forge-core=' + (forgeCore ? 'injected' : 'unavailable'));
 
         // Retrieval context (after identity/continuity layers)
+        const rollingBootstrapForPrompt = rollingBootstrapStatus === 'ready' ? rollingBootstrap : null;
         const summaryFirst = buildSummaryFirstContext({
             query,
-            rollingBootstrap,
+            rollingBootstrap: rollingBootstrapForPrompt,
             activeArchetype: activeArchetypeForMemory,
             sourceTrace: sources,
         });
         const rawChunksForPrompt = summaryFirst.block
-            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries())
-            : retrieved;
+            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries(archetypeMemoryProfile))
+            : retrieved.slice(0, MAX_CHAT_CONTEXT_CHUNKS);
         let userContent    = buildGroundedPrompt({
             query,
             retrievedChunks: rawChunksForPrompt,
@@ -670,15 +712,14 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         }
 
         // Assemble final prompt in required order:
-        // Forge Core → Rolling Bootstrap → Ember Prime continuity → optional archetype → retrieval
+        // Forge Core → optional archetype → retrieval
         const forgePart = formatForgeCoreForPrompt(forgeCore);
-        const rollingBootstrapPart = formatRollingBootstrapForPrompt(rollingBootstrap);
-        const bootstrapPart = formatBootstrapForPrompt(bootstrap);
+        const rollingBootstrapPart = summaryFirst.block ? '' : formatRollingBootstrapForPrompt(rollingBootstrapForPrompt);
         const archetypePart = selectedCourtMember
             ? buildCourtPromptModifier(selectedCourtMember)
             : (archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '');
 
-        const identityPreamble = [forgePart, rollingBootstrapPart, bootstrapPart, archetypePart]
+        const identityPreamble = [forgePart, rollingBootstrapPart, archetypePart]
             .filter(Boolean)
             .join('\n\n');
 
@@ -758,12 +799,11 @@ state: ${retrievalState}
                 .map(String)
                 .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
             : [];
-        const sourcesActuallyUsed = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
-            .map(normalizeDisplaySourceName)
-            .slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST);
-        const sourceList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
+        const compactContextList = Array.from(new Set((sources || []).map(s => s.sourceName || s.title || s.file)))
             .map(normalizeDisplaySourceName)
             .slice(0, MAX_SIGNAL_TRACE_SOURCES);
+        const sourcesActuallyUsed = compactContextList.slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST);
+        const sourceList = compactContextList;
         const lensName = selectedCourtMember ? extractCourtLensLabel(selectedCourtMember) : 'Ember Prime';
         const lensGlyph = selectedCourtMember ? (COURT_MEMBER_GLYPHS[selectedCourtMember.id] || '') : '';
         const courtSourcesConsidered = courtPrioritySourcesConsidered.length > 0
@@ -799,6 +839,19 @@ state: ${retrievalState}
                 documentSummaries: summaryFirst.summaryLayersUsed.documentSummaries,
                 rawChunks: rawChunksForPrompt.length,
             },
+            compact: [
+                'Active archetype: ' + (
+                    selectedCourtMember
+                        ? ((lensGlyph ? (lensGlyph + ' ') : '') + lensName)
+                        : 'Ember Prime'
+                ),
+                'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 2).join(' → ')),
+                'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
+                    (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
+                    ' · chunks ' + rawChunksForPrompt.length,
+                'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
+                'Model: ' + heart.model + ' / Ollama',
+            ].join('\n'),
         };
 
         const activeArchetype = selectedCourtMember

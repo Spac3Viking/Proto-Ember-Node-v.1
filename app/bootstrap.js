@@ -46,6 +46,7 @@ const FORGE_CORE_PATH      = path.join(FORGE_DIR, 'forge-core.json');
 const FORGE_MD_PATH        = path.join(FORGE_DIR, 'ember-node-forge-v1.3.md');
 const ACTIVE_BOOTSTRAP_PATH = path.join(BOOTSTRAP_DIR, 'active-bootstrap.json');
 const ROLLING_BOOTSTRAP_STALE_MS = 1000 * 60 * 60 * 24 * 7;
+const MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS = 420;
 
 // ── Forge v1.3 canonical markdown ─────────────────────────────────────────────
 
@@ -373,7 +374,7 @@ function summarizeHearthMap(map) {
 }
 
 /** Extract a lean summary from the Ember Council working map. */
-function summarizeWorkshopMap(map) {
+function summarizeCouncilMap(map) {
     if (!map) return null;
     const c = map.content || {};
     return {
@@ -381,6 +382,11 @@ function summarizeWorkshopMap(map) {
         updatedAt:    map.updatedAt,
         totalSources: c.totalSources || 0,
     };
+}
+
+// Backward-compatible alias for older imports.
+function summarizeWorkshopMap(map) {
+    return summarizeCouncilMap(map);
 }
 
 /** Extract a lean summary from the Threshold working map. */
@@ -662,21 +668,27 @@ function formatBootstrapForPrompt(bootstrap) {
  */
 function formatRollingBootstrapForPrompt(rollingBootstrap) {
     if (!rollingBootstrap) return '';
-    const lines = ['=== ROLLING BOOTSTRAP (Continuity) ==='];
+    const lines = ['=== ROLLING BOOTSTRAP ==='];
     if (rollingBootstrap.summary) {
-        lines.push(String(rollingBootstrap.summary).slice(0, 900));
+        lines.push(String(rollingBootstrap.summary).slice(0, MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS));
     }
     const themes = Array.isArray(rollingBootstrap.active_themes)
-        ? rollingBootstrap.active_themes.slice(0, 5).map(String)
+        ? rollingBootstrap.active_themes.slice(0, 4).map(String)
         : [];
     if (themes.length > 0) {
         lines.push('Themes: ' + themes.join(', ') + '.');
     }
     const openQuestions = Array.isArray(rollingBootstrap.open_questions)
-        ? rollingBootstrap.open_questions.slice(0, 3).map(String)
+        ? rollingBootstrap.open_questions.slice(0, 2).map(String)
         : [];
     if (openQuestions.length > 0) {
         lines.push('Open questions: ' + openQuestions.join(' | ') + '.');
+    }
+    const recentDecisions = Array.isArray(rollingBootstrap.recent_decisions)
+        ? rollingBootstrap.recent_decisions.slice(0, 2).map(String)
+        : [];
+    if (recentDecisions.length > 0) {
+        lines.push('Recent decisions: ' + recentDecisions.join(' | ') + '.');
     }
     lines.push('=== END ROLLING BOOTSTRAP ===');
     return lines.join('\n');
@@ -690,14 +702,21 @@ function formatRollingBootstrapForPrompt(rollingBootstrap) {
  */
 function formatArchetypeForPrompt(archetype) {
     if (!archetype) return '';
+    const posture = Array.isArray(archetype.reasoningEmphasis)
+        ? archetype.reasoningEmphasis.slice(0, 4).join(', ')
+        : '';
+    const bias = archetype.responseStyleBias || '';
+    const avoid = Array.isArray(archetype.toneAdjustments) && archetype.toneAdjustments.length > 0
+        ? ('flat delivery without ' + archetype.toneAdjustments.slice(0, 2).join(' or '))
+        : 'ornamental drift';
     return [
-        '=== ARCHETYPE OVERLAY: ' + (archetype.name || archetype.id) + ' ===',
-        'Tone adjustments: ' + (archetype.toneAdjustments || []).join(', ') + '.',
-        'Reasoning emphasis: ' + (archetype.reasoningEmphasis || []).join(', ') + '.',
-        'Style: ' + (archetype.responseStyleBias || ''),
-        'Epistemic discipline and Covenant remain fully in force.',
+        'ARCHETYPE OVERLAY',
+        'Active archetype: ' + (archetype.name || archetype.id),
+        posture ? ('Posture: ' + posture + '.') : '',
+        bias ? ('Bias: ' + bias) : '',
+        'Avoid: ' + avoid + '.',
         '=== END ARCHETYPE ===',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────

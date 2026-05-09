@@ -730,6 +730,7 @@ function renderSignalTrace(sources, signalTrace = null) {
     traceSources.innerHTML = '';
 
     const metadata = signalTrace && typeof signalTrace === 'object' ? signalTrace : null;
+    const compactTraceText = metadata && metadata.compact ? String(metadata.compact) : '';
     const contextStatus = metadata && metadata.contextStatus ? String(metadata.contextStatus) : null;
     const sourcesUsed = metadata && Number.isFinite(metadata.sourcesUsed) ? metadata.sourcesUsed : null;
     const sourceList = metadata && Array.isArray(metadata.sourceList) ? metadata.sourceList : [];
@@ -798,6 +799,10 @@ function renderSignalTrace(sources, signalTrace = null) {
         ? dedupedConceptRoute.join(' → ')
         : null;
     const rows = [
+        {
+            key: 'Signal Trace',
+            value: compactTraceText || null,
+        },
         {
             key: 'Memory',
             value: formatMemoryFlow(memoryFlow),
@@ -4643,6 +4648,18 @@ function showFlashMessage(msg) {
  * Fetch the startup check summary and render the launch banner.
  * Dismissible for the session; collapses on toggle.
  */
+function normalizeStartupRuntimeState(data) {
+    return {
+        newRuntimes: Number(data && (data.newRuntimes != null ? data.newRuntimes : data.newTools)) || 0,
+        runningRuntimes: Number(data && (data.runningRuntimes != null ? data.runningRuntimes : data.runningTools)) || 0,
+        offlineRuntimes: Number(data && (data.offlineRuntimes != null ? data.offlineRuntimes : data.offlineTools)) || 0,
+        activeRuntime: data ? (data.activeRuntime != null ? data.activeRuntime : data.activeHeart) : null,
+        activeRuntimeAvailable: Boolean(
+            data && (data.activeRuntimeAvailable != null ? data.activeRuntimeAvailable : data.activeHeartAvailable)
+        ),
+    };
+}
+
 async function loadStartupCheck() {
     let data;
     try {
@@ -4661,20 +4678,28 @@ async function loadStartupCheck() {
     const warningsEl = document.getElementById('startup-banner-warnings');
 
     if (statsEl) {
+        const {
+            newRuntimes,
+            runningRuntimes,
+            offlineRuntimes,
+            activeRuntime,
+            activeRuntimeAvailable,
+        } = normalizeStartupRuntimeState(data);
+
         // ── Top-line summary ────────────────────────────────────────
         const summaryParts = [];
         const totalIntake  = (data.waitingFiles || 0) + (data.changedFiles || 0) + (data.flaggedFiles || 0);
         summaryParts.push('Node awakened');
-        if (data.activeHeart && data.activeHeartAvailable) {
+        if (activeRuntime && activeRuntimeAvailable) {
             summaryParts.push('Ember Prime ready');
-        } else if (data.activeHeart && !data.activeHeartAvailable) {
+        } else if (activeRuntime && !activeRuntimeAvailable) {
             summaryParts.push('Ember Prime offline');
         } else {
             summaryParts.push('no Ember Prime set');
         }
         if (totalIntake > 0) summaryParts.push(totalIntake + ' file' + (totalIntake === 1 ? '' : 's') + ' awaiting review');
-        if (data.offlineTools > 0) summaryParts.push(data.offlineTools + ' AI offline');
-        if (data.newTools > 0) summaryParts.push(data.newTools + ' new runtime' + (data.newTools === 1 ? '' : 's') + ' detected');
+        if (offlineRuntimes > 0) summaryParts.push(offlineRuntimes + ' AI offline');
+        if (newRuntimes > 0) summaryParts.push(newRuntimes + ' new runtime' + (newRuntimes === 1 ? '' : 's') + ' detected');
 
         const summaryEl = document.getElementById('startup-banner-summary');
         if (summaryEl) {
@@ -4701,23 +4726,23 @@ async function loadStartupCheck() {
         }
 
         // ── AI Setup group ───────────────────────────────────────────
-        if (data.runningTools > 0) {
-            stats.push({ label: 'runtimes online', value: data.runningTools, style: 'ok', group: 'AI Setup' });
+        if (runningRuntimes > 0) {
+            stats.push({ label: 'runtimes online', value: runningRuntimes, style: 'ok', group: 'AI Setup' });
         }
-        if (data.offlineTools > 0) {
-            stats.push({ label: 'runtimes offline', value: data.offlineTools, style: 'error', group: 'AI Setup' });
+        if (offlineRuntimes > 0) {
+            stats.push({ label: 'runtimes offline', value: offlineRuntimes, style: 'error', group: 'AI Setup' });
         }
-        if (data.newTools > 0) {
-            stats.push({ label: 'new runtimes detected', value: data.newTools, style: 'warn', group: 'AI Setup' });
+        if (newRuntimes > 0) {
+            stats.push({ label: 'new runtimes detected', value: newRuntimes, style: 'warn', group: 'AI Setup' });
         }
 
         // Active Ember Prime
-        const noHeart = !data.activeHeart;
-        if (data.activeHeart) {
+        const noHeart = !activeRuntime;
+        if (activeRuntime) {
             stats.push({
                 label: 'ember prime',
-                value: data.activeHeart + (data.activeHeartAvailable ? ' ✓' : ' (offline)'),
-                style: data.activeHeartAvailable ? 'ok' : 'error',
+                value: activeRuntime + (activeRuntimeAvailable ? ' ✓' : ' (offline)'),
+                style: activeRuntimeAvailable ? 'ok' : 'error',
                 group: 'AI Setup',
             });
         } else {
@@ -4747,8 +4772,9 @@ async function loadStartupCheck() {
 
     // Warnings — merge server warnings with local no-Ember-Prime notice
     if (warningsEl) {
+        const { activeRuntime } = normalizeStartupRuntimeState(data);
         const warnings = [...(data.warnings || [])];
-        if (!data.activeHeart) warnings.unshift('No active Ember Prime detected — Recommended local AI: Ollama');
+        if (!activeRuntime) warnings.unshift('No active Ember Prime detected — Recommended local AI: Ollama');
         if (warnings.length > 0) {
             warningsEl.style.display = '';
             warningsEl.innerHTML = warnings.map(w =>
@@ -4771,6 +4797,14 @@ function renderSystemStartupSummary(data) {
     const el = document.getElementById('sys-startup-summary');
     if (!el) return;
 
+    const {
+        newRuntimes,
+        runningRuntimes,
+        offlineRuntimes,
+        activeRuntime,
+        activeRuntimeAvailable,
+    } = normalizeStartupRuntimeState(data);
+
     const sections = [
         {
             title: 'Intake',
@@ -4783,11 +4817,11 @@ function renderSystemStartupSummary(data) {
         {
             title: 'AI Setup',
             rows: [
-                { key: 'New runtimes',      val: data.newTools      || 0 },
-                { key: 'Running runtimes',  val: data.runningTools  || 0 },
-                { key: 'Offline runtimes',  val: data.offlineTools  || 0 },
-                { key: 'Active Ember Prime', val: data.activeHeart || '—' },
-                { key: 'Ember Prime ready',  val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
+                { key: 'New runtimes',      val: newRuntimes },
+                { key: 'Running runtimes',  val: runningRuntimes },
+                { key: 'Offline runtimes',  val: offlineRuntimes },
+                { key: 'Active Ember Prime', val: activeRuntime || '—' },
+                { key: 'Ember Prime ready',  val: activeRuntime ? (activeRuntimeAvailable ? 'yes' : 'offline') : '—' },
             ],
         },
         {

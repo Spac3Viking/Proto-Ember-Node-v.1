@@ -215,36 +215,105 @@ function buildArchetypeMemory(documentSummaries, cacheSummaries) {
             preferred_domains: [],
             preferred_sources: [],
             compression_style: 'balanced continuity synthesis',
+            retrieval_geometry: {
+                // raw_chunk_target: desired raw chunk count after summaries are present.
+                // cache_summary_limit/document_summary_limit: max summary blocks by type.
+                // source_line_limit: max domains/sources listed per summary block.
+                raw_chunk_target: 5,
+                cache_summary_limit: 3,
+                document_summary_limit: 4,
+                source_line_limit: 4,
+            },
+            prompt_modifier: {
+                posture: 'balanced continuity synthesis',
+                bias: 'preserve grounding while keeping response lean',
+                avoid: 'excessive preamble and duplicate context',
+            },
         },
         builder: {
             summary: '',
             preferred_domains: ['collapse_continuity', 'practice_reflection'],
             preferred_sources: [],
             compression_style: 'practical sequence, material constraints, grounded systems',
+            retrieval_geometry: {
+                raw_chunk_target: 6,
+                cache_summary_limit: 3,
+                document_summary_limit: 4,
+                source_line_limit: 4,
+            },
+            prompt_modifier: {
+                posture: 'practical sequence, constraints, systems, material application',
+                bias: 'show structure, constraints, and what can be built',
+                avoid: 'abstraction without application',
+            },
         },
         warrior: {
             summary: '',
             preferred_domains: ['collapse_continuity', 'sentinel_identity'],
             preferred_sources: [],
             compression_style: 'stakes, discipline, decision, pressure',
+            retrieval_geometry: {
+                raw_chunk_target: 5,
+                cache_summary_limit: 2,
+                document_summary_limit: 3,
+                source_line_limit: 3,
+            },
+            prompt_modifier: {
+                posture: 'stakes, risk, discipline, decisive action',
+                bias: 'clarify risk and immediate bounded moves',
+                avoid: 'grandstanding and escalation without need',
+            },
         },
         scholar: {
             summary: '',
             preferred_domains: ['core_orientation', 'myth_tech', 'symbolic_language'],
             preferred_sources: [],
             compression_style: 'taxonomy, comparison, conceptual relation',
+            retrieval_geometry: {
+                raw_chunk_target: 5,
+                cache_summary_limit: 3,
+                document_summary_limit: 4,
+                source_line_limit: 4,
+            },
+            prompt_modifier: {
+                posture: 'structure, comparison, taxonomy, conceptual relation',
+                bias: 'define terms and compare frameworks before synthesis',
+                avoid: 'unsupported certainty',
+            },
         },
         scribe: {
             summary: '',
             preferred_domains: ['living_sagas', 'triform_system'],
             preferred_sources: [],
             compression_style: 'transmission, narrative coherence, signal compression',
+            retrieval_geometry: {
+                raw_chunk_target: 4,
+                cache_summary_limit: 2,
+                document_summary_limit: 4,
+                source_line_limit: 4,
+            },
+            prompt_modifier: {
+                posture: 'compression, narrative coherence, transmission',
+                bias: 'shape output into reusable outlines and drafts',
+                avoid: 'ornament without communicative purpose',
+            },
         },
         mystic: {
             summary: '',
             preferred_domains: ['symbolic_language', 'myth_tech'],
             preferred_sources: [],
             compression_style: 'symbolic density, threshold resonance, hidden pattern',
+            retrieval_geometry: {
+                raw_chunk_target: 5,
+                cache_summary_limit: 2,
+                document_summary_limit: 3,
+                source_line_limit: 3,
+            },
+            prompt_modifier: {
+                posture: 'symbolic density, pattern resonance, threshold meaning',
+                bias: 'interpret symbols with grounded implications',
+                avoid: 'ungrounded mystification',
+            },
         },
     };
 
@@ -263,12 +332,45 @@ function buildArchetypeMemory(documentSummaries, cacheSummaries) {
             .filter(Boolean)
             .slice(0, 8);
         entry.preferred_sources = preferredSourceTitles;
-        entry.summary = summarizeText(
-            'Scribe compression posture: ' + id + ' attends to ' +
-            (entry.preferred_domains.length > 0 ? entry.preferred_domains.join(', ') : 'continuity synthesis') +
-            '; favored sources ' + (preferredSourceTitles.length > 0 ? preferredSourceTitles.join(', ') : 'pending') + '.',
-            280,
-        );
+        const favoredSources = preferredSourceTitles.length > 0 ? preferredSourceTitles.join(', ') : 'pending';
+        if (id === 'builder') {
+            entry.summary = summarizeText(
+                'Builder posture favors practical sequence and constraints across systems. Domains: ' +
+                entry.preferred_domains.join(', ') + '. Sources: ' + favoredSources + '.',
+                280,
+            );
+        } else if (id === 'warrior') {
+            entry.summary = summarizeText(
+                'Warrior posture tracks stakes, risk, and disciplined action under pressure. Domains: ' +
+                entry.preferred_domains.join(', ') + '. Sources: ' + favoredSources + '.',
+                280,
+            );
+        } else if (id === 'scholar') {
+            entry.summary = summarizeText(
+                'Scholar posture organizes structure, comparison, taxonomy, and conceptual relation. Domains: ' +
+                entry.preferred_domains.join(', ') + '. Sources: ' + favoredSources + '.',
+                280,
+            );
+        } else if (id === 'scribe') {
+            entry.summary = summarizeText(
+                'Scribe posture compresses for transmission, narrative coherence, and reusable drafts. Domains: ' +
+                entry.preferred_domains.join(', ') + '. Sources: ' + favoredSources + '.',
+                280,
+            );
+        } else if (id === 'mystic') {
+            entry.summary = summarizeText(
+                'Mystic posture reads symbolic density and threshold resonance while staying grounded. Domains: ' +
+                entry.preferred_domains.join(', ') + '. Sources: ' + favoredSources + '.',
+                280,
+            );
+        } else {
+            entry.summary = summarizeText(
+                'Ember Prime continuity posture balances compression and synthesis. Domains: ' +
+                (entry.preferred_domains.length > 0 ? entry.preferred_domains.join(', ') : 'continuity synthesis') +
+                '. Sources: ' + favoredSources + '.',
+                280,
+            );
+        }
     });
 
     if (base.ember_prime) {

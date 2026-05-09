@@ -368,7 +368,7 @@ function createSystemRouter({ migrationResult }) {
 
     /**
      * GET /api/intake-state
-     * Returns the full persistent intake state (files and tools).
+     * Returns the full persistent intake state (files and runtime entries).
      */
     router.get('/api/intake-state', readLimiter, (req, res) => {
         res.json(loadIntakeState());
