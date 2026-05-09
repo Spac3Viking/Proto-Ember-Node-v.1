@@ -614,7 +614,7 @@ function resolveSourcePath(storedPath) {
     if (!storedPath) return null;
     const normalized = storedPath
         .replace(/^data[\\/]/, '')
-        .replace(/^workshop[\\/]/, 'council/');
+        .replace(/^workshop([\\/])/, 'council$1');
     return path.join(DATA_ROOT, normalized);
 }
 

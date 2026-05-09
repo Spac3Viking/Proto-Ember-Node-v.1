@@ -445,6 +445,7 @@ router.post('/api/council/drafts', writeLimiter, (req, res) => {
         const noteText  = '# ' + (title || 'Council Draft') + '\n\n' + content + '\n';
 
         fs.writeFileSync(filePath, noteText, 'utf8');
+        // Council drafts are treated as workspace artifacts and are not indexed as sources.
 
         res.json({ success: true, filename, path: 'council/drafts/' + filename });
     } catch (error) {
