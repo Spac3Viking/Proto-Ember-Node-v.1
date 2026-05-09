@@ -364,7 +364,7 @@ router.get('/api/sources/:id', readLimiter, (req, res) => {
 
 /**
  * POST /api/sources/:id/remember
- * Promotes a Workshop or Threshold source to Hearth.
+ * Promotes an Ember Council or Threshold source to Hearth.
  */
 router.post('/api/sources/:id/remember', writeLimiter, async (req, res) => {
     try {
