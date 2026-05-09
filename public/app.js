@@ -59,7 +59,8 @@ function getEffectiveCourtMemberForApi() {
 }
 
 function normalizeResponseDepth(value) {
-    const raw = String(value || '').trim().toLowerCase();
+    if (typeof value !== 'string') return DEFAULT_RESPONSE_DEPTH;
+    const raw = value.trim().toLowerCase();
     return RESPONSE_DEPTH_IDS.has(raw) ? raw : DEFAULT_RESPONSE_DEPTH;
 }
 
