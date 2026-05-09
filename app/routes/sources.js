@@ -217,8 +217,11 @@ router.post('/api/index/cache/:id', indexLimiter, async (req, res) => {
 router.post('/api/index/file', indexLimiter, async (req, res) => {
     try {
         const { sourceId, targetRoom: targetRoomInput } = req.body;
-        if (!sourceId || !isSafeManifestKey(sourceId)) {
+        if (!sourceId) {
             return res.status(400).json({ error: 'sourceId is required' });
+        }
+        if (!isSafeManifestKey(sourceId)) {
+            return res.status(400).json({ error: 'Invalid source id' });
         }
 
         const manifests = loadManifests();
