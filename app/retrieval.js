@@ -27,6 +27,7 @@ const ROOM_PRIORITY = ['hearth', 'council', 'threshold'];
 const DEFAULT_MAX_CONTEXT_CHARS = 16000;
 const DEFAULT_MAX_CHUNK_CHARS = 2200;
 const DEFAULT_MAX_HISTORY_CHARS = 4000;
+const DEFAULT_MAX_HISTORY_TURNS = 8;
 const MAX_ROUTE_BONUS = 0.24;
 const BASE_ROUTE_BONUS = 0.12;
 const ROUTE_BONUS_INCREMENT = 0.04;
@@ -585,13 +586,17 @@ async function retrieve({
     });
 }
 
-function formatRecentHistory(recentHistory, maxHistoryChars) {
-    if (!Array.isArray(recentHistory) || recentHistory.length === 0) return '';
+function formatRecentHistory(recentHistory, maxHistoryChars, maxHistoryTurns = DEFAULT_MAX_HISTORY_TURNS) {
+    if (!Array.isArray(recentHistory) || recentHistory.length === 0) {
+        return { block: '', chars: 0, turns: 0 };
+    }
 
     const lines = [];
     let totalChars = 0;
+    const boundedTurns = Math.max(1, Number.isFinite(maxHistoryTurns) ? Math.floor(maxHistoryTurns) : DEFAULT_MAX_HISTORY_TURNS);
 
     for (let i = recentHistory.length - 1; i >= 0; i--) {
+        if (lines.length >= boundedTurns) break;
         const msg = recentHistory[i];
         if (!msg || typeof msg.content !== 'string') continue;
         const role = msg.role === 'assistant' ? 'Assistant' : 'User';
@@ -611,8 +616,14 @@ function formatRecentHistory(recentHistory, maxHistoryChars) {
         totalChars += line.length;
     }
 
-    if (lines.length === 0) return '';
-    return '=== Recent Chat Context ===\n' + lines.join('\n') + '\n\n';
+    if (lines.length === 0) {
+        return { block: '', chars: 0, turns: 0 };
+    }
+    return {
+        block: '=== Recent Chat Context ===\n' + lines.join('\n') + '\n\n',
+        chars: totalChars,
+        turns: lines.length,
+    };
 }
 
 function buildGroundedPrompt({
@@ -622,11 +633,27 @@ function buildGroundedPrompt({
     maxContextChars = DEFAULT_MAX_CONTEXT_CHARS,
     maxChunkChars = DEFAULT_MAX_CHUNK_CHARS,
     maxHistoryChars = DEFAULT_MAX_HISTORY_CHARS,
+    maxHistoryTurns = DEFAULT_MAX_HISTORY_TURNS,
+    includeMetrics = false,
 }) {
-    const historyBlock = formatRecentHistory(recentHistory, maxHistoryChars);
+    const historyInfo = formatRecentHistory(recentHistory, maxHistoryChars, maxHistoryTurns);
+    const historyBlock = historyInfo.block;
+    const rawChunkStats = {
+        rawContextChars: 0,
+        rawChunkCount: 0,
+        historyChars: historyInfo.chars,
+        historyTurns: historyInfo.turns,
+    };
 
     if (!retrievedChunks || retrievedChunks.length === 0) {
-        return historyBlock + query;
+        const promptWithoutChunks = historyBlock + query;
+        if (includeMetrics) {
+            return {
+                prompt: promptWithoutChunks,
+                metrics: rawChunkStats,
+            };
+        }
+        return promptWithoutChunks;
     }
 
     const contextBlocks = [];
@@ -657,15 +684,34 @@ function buildGroundedPrompt({
     }
 
     if (contextBlocks.length === 0) {
-        return historyBlock + query;
+        const promptWithoutContext = historyBlock + query;
+        if (includeMetrics) {
+            return {
+                prompt: promptWithoutContext,
+                metrics: rawChunkStats,
+            };
+        }
+        return promptWithoutContext;
     }
 
-    return (
+    rawChunkStats.rawContextChars = contextChars;
+    rawChunkStats.rawChunkCount = contextBlocks.length;
+
+    // Keep grounded chunks ahead of recent chat history so retrieval remains primary
+    // context while still retaining short-turn continuity near the active question.
+    const prompt = (
         `You are answering based on the following local knowledge sources:\n\n` +
-        `${historyBlock}` +
         `${contextBlocks.join('\n\n---\n\n')}\n\n---\n\n` +
+        `${historyBlock}` +
         `User question: ${query}`
     );
+    if (includeMetrics) {
+        return {
+            prompt,
+            metrics: rawChunkStats,
+        };
+    }
+    return prompt;
 }
 
 module.exports = {
@@ -683,4 +729,5 @@ module.exports = {
     DEFAULT_MAX_CONTEXT_CHARS,
     DEFAULT_MAX_CHUNK_CHARS,
     DEFAULT_MAX_HISTORY_CHARS,
+    DEFAULT_MAX_HISTORY_TURNS,
 };

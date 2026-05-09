@@ -108,5 +108,28 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(res.body).toHaveProperty('answer');
         expect(res.body).toHaveProperty('signalTrace');
         expect(res.body.signalTrace).toHaveProperty('memoryFlow');
+        expect(res.body.signalTrace.depth).toBe('Ember');
+        expect(typeof res.body.signalTrace.compact).toBe('string');
+        expect(res.body.signalTrace.compact).toContain('Depth: Ember');
+    });
+
+    test('chat accepts depth/context budget profile aliases', async () => {
+        const mockedAxios = require('axios');
+        mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Depth profile response' } } });
+        const { app } = require('../app/server');
+
+        const spark = await request(app)
+            .post('/api/chat')
+            .send({ query: 'Map symbolic language through practical systems.', depth: 'spark' });
+        expect(spark.status).toBe(200);
+        expect(spark.body.signalTrace.depth).toBe('Spark');
+        expect(spark.body.signalTrace.compact).toContain('Depth: Spark');
+
+        const archive = await request(app)
+            .post('/api/chat')
+            .send({ query: 'Map symbolic language through practical systems.', contextBudgetProfile: 'archive' });
+        expect(archive.status).toBe(200);
+        expect(archive.body.signalTrace.depth).toBe('Archive');
+        expect(archive.body.signalTrace.compact).toContain('Depth: Archive');
     });
 });

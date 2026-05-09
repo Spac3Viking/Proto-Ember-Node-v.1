@@ -35,7 +35,6 @@ const {
     loadCacheSummaries,
     loadDocumentSummaries,
     getArchetypeMemoryProfile,
-    loadArchetypeMemory,
 } = require('../memoryCompression');
 
 const router = express.Router();
@@ -46,6 +45,7 @@ const MAX_CHAT_CONTEXT_CHUNKS = 8;
 const MAX_CHAT_CONTEXT_CHARS = 16000;
 const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
+const MAX_CHAT_HISTORY_TURNS = 8;
 // Phase 16F target: compact Signal Trace routing/context lists.
 const MAX_SIGNAL_TRACE_SOURCES = 5;
 const MAX_SIGNAL_TRACE_ROUTING_LIST = 4;
@@ -64,9 +64,98 @@ const RETRIEVAL_STATES = Object.freeze({
     RETRIEVAL_ERROR:   'retrieval_error',
 });
 
+const CONTEXT_BUDGET_PROFILES = Object.freeze({
+    spark: {
+        id: 'spark',
+        label: 'Spark',
+        retrievalTopK: 4,
+        targetSources: 3,
+        maxRawChunks: 4,
+        minRawChunksWithSummary: 2,
+        maxContextChars: 9600,
+        maxChunkChars: 1700,
+        maxHistoryChars: 1400,
+        maxHistoryTurns: 4,
+        maxSummaryChars: 1200,
+        rollingBootstrapChars: 220,
+        cacheSummaryLimit: 1,
+        documentSummaryLimit: 2,
+        sourceLineLimit: 2,
+        includeArchetypeMemory: true,
+    },
+    ember: {
+        id: 'ember',
+        label: 'Ember',
+        retrievalTopK: 6,
+        targetSources: 4,
+        maxRawChunks: 6,
+        minRawChunksWithSummary: 3,
+        maxContextChars: 13000,
+        maxChunkChars: 2000,
+        maxHistoryChars: 2200,
+        maxHistoryTurns: 6,
+        maxSummaryChars: 2200,
+        rollingBootstrapChars: 320,
+        cacheSummaryLimit: 2,
+        documentSummaryLimit: 3,
+        sourceLineLimit: 3,
+        includeArchetypeMemory: true,
+    },
+    hearth: {
+        id: 'hearth',
+        label: 'Hearth',
+        retrievalTopK: 8,
+        targetSources: 6,
+        maxRawChunks: 8,
+        minRawChunksWithSummary: 4,
+        maxContextChars: 16000,
+        maxChunkChars: 2200,
+        maxHistoryChars: 2800,
+        maxHistoryTurns: 8,
+        maxSummaryChars: 3000,
+        rollingBootstrapChars: 400,
+        cacheSummaryLimit: 3,
+        documentSummaryLimit: 5,
+        sourceLineLimit: 4,
+        includeArchetypeMemory: true,
+    },
+    archive: {
+        id: 'archive',
+        label: 'Archive',
+        retrievalTopK: 12,
+        targetSources: 8,
+        maxRawChunks: 12,
+        minRawChunksWithSummary: 5,
+        maxContextChars: 22000,
+        maxChunkChars: 2600,
+        maxHistoryChars: 3200,
+        maxHistoryTurns: 8,
+        maxSummaryChars: 3800,
+        rollingBootstrapChars: 480,
+        cacheSummaryLimit: 4,
+        documentSummaryLimit: 6,
+        sourceLineLimit: 5,
+        includeArchetypeMemory: true,
+    },
+});
+const DEFAULT_CONTEXT_BUDGET_PROFILE = CONTEXT_BUDGET_PROFILES.ember;
+
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
     return room === 'workshop' ? 'council' : room;
+}
+
+function normalizeContextBudgetProfileId(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return DEFAULT_CONTEXT_BUDGET_PROFILE.id;
+    if (raw === 'deep') return 'hearth';
+    if (raw === 'default' || raw === 'balanced') return 'ember';
+    return CONTEXT_BUDGET_PROFILES[raw] ? raw : DEFAULT_CONTEXT_BUDGET_PROFILE.id;
+}
+
+function resolveContextBudgetProfile(value) {
+    const id = normalizeContextBudgetProfileId(value);
+    return CONTEXT_BUDGET_PROFILES[id] || DEFAULT_CONTEXT_BUDGET_PROFILE;
 }
 
 const HEART_SYSTEM_PROMPT = (
@@ -289,18 +378,23 @@ function extractCourtLensLabel(member) {
     return rawName || String((member && member.id) || '').trim();
 }
 
-function buildCourtPromptModifier(member) {
-    if (!member) return '';
-    const profile = COURT_PROMPT_PROFILES[member.id] || COURT_PROMPT_PROFILES.scribe;
-    const lens = extractCourtLensLabel(member) || member.id;
-    const glyph = COURT_MEMBER_GLYPHS[member.id] || '';
+function buildArchetypePromptModifier(member, archetypeMemoryProfile = null) {
+    if (!member && !archetypeMemoryProfile) return '';
+    const profile = member ? (COURT_PROMPT_PROFILES[member.id] || COURT_PROMPT_PROFILES.scribe) : null;
+    const promptModifier = archetypeMemoryProfile && archetypeMemoryProfile.prompt_modifier
+        ? archetypeMemoryProfile.prompt_modifier
+        : null;
+    const posture = String((promptModifier && promptModifier.posture) || (profile && profile.reasoningPosture) || '').trim();
+    const bias = String((promptModifier && promptModifier.bias) || (profile && profile.bias) || '').trim();
+    const avoid = String((promptModifier && promptModifier.avoid) || (profile && profile.avoid) || '').trim();
+    const lens = member ? (extractCourtLensLabel(member) || member.id) : 'Ember Prime';
+    const glyph = member ? (COURT_MEMBER_GLYPHS[member.id] || '') : '';
     return [
-        'EMBER COURT LENS',
         'Active archetype: ' + (glyph ? glyph + ' ' : '') + lens,
-        'Posture: ' + profile.reasoningPosture,
-        'Bias: ' + profile.bias,
-        'Avoid: ' + profile.avoid,
-    ].join('\n');
+        posture ? ('Posture: ' + posture) : '',
+        bias ? ('Bias: ' + bias) : '',
+        avoid ? ('Avoid: ' + avoid) : '',
+    ].filter(Boolean).join('\n');
 }
 
 function normalizeDisplaySourceName(value) {
@@ -389,27 +483,58 @@ function buildSummaryFirstContext({
     activeArchetype,
     sourceTrace,
     maxSummaryChars = 2400,
+    maxRollingBootstrapChars = MAX_ROLLING_BOOTSTRAP_SUMMARY_CHARS,
+    includeArchetypeMemory = true,
+    summaryLimits = null,
 }) {
     const blocks = [];
     let usedChars = 0;
     const cacheSummaries = loadCacheSummaries();
     const documentSummaries = loadDocumentSummaries();
-    const archetypeMemory = loadArchetypeMemory();
     const archetypeProfile = getArchetypeMemoryProfile(activeArchetype || 'ember_prime');
     const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
+    const maxCacheSummaryLimit = Number.isFinite(summaryLimits && summaryLimits.cacheSummaryLimit)
+        ? Math.max(1, Math.floor(summaryLimits.cacheSummaryLimit))
+        : null;
+    const maxDocumentSummaryLimit = Number.isFinite(summaryLimits && summaryLimits.documentSummaryLimit)
+        ? Math.max(1, Math.floor(summaryLimits.documentSummaryLimit))
+        : null;
+    const maxSourceLineLimit = Number.isFinite(summaryLimits && summaryLimits.sourceLineLimit)
+        ? Math.max(2, Math.floor(summaryLimits.sourceLineLimit))
+        : null;
     const cacheSummaryLimit = getGeometryLimit(geometry.cache_summary_limit, 1, 4, 3);
     const documentSummaryLimit = getGeometryLimit(geometry.document_summary_limit, 1, 6, 4);
     const sourceLineLimit = getGeometryLimit(geometry.source_line_limit, 2, 6, 4);
+    const boundedCacheSummaryLimit = maxCacheSummaryLimit === null
+        ? cacheSummaryLimit
+        : Math.min(cacheSummaryLimit, maxCacheSummaryLimit);
+    const boundedDocumentSummaryLimit = maxDocumentSummaryLimit === null
+        ? documentSummaryLimit
+        : Math.min(documentSummaryLimit, maxDocumentSummaryLimit);
+    const boundedSourceLineLimit = maxSourceLineLimit === null
+        ? sourceLineLimit
+        : Math.min(sourceLineLimit, maxSourceLineLimit);
+    const segmentLengths = {
+        rollingBootstrap: 0,
+        archetypeMemory: 0,
+        summaries: 0,
+    };
 
-    function pushBlock(label, text) {
+    // segmentKey contributes per-layer prompt audit lengths:
+    // 'rollingBootstrap' | 'archetypeMemory' | 'summaries'
+    function pushBlock(label, text, segmentKey) {
         const value = String(text || '').trim();
-        if (!value) return;
-        if (usedChars >= maxSummaryChars) return;
+        if (!value) return false;
+        if (usedChars >= maxSummaryChars) return false;
         const block = `=== ${label} ===\n${value}`;
         const next = usedChars + block.length + 2;
-        if (next > maxSummaryChars) return;
+        if (next > maxSummaryChars) return false;
         blocks.push(block);
         usedChars = next;
+        if (segmentKey && segmentLengths[segmentKey] !== undefined) {
+            segmentLengths[segmentKey] += block.length;
+        }
+        return true;
     }
 
     if (hasValidBootstrapSummary(rollingBootstrap)) {
@@ -417,24 +542,27 @@ function buildSummaryFirstContext({
         const openQuestions = compactList(rollingBootstrap.open_questions, 2);
         const recentDecisions = compactList(rollingBootstrap.recent_decisions, 2);
         pushBlock('Rolling Bootstrap', [
-            String(rollingBootstrap.summary || '').slice(0, MAX_ROLLING_BOOTSTRAP_SUMMARY_CHARS),
+            String(rollingBootstrap.summary || '').slice(0, maxRollingBootstrapChars),
             themes.length > 0 ? ('Themes: ' + themes.join(', ')) : '',
             openQuestions.length > 0 ? ('Open: ' + openQuestions.join(' | ')) : '',
             recentDecisions.length > 0 ? ('Decisions: ' + recentDecisions.join(' | ')) : '',
-        ].filter(Boolean).join('\n'));
+        ].filter(Boolean).join('\n'), 'rollingBootstrap');
     }
 
-    if (archetypeProfile) {
+    let usedArchetypeMemory = 0;
+    if (includeArchetypeMemory && archetypeProfile) {
         const archetypeLine = [
             String(archetypeProfile.summary || '').slice(0, 260),
-            compactList(archetypeProfile.preferred_domains, sourceLineLimit).length > 0
-                ? ('Domains: ' + compactList(archetypeProfile.preferred_domains, sourceLineLimit).join(', '))
+            compactList(archetypeProfile.preferred_domains, boundedSourceLineLimit).length > 0
+                ? ('Domains: ' + compactList(archetypeProfile.preferred_domains, boundedSourceLineLimit).join(', '))
                 : '',
-            compactList(archetypeProfile.preferred_sources, sourceLineLimit).length > 0
-                ? ('Sources: ' + compactList(archetypeProfile.preferred_sources, sourceLineLimit).join(', '))
+            compactList(archetypeProfile.preferred_sources, boundedSourceLineLimit).length > 0
+                ? ('Sources: ' + compactList(archetypeProfile.preferred_sources, boundedSourceLineLimit).join(', '))
                 : '',
         ].filter(Boolean).join('\n');
-        pushBlock('Archetype Memory', archetypeLine);
+        if (pushBlock('Archetype Memory', archetypeLine, 'archetypeMemory')) {
+            usedArchetypeMemory = 1;
+        }
     }
 
     const sourceNames = Array.from(new Set((sourceTrace || [])
@@ -448,18 +576,19 @@ function buildSummaryFirstContext({
 
     let usedCacheSummaries = 0;
     if (cacheSummaries && cacheSummaries.caches) {
-        cacheIds.slice(0, cacheSummaryLimit).forEach(cacheId => {
+        cacheIds.slice(0, boundedCacheSummaryLimit).forEach(cacheId => {
             const entry = cacheSummaries.caches[cacheId];
             if (!entry) return;
             pushBlock(
                 'Cache Summary · ' + cacheId,
                 [
                     String(entry.summary || '').slice(0, MAX_SUMMARY_PREVIEW_CHARS),
-                    compactList(entry.themes, sourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, sourceLineLimit).join(', ')) : '',
+                    compactList(entry.themes, boundedSourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, boundedSourceLineLimit).join(', ')) : '',
                     compactList(entry.dominant_archetypes, 3).length > 0
                         ? ('Archetypes: ' + compactList(entry.dominant_archetypes, 3).join(', '))
                         : '',
                 ].filter(Boolean).join('\n'),
+                'summaries',
             );
             usedCacheSummaries++;
         });
@@ -467,49 +596,53 @@ function buildSummaryFirstContext({
 
     let usedDocumentSummaries = 0;
     if (documentSummaries && documentSummaries.documents) {
-        sourceNames.slice(0, documentSummaryLimit).forEach(sourceKey => {
+        sourceNames.slice(0, boundedDocumentSummaryLimit).forEach(sourceKey => {
             const entry = documentSummaries.documents[sourceKey];
             if (!entry) return;
             pushBlock(
                 'Document Summary · ' + (entry.title || sourceKey),
                 [
                     String(entry.summary || '').slice(0, MAX_SUMMARY_PREVIEW_CHARS),
-                    compactList(entry.themes, sourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, sourceLineLimit).join(', ')) : '',
+                    compactList(entry.themes, boundedSourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, boundedSourceLineLimit).join(', ')) : '',
                     compactList(entry.preferred_archetypes, 3).length > 0
                         ? ('Preferred archetypes: ' + compactList(entry.preferred_archetypes, 3).join(', '))
                         : '',
                 ].filter(Boolean).join('\n'),
+                'summaries',
             );
             usedDocumentSummaries++;
         });
     }
 
-    const archetypeName = activeArchetype || 'ember_prime';
-    const hasArchetypeMemory = Boolean(
-        archetypeMemory &&
-        archetypeMemory.archetypes &&
-        archetypeMemory.archetypes[archetypeName],
-    );
-
     return {
         block: blocks.length > 0 ? (blocks.join('\n\n') + '\n\n') : '',
         summaryLayersUsed: {
-            archetypeMemory: hasArchetypeMemory ? 1 : 0,
+            archetypeMemory: usedArchetypeMemory,
             cacheSummaries: usedCacheSummaries,
             documentSummaries: usedDocumentSummaries,
+        },
+        segmentLengths: {
+            ...segmentLengths,
+            archetypeMemory: usedArchetypeMemory > 0 ? segmentLengths.archetypeMemory : 0,
         },
     };
 }
 
-function computeRawChunkBudgetWithSummaries(archetypeProfile) {
+function computeRawChunkBudgetWithSummaries(archetypeProfile, contextBudget) {
     const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
     const configured = Number.isFinite(geometry.raw_chunk_target)
         ? Math.floor(geometry.raw_chunk_target)
         : null;
+    const maxRawChunks = Number.isFinite(contextBudget && contextBudget.maxRawChunks)
+        ? Math.max(1, Math.floor(contextBudget.maxRawChunks))
+        : MAX_CHAT_CONTEXT_CHUNKS;
+    const minRawWithSummary = Number.isFinite(contextBudget && contextBudget.minRawChunksWithSummary)
+        ? Math.max(1, Math.floor(contextBudget.minRawChunksWithSummary))
+        : MIN_RAW_CHUNKS_WITH_SUMMARY;
     if (configured !== null) {
-        return Math.max(MIN_RAW_CHUNKS_WITH_SUMMARY, Math.min(MAX_CHAT_CONTEXT_CHUNKS, configured));
+        return Math.max(minRawWithSummary, Math.min(maxRawChunks, configured));
     }
-    return Math.max(MIN_RAW_CHUNKS_WITH_SUMMARY, Math.floor(MAX_CHAT_CONTEXT_CHUNKS * SUMMARY_RAW_CHUNK_RATIO));
+    return Math.max(minRawWithSummary, Math.floor(maxRawChunks * SUMMARY_RAW_CHUNK_RATIO));
 }
 
 /**
@@ -568,6 +701,9 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             archetype = null,
             courtMember = null,
             history = null,
+            contextBudgetProfile = null,
+            depthProfile = null,
+            depth = null,
             requestId = null,
         } = req.body;
         if (!query || typeof query !== 'string') {
@@ -593,7 +729,18 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             ? selectedCourtMember.id
             : (activeArchetypeId || 'ember_prime');
         const archetypeMemoryProfile = getArchetypeMemoryProfile(activeArchetypeForMemory);
-        const retrievalTopK = getRetrievalTopKForCourtMember(selectedCourtMember);
+        // Backward-compatible aliases: depth (legacy), depthProfile (transition), contextBudgetProfile (preferred).
+        // Legacy aliases remain supported for existing clients; new callers should send contextBudgetProfile.
+        const requestedDepthProfileId = normalizeContextBudgetProfileId(
+            contextBudgetProfile || depthProfile || depth,
+        );
+        const contextBudget = resolveContextBudgetProfile(requestedDepthProfileId);
+        // Retrieval keeps the larger budget so archetype/court tuning cannot undercut
+        // depth-profile breadth, while still honoring deeper court members when configured.
+        const retrievalTopK = Math.max(
+            contextBudget.retrievalTopK,
+            getRetrievalTopKForCourtMember(selectedCourtMember),
+        );
 
         // Determine active room for context pools and system prompt
         const requestedRoom = normalizeRoom(room);
@@ -620,6 +767,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 rooms: retrievalRooms,
                 cacheId,
                 topK: retrievalTopK,
+                targetSources: contextBudget.targetSources,
                 routeHint: detectedRoute,
                 courtMember: selectedCourtMember,
                 archetypeMemoryProfile,
@@ -694,18 +842,36 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             rollingBootstrap: rollingBootstrapForPrompt,
             activeArchetype: activeArchetypeForMemory,
             sourceTrace: sources,
+            maxSummaryChars: contextBudget.maxSummaryChars,
+            maxRollingBootstrapChars: contextBudget.rollingBootstrapChars,
+            includeArchetypeMemory: contextBudget.includeArchetypeMemory,
+            summaryLimits: {
+                cacheSummaryLimit: contextBudget.cacheSummaryLimit,
+                documentSummaryLimit: contextBudget.documentSummaryLimit,
+                sourceLineLimit: contextBudget.sourceLineLimit,
+            },
         });
         const rawChunksForPrompt = summaryFirst.block
-            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries(archetypeMemoryProfile))
-            : retrieved.slice(0, MAX_CHAT_CONTEXT_CHUNKS);
-        let userContent    = buildGroundedPrompt({
+            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries(archetypeMemoryProfile, contextBudget))
+            : retrieved.slice(0, contextBudget.maxRawChunks);
+        const groundedPrompt = buildGroundedPrompt({
             query,
             retrievedChunks: rawChunksForPrompt,
             recentHistory: Array.isArray(history) ? history : null,
-            maxContextChars: MAX_CHAT_CONTEXT_CHARS,
-            maxChunkChars: MAX_CHAT_CHUNK_CHARS,
-            maxHistoryChars: MAX_CHAT_HISTORY_CHARS,
+            maxContextChars: contextBudget.maxContextChars || MAX_CHAT_CONTEXT_CHARS,
+            maxChunkChars: contextBudget.maxChunkChars || MAX_CHAT_CHUNK_CHARS,
+            maxHistoryChars: contextBudget.maxHistoryChars || MAX_CHAT_HISTORY_CHARS,
+            maxHistoryTurns: contextBudget.maxHistoryTurns || MAX_CHAT_HISTORY_TURNS,
+            includeMetrics: true,
         });
+        const hasGroundedPromptObject = groundedPrompt && typeof groundedPrompt === 'object';
+        const groundedPromptText = hasGroundedPromptObject
+            ? groundedPrompt.prompt
+            : String(groundedPrompt || '');
+        const groundedPromptMetrics = hasGroundedPromptObject
+            ? groundedPrompt.metrics
+            : null;
+        let userContent = groundedPromptText;
         if (summaryFirst.block) {
             userContent = summaryFirst.block + userContent;
         }
@@ -725,9 +891,14 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // Forge Core → optional archetype → retrieval
         const forgePart = formatForgeCoreForPrompt(forgeCore);
         const rollingBootstrapPart = summaryFirst.block ? '' : formatRollingBootstrapForPrompt(rollingBootstrapForPrompt);
-        const archetypePart = selectedCourtMember
-            ? buildCourtPromptModifier(selectedCourtMember)
-            : (archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '');
+        // Prefer the compact archetype modifier from archetype-memory tuning.
+        // Fall back to legacy archetype formatter only when compact data is unavailable.
+        const fallbackArchetypePart = archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '';
+        const compactArchetypePart = buildArchetypePromptModifier(
+            selectedCourtMember,
+            archetypeMemoryProfile,
+        );
+        const archetypePart = compactArchetypePart || fallbackArchetypePart;
 
         const identityPreamble = [forgePart, rollingBootstrapPart, archetypePart]
             .filter(Boolean)
@@ -758,7 +929,27 @@ state: ${retrievalState}
             ],
         };
 
+        const promptAudit = {
+            systemPromptLength: systemPrompt.length,
+            rollingBootstrapLength: (
+                rollingBootstrapPart.length +
+                (summaryFirst.segmentLengths ? summaryFirst.segmentLengths.rollingBootstrap : 0)
+            ),
+            archetypeModifierLength: archetypePart.length,
+            summaryContextLength: summaryFirst.segmentLengths
+                ? summaryFirst.segmentLengths.summaries
+                : summaryFirst.block.length,
+            rawChunkContextLength: groundedPromptMetrics ? groundedPromptMetrics.rawContextChars : 0,
+            chatHistoryLength: groundedPromptMetrics ? groundedPromptMetrics.historyChars : 0,
+            chatHistoryTurns: groundedPromptMetrics ? groundedPromptMetrics.historyTurns : 0,
+            finalPromptLength: (
+                systemPrompt.length +
+                userContent.length
+            ),
+        };
+
         let response;
+        const modelRequestStartedAt = Date.now();
         try {
             response = await axios.post(heart.chatUrl, payload, {
                 signal: abortController.signal,
@@ -783,6 +974,17 @@ state: ${retrievalState}
             }
             throw err;
         }
+        const modelResponseTimeMs = Date.now() - modelRequestStartedAt;
+        console.log(
+            '[/api/chat] prompt-audit system=' + promptAudit.systemPromptLength +
+            ' rolling=' + promptAudit.rollingBootstrapLength +
+            ' archetype=' + promptAudit.archetypeModifierLength +
+            ' summaries=' + promptAudit.summaryContextLength +
+            ' raw=' + promptAudit.rawChunkContextLength +
+            ' history=' + promptAudit.chatHistoryLength + '/' + promptAudit.chatHistoryTurns +
+            ' final=' + promptAudit.finalPromptLength +
+            ' responseMs=' + modelResponseTimeMs,
+        );
         const answer   = response.data && response.data.message
             ? response.data.message.content
             : '';
@@ -823,6 +1025,7 @@ state: ${retrievalState}
                 : []);
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
+            depth: contextBudget.label,
             routeDetected: detectedRoute || 'general',
             courtLens: selectedCourtMember
                 ? ((lensGlyph ? (lensGlyph + ' ') : '') + lensName)
@@ -839,6 +1042,7 @@ state: ${retrievalState}
             sourceList,
             model: heart.model,
             provider: 'Ollama',
+            modelResponseMs: modelResponseTimeMs,
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
             rollingBootstrapStatus,
             rollingBootstrapThemes,
@@ -855,6 +1059,7 @@ state: ${retrievalState}
                         ? ((lensGlyph ? (lensGlyph + ' ') : '') + lensName)
                         : 'Ember Prime'
                 ),
+                'Depth: ' + contextBudget.label,
                 'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 2).join(' → ')),
                 'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
