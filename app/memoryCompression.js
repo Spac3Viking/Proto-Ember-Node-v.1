@@ -216,6 +216,9 @@ function buildArchetypeMemory(documentSummaries, cacheSummaries) {
             preferred_sources: [],
             compression_style: 'balanced continuity synthesis',
             retrieval_geometry: {
+                // raw_chunk_target: desired raw chunk count after summaries are present.
+                // cache_summary_limit/document_summary_limit: max summary blocks by type.
+                // source_line_limit: max domains/sources listed per summary block.
                 raw_chunk_target: 5,
                 cache_summary_limit: 3,
                 document_summary_limit: 4,

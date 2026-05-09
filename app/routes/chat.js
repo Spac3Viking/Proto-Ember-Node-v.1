@@ -41,16 +41,20 @@ const {
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
 const CHAT_REQUEST_TIMEOUT_MS = 120000;
+// Phase 16F target: keep raw grounding in the 4–8 range for faster starts.
 const MAX_CHAT_CONTEXT_CHUNKS = 8;
 const MAX_CHAT_CONTEXT_CHARS = 16000;
 const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
+// Phase 16F target: compact Signal Trace routing/context lists.
 const MAX_SIGNAL_TRACE_SOURCES = 5;
 const MAX_SIGNAL_TRACE_ROUTING_LIST = 4;
 // Preserve a small raw grounding floor even when summaries are present.
 const MIN_RAW_CHUNKS_WITH_SUMMARY = 3;
 // Use half of the normal raw chunk budget when summary layers are available.
 const SUMMARY_RAW_CHUNK_RATIO = 0.5;
+const MAX_ROLLING_BOOTSTRAP_SUMMARY_CHARS = 380;
+const MAX_SUMMARY_PREVIEW_CHARS = 220;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
@@ -321,6 +325,13 @@ function compactList(list, limit = 5) {
     return list.map(String).filter(Boolean).slice(0, limit);
 }
 
+/**
+ * Resolve archetype retrieval tuning geometry from profile data.
+ * Returns an empty object when geometry is absent or invalid.
+ *
+ * @param {object|null} archetypeProfile
+ * @returns {object}
+ */
 function getArchetypeRetrievalGeometry(archetypeProfile) {
     if (
         archetypeProfile &&
@@ -332,9 +343,26 @@ function getArchetypeRetrievalGeometry(archetypeProfile) {
     return {};
 }
 
+/**
+ * Clamp a geometry value between bounds with fallback.
+ *
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ * @param {number} fallback
+ * @returns {number}
+ */
 function getGeometryLimit(value, min, max, fallback) {
     if (!Number.isFinite(value)) return fallback;
     return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function hasValidBootstrapSummary(rollingBootstrap) {
+    return Boolean(
+        rollingBootstrap &&
+        typeof rollingBootstrap.summary === 'string' &&
+        rollingBootstrap.summary.trim(),
+    );
 }
 
 /**
@@ -379,12 +407,12 @@ function buildSummaryFirstContext({
         usedChars = next;
     }
 
-    if (rollingBootstrap && typeof rollingBootstrap.summary === 'string' && rollingBootstrap.summary.trim()) {
+    if (hasValidBootstrapSummary(rollingBootstrap)) {
         const themes = compactList(rollingBootstrap.active_themes, 4);
         const openQuestions = compactList(rollingBootstrap.open_questions, 2);
         const recentDecisions = compactList(rollingBootstrap.recent_decisions, 2);
         pushBlock('Rolling Bootstrap', [
-            String(rollingBootstrap.summary || '').slice(0, 380),
+            String(rollingBootstrap.summary || '').slice(0, MAX_ROLLING_BOOTSTRAP_SUMMARY_CHARS),
             themes.length > 0 ? ('Themes: ' + themes.join(', ')) : '',
             openQuestions.length > 0 ? ('Open: ' + openQuestions.join(' | ')) : '',
             recentDecisions.length > 0 ? ('Decisions: ' + recentDecisions.join(' | ')) : '',
@@ -421,7 +449,7 @@ function buildSummaryFirstContext({
             pushBlock(
                 'Cache Summary · ' + cacheId,
                 [
-                    String(entry.summary || '').slice(0, 220),
+                    String(entry.summary || '').slice(0, MAX_SUMMARY_PREVIEW_CHARS),
                     compactList(entry.themes, sourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, sourceLineLimit).join(', ')) : '',
                     compactList(entry.dominant_archetypes, 3).length > 0
                         ? ('Archetypes: ' + compactList(entry.dominant_archetypes, 3).join(', '))
@@ -440,7 +468,7 @@ function buildSummaryFirstContext({
             pushBlock(
                 'Document Summary · ' + (entry.title || sourceKey),
                 [
-                    String(entry.summary || '').slice(0, 220),
+                    String(entry.summary || '').slice(0, MAX_SUMMARY_PREVIEW_CHARS),
                     compactList(entry.themes, sourceLineLimit).length > 0 ? ('Themes: ' + compactList(entry.themes, sourceLineLimit).join(', ')) : '',
                     compactList(entry.preferred_archetypes, 3).length > 0
                         ? ('Preferred archetypes: ' + compactList(entry.preferred_archetypes, 3).join(', '))

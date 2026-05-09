@@ -46,6 +46,7 @@ const FORGE_CORE_PATH      = path.join(FORGE_DIR, 'forge-core.json');
 const FORGE_MD_PATH        = path.join(FORGE_DIR, 'ember-node-forge-v1.3.md');
 const ACTIVE_BOOTSTRAP_PATH = path.join(BOOTSTRAP_DIR, 'active-bootstrap.json');
 const ROLLING_BOOTSTRAP_STALE_MS = 1000 * 60 * 60 * 24 * 7;
+const MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS = 420;
 
 // ── Forge v1.3 canonical markdown ─────────────────────────────────────────────
 
@@ -669,7 +670,7 @@ function formatRollingBootstrapForPrompt(rollingBootstrap) {
     if (!rollingBootstrap) return '';
     const lines = ['=== ROLLING BOOTSTRAP ==='];
     if (rollingBootstrap.summary) {
-        lines.push(String(rollingBootstrap.summary).slice(0, 420));
+        lines.push(String(rollingBootstrap.summary).slice(0, MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS));
     }
     const themes = Array.isArray(rollingBootstrap.active_themes)
         ? rollingBootstrap.active_themes.slice(0, 4).map(String)
