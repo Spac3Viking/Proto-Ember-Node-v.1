@@ -117,6 +117,16 @@
                   <div class="chat-refs-chips" id="chat-refs-chips"></div>
                 </div>
 
+                <div class="response-depth-control">
+                  <label for="response-depth-select" class="response-depth-label">Response Depth:</label>
+                  <select id="response-depth-select" class="response-depth-select" aria-label="Response depth" aria-describedby="response-depth-help">
+                    <option value="spark">Spark</option>
+                    <option value="ember" selected>Ember</option>
+                    <option value="hearth">Hearth</option>
+                    <option value="archive">Archive</option>
+                  </select>
+                  <span class="visually-hidden" id="response-depth-help">Spark is fast with minimal context. Ember is the balanced default. Hearth enables deeper synthesis. Archive is broadest and slowest.</span>
+                </div>
                 <div class="chat-input-row" style="padding: 0.75rem 1rem;">
                   <textarea
                     id="message-input"
@@ -449,6 +459,16 @@
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <div class="council-section-title" style="margin:0 0 0.5rem 0;">Council Chat</div>
               <div class="message-system" id="ws-council-active-archetype">Active archetype: Ember Prime</div>
+              <div class="response-depth-control response-depth-control-inline">
+                <label for="ws-response-depth-select" class="response-depth-label">Response Depth:</label>
+                <select id="ws-response-depth-select" class="response-depth-select" aria-label="Council response depth" aria-describedby="ws-response-depth-help">
+                  <option value="spark">Spark</option>
+                  <option value="ember" selected>Ember</option>
+                  <option value="hearth">Hearth</option>
+                  <option value="archive">Archive</option>
+                </select>
+                <span class="visually-hidden" id="ws-response-depth-help">Spark is fast with minimal context. Ember is the balanced default. Hearth enables deeper synthesis. Archive is broadest and slowest.</span>
+              </div>
             </div>
             <div class="ember-card" style="padding: 1rem; display:flex; flex-direction:column; gap:0.75rem; min-height:420px;">
               <div id="ws-council-messages" class="messages-container">

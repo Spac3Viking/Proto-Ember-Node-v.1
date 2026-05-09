@@ -12,7 +12,11 @@ const DEFAULT_MODEL_LABEL = 'gemma3:4b';
 let activeModelLabel = DEFAULT_MODEL_LABEL;
 const EMBER_COURT_STORAGE_KEY = 'ember-court-active-member';
 const EMBER_PRIME_MEMBER_ID = 'ember-prime';
+const RESPONSE_DEPTH_STORAGE_KEY = 'responseDepth';
+const RESPONSE_DEPTH_IDS = new Set(['spark', 'ember', 'hearth', 'archive']);
+const DEFAULT_RESPONSE_DEPTH = 'ember';
 let _activeCourtMemberId = null;
+let _activeResponseDepth = null;
 
 function normalizeCourtMemberId(value) {
     if (!value || typeof value !== 'string') return null;
@@ -53,6 +57,57 @@ function getEffectiveCourtMemberForApi() {
     if (!activeCourtMember || activeCourtMember === EMBER_PRIME_MEMBER_ID) return undefined;
     return activeCourtMember;
 }
+
+function normalizeResponseDepth(value) {
+    if (typeof value !== 'string') return DEFAULT_RESPONSE_DEPTH;
+    const raw = value.trim().toLowerCase();
+    return RESPONSE_DEPTH_IDS.has(raw) ? raw : DEFAULT_RESPONSE_DEPTH;
+}
+
+function syncResponseDepthSelects() {
+    const activeDepth = getActiveResponseDepth();
+    const selectors = ['response-depth-select', 'ws-response-depth-select']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    selectors.forEach(selectEl => {
+        if (selectEl.value !== activeDepth) {
+            selectEl.value = activeDepth;
+        }
+    });
+}
+
+function getActiveResponseDepth() {
+    if (_activeResponseDepth) return _activeResponseDepth;
+    try {
+        _activeResponseDepth = normalizeResponseDepth(window.localStorage.getItem(RESPONSE_DEPTH_STORAGE_KEY));
+    } catch {
+        _activeResponseDepth = DEFAULT_RESPONSE_DEPTH;
+    }
+    return _activeResponseDepth;
+}
+
+function setActiveResponseDepth(depth) {
+    const normalized = normalizeResponseDepth(depth);
+    _activeResponseDepth = normalized;
+    try {
+        window.localStorage.setItem(RESPONSE_DEPTH_STORAGE_KEY, normalized);
+    } catch { /* ignore storage failures */ }
+    syncResponseDepthSelects();
+    return _activeResponseDepth;
+}
+
+(function initResponseDepthControls() {
+    const selectors = ['response-depth-select', 'ws-response-depth-select']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    const activeDepth = getActiveResponseDepth();
+    selectors.forEach(selectEl => {
+        selectEl.value = activeDepth;
+        selectEl.addEventListener('change', () => {
+            setActiveResponseDepth(selectEl.value);
+        });
+    });
+})();
 
 const COURT_MEMBER_TRANSITIONS = Object.freeze({
     builder: 'Grounding signal in structure, systems, and practical sequence.',
@@ -938,6 +993,7 @@ async function sendMessage() {
                 room:      'hearth',
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
                 courtMember: getEffectiveCourtMemberForApi(),
+                responseDepth: getActiveResponseDepth(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1095,6 +1151,7 @@ async function sendCouncilMessage() {
                 query: message,
                 room: 'council',
                 courtMember: getEffectiveCourtMemberForApi(),
+                responseDepth: getActiveResponseDepth(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1810,6 +1867,7 @@ async function sendDocumentToHeart() {
             body:    JSON.stringify({
                 query,
                 courtMember: getEffectiveCourtMemberForApi(),
+                responseDepth: getActiveResponseDepth(),
             }),
         });
         const data = await res.json();
