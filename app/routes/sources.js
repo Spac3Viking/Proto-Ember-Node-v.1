@@ -42,6 +42,7 @@ const router = express.Router();
 
 /** Maximum number of characters returned by the source preview endpoint. */
 const PREVIEW_MAX_LENGTH = 600;
+const VALID_ROOMS = ['hearth', 'council', 'threshold'];
 
 function normalizeRoom(room) {
     return room === 'workshop' ? 'council' : room;
@@ -98,8 +99,7 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
         const ALLOWED_EXTENSIONS = ['.txt', '.md', '.pdf', '.docx'];
 
         const room = normalizeRoom(roomInput);
-        const validRooms = ['hearth', 'council', 'threshold'];
-        if (!validRooms.includes(room)) {
+        if (!VALID_ROOMS.includes(room)) {
             return res.status(400).json({ error: 'Invalid room "' + room + '"' });
         }
 
@@ -229,8 +229,7 @@ router.post('/api/index/file', indexLimiter, async (req, res) => {
 
         if (targetRoomInput) {
             const targetRoom = normalizeRoom(targetRoomInput);
-            const validRooms = ['hearth', 'council', 'threshold'];
-            if (!validRooms.includes(targetRoom)) {
+            if (!VALID_ROOMS.includes(targetRoom)) {
                 return res.status(400).json({ error: 'Invalid room "' + targetRoom + '"' });
             }
 

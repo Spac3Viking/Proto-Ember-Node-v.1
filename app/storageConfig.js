@@ -561,13 +561,17 @@ function migrateLegacyWorkshopToCouncil() {
     const councilDir = path.join(DATA_ROOT, 'council');
     if (!fs.existsSync(legacyWorkshopDir)) return;
 
-    if (!fs.existsSync(councilDir)) {
-        fs.renameSync(legacyWorkshopDir, councilDir);
-        return;
-    }
+    try {
+        if (!fs.existsSync(councilDir)) {
+            fs.renameSync(legacyWorkshopDir, councilDir);
+            return;
+        }
 
-    copyDirSafe(legacyWorkshopDir, councilDir);
-    fs.rmSync(legacyWorkshopDir, { recursive: true, force: true });
+        copyDirSafe(legacyWorkshopDir, councilDir);
+        fs.rmSync(legacyWorkshopDir, { recursive: true, force: true });
+    } catch (err) {
+        throw new Error('Failed to migrate legacy workshop room to council: ' + err.message);
+    }
 }
 
 // ── First-run seed copy (Phase 11.8) ─────────────────────────────────────────

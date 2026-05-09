@@ -605,7 +605,9 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // - Otherwise, default to room-native pool
         const retrievalRooms = Array.isArray(rooms)
             ? rooms.map(normalizeRoom)
-            : [activeRoom];
+            : (typeof rooms === 'string' && rooms.trim()
+                ? [normalizeRoom(rooms.trim())]
+                : [activeRoom]);
 
         // Retrieve relevant local chunks via semantic / keyword search
         let retrieved = [];
