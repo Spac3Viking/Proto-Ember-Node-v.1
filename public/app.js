@@ -3753,23 +3753,23 @@ function updateHeaderStatus() {
 
 /**
  * Fetch all AI runtimes from the registry.
- * @returns {Promise<{ tools: object[], active: object }>}
+ * @returns {Promise<{ runtimes: object[], active: object }>}
  */
 async function fetchRuntimeRegistry() {
     const res  = await fetch('/api/runtimes');
     const data = await res.json();
-    return { tools: data.runtimes || [], active: data.active || {} };
+    return { runtimes: data.runtimes || [], active: data.active || {} };
 }
 
 /**
  * Trigger a discovery scan.
- * @returns {Promise<{ tools: object[], active: object }>}
+ * @returns {Promise<{ runtimes: object[], active: object }>}
  */
 async function scanRuntimes() {
     const res  = await fetch('/api/runtimes/scan', { method: 'POST' });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Scan failed');
-    return { tools: data.runtimes || [], active: data.active || {} };
+    return { runtimes: data.runtimes || [], active: data.active || {} };
 }
 
 /** Status label for an AI runtime lifecycle state. */
@@ -3816,15 +3816,15 @@ async function loadThresholdRuntimes() {
     listEl.innerHTML = '<span class="message-system">Loading…</span>';
 
     try {
-        const { tools, active } = await fetchRuntimeRegistry();
+        const { runtimes, active } = await fetchRuntimeRegistry();
 
         // Show all non-admitted detected runtimes (+ not_detected as dim)
         // Persistently rejected runtimes are shown as a separate dim section
-        const pendingRuntimes = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
-        const rejected = tools.filter(t => !t.trusted && t.intake && t.intake.state === 'rejected');
+        const pendingRuntimes = runtimes.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
+        const rejected = runtimes.filter(t => !t.trusted && t.intake && t.intake.state === 'rejected');
 
         // Show guided setup if no running runtimes at all
-        const anyRunning = tools.some(t => t.running === true);
+        const anyRunning = runtimes.some(t => t.running === true);
         if (guideEl) guideEl.style.display = anyRunning ? 'none' : 'flex';
 
         if (pendingRuntimes.length === 0 && rejected.length === 0) {
@@ -3842,7 +3842,7 @@ async function loadThresholdRuntimes() {
             listEl.appendChild(sep);
             rejected.forEach(tool => renderThresholdToolRow(tool, active, listEl));
         }
-        loadThresholdAiModelGuidance(tools);
+        loadThresholdAiModelGuidance(runtimes);
     } catch {
         listEl.innerHTML = '<span class="message-system threshold-error">Could not load runtimes.</span>';
         loadThresholdAiModelGuidance([]);
@@ -3858,7 +3858,7 @@ const THRESHOLD_AI_SUGGESTED_COMMANDS = [
 ].join('\n');
 
 /** Load Ollama detection/model guidance in Threshold → AI. */
-async function loadThresholdAiModelGuidance(tools) {
+async function loadThresholdAiModelGuidance(runtimes) {
     const ollamaStatusEl = document.getElementById('th-ai-ollama-status');
     const modelsListEl = document.getElementById('th-ai-models-list');
     const selectedModelEl = document.getElementById('th-ai-selected-model');
@@ -3868,13 +3868,13 @@ async function loadThresholdAiModelGuidance(tools) {
         commandsEl.textContent = THRESHOLD_AI_SUGGESTED_COMMANDS;
     }
 
-    const toolList = Array.isArray(tools) ? tools : [];
-    const ollamaTool = toolList.find(t => t && t.id === 'ollama-local');
+    const runtimeList = Array.isArray(runtimes) ? runtimes : [];
+    const ollamaRuntime = runtimeList.find(t => t && t.id === 'ollama-local');
     const ollamaDetected = Boolean(
-        ollamaTool &&
-        ollamaTool.status &&
-        ollamaTool.status !== 'not_detected' &&
-        ollamaTool.status !== 'unknown',
+        ollamaRuntime &&
+        ollamaRuntime.status &&
+        ollamaRuntime.status !== 'not_detected' &&
+        ollamaRuntime.status !== 'unknown',
     );
     if (ollamaStatusEl) {
         ollamaStatusEl.textContent = ollamaDetected ? 'Detected' : 'Not detected';
@@ -4210,8 +4210,8 @@ async function loadHearthToolRegistry() {
     if (!listEl) return;
 
     try {
-        const { tools, active } = await fetchRuntimeRegistry();
-        const trusted = tools.filter(t => t.trusted);
+        const { runtimes, active } = await fetchRuntimeRegistry();
+        const trusted = runtimes.filter(t => t.trusted);
 
         if (emptyEl) emptyEl.style.display = trusted.length === 0 ? '' : 'none';
 
@@ -4220,7 +4220,7 @@ async function loadHearthToolRegistry() {
 
         const currentHeart = active && active.heart;
         if (activeEl) activeEl.textContent = currentHeart
-            ? (tools.find(t => t.id === currentHeart) || {}).name || currentHeart
+            ? (runtimes.find(t => t.id === currentHeart) || {}).name || currentHeart
             : '—';
 
         trusted.forEach(tool => {
