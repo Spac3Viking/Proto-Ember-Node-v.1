@@ -50,7 +50,7 @@ router.get('/caches/:name', (req, res) => {
     if (!cache) {
         return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
     }
-    return res.json(cache);
+    res.json(cache);
 });
 
 module.exports = router;
