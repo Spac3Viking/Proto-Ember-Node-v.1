@@ -26,10 +26,10 @@
  *   <data-root>/
  *     hearth/                  — curated Hearth sources (remembered knowledge)
  *       remembered-threads/    — durable thread memory objects
- *     workshop/                — Workshop notes and active drafts
- *       documents/             — Workshop documents
- *       notes/                 — Workshop notes
- *       drafts/                — Workshop drafts
+ *     council/                 — Ember Council drafts and notes
+ *       documents/             — Council documents
+ *       notes/                 — Council notes
+ *       drafts/                — Council drafts
  *     threshold/               — quarantined imports awaiting inspection
  *       waiting/               — files pending review
  *       changed/               — files changed since last ingest
@@ -116,16 +116,16 @@ const DATA_ROOT = getDataRoot();
 
 const ROOM_DIRS = {
     hearth:    path.join(DATA_ROOT, 'hearth'),
-    workshop:  path.join(DATA_ROOT, 'workshop'),
+    council:   path.join(DATA_ROOT, 'council'),
     threshold: path.join(DATA_ROOT, 'threshold'),
 };
 
-// ── Phase 11.8: Workshop subdirectories ──────────────────────────────────────
+// ── Phase 11.8: Council subdirectories ───────────────────────────────────────
 
-/** Workshop sub-directories (documents, notes, drafts, maps) */
-const WORKSHOP_DOCUMENTS_DIR = path.join(DATA_ROOT, 'workshop', 'documents');
-const WORKSHOP_NOTES_DIR     = path.join(DATA_ROOT, 'workshop', 'notes');
-const WORKSHOP_DRAFTS_DIR    = path.join(DATA_ROOT, 'workshop', 'drafts');
+/** Council sub-directories (documents, notes, drafts, maps) */
+const COUNCIL_DOCUMENTS_DIR = path.join(DATA_ROOT, 'council', 'documents');
+const COUNCIL_NOTES_DIR     = path.join(DATA_ROOT, 'council', 'notes');
+const COUNCIL_DRAFTS_DIR    = path.join(DATA_ROOT, 'council', 'drafts');
 
 // ── Phase 11.8: Threshold subdirectories ─────────────────────────────────────
 
@@ -218,16 +218,12 @@ const ARCHIVE_DIRS = {
 /** Room-partitioned thread sub-directories */
 const THREADS_ROOM_DIRS = {
     hearth:    path.join(DATA_ROOT, 'threads', 'hearth'),
-    workshop:  path.join(DATA_ROOT, 'threads', 'workshop'),
+    council:   path.join(DATA_ROOT, 'threads', 'council'),
     threshold: path.join(DATA_ROOT, 'threads', 'threshold'),
 };
 
 /** Hearth sub-directories for continuity memory features */
 const HEARTH_REMEMBERED_THREADS_DIR = path.join(ROOM_DIRS.hearth, 'remembered-threads');
-
-// Ember Council terminology note:
-// Runtime room key remains "workshop" for compatibility with existing data and routes.
-// TODO(phase-15-9c): evaluate a full storage migration from workshop/ to council/.
 
 // Placeholder files that should not be treated as real user content
 const SEED_TEMPLATE_MARKER = '.ember-seed-template.json';
@@ -346,7 +342,7 @@ function ensureDataRoot() {
     const dirs = [
         DATA_ROOT,
         ROOM_DIRS.hearth,
-        ROOM_DIRS.workshop,
+        ROOM_DIRS.council,
         ROOM_DIRS.threshold,
         INDEXES_DIR,
         THREADS_DIR,
@@ -371,12 +367,12 @@ function ensureDataRoot() {
         SYSTEM_CONFIG_DIR,
         SYSTEM_PROMPTS_DIR,
         THREADS_ROOM_DIRS.hearth,
-        THREADS_ROOM_DIRS.workshop,
+        THREADS_ROOM_DIRS.council,
         THREADS_ROOM_DIRS.threshold,
-        // Phase 11.8: Workshop subdirectories
-        WORKSHOP_DOCUMENTS_DIR,
-        WORKSHOP_NOTES_DIR,
-        WORKSHOP_DRAFTS_DIR,
+        // Phase 11.8: Council subdirectories
+        COUNCIL_DOCUMENTS_DIR,
+        COUNCIL_NOTES_DIR,
+        COUNCIL_DRAFTS_DIR,
         // Phase 11.8: Threshold subdirectories
         THRESHOLD_WAITING_DIR,
         THRESHOLD_CHANGED_DIR,
@@ -604,8 +600,8 @@ function seedDataRoot(seedDir) {
  * Resolve a stored source path to an absolute filesystem path.
  *
  * Handles two formats:
- *   New (storage-root-relative): 'workshop/file.md'  → <DATA_ROOT>/workshop/file.md
- *   Legacy (app-root-relative):  'data/workshop/file.md' → <DATA_ROOT>/workshop/file.md
+ *   New (storage-root-relative): 'council/file.md'  → <DATA_ROOT>/council/file.md
+ *   Legacy (app-root-relative):  'data/workshop/file.md' → <DATA_ROOT>/council/file.md
  *
  * The legacy format was used by older Ember Node versions that stored data
  * inside the app folder.  The data/ prefix is stripped so both formats
@@ -616,7 +612,9 @@ function seedDataRoot(seedDir) {
  */
 function resolveSourcePath(storedPath) {
     if (!storedPath) return null;
-    const normalized = storedPath.replace(/^data[\\/]/, '');
+    const normalized = storedPath
+        .replace(/^data[\\/]/, '')
+        .replace(/^workshop([\\/])/, 'council$1');
     return path.join(DATA_ROOT, normalized);
 }
 
@@ -654,10 +652,10 @@ module.exports = {
     SYSTEM_CONFIG_DIR,
     SYSTEM_PROMPTS_DIR,
     THREADS_ROOM_DIRS,
-    // Phase 11.8: Workshop + Threshold subdirectories
-    WORKSHOP_DOCUMENTS_DIR,
-    WORKSHOP_NOTES_DIR,
-    WORKSHOP_DRAFTS_DIR,
+    // Phase 11.8: Council + Threshold subdirectories
+    COUNCIL_DOCUMENTS_DIR,
+    COUNCIL_NOTES_DIR,
+    COUNCIL_DRAFTS_DIR,
     THRESHOLD_WAITING_DIR,
     THRESHOLD_CHANGED_DIR,
     THRESHOLD_FLAGGED_DIR,

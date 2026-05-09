@@ -10,8 +10,8 @@
  * POST /api/sources/:id/exclude
  * GET  /api/sources/:id
  * POST /api/sources/:id/remember
- * POST /api/notes
- * GET  /api/notes
+ * POST /api/council/drafts
+ * GET  /api/council/drafts
  * POST /api/sources/:id/flag
  * POST /api/sources/:id/inspect
  * POST /api/sources/:id/reject
@@ -23,7 +23,7 @@ const path    = require('path');
 const { readLimiter, writeLimiter, indexLimiter } = require('../rateLimiters');
 const { DATA_ROOT, resolveSourcePath }            = require('../storageConfig');
 const { resolveBundledCacheDir } = require('../cacheLoader');
-const { ingestFile, ingestCache, extractTextAsync, buildSourceRecord } = require('../ingest');
+const { ingestCache, extractTextAsync, buildSourceRecord } = require('../ingest');
 const { chunkText }                                   = require('../chunker');
 const { generateEmbedding }                           = require('../embeddings');
 const {
@@ -417,68 +417,64 @@ router.post('/api/sources/:id/remember', writeLimiter, async (req, res) => {
     }
 });
 
-// ── Phase 3: Workshop notes ───────────────────────────────────────────────────
+// ── Council drafts ─────────────────────────────────────────────────────────────
 
 /**
- * POST /api/notes
+ * POST /api/council/drafts
  * Body: { content, title? }
  */
-router.post('/api/notes', writeLimiter, (req, res) => {
+router.post('/api/council/drafts', writeLimiter, (req, res) => {
     try {
         const { content, title } = req.body;
         if (!content || typeof content !== 'string') {
             return res.status(400).json({ error: 'content is required' });
         }
 
-        const workshopDir = path.join(DATA_ROOT, 'workshop');
-        if (!fs.existsSync(workshopDir)) {
-            fs.mkdirSync(workshopDir, { recursive: true });
+        const councilDraftsDir = path.join(DATA_ROOT, 'council', 'drafts');
+        if (!fs.existsSync(councilDraftsDir)) {
+            fs.mkdirSync(councilDraftsDir, { recursive: true });
         }
 
-        const safeTitle = (title || 'workshop-note')
+        const safeTitle = (title || 'council-draft')
             .replace(/[^a-zA-Z0-9-_]/g, '-')
             .toLowerCase()
             .replace(/-+/g, '-')
             .replace(/^-|-$/g, '');
         const filename  = safeTitle + '.md';
-        const filePath  = path.join(workshopDir, filename);
-        const noteText  = '# ' + (title || 'Workshop Note') + '\n\n' + content + '\n';
+        const filePath  = path.join(councilDraftsDir, filename);
+        const noteText  = '# ' + (title || 'Council Draft') + '\n\n' + content + '\n';
 
         fs.writeFileSync(filePath, noteText, 'utf8');
+        // Council drafts are treated as workspace artifacts and are not indexed as sources.
 
-        const result = ingestFile({ filePath, room: 'workshop' });
-        if (result) {
-            upsertManifest(result.source.id, result.source);
-        }
-
-        res.json({ success: true, filename, path: 'workshop/' + filename });
+        res.json({ success: true, filename, path: 'council/drafts/' + filename });
     } catch (error) {
-        console.error('Error saving note:', error.message);
+        console.error('Error saving council draft:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
 /**
- * GET /api/notes
+ * GET /api/council/drafts
  */
-router.get('/api/notes', readLimiter, (req, res) => {
-    const workshopDir = path.join(DATA_ROOT, 'workshop');
-    if (!fs.existsSync(workshopDir)) return res.json({ notes: [] });
+router.get('/api/council/drafts', readLimiter, (req, res) => {
+    const councilDraftsDir = path.join(DATA_ROOT, 'council', 'drafts');
+    if (!fs.existsSync(councilDraftsDir)) return res.json({ drafts: [] });
 
-    const notes = fs.readdirSync(workshopDir)
+    const drafts = fs.readdirSync(councilDraftsDir)
         .filter(f => f.endsWith('.md') || f.endsWith('.txt'))
         .map(f => {
-            const stats = fs.statSync(path.join(workshopDir, f));
+            const stats = fs.statSync(path.join(councilDraftsDir, f));
             return {
                 filename: f,
-                path:     'workshop/' + f,
+                path:     'council/drafts/' + f,
                 size:     stats.size,
                 created:  (stats.birthtime || stats.mtime).toISOString(),
             };
         })
         .sort(function(a, b) { return b.created.localeCompare(a.created); });
 
-    res.json({ notes });
+    res.json({ drafts });
 });
 
 // ── Phase 8: Source triage actions ───────────────────────────────────────────
