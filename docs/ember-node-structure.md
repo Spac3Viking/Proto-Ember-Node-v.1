@@ -8,6 +8,8 @@
 - **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/`.
 - **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
 
+Legacy Workshop/Tools/Projects/Cartridges architecture has been removed.
+
 ## Continuity Memory Layers
 
 - **Archive Memory** → enduring Green Fire source material and trusted archive/caches.

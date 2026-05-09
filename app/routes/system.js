@@ -27,13 +27,16 @@ const {
     USER_CACHES_DIR, SYSTEM_DIR, EXPORTS_DIR,
     FORGE_DIR, ensureDataRoot, ensureCanonicalDataFiles,
 } = require('../storageConfig');
-const { OLLAMA_BASE_URL } = require('../runtimeConfig');
+const { OLLAMA_BASE_URL } = require('../runtimeStewardship');
 const { getSelectedModel, setSelectedModel } = require('../aiConfig');
 const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
 const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCaches }                            = require('../cacheLoader');
 const { loadIntakeState }                           = require('../intakeState');
-const { getRollingBootstrapStatus, refreshRollingBootstrap } = require('../bootstrap');
+const {
+    loadBootstrap, refreshBootstrap,
+    getRollingBootstrapStatus, refreshRollingBootstrap,
+} = require('../bootstrap');
 const { loadCourtConfig }                           = require('../courtConfig');
 // Reuse canonical archive cache logic for installed/update status.
 const { compareInstalledWithUpstream } = require('../archiveCacheService');
@@ -201,6 +204,10 @@ function createSystemRouter({ migrationResult }) {
 
         // Phase 16D: Forge + Rolling Bootstrap status
         const forgeLoaded   = fs.existsSync(FORGE_CORE_PATH);
+        const bootstrap = loadBootstrap();
+        const bootstrapStatus = bootstrap ? 'ready' : 'not generated';
+        const legacyLastRefresh = bootstrap ? (bootstrap.nodeState || {}).lastRefresh || null : null;
+        const activeArchetype = bootstrap ? (bootstrap.nodeState || {}).activeArchetype || null : null;
         const rollingBootstrap = getRollingBootstrapStatus();
         const memoryCompression = getMemoryCompressionStatus();
 
@@ -228,8 +235,11 @@ function createSystemRouter({ migrationResult }) {
             storageRootSource: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
                              : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
                              : 'default',
-            // Continuity + memory layers
+            // Phase 11.5
             forgeLoaded,
+            bootstrapStatus,
+            lastBootstrapRefresh: legacyLastRefresh,
+            activeArchetype,
             rollingBootstrapStatus: rollingBootstrap.status,
             rollingBootstrapLastRefreshed: rollingBootstrap.lastRefreshed,
             rollingBootstrapActiveThemesCount: rollingBootstrap.activeThemesCount,
@@ -411,7 +421,14 @@ function createSystemRouter({ migrationResult }) {
             ensureDataRoot();
             ensureCanonicalDataFiles();
             const cleanup = runLegacyCleanupPass();
+            let bootstrapStatus = 'unchanged';
             let rollingBootstrapStatus = 'unchanged';
+            try {
+                refreshBootstrap();
+                bootstrapStatus = 'refreshed';
+            } catch {
+                bootstrapStatus = 'refresh-failed';
+            }
             try {
                 refreshRollingBootstrap();
                 rollingBootstrapStatus = 'refreshed';
@@ -430,6 +447,7 @@ function createSystemRouter({ migrationResult }) {
             return res.json({
                 success: true,
                 message: 'Node refreshed. Local memory remains intact.',
+                bootstrapStatus,
                 rollingBootstrapStatus,
                 memoryCompressionStatus,
                 cleanup,

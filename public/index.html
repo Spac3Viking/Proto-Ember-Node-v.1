@@ -323,10 +323,18 @@
                 </div>
               </div>
 
+              <!-- Active Ember Prime Assignment -->
               <div class="ember-card system-block">
-                <div class="system-block-title">Local Model Selection</div>
-                <div class="system-row">
-                  <span class="system-key">Selected model</span>
+                <div class="system-block-title">Active Ember Prime</div>
+                <p style="font-size:0.8rem; opacity:0.65; margin:0 0 0.75rem;">
+                  Select which trusted runtime acts as Ember Prime for chat. Only one runtime can be active at a time.
+                  Switching does not remove previous runtimes.
+                </p>
+                <div id="sys-heart-list" style="display:flex; flex-direction:column; gap:0.5rem;">
+                  <span class="message-system" id="sys-heart-empty">No trusted runtimes available. Complete Threshold → AI setup first.</span>
+                </div>
+                <div class="system-row" style="margin-top:0.75rem;">
+                  <span class="system-key">Active Ember Prime</span>
                   <span class="system-val" id="sys-active-heart">—</span>
                 </div>
               </div>
@@ -338,18 +346,21 @@
                   Phase 4 ✓ — sub-tab navigation, file lifecycle, thread system, PDF/DOCX support<br>
                   Phase 5 ✓ — external data root, portability, cache ownership<br>
                   Phase 6 ✓ — source actions, cross-room mobility, Hearth Chat references<br>
-                  Phase 7 ✓ — Local runtime readiness and Ollama model selection<br>
-                  Phase 8 ✓ — startup checklist, airlock discipline, tool readiness<br>
-                  Phase 8.5 ✓ — intake persistence, durable reject, changed-file flow, tool setup polish<br>
+                  Phase 7 ✓ — local AI runtime stewardship and Ember Prime selection<br>
+                  Phase 8 ✓ — startup checklist and Threshold intake discipline<br>
+                  Phase 8.5 ✓ — intake persistence and changed-file flow polish<br>
                   Phase 8.75 ✓ — cleanup pass: redundancy removal, path consolidation, modular clarity<br>
                   Phase 9 ✓ — Scribe Forge: document editor, Ember Prime tuning, Green Fire UI<br>
-                  Phase 11 ✓ — Context Architecture: archive, remembered threads, context maps, room-bounded chat<br>
+                  Phase 11 ✓ — Context Architecture: archive, remembered threads, and room-bounded chat<br>
                   Phase 11.5 ✓ — Forge Integration + Bootstrap System: identity layer, epistemic discipline, archetypes
                 </p>
               </div>
 
+              <!-- Continuity Memory Status -->
               <div class="ember-card system-block">
-                <div class="system-block-title">Context Memory</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+                  <div class="system-block-title" style="margin:0;">Context Memory</div>
+                </div>
                 <div id="sys-context-maps-status">
                   <span class="message-system">Loading…</span>
                 </div>
@@ -605,21 +616,21 @@
             </div>
           </div>
 
-          <!-- Threshold / AI -->
+          <!-- Threshold / AI — detected but untrusted runtimes -->
           <div class="sub-panel" id="th-ai">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
-                Runtime status and model guidance for local Ollama.
-                Threshold remains intake and inspection.
+                Local AI runtimes detected on this machine appear here for <strong>Runtime Stewardship</strong>.
+                Inspect each runtime before admission. Threshold remains intake and inspection, not a toolbox.
               </p>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div class="workshop-section-title" style="margin:0;">Runtime Status</div>
-                <button class="secondary" id="th-ai-refresh-runtime-btn" style="font-size:0.78rem;">↺ Refresh</button>
+                <button class="secondary" id="tool-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
               </div>
               <div id="th-tool-list" class="threshold-file-list">
-                <span class="message-system">Loading runtime status…</span>
+                <span class="message-system">No AI runtimes detected. Click Scan to search.</span>
               </div>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
@@ -715,6 +726,32 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       AI RUNTIME INSPECTOR MODAL
+       Shown when the user clicks "Inspect" on any runtime card.
+        ═══════════════════════════════════════════════════════════ -->
+  <div class="source-inspector-overlay" id="tool-inspector-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Runtime Inspector">
+    <div class="source-inspector-panel">
+      <div class="source-inspector-header">
+        <span class="source-inspector-title" id="tool-insp-title">AI Runtime Inspector</span>
+        <button class="source-inspector-close" id="tool-insp-close" aria-label="Close runtime inspector">✕</button>
+      </div>
+      <div class="source-inspector-body">
+        <div class="insp-meta-grid">
+          <div class="insp-meta-row"><span class="trace-key">Status</span><span id="tool-insp-status"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Running</span><span id="tool-insp-running"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Type</span><span id="tool-insp-type"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Interface</span><span id="tool-insp-interface"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Endpoint</span><span id="tool-insp-endpoint" class="source-card-filename"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Role</span><span id="tool-insp-role"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Trust</span><span id="tool-insp-trust"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Last Seen</span><span id="tool-insp-lastseen" class="source-card-filename"></span></div>
+        </div>
+        <div class="insp-actions" id="tool-insp-actions"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- AI Setup Guide Modal ──────────────────────────────────────────── -->
   <div class="source-inspector-overlay" id="setup-guide-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Setup Guide">
     <div class="source-inspector-panel" style="max-width:520px;">
@@ -724,7 +761,7 @@
       </div>
       <div class="source-inspector-body" style="padding:1.2rem 1.3rem; overflow-y:auto; display:flex; flex-direction:column; gap:1rem;">
         <p style="margin:0; font-size:0.85rem; opacity:0.8;">
-          No local model is selected. Ember Node works best with a local AI model host running on your machine.
+          No active Ember Prime was detected. Ember Node works best with a local AI model host running on your machine.
           The recommended option is <strong>Ollama</strong> — a free, local, offline-capable AI runtime.
         </p>
         <div>

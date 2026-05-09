@@ -26,17 +26,14 @@
  *   <data-root>/
  *     hearth/                  — curated Hearth sources (remembered knowledge)
  *       remembered-threads/    — durable thread memory objects
- *       maps/                  — Hearth working & remembered context maps
  *     workshop/                — Workshop notes and active drafts
  *       documents/             — Workshop documents
  *       notes/                 — Workshop notes
  *       drafts/                — Workshop drafts
- *       maps/                  — Workshop context maps
  *     threshold/               — quarantined imports awaiting inspection
  *       waiting/               — files pending review
  *       changed/               — files changed since last ingest
  *       flagged/               — flagged files
- *       maps/                  — Threshold context maps
  *     archive/                 — Trusted Archive (privileged curated path)
  *       core/                  — Default trusted archive (Green Fire Core)
  *         codices/             — Green Fire Codices
@@ -168,10 +165,9 @@ const CACHE_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-summaries.json'
 const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries.json');
 const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
 
-/** System config, prompts, and tools directories */
+/** System config and prompts directories */
 const SYSTEM_CONFIG_DIR       = path.join(SYSTEM_DIR, 'config');
 const SYSTEM_PROMPTS_DIR      = path.join(SYSTEM_DIR, 'prompts');
-const SYSTEM_TOOLS_DIR        = path.join(SYSTEM_DIR, 'tools');
 
 // ── Phase 11.7: Core Archive + Cache Structure ────────────────────────────────
 
@@ -226,16 +222,8 @@ const THREADS_ROOM_DIRS = {
     threshold: path.join(DATA_ROOT, 'threads', 'threshold'),
 };
 
-/** Hearth sub-directories for Phase 11 features */
+/** Hearth sub-directories for continuity memory features */
 const HEARTH_REMEMBERED_THREADS_DIR = path.join(ROOM_DIRS.hearth, 'remembered-threads');
-const HEARTH_MAPS_DIR               = path.join(ROOM_DIRS.hearth, 'maps');
-
-/** Context map directories for each room */
-const MAPS_DIRS = {
-    hearth:    HEARTH_MAPS_DIR,
-    workshop:  path.join(ROOM_DIRS.workshop, 'maps'),
-    threshold: path.join(ROOM_DIRS.threshold, 'maps'),
-};
 
 // Ember Council terminology note:
 // Runtime room key remains "workshop" for compatibility with existing data and routes.
@@ -277,7 +265,7 @@ const DEFAULT_ROLLING_BOOTSTRAP = {
     updated_at: null,
     summary: '',
     active_themes: [],
-    current_projects: [],
+    active_threads: [],
     open_questions: [],
     recent_decisions: [],
     archetype_notes: {
@@ -371,10 +359,6 @@ function ensureDataRoot() {
         ...Object.values(ARCHIVE_DIRS),
         // Phase 11: Hearth memory dirs
         HEARTH_REMEMBERED_THREADS_DIR,
-        // Phase 11: Context map dirs
-        MAPS_DIRS.hearth,
-        MAPS_DIRS.workshop,
-        MAPS_DIRS.threshold,
         // Phase 11.5: Forge + Bootstrap
         FORGE_DIR,
         ARCHETYPES_DIR,
@@ -386,7 +370,6 @@ function ensureDataRoot() {
         ARCHIVE_LEGACY_CACHES_DIR,
         SYSTEM_CONFIG_DIR,
         SYSTEM_PROMPTS_DIR,
-        SYSTEM_TOOLS_DIR,
         THREADS_ROOM_DIRS.hearth,
         THREADS_ROOM_DIRS.workshop,
         THREADS_ROOM_DIRS.threshold,
@@ -654,8 +637,6 @@ module.exports = {
     ARCHIVE_DIR,
     ARCHIVE_DIRS,
     HEARTH_REMEMBERED_THREADS_DIR,
-    HEARTH_MAPS_DIR,
-    MAPS_DIRS,
     // Phase 11.5
     FORGE_DIR,
     ARCHETYPES_DIR,
@@ -672,7 +653,6 @@ module.exports = {
     ARCHIVE_LEGACY_CACHES_DIR,
     SYSTEM_CONFIG_DIR,
     SYSTEM_PROMPTS_DIR,
-    SYSTEM_TOOLS_DIR,
     THREADS_ROOM_DIRS,
     // Phase 11.8: Workshop + Threshold subdirectories
     WORKSHOP_DOCUMENTS_DIR,
@@ -689,8 +669,3 @@ module.exports = {
     seedDataRoot,
     resolveSourcePath,
 };
-
-// Deprecated compatibility aliases.
-// TODO(phase-15-9c): remove after all modules/tests fully migrate to cache naming.
-module.exports.USER_CARTRIDGES_DIR = USER_CACHES_DIR;
-module.exports.ARCHIVE_CARTRIDGES_DIR = ARCHIVE_LEGACY_CACHES_DIR;

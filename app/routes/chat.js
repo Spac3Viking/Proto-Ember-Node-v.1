@@ -4,9 +4,9 @@
  * Ember Node v.ᚠ — Chat Routes (Phase 16D: Rolling Bootstrap continuity layer)
  *
  * POST /chat          (legacy Phase 2 direct-Ollama endpoint)
- * POST /api/chat      (grounded Heart chat with retrieval)
+ * POST /api/chat      (grounded Ember Prime chat with retrieval)
  *
- * Phase 11:   Chat context is room-bounded with cross-room context maps.
+ * Phase 11:   Chat context is room-bounded with continuity memory overlays.
  * Phase 11.5: Chat assembly includes identity (Forge) + continuity + retrieval +
  *             optional archetype overlay.
  * Phase 16D assembly order:
@@ -20,16 +20,17 @@
 const express = require('express');
 const axios   = require('axios');
 const { chatLimiter } = require('../rateLimiters');
-const { OLLAMA_CHAT_URL, getRuntimeModel } = require('../runtimeConfig');
+const { OLLAMA_CHAT_URL, getEmberPrimeModel, resolveEmberPrimeRuntime } = require('../runtimeStewardship');
 const { loadChunks }                                  = require('../indexStore');
 const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
-const { assembleRoomContext }                         = require('../contextMaps');
 const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
+    loadBootstrap, refreshBootstrap,
     loadRollingBootstrap, formatRollingBootstrapForPrompt,
     loadForgeCore, loadArchetype,
     formatForgeCoreForPrompt,
+    formatBootstrapForPrompt,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
 const {
@@ -106,7 +107,7 @@ const ROOM_SYSTEM_PROMPTS = {
         'In Ember Council mode you:\n' +
         '- assist with drafting, restructuring, and expanding documents\n' +
         '- help connect fragments into coherent structure\n' +
-        '- reference indexed Ember Council materials and project files\n' +
+        '- reference indexed Ember Council materials and active source memory\n' +
         '- maintain focus on active work rather than archive reflection\n' +
         '\n' +
         'You speak with practical precision. You are a craftsman\'s companion.'
@@ -125,52 +126,6 @@ const ROOM_SYSTEM_PROMPTS = {
         'You speak with careful discernment. Nothing passes unexamined.'
     ),
 };
-
-/**
- * Build the room context preamble to prepend to grounded prompts.
- * Includes imported context map summaries if available.
- *
- * @param {string} room
- * @returns {string}
- */
-function buildRoomContextPreamble(room) {
-    let context;
-    try {
-        context = assembleRoomContext(room);
-    } catch {
-        return '';
-    }
-
-    const lines = [];
-
-    if (context.imported && context.imported.length > 0) {
-        lines.push('=== Cross-Room Context Maps ===');
-        for (const map of context.imported) {
-            lines.push('\n[' + map.title + ']');
-            if (map.content) {
-                const c = map.content;
-                if (c.rememberedThreads && c.rememberedThreads.length > 0) {
-                    lines.push('Remembered threads: ' + c.rememberedThreads.map(t => t.title).join(', '));
-                }
-                if (c.archiveByShelf) {
-                    const shelves = Object.entries(c.archiveByShelf)
-                        .map(([s, n]) => s + ' (' + n + ')')
-                        .join(', ');
-                    if (shelves) lines.push('Archive shelves: ' + shelves);
-                }
-                if (c.recentSources && c.recentSources.length > 0) {
-                    lines.push('Recent sources: ' + c.recentSources.map(s => s.title || s.id).join(', '));
-                }
-                if (c.totalSources !== undefined) {
-                    lines.push('Total sources: ' + c.totalSources);
-                }
-            }
-        }
-        lines.push('\n==============================\n');
-    }
-
-    return lines.join('\n');
-}
 
 function optimizeRetrievedContext(retrievedChunks) {
     if (!Array.isArray(retrievedChunks) || retrievedChunks.length === 0) return [];
@@ -512,13 +467,13 @@ const MAX_PINNED_CHUNKS = 8;
 
 // ── Phase 2: original chat endpoint (kept for backward compatibility) ─────────
 // This endpoint bypasses retrieval and goes directly to Ollama.
-// New code should use POST /api/chat with grounded retrieval. Kept to avoid
-// breaking any existing integrations.
+// New code should use POST /api/chat which routes through Ember Prime
+// with grounded retrieval.  Kept to avoid breaking any existing integrations.
 
 router.post('/chat', async (req, res) => {
     try {
         const { message, prompt, model: _ignored, ...rest } = req.body;
-        const selectedModel = getRuntimeModel();
+        const selectedModel = getEmberPrimeModel();
         const payload = {
             stream:   false,
             ...rest,
@@ -650,8 +605,17 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const sources = buildSignalTrace(retrieved);
 
-        // ── Prompt assembly order ───────────────────────────────────────────────
-        // Forge Core → Rolling Bootstrap → Archetype → Retrieval
+        // ── Phase 16D: Prompt assembly order ───────────────────────────────────
+        // Forge Core → Rolling Bootstrap → Ember Prime continuity → Archetype → Retrieval
+
+        // Legacy Ember Prime continuity layer (active-bootstrap)
+        let bootstrap = loadBootstrap();
+        if (!bootstrap) {
+            console.warn('[/api/chat] Bootstrap missing — regenerating now.');
+            try { bootstrap = refreshBootstrap({ activeArchetype: activeArchetypeId }); }
+            catch (err) { console.warn('[/api/chat] Bootstrap regeneration failed:', err.message); }
+        }
+        console.log('[/api/chat] bootstrap=' + (bootstrap ? 'loaded' : 'unavailable'));
 
         const rollingBootstrap = loadRollingBootstrap();
         let rollingBootstrapStatus = 'missing';
@@ -673,7 +637,6 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         console.log('[/api/chat] forge-core=' + (forgeCore ? 'injected' : 'unavailable'));
 
         // Retrieval context (after identity/continuity layers)
-        const roomPreamble = buildRoomContextPreamble(activeRoom);
         const summaryFirst = buildSummaryFirstContext({
             query,
             rollingBootstrap,
@@ -694,9 +657,6 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         if (summaryFirst.block) {
             userContent = summaryFirst.block + userContent;
         }
-        if (roomPreamble) {
-            userContent = roomPreamble + userContent;
-        }
         console.log(
             '[/api/chat] retrieval=' +
             (retrieved.length > 0 ? retrieved.length + ' chunks' : 'none') +
@@ -713,11 +673,12 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // Forge Core → Rolling Bootstrap → Ember Prime continuity → optional archetype → retrieval
         const forgePart = formatForgeCoreForPrompt(forgeCore);
         const rollingBootstrapPart = formatRollingBootstrapForPrompt(rollingBootstrap);
+        const bootstrapPart = formatBootstrapForPrompt(bootstrap);
         const archetypePart = selectedCourtMember
             ? buildCourtPromptModifier(selectedCourtMember)
             : (archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '');
 
-        const identityPreamble = [forgePart, rollingBootstrapPart, archetypePart]
+        const identityPreamble = [forgePart, rollingBootstrapPart, bootstrapPart, archetypePart]
             .filter(Boolean)
             .join('\n\n');
 
@@ -734,8 +695,11 @@ state: ${retrievalState}
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
+        // Resolve Ember Prime runtime (Ollama-first).
+        const heart = resolveEmberPrimeRuntime();
+
         const payload = {
-            model:    getRuntimeModel(),
+            model:    heart.model,
             stream:   false,
             messages: [
                 { role: 'system', content: systemPrompt },
@@ -745,7 +709,7 @@ state: ${retrievalState}
 
         let response;
         try {
-            response = await axios.post(OLLAMA_CHAT_URL, payload, {
+            response = await axios.post(heart.chatUrl, payload, {
                 signal: abortController.signal,
                 timeout: CHAT_REQUEST_TIMEOUT_MS,
             });
@@ -823,7 +787,7 @@ state: ${retrievalState}
             sourcesUsed: uniqueSourceCount,
             chunksUsed: retrieved.length,
             sourceList,
-            model: getRuntimeModel(),
+            model: heart.model,
             provider: 'Ollama',
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
             rollingBootstrapStatus,

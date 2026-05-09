@@ -1,10 +1,19 @@
 'use strict';
 
 /**
- * Context Memory compatibility surface.
+ * Context Memory continuity helpers.
  *
- * The runtime storage key remains workshop/ for backward compatibility,
- * while this module exposes context map utilities under continuity naming.
+ * Context map mechanics were pruned in Phase 16E-B.
+ * This module remains as a small compatibility surface for future memory-layer growth.
  */
 
-module.exports = require('./contextMaps');
+function getContextMemoryStatus() {
+    return {
+        mode: 'rolling-bootstrap-and-compression',
+        contextMaps: false,
+    };
+}
+
+module.exports = {
+    getContextMemoryStatus,
+};

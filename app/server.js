@@ -5,7 +5,7 @@
  * dedicated modules under app/routes/.  Shared service logic lives in:
  *
  *   app/intakeState.js    — Threshold intake state persistence
- *   app/runtimeConfig.js  — Ollama runtime constants + selected model access
+ *   app/runtimeStewardship.js — Ollama runtime stewardship + Ember Prime resolution
  *   app/startupCheck.js   — Startup summary generation
  *   app/rateLimiters.js   — Shared rate limiter instances
  *
@@ -13,8 +13,8 @@
  *   app/routes/startup.js   — GET /api/startup-check
  *   app/routes/sources.js   — Source management, ingest, indexing
  *   app/routes/threshold.js — Threshold intake queue and inbox reader routes
+ *   app/routes/threshold.js — Threshold intake + runtime stewardship API
  *   app/routes/chat.js      — Chat (legacy + grounded)
- *   app/routes/caches.js    — User caches + bundled cache reader
  *   app/routes/threads.js   — Thread persistence
  *   app/routes/system.js    — System status, storage info, intake state
  */
@@ -34,12 +34,14 @@ const { ensureCourtConfig } = require('./courtConfig');
 const { runLegacyCleanupPass } = require('./system/nodeMaintenance');
 
 // Re-export legacy symbols for backward compatibility with tests
-const { listCaches, loadCache, listCartridges, loadCartridge } = require('./cacheLoader');
+const { listCaches, loadCache } = require('./cacheLoader');
 const {
-    MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL, getRuntimeModel,
-} = require('./runtimeConfig');
+    MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL,
+    getEmberPrimeModel,
+    probeOllamaRuntime,
+} = require('./runtimeStewardship');
 const { loadIntakeState, saveIntakeState,
-        upsertIntakeFile, upsertIntakeTool }           = require('./intakeState');
+        upsertIntakeFile }           = require('./intakeState');
 const { triageFile }                                   = require('./startupCheck');
 
 // ── Startup side-effects ──────────────────────────────────────────────────────
@@ -62,9 +64,7 @@ const chatRouter           = require('./routes/chat');
 const sourcesRouter        = require('./routes/sources');
 const thresholdRouter      = require('./routes/threshold');
 const threadsRouter        = require('./routes/threads');
-const cachesRouter         = require('./routes/caches');
 const documentsRouter      = require('./routes/documents');
-const contextMapsRouter    = require('./routes/contextMaps');
 const archiveRouter        = require('./routes/archive');
 const bootstrapRouter      = require('./routes/bootstrap');
 
@@ -86,11 +86,19 @@ app.use(chatRouter);
 app.use(sourcesRouter);
 app.use(thresholdRouter);
 app.use(threadsRouter);
-app.use(cachesRouter);
 app.use(documentsRouter);
-app.use(contextMapsRouter);
 app.use(archiveRouter);
 app.use(bootstrapRouter);
+
+// Cache manager endpoints
+app.get('/caches', (req, res) => {
+    res.json({ caches: listCaches() });
+});
+app.get('/caches/:name', (req, res) => {
+    const cache = loadCache(req.params.name);
+    if (!cache) return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
+    return res.json(cache);
+});
 
 // ── Server start ──────────────────────────────────────────────────────────────
 
@@ -98,7 +106,7 @@ async function checkModel() {
     try {
         const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
         const models   = (response.data.models || []).map(function(m) { return m.name; });
-        const selectedModel = getRuntimeModel();
+        const selectedModel = getEmberPrimeModel();
         if (!models.some(function(name) { return name === selectedModel || name.startsWith(selectedModel + ':'); })) {
             console.warn(
                 'WARNING: Model "' + selectedModel + '" was not found in Ollama. ' +
@@ -135,11 +143,21 @@ if (require.main === module) {
 
     // Phase 11.5: Seed Forge identity files and initial bootstrap
     try {
-        const { seedForgeFiles } = require('./bootstrap');
+        const { seedForgeFiles, refreshBootstrap } = require('./bootstrap');
         seedForgeFiles();
+        refreshBootstrap();
     } catch (err) {
         console.warn('[forge] Forge seed failed:', err.message);
     }
+
+    // Non-blocking startup runtime check
+    probeOllamaRuntime().then(function(runtime) {
+        if (!runtime.ok) {
+            console.warn('[runtime] Ollama not detected during startup.');
+        }
+    }).catch(function(err) {
+        console.warn('[runtime] Startup check failed:', err.message);
+    });
 
     checkModel().then(function() {
         app.listen(PORT, function() {
@@ -155,11 +173,8 @@ module.exports = {
     OLLAMA_BASE_URL,
     listCaches,
     loadCache,
-    listCartridges,
-    loadCartridge,
     loadIntakeState,
     saveIntakeState,
     upsertIntakeFile,
-    upsertIntakeTool,
     triageFile,
 };

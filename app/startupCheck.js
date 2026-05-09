@@ -11,7 +11,7 @@ const fs   = require('fs');
 const path = require('path');
 const { DATA_ROOT } = require('./storageConfig');
 const { loadManifests } = require('./indexStore');
-const { getSelectedModel } = require('./aiConfig');
+const { loadIntakeState } = require('./intakeState');
 
 // ── File detection constants ──────────────────────────────────────────────────
 
@@ -88,6 +88,7 @@ function getChangedFilesSummary(manifests) {
  */
 function generateStartupCheck(migrationResult) {
     const manifests = loadManifests();
+    const intakeState = loadIntakeState();
 
     // File counts — Threshold intake states
     const allSources   = Object.values(manifests);
@@ -99,22 +100,34 @@ function generateStartupCheck(migrationResult) {
     const { changed } = getChangedFilesSummary(manifests);
     const changedFiles = changed.length;
 
-    const selectedModel = getSelectedModel();
+    // Runtime stewardship counts from persisted Threshold intake decisions.
+    const runtimeEntries = Object.values((intakeState && intakeState.tools) || {});
+    const trustedRuntimeEntries = runtimeEntries.filter(t => t.state === 'trusted');
+    const trustedTools = trustedRuntimeEntries.length;
+    const newTools = runtimeEntries.filter(t => t.state === 'inspected').length;
+    const runningTools = 0;
+    const offlineTools = 0;
+    const activeHeartAvailable = trustedTools > 0;
 
     // Migration state
     const migrationState = (migrationResult && migrationResult.performed) ? 'migrated' : 'none';
 
     // Warnings
     const warnings = [];
-    if (!selectedModel) {
-        warnings.push('No local model selected');
+    if (runtimeEntries.length > 0 && runningTools === 0) {
+        warnings.push('No running local AI runtimes detected');
     }
 
     return {
         waitingFiles,
         changedFiles,
         flaggedFiles,
-        selectedModel,
+        newTools,
+        trustedTools,
+        runningTools,
+        offlineTools,
+        activeHeart:           trustedRuntimeEntries[0] ? trustedRuntimeEntries[0].id || null : null,
+        activeHeartAvailable,
         migrationState,
         warnings,
         lastScan:              new Date().toISOString(),
