@@ -384,11 +384,6 @@ function summarizeCouncilMap(map) {
     };
 }
 
-// Backward-compatible alias for older imports.
-function summarizeWorkshopMap(map) {
-    return summarizeCouncilMap(map);
-}
-
 /** Extract a lean summary from the Threshold working map. */
 function summarizeThresholdMap(map) {
     if (!map) return null;

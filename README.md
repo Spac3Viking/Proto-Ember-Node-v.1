@@ -13,7 +13,7 @@ A local-first sovereign AI console descended from the Green Fire Archive.
 - **Rolling Bootstrap** — unfolding continuity summary.
 - **Fractal Memory Compression** — cache/document/archetype summary geometry.
 
-> Legacy Workshop/Tools/Projects/Cartridges architecture has been removed.
+> Workshop is retired. Ember Council is the active archetype room. Tools registry is retired. Threshold now handles Local AI and Runtime Stewardship. Caches replaced cartridges. Signal Threads are the successor to old project/thread concepts.
 
 ## Quick Start
 

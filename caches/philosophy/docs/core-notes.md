@@ -23,7 +23,7 @@ For a knowledge engine, the parallel is: unexamined data is not worth storing.
 Before material enters Hearth, it should be examined. What does it claim? What is its
 source? How does it relate to what is already known? What would it change if accepted?
 
-The Threshold → Workshop → Hearth path enforces this discipline structurally.
+The Threshold → Ember Council → Hearth path enforces this discipline structurally.
 
 ---
 

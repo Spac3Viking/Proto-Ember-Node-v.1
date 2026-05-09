@@ -35,7 +35,7 @@ Tags: observation, reflection, project, technical, personal
 ## What Does Not Belong Here
 
 - Unverified external material (use Threshold)
-- Active working drafts (use Workshop)
+- Active working drafts (use Ember Council)
 - Reference documents (use appropriate knowledge cache)
 
 ---

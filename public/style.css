@@ -453,9 +453,9 @@ input:focus, textarea:focus {
   color: var(--gf-ember-orange);
 }
 
-/* ── Workshop Room ─────────────────────────────────────────── */
+/* ── Council Room ─────────────────────────────────────────── */
 
-.workshop-layout {
+.council-layout {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -479,14 +479,14 @@ input:focus, textarea:focus {
   padding: 0.875rem 1rem;
 }
 
-.workshop-controls {
+.council-controls {
   display: flex;
   gap: 0.6rem;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.workshop-status {
+.council-status-text {
   font-size: 0.75rem;
   color: var(--archive-muted);
   margin-left: auto;
@@ -991,20 +991,20 @@ input:focus, textarea:focus {
   letter-spacing: 0.08em;
 }
 
-/* ── Phase 3 — Workshop Panels ──────────────────────────────────────────────── */
+/* ── Phase 3 — Council Panels ──────────────────────────────────────────────── */
 
-.workshop-draft-card {
+.council-draft-card {
   display: flex;
   flex-direction: column;
   flex: 1;
   gap: 0.75rem;
 }
 
-.workshop-index-card {
+.council-index-card {
   min-height: 0;
 }
 
-.workshop-section-title {
+.council-section-title {
   font-family: 'Cinzel', serif;
   font-size: 0.68rem;
   letter-spacing: 0.1em;
@@ -2934,7 +2934,7 @@ button.secondary:disabled {
   }
 }
 
-/* ── Phase 10.5: Admit-to-Workshop primary action + batch bar ─────────────── */
+/* ── Phase 10.5: Admit-to-Council primary action + batch bar ─────────────── */
 
 /* Primary admit action — more prominent than secondary buttons */
 .threshold-admit-btn {

@@ -44,7 +44,7 @@
         <div class="startup-banner-warnings" id="startup-banner-warnings" style="display:none;"></div>
         <div class="startup-banner-links">
           <button class="secondary startup-banner-link" id="sb-review-threshold">ᚦ Review Threshold</button>
-          <button class="secondary startup-banner-link" id="sb-review-tools">ᚹ Review AI Setup</button>
+          <button class="secondary startup-banner-link" id="sb-review-runtimes">ᚹ Review Runtime Stewardship</button>
           <button class="secondary startup-banner-link" id="sb-open-system">ᚺ System</button>
           <button class="secondary startup-banner-link" id="sb-setup-guide" style="display:none;">⬡ View Setup Guide</button>
         </div>
@@ -83,7 +83,7 @@
             <div class="thread-layout">
               <aside class="thread-sidebar">
                 <div class="thread-sidebar-header">
-                  <span class="workshop-section-title" style="border:none;margin:0;padding:0;">Threads</span>
+                  <span class="council-section-title" style="border:none;margin:0;padding:0;">Threads</span>
                   <button class="secondary" id="hearth-new-thread-btn" title="New thread">+</button>
                 </div>
                 <div class="thread-list" id="hearth-thread-list">
@@ -135,7 +135,7 @@
           <!-- Hearth / Archive -->
           <div class="sub-panel" id="hearth-archive">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
-              <div class="workshop-section-title">Remembered Sources</div>
+              <div class="council-section-title">Remembered Sources</div>
               <div id="hearth-archive-list" class="ws-sources-list">
                 <span class="message-system">No remembered sources.</span>
               </div>
@@ -143,7 +143,7 @@
             <!-- Phase 11: Trusted Archive section -->
             <div class="ember-card" style="padding: 1rem 1.25rem; margin-top: 1rem;">
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
-                <div class="workshop-section-title" style="border:none; margin:0; padding:0;">Trusted Archive</div>
+                <div class="council-section-title" style="border:none; margin:0; padding:0;">Trusted Archive</div>
                 <button class="secondary" id="hearth-archive-bootstrap-btn" title="Rescan archive" style="font-size:0.75rem; padding:0.2rem 0.6rem;">↻ Rescan</button>
               </div>
               <div id="hearth-trusted-archive-list" class="ws-sources-list">
@@ -152,7 +152,7 @@
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; margin-top: 1rem;">
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
-                <div class="workshop-section-title" style="border:none; margin:0; padding:0;">Cache Manager</div>
+                <div class="council-section-title" style="border:none; margin:0; padding:0;">Cache Manager</div>
                 <button class="secondary" id="hearth-cache-manager-rescan-btn" title="Refresh cache manager" style="font-size:0.75rem; padding:0.2rem 0.6rem;">↻ Refresh</button>
               </div>
               <div class="message-system" style="margin-bottom:0.35rem;">Bundled Core is local seed memory. Archive Caches are optional network packages.</div>
@@ -162,14 +162,14 @@
               </div>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; margin-top: 1rem;">
-              <div class="workshop-section-title">Archive Signal</div>
+              <div class="council-section-title">Archive Signal</div>
               <div id="hearth-archive-signal-panel" class="cache-signal-panel">
                 <span class="message-system">Loading signal…</span>
               </div>
             </div>
             <!-- Phase 11: Remembered Threads section -->
             <div class="ember-card" style="padding: 1rem 1.25rem; margin-top: 1rem;">
-              <div class="workshop-section-title">Remembered Threads</div>
+              <div class="council-section-title">Remembered Threads</div>
               <div id="hearth-remembered-threads-list" class="ws-sources-list">
                 <span class="message-system">No remembered threads.</span>
               </div>
@@ -414,7 +414,7 @@
            Sub-tabs: Archetypes | Council Chat | Drafts | Caches
            ═══════════════════════════════════════════════════════════ -->
       <section class="room-panel" id="room-council" role="tabpanel">
-        <div class="room-panel-inner workshop-layout">
+        <div class="room-panel-inner council-layout">
 
           <div class="room-header-row">
             <h2 class="room-heading"><span class="room-rune">ᚹ</span> Ember Council <span class="lifecycle-pill indexed">Indexed</span></h2>
@@ -436,7 +436,7 @@
               </p>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
-              <div class="workshop-section-title">Sentinel Archetypes</div>
+              <div class="council-section-title">Sentinel Archetypes</div>
               <div class="message-system" id="ws-court-active">Loading court selection…</div>
               <div id="ws-court-list" class="ws-sources-list">
                 <span class="message-system">Loading Ember Court…</span>
@@ -447,7 +447,7 @@
           <!-- Ember Council / Council Chat -->
           <div class="sub-panel" id="ws-council-chat">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
-              <div class="workshop-section-title" style="margin:0 0 0.5rem 0;">Council Chat</div>
+              <div class="council-section-title" style="margin:0 0 0.5rem 0;">Council Chat</div>
               <div class="message-system" id="ws-council-active-archetype">Active archetype: Ember Prime</div>
             </div>
             <div class="ember-card" style="padding: 1rem; display:flex; flex-direction:column; gap:0.75rem; min-height:420px;">
@@ -466,8 +466,8 @@
 
           <!-- Ember Council / Drafts -->
           <div class="sub-panel" id="ws-drafts">
-            <div class="ember-card workshop-draft-card" style="padding: 1rem;">
-              <div class="workshop-section-title" style="margin-bottom:0.6rem;">Council Drafts</div>
+            <div class="ember-card council-draft-card" style="padding: 1rem;">
+              <div class="council-section-title" style="margin-bottom:0.6rem;">Council Drafts</div>
               <div class="draft-area">
                 <label for="council-draft" class="visually-hidden">Draft area</label>
                 <textarea
@@ -476,10 +476,10 @@
                   spellcheck="true"
                 ></textarea>
               </div>
-              <div class="workshop-controls">
+              <div class="council-controls">
                 <button class="primary" id="save-note-btn">Save Note</button>
                 <button class="primary" id="clear-draft-btn">Clear</button>
-                <span class="workshop-status" id="council-status"></span>
+                <span class="council-status-text" id="council-status"></span>
               </div>
             </div>
           </div>
@@ -586,7 +586,7 @@
               <!-- Intake Queue (multi-file) -->
               <div class="threshold-file-section" id="threshold-queue-section" style="display:none;">
                 <div class="threshold-queue-header">
-                  <div class="workshop-section-title" style="margin:0;">Intake Queue</div>
+                  <div class="council-section-title" style="margin:0;">Intake Queue</div>
                   <div class="threshold-queue-actions">
                     <span class="threshold-batch-progress" id="threshold-batch-progress"></span>
                     <button class="primary" id="threshold-import-all-btn">Import All</button>
@@ -599,7 +599,7 @@
 
               <!-- Indexed File List — sectioned: Waiting / Flagged / (Changed handled by intake queue) -->
               <div class="threshold-file-section">
-                <div class="workshop-section-title">Imported Files</div>
+                <div class="council-section-title">Imported Files</div>
                 <div id="threshold-file-list" class="threshold-file-list">
                   <span class="message-system">No files have crossed the Threshold yet.</span>
                 </div>
@@ -607,7 +607,7 @@
 
               <!-- Scratch Notes -->
               <div class="threshold-scratch">
-                <label for="threshold-notes" class="workshop-section-title">Scratch Notes</label>
+                <label for="threshold-notes" class="council-section-title">Scratch Notes</label>
                 <textarea
                   id="threshold-notes"
                   placeholder="Temporary notes about imported material. These remain in the Threshold — not written to Hearth."
@@ -626,15 +626,15 @@
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div class="workshop-section-title" style="margin:0;">Runtime Status</div>
-                <button class="secondary" id="tool-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
+                <div class="council-section-title" style="margin:0;">Runtime Status</div>
+                <button class="secondary" id="runtime-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
               </div>
-              <div id="th-tool-list" class="threshold-file-list">
+              <div id="th-runtime-list" class="threshold-file-list">
                 <span class="message-system">No AI runtimes detected. Click Scan to search.</span>
               </div>
             </div>
             <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
-              <div class="workshop-section-title" style="margin:0;">Local AI Guidance</div>
+              <div class="council-section-title" style="margin:0;">Local AI Guidance</div>
               <div class="system-row">
                 <span class="system-key">Ollama status</span>
                 <span class="system-val" id="th-ai-ollama-status">checking…</span>
@@ -656,7 +656,7 @@
             </div>
             <!-- Guided setup — shown when no AI is running -->
             <div class="ember-card" id="th-ai-setup-guide" style="padding: 1rem 1.25rem; display:none; gap:0.5rem; flex-direction:column;">
-              <div class="workshop-section-title">No Local AI Detected</div>
+              <div class="council-section-title">No Local AI Detected</div>
               <p style="font-size:0.82rem; opacity:0.75; margin:0;">
                 Ember Node works best with a local AI model host. The recommended option is <strong>Ollama</strong>.
               </p>
@@ -730,24 +730,24 @@
        AI RUNTIME INSPECTOR MODAL
        Shown when the user clicks "Inspect" on any runtime card.
         ═══════════════════════════════════════════════════════════ -->
-  <div class="source-inspector-overlay" id="tool-inspector-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Runtime Inspector">
+  <div class="source-inspector-overlay" id="runtime-inspector-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="AI Runtime Inspector">
     <div class="source-inspector-panel">
       <div class="source-inspector-header">
-        <span class="source-inspector-title" id="tool-insp-title">AI Runtime Inspector</span>
-        <button class="source-inspector-close" id="tool-insp-close" aria-label="Close runtime inspector">✕</button>
+        <span class="source-inspector-title" id="runtime-insp-title">AI Runtime Inspector</span>
+        <button class="source-inspector-close" id="runtime-insp-close" aria-label="Close runtime inspector">✕</button>
       </div>
       <div class="source-inspector-body">
         <div class="insp-meta-grid">
-          <div class="insp-meta-row"><span class="trace-key">Status</span><span id="tool-insp-status"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Running</span><span id="tool-insp-running"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Type</span><span id="tool-insp-type"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Interface</span><span id="tool-insp-interface"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Endpoint</span><span id="tool-insp-endpoint" class="source-card-filename"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Role</span><span id="tool-insp-role"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Trust</span><span id="tool-insp-trust"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Last Seen</span><span id="tool-insp-lastseen" class="source-card-filename"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Status</span><span id="runtime-insp-status"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Running</span><span id="runtime-insp-running"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Type</span><span id="runtime-insp-type"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Interface</span><span id="runtime-insp-interface"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Endpoint</span><span id="runtime-insp-endpoint" class="source-card-filename"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Role</span><span id="runtime-insp-role"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Trust</span><span id="runtime-insp-trust"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Last Seen</span><span id="runtime-insp-lastseen" class="source-card-filename"></span></div>
         </div>
-        <div class="insp-actions" id="tool-insp-actions"></div>
+        <div class="insp-actions" id="runtime-insp-actions"></div>
       </div>
     </div>
   </div>
@@ -765,24 +765,24 @@
           The recommended option is <strong>Ollama</strong> — a free, local, offline-capable AI runtime.
         </p>
         <div>
-          <div class="workshop-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">What is Ollama?</div>
+          <div class="council-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">What is Ollama?</div>
           <p style="margin:0; font-size:0.82rem; opacity:0.75;">
             Ollama lets you download and run open-source AI models entirely on your own machine.
             No cloud account, no internet required after setup, no data leaves your device.
           </p>
         </div>
         <div>
-          <div class="workshop-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">How to Install</div>
+          <div class="council-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">How to Install</div>
           <ol style="margin:0 0 0 1.2rem; font-size:0.82rem; opacity:0.8; line-height:1.8;">
             <li>Visit <strong>ollama.com</strong> and download the installer for your OS.</li>
             <li>Run the installer (no admin required on most systems).</li>
             <li>Open a terminal and start the server:<br><code style="font-size:0.8rem;">ollama serve</code></li>
             <li>Pull a model to use for Ember Prime:<br><code style="font-size:0.8rem;">ollama pull gemma3:4b</code></li>
-            <li>Return to Ember Node and click <strong>ᚹ Review AI Setup</strong> → <strong>↺ Scan</strong> to detect it.</li>
+            <li>Return to Ember Node and click <strong>ᚹ Review Runtime Stewardship</strong> → <strong>↺ Scan</strong> to detect it.</li>
           </ol>
         </div>
         <div>
-          <div class="workshop-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">Windows Quick Start</div>
+          <div class="council-section-title" style="border:none; padding:0; margin-bottom:0.5rem;">Windows Quick Start</div>
           <p style="margin:0; font-size:0.82rem; opacity:0.75;">
             After installing Ollama, you can use <strong>Awaken-Ember-Node.bat</strong> to start both
             Ollama and Ember Node together with a single double-click.

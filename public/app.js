@@ -173,7 +173,7 @@ let _activeRoomId = 'hearth';
                 }
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
-                    loadHearthToolRegistry();
+                    loadHearthRuntimeRegistry();
                     loadContextMemoryStatus();
                     loadBootstrapStatus();
                     loadMemoryCompressionStatus();
@@ -3777,7 +3777,7 @@ async function scanRuntimes() {
 }
 
 /** Status label for an AI runtime lifecycle state. */
-function toolStatusLabel(tool) {
+function runtimeStatusLabel(tool) {
     if (tool.trusted && tool.role) return 'Assigned';
     if (tool.trusted)              return 'Admitted';
     if (tool.status === 'detected') return 'Waiting';
@@ -3785,7 +3785,7 @@ function toolStatusLabel(tool) {
 }
 
 /** CSS class for AI runtime status badge. */
-function toolStatusClass(tool) {
+function runtimeStatusClass(tool) {
     if (tool.trusted && tool.role) return 'indexed';
     if (tool.trusted)              return 'indexed';
     if (tool.status === 'detected') return 'waiting';
@@ -3793,7 +3793,7 @@ function toolStatusClass(tool) {
 }
 
 /** Running/offline badge HTML for an AI runtime. */
-function toolRunningBadge(tool) {
+function runtimeRunningBadge(tool) {
     if (tool.status === 'not_detected' || tool.status === 'unknown') return '';
     if (tool.running === true)  return ' <span class="status-badge running">Running</span>';
     if (tool.running === false) return ' <span class="status-badge offline">Offline</span>';
@@ -3814,7 +3814,7 @@ function roleLabel(role) {
  * Shows detected runtimes that are not yet trusted (excluding persistently rejected ones).
  */
 async function loadThresholdRuntimes() {
-    const listEl   = document.getElementById('th-tool-list');
+    const listEl   = document.getElementById('th-runtime-list');
     const guideEl  = document.getElementById('th-ai-setup-guide');
     if (!listEl) return;
     listEl.innerHTML = '<span class="message-system">Loading…</span>';
@@ -3837,14 +3837,14 @@ async function loadThresholdRuntimes() {
         }
 
         listEl.innerHTML = '';
-        pendingRuntimes.forEach(tool => renderThresholdToolRow(tool, active, listEl));
+        pendingRuntimes.forEach(tool => renderThresholdRuntimeRow(tool, active, listEl));
 
         if (rejected.length > 0) {
             const sep = document.createElement('div');
             sep.className   = 'threshold-section-header';
             sep.textContent = 'Rejected by stewardship (' + rejected.length + ')';
             listEl.appendChild(sep);
-            rejected.forEach(tool => renderThresholdToolRow(tool, active, listEl));
+            rejected.forEach(tool => renderThresholdRuntimeRow(tool, active, listEl));
         }
         loadThresholdAiModelGuidance(runtimes);
     } catch {
@@ -3903,10 +3903,10 @@ async function loadThresholdAiModelGuidance(runtimes) {
     }
 }
 
-function renderThresholdToolRow(tool, active, container) {
+function renderThresholdRuntimeRow(tool, active, container) {
     const row = document.createElement('div');
     row.className = 'threshold-file-row';
-    row.dataset.toolId = tool.id;
+    row.dataset.runtimeId = tool.id;
 
     const intakeState = tool.intake && tool.intake.state;
     if (intakeState === 'rejected') row.className += ' intake-rejected';
@@ -3918,9 +3918,9 @@ function renderThresholdToolRow(tool, active, container) {
     nameEl.style.cssText = 'flex:1; min-width:0;';
     nameEl.innerHTML =
         '<div class="threshold-file-name">' + escapeHtml(tool.name) +
-            ' <span class="status-badge ' + toolStatusClass(tool) + '">' +
-            escapeHtml(toolStatusLabel(tool)) + '</span>' +
-            toolRunningBadge(tool) +
+            ' <span class="status-badge ' + runtimeStatusClass(tool) + '">' +
+            escapeHtml(runtimeStatusLabel(tool)) + '</span>' +
+            runtimeRunningBadge(tool) +
             (intakeState === 'rejected' ? ' <span class="status-badge rejected">Rejected</span>' : '') +
             (intakeState === 'inspected' ? ' <span class="status-badge inspected">Inspected</span>' : '') +
             '</div>' +
@@ -3941,7 +3941,7 @@ function renderThresholdToolRow(tool, active, container) {
             try {
                 await fetch('/api/runtimes/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
             } catch { /* ignore */ }
-            openToolInspector(tool, active);
+            openRuntimeInspector(tool, active);
             loadThresholdRuntimes();
         });
         actions.appendChild(inspBtn);
@@ -3965,7 +3965,7 @@ function renderThresholdToolRow(tool, active, container) {
                         showFlashMessage(escapeHtml(tool.name) + ' admitted ✓ — now in Ember Council');
                         loadThresholdRuntimes();
                         loadCouncilArchetypes();
-                        loadHearthToolRegistry();
+                        loadHearthRuntimeRegistry();
                     } else {
                         showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
                         trustBtn.disabled = false;
@@ -4033,9 +4033,9 @@ function renderThresholdToolRow(tool, active, container) {
 }
 
 /* Scan button in Threshold → AI */
-(function initToolScanBtn() {
+(function initRuntimeScanBtn() {
     document.addEventListener('click', async e => {
-        if (e.target && e.target.id === 'tool-scan-btn') {
+        if (e.target && e.target.id === 'runtime-scan-btn') {
             const btn = e.target;
             btn.disabled = true;
             btn.textContent = '↺ Scanning…';
@@ -4207,7 +4207,7 @@ async function loadCouncilArchetypes() {
 /**
  * Load the Ember Prime assignment UI in the Hearth → System tab.
  */
-async function loadHearthToolRegistry() {
+async function loadHearthRuntimeRegistry() {
     const listEl   = document.getElementById('sys-heart-list');
     const emptyEl  = document.getElementById('sys-heart-empty');
     const activeEl = document.getElementById('sys-active-heart');
@@ -4220,7 +4220,7 @@ async function loadHearthToolRegistry() {
         if (emptyEl) emptyEl.style.display = trusted.length === 0 ? '' : 'none';
 
         // Remove previous runtime rows
-        listEl.querySelectorAll('.heart-tool-row').forEach(el => el.remove());
+        listEl.querySelectorAll('.heart-runtime-row').forEach(el => el.remove());
 
         const currentHeart = active && active.heart;
         if (activeEl) activeEl.textContent = currentHeart
@@ -4229,7 +4229,7 @@ async function loadHearthToolRegistry() {
 
         trusted.forEach(tool => {
             const row = document.createElement('div');
-            row.className = 'heart-tool-row system-row';
+            row.className = 'heart-runtime-row system-row';
             row.style.cssText = 'justify-content:space-between; align-items:center; gap:0.5rem;';
 
             const isHeart = currentHeart === tool.id;
@@ -4259,7 +4259,7 @@ async function loadHearthToolRegistry() {
                         showFlashMessage(heartId
                             ? escapeHtml(tool.name) + ' is now active as Ember Prime ✓'
                             : 'Ember Prime assignment cleared.');
-                        loadHearthToolRegistry();
+                        loadHearthRuntimeRegistry();
                     } else {
                         showFlashMessage('Ember Prime update failed: ' + (data.error || 'unknown'));
                         btn.disabled = false;
@@ -4281,13 +4281,13 @@ async function loadHearthToolRegistry() {
 
 /* ── AI Runtime Inspector Modal ───────────────────────────────── */
 
-function closeToolInspector() {
-    const overlay = document.getElementById('tool-inspector-overlay');
+function closeRuntimeInspector() {
+    const overlay = document.getElementById('runtime-inspector-overlay');
     if (overlay) overlay.style.display = 'none';
 }
 
-function openToolInspector(tool, active) {
-    const overlay = document.getElementById('tool-inspector-overlay');
+function openRuntimeInspector(tool, active) {
+    const overlay = document.getElementById('runtime-inspector-overlay');
     if (!overlay) return;
 
     const isHeart = active && active.heart === tool.id;
@@ -4297,25 +4297,25 @@ function openToolInspector(tool, active) {
         if (el) el.textContent = text || '—';
     };
 
-    const titleEl = document.getElementById('tool-insp-title');
+    const titleEl = document.getElementById('runtime-insp-title');
     if (titleEl) titleEl.textContent = tool.name || 'AI Runtime Inspector';
 
-    const statusEl = document.getElementById('tool-insp-status');
+    const statusEl = document.getElementById('runtime-insp-status');
     if (statusEl) {
         statusEl.innerHTML =
-            '<span class="status-badge ' + toolStatusClass(tool) + '">' +
-            escapeHtml(toolStatusLabel(tool)) + '</span>' +
+            '<span class="status-badge ' + runtimeStatusClass(tool) + '">' +
+            escapeHtml(runtimeStatusLabel(tool)) + '</span>' +
             (isHeart ? ' <span class="status-badge remembered">Active Ember Prime</span>' : '');
     }
 
-    set('tool-insp-type',      tool.type);
-    set('tool-insp-interface', tool.interface);
-    set('tool-insp-endpoint',  tool.endpoint || '(none)');
-    set('tool-insp-role',      tool.role ? roleLabel(tool.role) : 'None');
-    set('tool-insp-trust',     tool.trusted ? 'Admitted' : 'Pending');
-    set('tool-insp-lastseen',  tool.lastSeen || '—');
+    set('runtime-insp-type',      tool.type);
+    set('runtime-insp-interface', tool.interface);
+    set('runtime-insp-endpoint',  tool.endpoint || '(none)');
+    set('runtime-insp-role',      tool.role ? roleLabel(tool.role) : 'None');
+    set('runtime-insp-trust',     tool.trusted ? 'Admitted' : 'Pending');
+    set('runtime-insp-lastseen',  tool.lastSeen || '—');
 
-    const runningEl = document.getElementById('tool-insp-running');
+    const runningEl = document.getElementById('runtime-insp-running');
     if (runningEl) {
         if (tool.status === 'not_detected' || tool.status === 'unknown') {
             runningEl.textContent = '—';
@@ -4326,7 +4326,7 @@ function openToolInspector(tool, active) {
         }
     }
 
-    const actEl = document.getElementById('tool-insp-actions');
+    const actEl = document.getElementById('runtime-insp-actions');
     if (actEl) {
         actEl.innerHTML = '';
         const actions = [];
@@ -4344,11 +4344,11 @@ function openToolInspector(tool, active) {
                         });
                         const data = await res.json();
                         if (data.success) {
-                            closeToolInspector();
+                            closeRuntimeInspector();
                             showFlashMessage(escapeHtml(tool.name) + ' admitted ✓');
                             loadThresholdRuntimes();
                             loadCouncilArchetypes();
-                            loadHearthToolRegistry();
+                            loadHearthRuntimeRegistry();
                         } else {
                             showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
                         }
@@ -4372,9 +4372,9 @@ function openToolInspector(tool, active) {
                         });
                         const data = await res.json();
                         if (data.success) {
-                            closeToolInspector();
+                            closeRuntimeInspector();
                             showFlashMessage(escapeHtml(tool.name) + ' is now active as Ember Prime ✓');
-                            loadHearthToolRegistry();
+                            loadHearthRuntimeRegistry();
                         }
                     } catch {
                         showFlashMessage('Could not reach server.');
@@ -4389,7 +4389,7 @@ function openToolInspector(tool, active) {
                 label: '▶ Launch Ollama',
                 primary: true,
                 fn: async () => {
-                    closeToolInspector();
+                    closeRuntimeInspector();
                     await launchOllama(tool.id);
                 },
             });
@@ -4405,7 +4405,7 @@ function openToolInspector(tool, active) {
                     try {
                         await fetch('/api/runtimes/scan', { method: 'POST' });
                         showFlashMessage('Scan complete — check runtime status.');
-                        closeToolInspector();
+                        closeRuntimeInspector();
                         loadThresholdRuntimes();
                         loadCouncilArchetypes();
                     } catch {
@@ -4415,7 +4415,7 @@ function openToolInspector(tool, active) {
             });
         }
 
-        actions.push({ label: 'Close', primary: false, fn: closeToolInspector });
+        actions.push({ label: 'Close', primary: false, fn: closeRuntimeInspector });
 
         actions.forEach(a => {
             const btn = document.createElement('button');
@@ -4430,13 +4430,13 @@ function openToolInspector(tool, active) {
 }
 
 // Close runtime inspector on overlay click or close button
-(function initToolInspector() {
-    const closeBtn = document.getElementById('tool-insp-close');
-    const overlay  = document.getElementById('tool-inspector-overlay');
-    if (closeBtn) closeBtn.addEventListener('click', closeToolInspector);
+(function initRuntimeInspector() {
+    const closeBtn = document.getElementById('runtime-insp-close');
+    const overlay  = document.getElementById('runtime-inspector-overlay');
+    if (closeBtn) closeBtn.addEventListener('click', closeRuntimeInspector);
     if (overlay) {
         overlay.addEventListener('click', e => {
-            if (e.target === overlay) closeToolInspector();
+            if (e.target === overlay) closeRuntimeInspector();
         });
     }
 })();
@@ -4649,13 +4649,11 @@ function showFlashMessage(msg) {
  */
 function normalizeStartupRuntimeState(data) {
     return {
-        newRuntimes: Number(data && (data.newRuntimes != null ? data.newRuntimes : data.newTools)) || 0,
-        runningRuntimes: Number(data && (data.runningRuntimes != null ? data.runningRuntimes : data.runningTools)) || 0,
-        offlineRuntimes: Number(data && (data.offlineRuntimes != null ? data.offlineRuntimes : data.offlineTools)) || 0,
-        activeRuntime: data ? (data.activeRuntime != null ? data.activeRuntime : data.activeHeart) : null,
-        activeRuntimeAvailable: Boolean(
-            data && (data.activeRuntimeAvailable != null ? data.activeRuntimeAvailable : data.activeHeartAvailable)
-        ),
+        newRuntimes: Number(data && data.newRuntimes) || 0,
+        runningRuntimes: Number(data && data.runningRuntimes) || 0,
+        offlineRuntimes: Number(data && data.offlineRuntimes) || 0,
+        activeRuntime: data ? data.activeRuntime : null,
+        activeRuntimeAvailable: Boolean(data && data.activeRuntimeAvailable),
     };
 }
 
@@ -4855,7 +4853,7 @@ function renderSystemStartupSummary(data) {
         const dismiss  = document.getElementById('startup-banner-dismiss');
 
         const reviewThresholdBtn = document.getElementById('sb-review-threshold');
-        const reviewToolsBtn     = document.getElementById('sb-review-tools');
+        const reviewRuntimesBtn     = document.getElementById('sb-review-runtimes');
         const openSystemBtn      = document.getElementById('sb-open-system');
 
         if (toggle && body) {
@@ -4880,8 +4878,8 @@ function renderSystemStartupSummary(data) {
             });
         }
 
-        if (reviewToolsBtn) {
-            reviewToolsBtn.addEventListener('click', () => {
+        if (reviewRuntimesBtn) {
+            reviewRuntimesBtn.addEventListener('click', () => {
                 const thTab = document.querySelector('.room-tab[data-room="threshold"]');
                 if (thTab) thTab.click();
                 setTimeout(() => {
@@ -4952,12 +4950,12 @@ async function flagSource(sourceId, flagged) {
 
 /**
  * Attempt to launch Ollama from within Ember Node.
- * Shows progress feedback and re-loads tool list on completion.
+ * Shows progress feedback and re-loads runtime list on completion.
  */
-async function launchOllama(toolId) {
+async function launchOllama(runtimeId) {
     showFlashMessage('Attempting to launch Ollama…');
     try {
-        const res  = await fetch('/api/runtimes/' + encodeURIComponent(toolId) + '/launch', {
+        const res  = await fetch('/api/runtimes/' + encodeURIComponent(runtimeId) + '/launch', {
             method: 'POST',
         });
         const data = await res.json();
@@ -4968,7 +4966,7 @@ async function launchOllama(toolId) {
         }
         loadThresholdRuntimes();
         loadCouncilArchetypes();
-        loadHearthToolRegistry();
+        loadHearthRuntimeRegistry();
     } catch {
         showFlashMessage('Could not reach server.');
     }

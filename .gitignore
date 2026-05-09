@@ -140,7 +140,7 @@ vite.config.ts.timestamp-*
 
 # Ember Node — runtime data directories (keep .gitkeep, ignore actual data)
 data/hearth/*
-data/workshop/*
+data/council/*
 data/threshold/*
 data/system/*
 data/caches/*

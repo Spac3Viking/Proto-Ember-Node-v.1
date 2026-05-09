@@ -255,7 +255,7 @@ const DEFAULT_CORE_ARCHIVE_MANIFEST = {
     },
 };
 
-const DEFAULT_INTAKE_STATE = { files: {}, tools: {} };
+const DEFAULT_INTAKE_STATE = { files: {}, runtimes: {} };
 const DEFAULT_ROLLING_BOOTSTRAP = {
     version: '0.1.0',
     updated_at: null,

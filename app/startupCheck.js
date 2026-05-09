@@ -101,7 +101,7 @@ function generateStartupCheck(migrationResult) {
     const changedFiles = changed.length;
 
     // Runtime stewardship counts from persisted Threshold intake decisions.
-    const runtimeEntries = Object.values((intakeState && intakeState.tools) || {});
+    const runtimeEntries = Object.values((intakeState && intakeState.runtimes) || {});
     const trustedRuntimeEntries = runtimeEntries.filter(t => t.state === 'trusted');
     const trustedRuntimes = trustedRuntimeEntries.length;
     const newRuntimes = runtimeEntries.filter(t => t.state === 'inspected').length;
@@ -129,13 +129,6 @@ function generateStartupCheck(migrationResult) {
         offlineRuntimes,
         activeRuntime,
         activeRuntimeAvailable,
-        // Backward-compatible aliases for existing UI bindings.
-        newTools: newRuntimes,
-        trustedTools: trustedRuntimes,
-        runningTools: runningRuntimes,
-        offlineTools: offlineRuntimes,
-        activeHeart: activeRuntime,
-        activeHeartAvailable: activeRuntimeAvailable,
         migrationState,
         warnings,
         lastScan:              new Date().toISOString(),
