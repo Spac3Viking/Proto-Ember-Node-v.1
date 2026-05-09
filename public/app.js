@@ -730,7 +730,7 @@ function renderSignalTrace(sources, signalTrace = null) {
     traceSources.innerHTML = '';
 
     const metadata = signalTrace && typeof signalTrace === 'object' ? signalTrace : null;
-    const compactTrace = metadata && metadata.compact ? String(metadata.compact) : '';
+    const compactTraceText = metadata && metadata.compact ? String(metadata.compact) : '';
     const contextStatus = metadata && metadata.contextStatus ? String(metadata.contextStatus) : null;
     const sourcesUsed = metadata && Number.isFinite(metadata.sourcesUsed) ? metadata.sourcesUsed : null;
     const sourceList = metadata && Array.isArray(metadata.sourceList) ? metadata.sourceList : [];
@@ -801,7 +801,7 @@ function renderSignalTrace(sources, signalTrace = null) {
     const rows = [
         {
             key: 'Signal Trace',
-            value: compactTrace || null,
+            value: compactTraceText || null,
         },
         {
             key: 'Memory',

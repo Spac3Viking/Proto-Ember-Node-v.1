@@ -48,9 +48,9 @@ const MAX_CHAT_HISTORY_CHARS = 4000;
 const MAX_SIGNAL_TRACE_SOURCES = 5;
 const MAX_SIGNAL_TRACE_ROUTING_LIST = 4;
 // Preserve a small raw grounding floor even when summaries are present.
-const MIN_RAW_CHUNKS_WITH_SUMMARY = 4;
+const MIN_RAW_CHUNKS_WITH_SUMMARY = 3;
 // Use half of the normal raw chunk budget when summary layers are available.
-const SUMMARY_RAW_CHUNK_RATIO = 0.75;
+const SUMMARY_RAW_CHUNK_RATIO = 0.5;
 const activeChatRequests = new Map();
 const RETRIEVAL_STATES = Object.freeze({
     CONTEXT_AVAILABLE: 'context_available',
