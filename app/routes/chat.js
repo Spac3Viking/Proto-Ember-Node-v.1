@@ -730,8 +730,8 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             ? selectedCourtMember.id
             : (activeArchetypeId || 'ember_prime');
         const archetypeMemoryProfile = getArchetypeMemoryProfile(activeArchetypeForMemory);
-        // Backward-compatible aliases: depth (legacy), depthProfile/contextBudgetProfile (transition),
-        // responseDepth (UI-friendly).
+        // Backward-compatible aliases (highest to lowest precedence):
+        // responseDepth (UI-friendly), contextBudgetProfile/depthProfile (transition), depth (legacy).
         const requestedDepthProfileId = normalizeContextBudgetProfileId(
             responseDepth || contextBudgetProfile || depthProfile || depth,
         );

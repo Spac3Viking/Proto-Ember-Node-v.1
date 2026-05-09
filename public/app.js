@@ -13,12 +13,7 @@ let activeModelLabel = DEFAULT_MODEL_LABEL;
 const EMBER_COURT_STORAGE_KEY = 'ember-court-active-member';
 const EMBER_PRIME_MEMBER_ID = 'ember-prime';
 const RESPONSE_DEPTH_STORAGE_KEY = 'responseDepth';
-const RESPONSE_DEPTH_OPTIONS = Object.freeze({
-    spark: 'Spark',
-    ember: 'Ember',
-    hearth: 'Hearth',
-    archive: 'Archive',
-});
+const RESPONSE_DEPTH_IDS = new Set(['spark', 'ember', 'hearth', 'archive']);
 const DEFAULT_RESPONSE_DEPTH = 'ember';
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
@@ -65,7 +60,7 @@ function getEffectiveCourtMemberForApi() {
 
 function normalizeResponseDepth(value) {
     const raw = String(value || '').trim().toLowerCase();
-    return RESPONSE_DEPTH_OPTIONS[raw] ? raw : DEFAULT_RESPONSE_DEPTH;
+    return RESPONSE_DEPTH_IDS.has(raw) ? raw : DEFAULT_RESPONSE_DEPTH;
 }
 
 function syncResponseDepthSelects() {
