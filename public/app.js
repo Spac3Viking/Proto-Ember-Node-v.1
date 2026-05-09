@@ -736,6 +736,7 @@ function renderSignalTrace(sources, signalTrace = null) {
     const conceptRoute = metadata && metadata.conceptRoute ? String(metadata.conceptRoute) : null;
     const courtLens = metadata && metadata.courtLens ? String(metadata.courtLens) : null;
     const courtDomains = metadata && Array.isArray(metadata.courtDomains) ? metadata.courtDomains : [];
+    const depth = metadata && metadata.depth ? String(metadata.depth) : null;
     const model = metadata && metadata.model ? String(metadata.model) : null;
     const provider = metadata && metadata.provider ? String(metadata.provider) : null;
     const rollingBootstrapStatus = metadata && metadata.rollingBootstrapStatus
@@ -797,31 +798,35 @@ function renderSignalTrace(sources, signalTrace = null) {
     const compactRoute = dedupedConceptRoute.length > 0
         ? dedupedConceptRoute.join(' → ')
         : null;
-    const rows = [
-        {
-            key: 'Signal Trace',
-            value: compactTraceText || null,
-        },
-        {
-            key: 'Memory',
-            value: formatMemoryFlow(memoryFlow),
-        },
-        {
-            key: 'Rolling Bootstrap',
-            value: rollingBootstrapStatus
-                ? (
-                    rollingBootstrapThemes.length > 0
-                        ? rollingBootstrapStatus + ' — ' + boundedListText(rollingBootstrapThemes.slice(0, 5))
-                        : rollingBootstrapStatus
-                )
-                : null,
-        },
-        { key: 'Active archetype', value: courtLens || 'Ember Prime' },
-        { key: 'Route', value: compactRoute },
-        { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
-        { key: 'Model', value: model },
-        { key: 'Provider', value: provider },
-    ];
+    const rows = compactTraceText
+        ? [
+            {
+                key: 'Signal Trace',
+                value: compactTraceText,
+            },
+        ]
+        : [
+            {
+                key: 'Memory',
+                value: formatMemoryFlow(memoryFlow),
+            },
+            {
+                key: 'Rolling Bootstrap',
+                value: rollingBootstrapStatus
+                    ? (
+                        rollingBootstrapThemes.length > 0
+                            ? rollingBootstrapStatus + ' — ' + boundedListText(rollingBootstrapThemes.slice(0, 5))
+                            : rollingBootstrapStatus
+                    )
+                    : null,
+            },
+            { key: 'Active archetype', value: courtLens || 'Ember Prime' },
+            { key: 'Depth', value: depth },
+            { key: 'Route', value: compactRoute },
+            { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
+            { key: 'Model', value: model },
+            { key: 'Provider', value: provider },
+        ];
 
     rows.forEach(row => {
         if (!row.value) return;

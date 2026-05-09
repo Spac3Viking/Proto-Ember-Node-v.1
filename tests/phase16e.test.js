@@ -108,5 +108,8 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(res.body).toHaveProperty('answer');
         expect(res.body).toHaveProperty('signalTrace');
         expect(res.body.signalTrace).toHaveProperty('memoryFlow');
+        expect(res.body.signalTrace.depth).toBe('Ember');
+        expect(typeof res.body.signalTrace.compact).toBe('string');
+        expect(res.body.signalTrace.compact).toContain('Depth: Ember');
     });
 });
