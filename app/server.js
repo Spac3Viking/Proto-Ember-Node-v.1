@@ -5,7 +5,7 @@
  * dedicated modules under app/routes/.  Shared service logic lives in:
  *
  *   app/intakeState.js    — Threshold intake state persistence
- *   app/toolRegistry.js   — Tool registry, trust, Heart resolution
+ *   app/runtimeConfig.js  — Ollama runtime constants + selected model access
  *   app/startupCheck.js   — Startup summary generation
  *   app/rateLimiters.js   — Shared rate limiter instances
  *
@@ -13,9 +13,8 @@
  *   app/routes/startup.js   — GET /api/startup-check
  *   app/routes/sources.js   — Source management, ingest, indexing
  *   app/routes/threshold.js — Threshold intake queue and inbox reader routes
- *   app/routes/tools.js     — Tool registry API
  *   app/routes/chat.js      — Chat (legacy + grounded)
- *   app/routes/projects.js  — Projects, user-caches, bundled caches
+ *   app/routes/caches.js    — User caches + bundled cache reader
  *   app/routes/threads.js   — Thread persistence
  *   app/routes/system.js    — System status, storage info, intake state
  */
@@ -36,10 +35,9 @@ const { runLegacyCleanupPass } = require('./system/nodeMaintenance');
 
 // Re-export legacy symbols for backward compatibility with tests
 const { listCaches, loadCache, listCartridges, loadCartridge } = require('./cacheLoader');
-const { loadToolRegistry, saveToolRegistry,
-        mergeDetectedTools, resolveActiveHeart,
-        MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL, getHeartModel,
-        discoverTools }                                = require('./toolRegistry');
+const {
+    MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL, getRuntimeModel,
+} = require('./runtimeConfig');
 const { loadIntakeState, saveIntakeState,
         upsertIntakeFile, upsertIntakeTool }           = require('./intakeState');
 const { triageFile }                                   = require('./startupCheck');
@@ -63,9 +61,8 @@ const createSystemRouter   = require('./routes/system');
 const chatRouter           = require('./routes/chat');
 const sourcesRouter        = require('./routes/sources');
 const thresholdRouter      = require('./routes/threshold');
-const toolsRouter          = require('./routes/tools');
 const threadsRouter        = require('./routes/threads');
-const projectsRouter       = require('./routes/projects');
+const cachesRouter         = require('./routes/caches');
 const documentsRouter      = require('./routes/documents');
 const contextMapsRouter    = require('./routes/contextMaps');
 const archiveRouter        = require('./routes/archive');
@@ -88,10 +85,8 @@ app.use(createSystemRouter(deps));
 app.use(chatRouter);
 app.use(sourcesRouter);
 app.use(thresholdRouter);
-app.use(toolsRouter);
 app.use(threadsRouter);
-// Legacy compatibility: project/cache APIs remain mounted for existing data and tests.
-app.use(projectsRouter);
+app.use(cachesRouter);
 app.use(documentsRouter);
 app.use(contextMapsRouter);
 app.use(archiveRouter);
@@ -103,7 +98,7 @@ async function checkModel() {
     try {
         const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
         const models   = (response.data.models || []).map(function(m) { return m.name; });
-        const selectedModel = getHeartModel();
+        const selectedModel = getRuntimeModel();
         if (!models.some(function(name) { return name === selectedModel || name.startsWith(selectedModel + ':'); })) {
             console.warn(
                 'WARNING: Model "' + selectedModel + '" was not found in Ollama. ' +
@@ -140,23 +135,11 @@ if (require.main === module) {
 
     // Phase 11.5: Seed Forge identity files and initial bootstrap
     try {
-        const { seedForgeFiles, refreshBootstrap } = require('./bootstrap');
+        const { seedForgeFiles } = require('./bootstrap');
         seedForgeFiles();
-        refreshBootstrap();
     } catch (err) {
         console.warn('[forge] Forge seed failed:', err.message);
     }
-
-    // Non-blocking startup tool scan
-    discoverTools().then(function(detected) {
-        const tools    = mergeDetectedTools(detected);
-        const newTools = tools.filter(t => t.status === 'detected');
-        if (newTools.length > 0) {
-            console.log('[tools] Detected ' + newTools.length + ' tool(s): ' + newTools.map(t => t.name).join(', '));
-        }
-    }).catch(function(err) {
-        console.warn('[tools] Startup scan failed:', err.message);
-    });
 
     checkModel().then(function() {
         app.listen(PORT, function() {
@@ -174,12 +157,9 @@ module.exports = {
     loadCache,
     listCartridges,
     loadCartridge,
-    loadToolRegistry,
-    saveToolRegistry,
     loadIntakeState,
     saveIntakeState,
     upsertIntakeFile,
     upsertIntakeTool,
-    resolveActiveHeart,
     triageFile,
 };

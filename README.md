@@ -135,8 +135,6 @@ exposes the storage-root-relative path and Source ID without cluttering the card
 |--------|------|-------------|
 | `GET`    | `/api/sources/:id`                     | Get full source manifest + plaintext preview |
 | `POST`   | `/api/sources/:id/remember`            | Promote source to Hearth (copies file, re-indexes) |
-| `POST`   | `/api/projects/:id/sources`            | Attach a source to a project |
-| `DELETE` | `/api/projects/:id/sources/:sourceId`  | Remove a linked source from a project |
 
 `POST /api/chat` now accepts an optional `sourceIds` array.  Chunks from pinned sources
 are prepended to the grounded retrieval context regardless of semantic score.
@@ -483,36 +481,24 @@ It is not implemented in the current runtime.
 | `POST` | `/api/threads` | Create a new chat thread |
 | `GET`  | `/api/threads/:id` | Get thread with messages |
 | `POST` | `/api/threads/:id/messages` | Add message to thread |
-| `GET`  | `/api/projects` | List Ember Council projects |
-| `POST` | `/api/projects` | Create a project |
-| `GET`  | `/api/projects/:id` | Get a project |
-| `PUT`  | `/api/projects/:id` | Update a project |
-| `POST` | `/api/projects/:id/sources` | Attach a source to a project (Phase 6) |
-| `DELETE` | `/api/projects/:id/sources/:sourceId` | Remove a linked source from a project (Phase 6) |
 | `GET`  | `/api/user-caches` | List user-owned caches |
 | `POST` | `/api/user-caches` | Create a user cache |
 
 ### Phase 7 (new)
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/api/tools`                   | List all AI runtimes in the registry |
-| `POST` | `/api/tools/scan`              | Trigger a discovery scan |
-| `POST` | `/api/tools/:id/trust`         | Trust or revoke an AI runtime |
-| `POST` | `/api/tools/:id/role`          | Assign a role (mirror / forge) |
-| `GET`  | `/api/tools/active`            | Get current Heart assignment |
-| `POST` | `/api/tools/active`            | Set the active Heart |
-| `POST` | `/api/tools/:id/launch`        | Attempt to start Ollama (ollama-local only) |
+| `GET`  | `/api/ollama-status`           | Check local Ollama reachability |
+| `GET`  | `/api/ai/models`               | List local Ollama models + selected model |
+| `POST` | `/api/ai/models/select`        | Set selected local model |
 
 ### Phase 8 / 8.5 (new)
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/api/startup-check`               | Launch summary: intake counts, tool state, Heart status |
+| `GET`  | `/api/startup-check`               | Launch summary: intake counts + selected model status |
 | `POST` | `/api/sources/:id/flag`            | Flag or unflag a Threshold source |
 | `GET`  | `/api/intake-state`                | Full persistent intake state (files + tools) |
 | `POST` | `/api/sources/:id/inspect`         | Mark a source as inspected in intake state |
 | `POST` | `/api/sources/:id/reject`          | Persistently reject a source |
-| `POST` | `/api/tools/:id/inspect`           | Mark a tool as inspected |
-| `POST` | `/api/tools/:id/reject`            | Persistently reject a tool |
 
 ### Phase 11 / 12 (archive + cache integration)
 | Method | Path | Description |
@@ -562,14 +548,14 @@ Trace indicates: *base model — no local sources*.
 | Phase 2 ✓ | Green Fire UI shell + Cache Shelf + room navigation |
 | Phase 3 ✓ | Document ingestion, chunking, embeddings, retrieval, signal trace |
 | Phase 3.2 ✓ | Deterministic source IDs, embeddings endpoint fallback, room-transfer file moves, Ember Council notes indexing, tiered rate limiting |
-| Phase 4 ✓ | Threads, projects, user caches, Threshold intake, PDF/DOCX support |
+| Phase 4 ✓ | Threads, user caches, Threshold intake, PDF/DOCX support |
 | Phase 5 ✓ | Storage stabilization: external data root, legacy migration, storage-root-native paths, cache ownership clarity, portability readiness |
 | Phase 6 ✓ | Mobility layer: actionable source cards, source inspector, Remember to Hearth, Send To (Chat/Notepad/Project), project linked sources, path visibility, cross-room reference flow |
-| Phase 7 ✓ | AI runtime discovery, trust flow, role assignment, Heart selection, runtime registry |
+| Phase 7 ✓ | Local AI runtime readiness + model selection |
 | Phase 8 ✓ | Startup checklist, airlock discipline, AI setup readiness, changed-file detection |
 | Phase 8.5 ✓ | Intake persistence, durable reject, changed-file flow, AI setup polish |
 | Phase 8.75 ✓ | Cleanup pass: redundancy removal, DATA_DIR alias eliminated, path consolidation, duplicate constant consolidation, documentation update |
-| Phase 8.95 ✓ | Backend modularization: `server.js` reduced to ~140 lines; routes split by domain into `app/routes/`; intake state extracted to `app/intakeState.js`; startup summary to `app/startupCheck.js`; tool registry to `app/toolRegistry.js` |
+| Phase 8.95 ✓ | Backend modularization: `server.js` reduced to ~140 lines; routes split by domain into `app/routes/`; intake state extracted to `app/intakeState.js`; startup summary to `app/startupCheck.js` |
 | Phase 10 ✓ | Launcher + local install experience: `Awaken-Ember-Node.bat` one-click launcher, optional Ollama auto-start, startup ritual banner, no-Heart setup guide, desktop shortcut docs, future installer groundwork |
 
 ---
@@ -585,7 +571,7 @@ in dedicated modules:
 | Module | Responsibility |
 |---|---|
 | `app/intakeState.js` | Threshold intake state: load, save, upsert file/runtime entries |
-| `app/toolRegistry.js` | AI runtime registry: load, save, merge discovered runtimes, resolve active Heart |
+| `app/runtimeConfig.js` | Local runtime constants + selected model resolution |
 | `app/startupCheck.js` | Startup summary: triageFile, changed-file scan, launch summary generator |
 | `app/rateLimiters.js` | Shared rate limiter instances (read / write / index / chat) |
 
@@ -596,9 +582,8 @@ in dedicated modules:
 | `startup.js` | `GET /api/startup-check` |
 | `sources.js` | `/api/ingest`, `/api/index/*`, `/api/sources/*`, `/api/notes` |
 | `threshold.js` | `/api/threshold/list`, `/api/threshold/import`, `/api/threshold/files*` |
-| `tools.js` | `/api/tools/*` |
+| `caches.js` | `/api/user-caches`, `/caches*` |
 | `chat.js` | `POST /chat` (legacy), `POST /api/chat` |
-| `projects.js` | `/api/projects/*`, `/api/user-caches`, `/caches*` |
 | `threads.js` | `/api/threads/*` |
 | `system.js` | `/api/status`, `/api/ollama-status`, `/api/storage-info`, `/api/intake-state` |
 | `archive.js` | `/api/archive*`, `/api/archive/caches*` |

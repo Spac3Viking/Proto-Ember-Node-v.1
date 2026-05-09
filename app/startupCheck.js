@@ -11,7 +11,7 @@ const fs   = require('fs');
 const path = require('path');
 const { DATA_ROOT } = require('./storageConfig');
 const { loadManifests } = require('./indexStore');
-const { loadToolRegistry } = require('./toolRegistry');
+const { getSelectedModel } = require('./aiConfig');
 
 // ── File detection constants ──────────────────────────────────────────────────
 
@@ -88,7 +88,6 @@ function getChangedFilesSummary(manifests) {
  */
 function generateStartupCheck(migrationResult) {
     const manifests = loadManifests();
-    const registry  = loadToolRegistry();
 
     // File counts — Threshold intake states
     const allSources   = Object.values(manifests);
@@ -100,40 +99,22 @@ function generateStartupCheck(migrationResult) {
     const { changed } = getChangedFilesSummary(manifests);
     const changedFiles = changed.length;
 
-    // Tool counts
-    const tools        = registry.tools || [];
-    const trustedTools = tools.filter(t => t.trusted).length;
-    const runningTools = tools.filter(t => t.running === true).length;
-    const offlineTools = tools.filter(t => t.trusted && t.running === false).length;
-    const newTools     = tools.filter(t => t.status === 'detected' && !t.trusted).length;
-
-    // Active Heart
-    const heartId              = registry.active && registry.active.heart;
-    const heartTool            = heartId ? tools.find(t => t.id === heartId) : null;
-    const activeHeartAvailable = heartTool ? (heartTool.running === true) : false;
+    const selectedModel = getSelectedModel();
 
     // Migration state
     const migrationState = (migrationResult && migrationResult.performed) ? 'migrated' : 'none';
 
     // Warnings
     const warnings = [];
-    if (heartId && heartTool && !activeHeartAvailable) {
-        warnings.push('Active Heart "' + (heartTool.name || heartId) + '" is offline');
-    }
-    if (tools.length > 0 && runningTools === 0) {
-        warnings.push('No running local AI runtimes detected');
+    if (!selectedModel) {
+        warnings.push('No local model selected');
     }
 
     return {
         waitingFiles,
         changedFiles,
         flaggedFiles,
-        newTools,
-        trustedTools,
-        runningTools,
-        offlineTools,
-        activeHeart:           heartId || null,
-        activeHeartAvailable,
+        selectedModel,
         migrationState,
         warnings,
         lastScan:              new Date().toISOString(),

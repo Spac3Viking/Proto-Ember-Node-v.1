@@ -3528,71 +3528,18 @@ function updateSystemCacheCount(count) {
 }
 
 /* ================================================================
-   Context Maps Status (Phase 11)
+   Context Memory Status
    ================================================================ */
 
-async function loadContextMapsStatus() {
+function loadContextMapsStatus() {
     const el = document.getElementById('sys-context-maps-status');
     if (!el) return;
-
-    el.innerHTML = '<span class="message-system">Loading…</span>';
-
-    const rooms = ['hearth', 'workshop', 'threshold'];
-    const rows  = [];
-
-    for (const room of rooms) {
-        try {
-            const res  = await fetch('/api/context-maps/' + room + '/working');
-            if (res.ok) {
-                const data = await res.json();
-                const map  = data.map;
-                const updated = map.updatedAt ? new Date(map.updatedAt).toLocaleString() : '—';
-                rows.push(
-                    '<div class="system-row">' +
-                    '<span class="system-key">' + room.charAt(0).toUpperCase() + room.slice(1) + ' map</span>' +
-                    '<span class="system-val ok">updated ' + escapeHtml(updated) + '</span>' +
-                    '</div>',
-                );
-            } else {
-                rows.push(
-                    '<div class="system-row">' +
-                    '<span class="system-key">' + room.charAt(0).toUpperCase() + room.slice(1) + ' map</span>' +
-                    '<span class="system-val warn">not generated</span>' +
-                    '</div>',
-                );
-            }
-        } catch {
-            rows.push(
-                '<div class="system-row"><span class="system-key">' + room + '</span><span class="system-val error">error</span></div>',
-            );
-        }
-    }
-
-    el.innerHTML = rows.join('');
+    el.innerHTML =
+        '<div class="system-row">' +
+        '<span class="system-key">Context Memory</span>' +
+        '<span class="system-val">managed through Rolling Bootstrap + Memory Compression</span>' +
+        '</div>';
 }
-
-// Refresh all context maps button
-(function initRefreshMapsBtn() {
-    document.addEventListener('click', async (e) => {
-        if (e.target && e.target.id === 'sys-refresh-maps-btn') {
-            const btn = e.target;
-            btn.disabled = true;
-            btn.textContent = '↻ Refreshing…';
-            try {
-                await Promise.all(['hearth', 'workshop', 'threshold'].map(room =>
-                    fetch('/api/context-maps/' + room + '/refresh', { method: 'POST' }),
-                ));
-                showFlashMessage('Context maps refreshed.');
-                loadContextMapsStatus();
-            } catch {
-                showFlashMessage('Could not refresh maps.');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '↻ Refresh All';
-            }
-        }
-    });
-})();
 
 /* ================================================================
    Rolling Bootstrap Status (Phase 16D)
@@ -3785,59 +3732,25 @@ function updateHeaderStatus() {
 }
 
 /* ================================================================
-   Phase 7 — Runtime Registry: Discovery, Trust, Role, Heart
+   Runtime Status (Ollama + Model Selection)
    ================================================================ */
 
-/**
- * Fetch all AI runtimes from the registry.
- * @returns {Promise<{ tools: object[], active: object }>}
- */
 async function fetchToolRegistry() {
-    const res  = await fetch('/api/tools');
-    const data = await res.json();
-    return { tools: data.tools || [], active: data.active || {} };
-}
-
-/**
- * Trigger a discovery scan.
- * @returns {Promise<{ tools: object[], active: object }>}
- */
-async function scanTools() {
-    const res  = await fetch('/api/tools/scan', { method: 'POST' });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Scan failed');
-    return { tools: data.tools || [], active: data.active || {} };
-}
-
-/** Status label for an AI runtime lifecycle state. */
-function toolStatusLabel(tool) {
-    if (tool.trusted && tool.role) return 'Assigned';
-    if (tool.trusted)              return 'Admitted';
-    if (tool.status === 'detected') return 'Waiting';
-    return tool.status || 'Unknown';
-}
-
-/** CSS class for AI runtime status badge. */
-function toolStatusClass(tool) {
-    if (tool.trusted && tool.role) return 'indexed';
-    if (tool.trusted)              return 'indexed';
-    if (tool.status === 'detected') return 'waiting';
-    return 'warn';
-}
-
-/** Running/offline badge HTML for an AI runtime. */
-function toolRunningBadge(tool) {
-    if (tool.status === 'not_detected' || tool.status === 'unknown') return '';
-    if (tool.running === true)  return ' <span class="status-badge running">Running</span>';
-    if (tool.running === false) return ' <span class="status-badge offline">Offline</span>';
-    return '';
-}
-
-/** Human-readable role label */
-function roleLabel(role) {
-    if (role === 'mirror') return 'Mythic Mirror';
-    if (role === 'forge')  return 'Forge Node';
-    return 'Unclassified';
+    const statusRes = await fetch('/api/ollama-status');
+    const modelsRes = await fetch('/api/ai/models');
+    const modelsData = await modelsRes.json();
+    const reachable = statusRes.ok;
+    const selectedModel = modelsData && modelsData.selected_model ? String(modelsData.selected_model) : null;
+    return {
+        tools: [{
+            id: 'ollama-local',
+            name: 'Ollama',
+            status: reachable ? 'reachable' : 'unreachable',
+            running: reachable,
+            selectedModel,
+        }],
+        active: {},
+    };
 }
 
 /* ── Threshold / AI tab ─────────────────────────────────────── */
@@ -3853,36 +3766,20 @@ async function loadThresholdTools() {
     listEl.innerHTML = '<span class="message-system">Loading…</span>';
 
     try {
-        const { tools, active } = await fetchToolRegistry();
-
-        // Show all non-admitted detected runtimes (+ not_detected as dim)
-        // Persistently rejected runtimes are shown as a separate dim section
-        const pendingRuntimes = tools.filter(t => !t.trusted && (!t.intake || t.intake.state !== 'rejected'));
-        const rejected = tools.filter(t => !t.trusted && t.intake && t.intake.state === 'rejected');
-
-        // Show guided setup if no running runtimes at all
-        const anyRunning = tools.some(t => t.running === true);
-        if (guideEl) guideEl.style.display = anyRunning ? 'none' : 'flex';
-
-        if (pendingRuntimes.length === 0 && rejected.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No pending runtimes. All detected runtimes have been admitted.</span>';
-            return;
-        }
-
-        listEl.innerHTML = '';
-        pendingRuntimes.forEach(tool => renderThresholdToolRow(tool, active, listEl));
-
-        if (rejected.length > 0) {
-            const sep = document.createElement('div');
-            sep.className   = 'threshold-section-header';
-            sep.textContent = 'Rejected by stewardship (' + rejected.length + ')';
-            listEl.appendChild(sep);
-            rejected.forEach(tool => renderThresholdToolRow(tool, active, listEl));
-        }
-        loadThresholdAiModelGuidance(tools);
+        const { tools } = await fetchToolRegistry();
+        const ollama = tools[0] || null;
+        const statusText = ollama && ollama.running ? 'reachable' : 'unreachable';
+        const modelText = ollama && ollama.selectedModel ? ollama.selectedModel : 'none selected';
+        if (guideEl) guideEl.style.display = ollama && ollama.running ? 'none' : 'flex';
+        listEl.innerHTML =
+            '<div class="system-row"><span class="system-key">Ollama</span><span class="system-val ' +
+            (ollama && ollama.running ? 'ok' : 'warn') + '">' + escapeHtml(statusText) + '</span></div>' +
+            '<div class="system-row"><span class="system-key">Selected model</span><span class="system-val">' +
+            escapeHtml(modelText) + '</span></div>';
+        loadThresholdAiModelGuidance();
     } catch {
-        listEl.innerHTML = '<span class="message-system threshold-error">Could not load runtimes.</span>';
-        loadThresholdAiModelGuidance([]);
+        listEl.innerHTML = '<span class="message-system threshold-error">Could not load runtime status.</span>';
+        loadThresholdAiModelGuidance();
     }
 }
 
@@ -3895,7 +3792,7 @@ const THRESHOLD_AI_SUGGESTED_COMMANDS = [
 ].join('\n');
 
 /** Load Ollama detection/model guidance in Threshold → AI. */
-async function loadThresholdAiModelGuidance(tools) {
+async function loadThresholdAiModelGuidance() {
     const ollamaStatusEl = document.getElementById('th-ai-ollama-status');
     const modelsListEl = document.getElementById('th-ai-models-list');
     const selectedModelEl = document.getElementById('th-ai-selected-model');
@@ -3905,14 +3802,11 @@ async function loadThresholdAiModelGuidance(tools) {
         commandsEl.textContent = THRESHOLD_AI_SUGGESTED_COMMANDS;
     }
 
-    const toolList = Array.isArray(tools) ? tools : [];
-    const ollamaTool = toolList.find(t => t && t.id === 'ollama-local');
-    const ollamaDetected = Boolean(
-        ollamaTool &&
-        ollamaTool.status &&
-        ollamaTool.status !== 'not_detected' &&
-        ollamaTool.status !== 'unknown',
-    );
+    let ollamaDetected = false;
+    try {
+        const statusRes = await fetch('/api/ollama-status');
+        ollamaDetected = statusRes.ok;
+    } catch { /* ignore */ }
     if (ollamaStatusEl) {
         ollamaStatusEl.textContent = ollamaDetected ? 'Detected' : 'Not detected';
         ollamaStatusEl.className = ollamaDetected ? 'system-val ok' : 'system-val error';
@@ -3936,160 +3830,10 @@ async function loadThresholdAiModelGuidance(tools) {
     }
 }
 
-function renderThresholdToolRow(tool, active, container) {
-    const row = document.createElement('div');
-    row.className = 'threshold-file-row';
-    row.dataset.toolId = tool.id;
-
-    const intakeState = tool.intake && tool.intake.state;
-    if (intakeState === 'rejected') row.className += ' intake-rejected';
-
-    // Runtime last-seen timestamp
-    const lastSeen = tool.lastSeen ? ' · last seen ' + new Date(tool.lastSeen).toLocaleString() : '';
-
-    const nameEl = document.createElement('div');
-    nameEl.style.cssText = 'flex:1; min-width:0;';
-    nameEl.innerHTML =
-        '<div class="threshold-file-name">' + escapeHtml(tool.name) +
-            ' <span class="status-badge ' + toolStatusClass(tool) + '">' +
-            escapeHtml(toolStatusLabel(tool)) + '</span>' +
-            toolRunningBadge(tool) +
-            (intakeState === 'rejected' ? ' <span class="status-badge rejected">Rejected</span>' : '') +
-            (intakeState === 'inspected' ? ' <span class="status-badge inspected">Inspected</span>' : '') +
-            '</div>' +
-        '<div class="source-card-filename">' + escapeHtml(tool.type || '') + ' · ' + escapeHtml(tool.interface || '') + escapeHtml(lastSeen) + '</div>' +
-        (tool.endpoint ? '<div class="source-card-filename">' + escapeHtml(tool.endpoint) + '</div>' : '') +
-        (tool.note ? '<div class="source-card-description">' + escapeHtml(tool.note) + '</div>' : '');
-
-    const actions = document.createElement('span');
-    actions.className = 'threshold-file-actions';
-
-    if (intakeState !== 'rejected') {
-        // Inspect button — marks as inspected in persistent state
-        const inspBtn = document.createElement('button');
-        inspBtn.className = 'secondary threshold-action-btn';
-        inspBtn.textContent = intakeState === 'inspected' ? 'Re-inspect' : 'Inspect';
-        inspBtn.addEventListener('click', async () => {
-            inspBtn.disabled = true;
-            try {
-                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
-            } catch { /* ignore */ }
-            openToolInspector(tool, active);
-            loadThresholdTools();
-        });
-        actions.appendChild(inspBtn);
-
-        // Admit button (only for detected runtimes)
-        if (tool.status === 'detected') {
-            const trustBtn = document.createElement('button');
-            trustBtn.className = 'primary threshold-action-btn';
-            trustBtn.textContent = 'Admit';
-            trustBtn.addEventListener('click', async () => {
-                trustBtn.disabled = true;
-                trustBtn.textContent = 'Admitting…';
-                try {
-                    const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ trusted: true }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        showFlashMessage(escapeHtml(tool.name) + ' admitted ✓ — now in Ember Council');
-                        loadThresholdTools();
-                        loadWorkshopTools();
-                        loadHearthToolRegistry();
-                    } else {
-                        showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
-                        trustBtn.disabled = false;
-                        trustBtn.textContent = 'Admit';
-                    }
-                } catch {
-                    showFlashMessage('Could not reach server.');
-                    trustBtn.disabled = false;
-                    trustBtn.textContent = 'Admit';
-                }
-            });
-            actions.appendChild(trustBtn);
-        }
-
-        // Launch button — only for Ollama when detected but not running
-        if (tool.id === 'ollama-local' && tool.status === 'detected' && !tool.running) {
-            const launchBtn = document.createElement('button');
-            launchBtn.className = 'secondary threshold-action-btn';
-            launchBtn.textContent = '▶ Launch';
-            launchBtn.title = 'Attempt to start Ollama';
-            launchBtn.addEventListener('click', async () => {
-                launchBtn.disabled = true;
-                launchBtn.textContent = 'Launching…';
-                await launchOllama(tool.id);
-                launchBtn.disabled = false;
-                launchBtn.textContent = '▶ Launch';
-            });
-            actions.appendChild(launchBtn);
-        }
-
-        // Reject button — persistent rejection
-        const rejectBtn = document.createElement('button');
-        rejectBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
-        rejectBtn.textContent = 'Reject';
-        rejectBtn.title = 'Persistently reject — hides runtime from intake queue';
-        rejectBtn.addEventListener('click', async () => {
-            rejectBtn.disabled = true;
-            try {
-                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/reject', { method: 'POST' });
-                showFlashMessage(escapeHtml(tool.name) + ' rejected.');
-            } catch { /* ignore */ }
-            loadThresholdTools();
-        });
-        actions.appendChild(rejectBtn);
-    } else {
-        // Rejected — offer undo
-        const undoBtn = document.createElement('button');
-        undoBtn.className = 'secondary threshold-action-btn';
-        undoBtn.textContent = 'Undo Reject';
-        undoBtn.title = 'Restore runtime to intake queue';
-        undoBtn.addEventListener('click', async () => {
-            undoBtn.disabled = true;
-            try {
-                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
-                showFlashMessage(escapeHtml(tool.name) + ' restored to intake.');
-            } catch { /* ignore */ }
-            loadThresholdTools();
-        });
-        actions.appendChild(undoBtn);
-    }
-
-    row.appendChild(nameEl);
-    row.appendChild(actions);
-    container.appendChild(row);
-}
-
-/* Scan button in Threshold → AI */
-(function initToolScanBtn() {
-    document.addEventListener('click', async e => {
-        if (e.target && e.target.id === 'tool-scan-btn') {
-            const btn = e.target;
-            btn.disabled = true;
-            btn.textContent = '↺ Scanning…';
-            try {
-                await scanTools();
-                showFlashMessage('Scan complete.');
-                loadThresholdTools();
-            } catch (err) {
-                showFlashMessage('Scan failed: ' + err.message);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '↺ Scan';
-            }
-        }
-    });
-})();
-
 (function initThresholdAiGuidanceButtons() {
     document.addEventListener('click', async e => {
         if (!e.target) return;
-        if (e.target.id === 'th-ai-refresh-models-btn') {
+        if (e.target.id === 'th-ai-refresh-models-btn' || e.target.id === 'th-ai-refresh-runtime-btn') {
             const btn = e.target;
             btn.disabled = true;
             btn.textContent = 'Refreshing…';
@@ -4235,244 +3979,22 @@ async function loadWorkshopTools() {
     }
 }
 
-/* ── Hearth / System: Ember Prime Assignment ─────────────────── */
+/* ── Hearth / System: local model status ──────────────────────── */
 
-/**
- * Load the Ember Prime assignment UI in the Hearth → System tab.
- */
 async function loadHearthToolRegistry() {
-    const listEl   = document.getElementById('sys-heart-list');
-    const emptyEl  = document.getElementById('sys-heart-empty');
     const activeEl = document.getElementById('sys-active-heart');
-    if (!listEl) return;
-
+    if (!activeEl) return;
     try {
-        const { tools, active } = await fetchToolRegistry();
-        const trusted = tools.filter(t => t.trusted);
-
-        if (emptyEl) emptyEl.style.display = trusted.length === 0 ? '' : 'none';
-
-        // Remove previous runtime rows
-        listEl.querySelectorAll('.heart-tool-row').forEach(el => el.remove());
-
-        const currentHeart = active && active.heart;
-        if (activeEl) activeEl.textContent = currentHeart
-            ? (tools.find(t => t.id === currentHeart) || {}).name || currentHeart
-            : '—';
-
-        trusted.forEach(tool => {
-            const row = document.createElement('div');
-            row.className = 'heart-tool-row system-row';
-            row.style.cssText = 'justify-content:space-between; align-items:center; gap:0.5rem;';
-
-            const isHeart = currentHeart === tool.id;
-
-            const label = document.createElement('span');
-            label.className = 'system-val';
-            label.innerHTML =
-                escapeHtml(tool.name) +
-                (tool.role ? ' <span class="status-badge indexed" style="font-size:0.68rem;">' + escapeHtml(roleLabel(tool.role)) + '</span>' : '') +
-                (isHeart ? ' <span class="status-badge remembered" style="font-size:0.68rem;">Active Ember Prime</span>' : '');
-
-            const btn = document.createElement('button');
-            btn.className = isHeart ? 'secondary' : 'primary';
-            btn.style.cssText = 'font-size:0.75rem; padding:0.2rem 0.6rem;';
-            btn.textContent = isHeart ? 'Clear' : 'Set as Ember Prime';
-            btn.addEventListener('click', async () => {
-                btn.disabled = true;
-                try {
-                    const heartId = isHeart ? null : tool.id;
-                    const res  = await fetch('/api/tools/active', {
-                        method:  'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ heart: heartId }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        showFlashMessage(heartId
-                            ? escapeHtml(tool.name) + ' is now active as Ember Prime ✓'
-                            : 'Ember Prime assignment cleared.');
-                        loadHearthToolRegistry();
-                    } else {
-                        showFlashMessage('Ember Prime update failed: ' + (data.error || 'unknown'));
-                        btn.disabled = false;
-                    }
-                } catch {
-                    showFlashMessage('Could not reach server.');
-                    btn.disabled = false;
-                }
-            });
-
-            row.appendChild(label);
-            row.appendChild(btn);
-            listEl.insertBefore(row, emptyEl);
-        });
+        const res = await fetch('/api/ai/models');
+        const data = await res.json();
+        activeEl.textContent = data && data.selected_model ? data.selected_model : '—';
     } catch {
-        if (listEl) listEl.innerHTML += '<span class="message-system">Could not load runtime stewardship registry.</span>';
+        activeEl.textContent = '—';
     }
 }
 
-/* ── AI Runtime Inspector Modal ───────────────────────────────── */
-
-function closeToolInspector() {
-    const overlay = document.getElementById('tool-inspector-overlay');
-    if (overlay) overlay.style.display = 'none';
-}
-
-function openToolInspector(tool, active) {
-    const overlay = document.getElementById('tool-inspector-overlay');
-    if (!overlay) return;
-
-    const isHeart = active && active.heart === tool.id;
-
-    const set = (id, text) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = text || '—';
-    };
-
-    const titleEl = document.getElementById('tool-insp-title');
-    if (titleEl) titleEl.textContent = tool.name || 'AI Runtime Inspector';
-
-    const statusEl = document.getElementById('tool-insp-status');
-    if (statusEl) {
-        statusEl.innerHTML =
-            '<span class="status-badge ' + toolStatusClass(tool) + '">' +
-            escapeHtml(toolStatusLabel(tool)) + '</span>' +
-            (isHeart ? ' <span class="status-badge remembered">Active Ember Prime</span>' : '');
-    }
-
-    set('tool-insp-type',      tool.type);
-    set('tool-insp-interface', tool.interface);
-    set('tool-insp-endpoint',  tool.endpoint || '(none)');
-    set('tool-insp-role',      tool.role ? roleLabel(tool.role) : 'None');
-    set('tool-insp-trust',     tool.trusted ? 'Admitted' : 'Pending');
-    set('tool-insp-lastseen',  tool.lastSeen || '—');
-
-    const runningEl = document.getElementById('tool-insp-running');
-    if (runningEl) {
-        if (tool.status === 'not_detected' || tool.status === 'unknown') {
-            runningEl.textContent = '—';
-        } else if (tool.running === true) {
-            runningEl.innerHTML = '<span class="status-badge running">Running</span>';
-        } else {
-            runningEl.innerHTML = '<span class="status-badge offline">Offline</span>';
-        }
-    }
-
-    const actEl = document.getElementById('tool-insp-actions');
-    if (actEl) {
-        actEl.innerHTML = '';
-        const actions = [];
-
-        if (!tool.trusted && tool.status === 'detected') {
-            actions.push({
-                label: 'Admit Runtime',
-                primary: true,
-                fn: async () => {
-                    try {
-                        const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
-                            method:  'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body:    JSON.stringify({ trusted: true }),
-                        });
-                        const data = await res.json();
-                        if (data.success) {
-                            closeToolInspector();
-                            showFlashMessage(escapeHtml(tool.name) + ' admitted ✓');
-                            loadThresholdTools();
-                            loadWorkshopTools();
-                            loadHearthToolRegistry();
-                        } else {
-                            showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
-                        }
-                    } catch {
-                        showFlashMessage('Could not reach server.');
-                    }
-                },
-            });
-        }
-
-        if (tool.trusted && !isHeart) {
-            actions.push({
-                label: 'Set as Ember Prime',
-                primary: true,
-                fn: async () => {
-                    try {
-                        const res  = await fetch('/api/tools/active', {
-                            method:  'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body:    JSON.stringify({ heart: tool.id }),
-                        });
-                        const data = await res.json();
-                        if (data.success) {
-                            closeToolInspector();
-                            showFlashMessage(escapeHtml(tool.name) + ' is now active as Ember Prime ✓');
-                            loadHearthToolRegistry();
-                        }
-                    } catch {
-                        showFlashMessage('Could not reach server.');
-                    }
-                },
-            });
-        }
-
-        // Launch action — Ollama only, when detected but offline
-        if (tool.id === 'ollama-local' && tool.status === 'detected' && !tool.running) {
-            actions.push({
-                label: '▶ Launch Ollama',
-                primary: true,
-                fn: async () => {
-                    closeToolInspector();
-                    await launchOllama(tool.id);
-                },
-            });
-        }
-
-        // Test connection action for detected runtimes with an endpoint
-        if (tool.status === 'detected' && tool.endpoint) {
-            actions.push({
-                label: 'Test Connection',
-                primary: false,
-                fn: async () => {
-                    showFlashMessage('Testing connection to ' + tool.name + '…');
-                    try {
-                        await fetch('/api/tools/scan', { method: 'POST' });
-                        showFlashMessage('Scan complete — check runtime status.');
-                        closeToolInspector();
-                        loadThresholdTools();
-                        loadWorkshopTools();
-                    } catch {
-                        showFlashMessage('Could not reach server.');
-                    }
-                },
-            });
-        }
-
-        actions.push({ label: 'Close', primary: false, fn: closeToolInspector });
-
-        actions.forEach(a => {
-            const btn = document.createElement('button');
-            btn.className = a.primary ? 'primary' : 'secondary';
-            btn.textContent = a.label;
-            btn.addEventListener('click', a.fn);
-            actEl.appendChild(btn);
-        });
-    }
-
-    overlay.style.display = 'flex';
-}
-
-// Close runtime inspector on overlay click or close button
-(function initToolInspector() {
-    const closeBtn = document.getElementById('tool-insp-close');
-    const overlay  = document.getElementById('tool-inspector-overlay');
-    if (closeBtn) closeBtn.addEventListener('click', closeToolInspector);
-    if (overlay) {
-        overlay.addEventListener('click', e => {
-            if (e.target === overlay) closeToolInspector();
-        });
-    }
-})();
+function closeToolInspector() {}
+function openToolInspector() {}
 
 /** Active chat reference context — array of { sourceId, title } objects. */
 let _chatRefs = [];
@@ -4702,16 +4224,8 @@ async function loadStartupCheck() {
         const summaryParts = [];
         const totalIntake  = (data.waitingFiles || 0) + (data.changedFiles || 0) + (data.flaggedFiles || 0);
         summaryParts.push('Node awakened');
-        if (data.activeHeart && data.activeHeartAvailable) {
-            summaryParts.push('Ember Prime ready');
-        } else if (data.activeHeart && !data.activeHeartAvailable) {
-            summaryParts.push('Ember Prime offline');
-        } else {
-            summaryParts.push('no Ember Prime set');
-        }
+        summaryParts.push(data.selectedModel ? ('model ' + data.selectedModel + ' selected') : 'no model selected');
         if (totalIntake > 0) summaryParts.push(totalIntake + ' file' + (totalIntake === 1 ? '' : 's') + ' awaiting review');
-        if (data.offlineTools > 0) summaryParts.push(data.offlineTools + ' AI offline');
-        if (data.newTools > 0) summaryParts.push(data.newTools + ' new runtime' + (data.newTools === 1 ? '' : 's') + ' detected');
 
         const summaryEl = document.getElementById('startup-banner-summary');
         if (summaryEl) {
@@ -4737,29 +4251,14 @@ async function loadStartupCheck() {
             stats.push({ label: 'threshold clear', value: '✓', style: 'ok', group: 'Intake' });
         }
 
-        // ── AI Setup group ───────────────────────────────────────────
-        if (data.runningTools > 0) {
-            stats.push({ label: 'runtimes online', value: data.runningTools, style: 'ok', group: 'AI Setup' });
-        }
-        if (data.offlineTools > 0) {
-            stats.push({ label: 'runtimes offline', value: data.offlineTools, style: 'error', group: 'AI Setup' });
-        }
-        if (data.newTools > 0) {
-            stats.push({ label: 'new runtimes detected', value: data.newTools, style: 'warn', group: 'AI Setup' });
-        }
-
-        // Active Ember Prime
-        const noHeart = !data.activeHeart;
-        if (data.activeHeart) {
-            stats.push({
-                label: 'ember prime',
-                value: data.activeHeart + (data.activeHeartAvailable ? ' ✓' : ' (offline)'),
-                style: data.activeHeartAvailable ? 'ok' : 'error',
-                group: 'AI Setup',
-            });
-        } else {
-            stats.push({ label: 'ember prime', value: 'none set', style: 'zero', group: 'AI Setup' });
-        }
+        const modelSelected = Boolean(data.selectedModel);
+        const noModel = !modelSelected;
+        stats.push({
+            label: 'selected model',
+            value: modelSelected ? data.selectedModel : 'none',
+            style: modelSelected ? 'ok' : 'warn',
+            group: 'AI Setup',
+        });
 
         // ── Render grouped stats ─────────────────────────────────────
         let lastGroup = null;
@@ -4779,13 +4278,13 @@ async function loadStartupCheck() {
 
         // Show/hide "View Setup Guide" button in banner links
         const setupGuideBtn = document.getElementById('sb-setup-guide');
-        if (setupGuideBtn) setupGuideBtn.style.display = noHeart ? '' : 'none';
+        if (setupGuideBtn) setupGuideBtn.style.display = noModel ? '' : 'none';
     }
 
-    // Warnings — merge server warnings with local no-Ember-Prime notice
+    // Warnings — merge server warnings with local no-model notice
     if (warningsEl) {
         const warnings = [...(data.warnings || [])];
-        if (!data.activeHeart) warnings.unshift('No active Ember Prime detected — Recommended local AI: Ollama');
+        if (!data.selectedModel) warnings.unshift('No local model selected — recommended runtime: Ollama');
         if (warnings.length > 0) {
             warningsEl.style.display = '';
             warningsEl.innerHTML = warnings.map(w =>
@@ -4820,11 +4319,7 @@ function renderSystemStartupSummary(data) {
         {
             title: 'AI Setup',
             rows: [
-                { key: 'New runtimes',      val: data.newTools      || 0 },
-                { key: 'Running runtimes',  val: data.runningTools  || 0 },
-                { key: 'Offline runtimes',  val: data.offlineTools  || 0 },
-                { key: 'Active Ember Prime', val: data.activeHeart || '—' },
-                { key: 'Ember Prime ready',  val: data.activeHeart ? (data.activeHeartAvailable ? 'yes' : 'offline') : '—' },
+                { key: 'Selected model', val: data.selectedModel || '—' },
             ],
         },
         {
@@ -4956,26 +4451,10 @@ async function flagSource(sourceId, flagged) {
 
 /**
  * Attempt to launch Ollama from within Ember Node.
- * Shows progress feedback and re-loads tool list on completion.
+ * Ember Node does not auto-launch runtimes; this opens setup guidance.
  */
-async function launchOllama(toolId) {
-    showFlashMessage('Attempting to launch Ollama…');
-    try {
-        const res  = await fetch('/api/tools/' + encodeURIComponent(toolId) + '/launch', {
-            method: 'POST',
-        });
-        const data = await res.json();
-        if (data.success) {
-            showFlashMessage(data.message || 'Ollama started ✓');
-        } else {
-            showFlashMessage(data.message || 'Launch failed — try: ollama serve');
-        }
-        loadThresholdTools();
-        loadWorkshopTools();
-        loadHearthToolRegistry();
-    } catch {
-        showFlashMessage('Could not reach server.');
-    }
+async function launchOllama() {
+    window.open('https://ollama.com/download', '_blank', 'noopener,noreferrer');
 }
 
 /* ================================================================

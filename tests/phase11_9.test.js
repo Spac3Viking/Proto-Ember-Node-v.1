@@ -49,7 +49,6 @@ describe('Phase 11.9 — canonical data root finalization', () => {
 
         sc.ensureCanonicalDataFiles();
 
-        expect(fs.existsSync(sc.TOOLS_REGISTRY_PATH)).toBe(true);
         expect(fs.existsSync(sc.INTAKE_STATE_PATH)).toBe(true);
         const manifestAfter = JSON.parse(fs.readFileSync(sc.CORE_ARCHIVE_MANIFEST_PATH, 'utf8'));
         expect(manifestAfter.id).toBe('custom-core');

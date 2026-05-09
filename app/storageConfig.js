@@ -50,7 +50,6 @@
  *       science/               — curated scientific sources (legacy shelf)
  *       green-fire/            — Green Fire primary texts (legacy shelf)
  *     indexes/                 — local knowledge index (chunks, embeddings, manifests)
- *     projects/                — Workshop project files
  *     threads/                 — chat thread records
  *     caches/              — user-created cache metadata (NOT bundled caches)
  *     system/                  — system state
@@ -139,7 +138,6 @@ const THRESHOLD_CHANGED_DIR  = path.join(DATA_ROOT, 'threshold', 'changed');
 const THRESHOLD_FLAGGED_DIR  = path.join(DATA_ROOT, 'threshold', 'flagged');
 
 const INDEXES_DIR         = path.join(DATA_ROOT, 'indexes');
-const PROJECTS_DIR        = path.join(DATA_ROOT, 'projects');
 const THREADS_DIR         = path.join(DATA_ROOT, 'threads');
 const USER_CACHES_DIR = path.join(DATA_ROOT, 'caches');
 const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
@@ -255,7 +253,6 @@ const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store', SEED_TEMPLATE_MARKER]);
 const LEGACY_DATA_DIR = path.join(__dirname, '..', 'data');
 const LEGACY_CORE_MANIFEST_REL_PATH = path.join('archive', 'core', 'manifest.json').replace(/\\/g, '/');
 const CORE_ARCHIVE_MANIFEST_PATH = path.join(ARCHIVE_CORE_DIR, 'manifest.json');
-const TOOLS_REGISTRY_PATH        = path.join(SYSTEM_DIR, 'tools.json');
 const INTAKE_STATE_PATH          = path.join(SYSTEM_DIR, 'intake.json');
 
 const DEFAULT_CORE_ARCHIVE_MANIFEST = {
@@ -274,7 +271,6 @@ const DEFAULT_CORE_ARCHIVE_MANIFEST = {
     },
 };
 
-const DEFAULT_TOOLS_REGISTRY = { tools: [], active: {} };
 const DEFAULT_INTAKE_STATE = { files: {}, tools: {} };
 const DEFAULT_ROLLING_BOOTSTRAP = {
     version: '0.1.0',
@@ -365,7 +361,6 @@ function ensureDataRoot() {
         ROOM_DIRS.workshop,
         ROOM_DIRS.threshold,
         INDEXES_DIR,
-        PROJECTS_DIR,
         THREADS_DIR,
         USER_CACHES_DIR,
         SYSTEM_DIR,
@@ -429,7 +424,6 @@ function writeJsonIfMissing(filePath, json) {
  */
 function ensureCanonicalDataFiles() {
     writeJsonIfMissing(CORE_ARCHIVE_MANIFEST_PATH, DEFAULT_CORE_ARCHIVE_MANIFEST);
-    writeJsonIfMissing(TOOLS_REGISTRY_PATH, DEFAULT_TOOLS_REGISTRY);
     writeJsonIfMissing(INTAKE_STATE_PATH, DEFAULT_INTAKE_STATE);
     writeJsonIfMissing(ROLLING_BOOTSTRAP_PATH, DEFAULT_ROLLING_BOOTSTRAP);
     writeJsonIfMissing(CACHE_SUMMARIES_PATH, DEFAULT_CACHE_SUMMARIES);
@@ -650,7 +644,6 @@ module.exports = {
     getDataRoot,
     ROOM_DIRS,
     INDEXES_DIR,
-    PROJECTS_DIR,
     THREADS_DIR,
     USER_CACHES_DIR,
     SYSTEM_DIR,
@@ -689,7 +682,6 @@ module.exports = {
     THRESHOLD_CHANGED_DIR,
     THRESHOLD_FLAGGED_DIR,
     CORE_ARCHIVE_MANIFEST_PATH,
-    TOOLS_REGISTRY_PATH,
     INTAKE_STATE_PATH,
     ensureDataRoot,
     ensureCanonicalDataFiles,

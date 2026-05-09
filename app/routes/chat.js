@@ -20,18 +20,16 @@
 const express = require('express');
 const axios   = require('axios');
 const { chatLimiter } = require('../rateLimiters');
-const { OLLAMA_CHAT_URL, getHeartModel, resolveActiveHeart } = require('../toolRegistry');
+const { OLLAMA_CHAT_URL, getRuntimeModel } = require('../runtimeConfig');
 const { loadChunks }                                  = require('../indexStore');
 const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
 const { assembleRoomContext }                         = require('../contextMaps');
 const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
-    loadBootstrap, refreshBootstrap,
     loadRollingBootstrap, formatRollingBootstrapForPrompt,
     loadForgeCore, loadArchetype,
     formatForgeCoreForPrompt,
-    formatBootstrapForPrompt,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
 const {
@@ -514,13 +512,13 @@ const MAX_PINNED_CHUNKS = 8;
 
 // ── Phase 2: original chat endpoint (kept for backward compatibility) ─────────
 // This endpoint bypasses retrieval and goes directly to Ollama.
-// New code should use POST /api/chat which routes through the active Heart tool
-// with grounded retrieval.  Kept to avoid breaking any existing integrations.
+// New code should use POST /api/chat with grounded retrieval. Kept to avoid
+// breaking any existing integrations.
 
 router.post('/chat', async (req, res) => {
     try {
         const { message, prompt, model: _ignored, ...rest } = req.body;
-        const selectedModel = getHeartModel();
+        const selectedModel = getRuntimeModel();
         const payload = {
             stream:   false,
             ...rest,
@@ -652,17 +650,8 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const sources = buildSignalTrace(retrieved);
 
-        // ── Phase 16D: Prompt assembly order ───────────────────────────────────
-        // Forge Core → Rolling Bootstrap → Ember Prime continuity → Archetype → Retrieval
-
-        // Legacy Ember Prime continuity layer (active-bootstrap)
-        let bootstrap = loadBootstrap();
-        if (!bootstrap) {
-            console.warn('[/api/chat] Bootstrap missing — regenerating now.');
-            try { bootstrap = refreshBootstrap({ activeArchetype: activeArchetypeId }); }
-            catch (err) { console.warn('[/api/chat] Bootstrap regeneration failed:', err.message); }
-        }
-        console.log('[/api/chat] bootstrap=' + (bootstrap ? 'loaded' : 'unavailable'));
+        // ── Prompt assembly order ───────────────────────────────────────────────
+        // Forge Core → Rolling Bootstrap → Archetype → Retrieval
 
         const rollingBootstrap = loadRollingBootstrap();
         let rollingBootstrapStatus = 'missing';
@@ -724,12 +713,11 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // Forge Core → Rolling Bootstrap → Ember Prime continuity → optional archetype → retrieval
         const forgePart = formatForgeCoreForPrompt(forgeCore);
         const rollingBootstrapPart = formatRollingBootstrapForPrompt(rollingBootstrap);
-        const bootstrapPart = formatBootstrapForPrompt(bootstrap);
         const archetypePart = selectedCourtMember
             ? buildCourtPromptModifier(selectedCourtMember)
             : (archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '');
 
-        const identityPreamble = [forgePart, rollingBootstrapPart, bootstrapPart, archetypePart]
+        const identityPreamble = [forgePart, rollingBootstrapPart, archetypePart]
             .filter(Boolean)
             .join('\n\n');
 
@@ -746,11 +734,8 @@ state: ${retrievalState}
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
-        // Resolve which Heart tool to use (falls back to built-in Ollama)
-        const heart = resolveActiveHeart();
-
         const payload = {
-            model:    heart.model,
+            model:    getRuntimeModel(),
             stream:   false,
             messages: [
                 { role: 'system', content: systemPrompt },
@@ -760,7 +745,7 @@ state: ${retrievalState}
 
         let response;
         try {
-            response = await axios.post(heart.chatUrl, payload, {
+            response = await axios.post(OLLAMA_CHAT_URL, payload, {
                 signal: abortController.signal,
                 timeout: CHAT_REQUEST_TIMEOUT_MS,
             });
@@ -838,7 +823,7 @@ state: ${retrievalState}
             sourcesUsed: uniqueSourceCount,
             chunksUsed: retrieved.length,
             sourceList,
-            model: heart.model,
+            model: getRuntimeModel(),
             provider: 'Ollama',
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
             rollingBootstrapStatus,
