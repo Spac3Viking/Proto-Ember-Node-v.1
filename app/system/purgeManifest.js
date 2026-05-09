@@ -25,7 +25,7 @@ const PURGE_PROFILES = Object.freeze({
     [PURGE_MODES.TEMPORARY]: Object.freeze([
         'chats',
         'threads',
-        'workshop/drafts',
+        'council/drafts',
         'logs',
         'tmp',
         'legacy',
@@ -36,9 +36,9 @@ const PURGE_PROFILES = Object.freeze({
     [PURGE_MODES.FULL]: Object.freeze([
         'chats',
         'threads',
-        'workshop/drafts',
-        'workshop/notes',
-        'workshop/documents',
+        'council/drafts',
+        'council/notes',
+        'council/documents',
         'hearth/remembered-threads',
         'threshold/waiting',
         'threshold/changed',

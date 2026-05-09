@@ -28,10 +28,14 @@ const SOURCE_CLASSES = {
     TRUSTED_ARCHIVE:    'trusted-archive',
     ARCHIVE_CACHE:      'archive-cache',
     ARCHIVE_LEGACY_CACHE: 'archive-legacy-cache',
-    WORKSHOP_DRAFT:     'workshop-draft',
+    COUNCIL_DRAFT:      'council-draft',
     HEARTH_REMEMBERED:  'hearth-remembered',
     THRESHOLD_INTAKE:   'threshold-intake',
 };
+
+function normalizeRoom(room) {
+    return room === 'workshop' ? 'council' : room;
+}
 
 /**
  * Derive the default source class for a room.
@@ -40,9 +44,9 @@ const SOURCE_CLASSES = {
  * @returns {string}
  */
 function sourceClassForRoom(room) {
-    switch (room) {
+    switch (normalizeRoom(room)) {
         case 'hearth':    return SOURCE_CLASSES.HEARTH_REMEMBERED;
-        case 'workshop':  return SOURCE_CLASSES.WORKSHOP_DRAFT;
+        case 'council':   return SOURCE_CLASSES.COUNCIL_DRAFT;
         case 'threshold': return SOURCE_CLASSES.THRESHOLD_INTAKE;
         default:          return SOURCE_CLASSES.THRESHOLD_INTAKE;
     }
@@ -122,7 +126,7 @@ async function extractTextAsync(filePath) {
  *
  * @param {object} opts
  * @param {string} opts.filePath       - Absolute path to the file
- * @param {string} opts.room           - Target room (hearth | workshop | threshold)
+ * @param {string} opts.room           - Target room (hearth | council | threshold)
  * @param {string|null} opts.cacheId
  * @param {string|null} opts.manifestId
  * @param {string|null} opts.title     - Human-readable title for the source
@@ -135,8 +139,9 @@ function buildSourceRecord({ filePath, room, cacheId = null, manifestId = null, 
     const ext      = path.extname(filePath).toLowerCase().slice(1);
 
     // Path relative to the storage root — storage-root-native, no app-folder assumptions.
-    // e.g. 'workshop/file.md' rather than 'data/workshop/file.md'.
+    // e.g. 'council/file.md' rather than 'data/council/file.md'.
     const relPath  = path.relative(DATA_DIR, filePath).replace(/\\/g, '/');
+    const normalizedRoom = normalizeRoom(room);
 
     // Deterministic ID: stable across re-ingestion of the same file.
     // Uses room + cacheId + normalised relative path — no timestamps.
@@ -148,11 +153,11 @@ function buildSourceRecord({ filePath, room, cacheId = null, manifestId = null, 
         .replace(/-+/g, '-')          // collapse consecutive dashes
         .replace(/^-|-$/g, '');       // trim leading/trailing dashes
 
-    const id = [room, cacheId, safePath].filter(Boolean).join('-');
+    const id = [normalizedRoom, cacheId, safePath].filter(Boolean).join('-');
 
     return {
         id,
-        room,
+        room:             normalizedRoom,
         file:             fileName,
         path:             relPath,
         cacheId:      cacheId  || null,
@@ -163,10 +168,10 @@ function buildSourceRecord({ filePath, room, cacheId = null, manifestId = null, 
         description:      description  || null,
         shelf:            shelf        || null,
         // Phase 11: source class for context pool membership
-        sourceClass:      sourceClassForRoom(room),
+        sourceClass:      sourceClassForRoom(normalizedRoom),
         // lifecycle status: 'waiting' | 'indexed' | 'remembered'
-        status:           room === 'threshold' ? 'waiting'
-                        : room === 'workshop'  ? 'indexed'
+        status:           normalizedRoom === 'threshold' ? 'waiting'
+                        : normalizedRoom === 'council'   ? 'indexed'
                         : 'remembered',
     };
 }
@@ -222,13 +227,14 @@ function collectFiles(dir) {
  * @param {object} opts
  * @param {string} opts.cacheDir
  * @param {string} opts.cacheId
- * @param {string} [opts.room='workshop']
+ * @param {string} [opts.room='council']
  * @returns {Array<{ source: object, text: string }>}
  */
-function ingestCache({ cacheDir, cacheId, room = 'workshop' }) {
+function ingestCache({ cacheDir, cacheId, room = 'council' }) {
+    const normalizedRoom = normalizeRoom(room);
     const files = collectFiles(cacheDir);
     return files
-        .map(filePath => ingestFile({ filePath, room, cacheId }))
+        .map(filePath => ingestFile({ filePath, room: normalizedRoom, cacheId }))
         .filter(Boolean);
 }
 

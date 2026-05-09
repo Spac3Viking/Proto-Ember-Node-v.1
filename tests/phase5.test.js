@@ -195,7 +195,7 @@ describe('storageConfig — migrateLegacyData', () => {
         expect(result.errors).toHaveLength(0);
 
         // Verify the file was copied
-        const destFile = path.join(tmpRoot, 'workshop', 'note.md');
+        const destFile = path.join(tmpRoot, 'council', 'note.md');
         expect(fs.existsSync(destFile)).toBe(true);
         expect(fs.readFileSync(destFile, 'utf8')).toContain('Legacy note');
     });
@@ -219,7 +219,7 @@ describe('storageConfig — migrateLegacyData', () => {
 
     test('does not overwrite existing files in the data root (non-destructive)', () => {
         // Existing file in data root
-        const destFile = path.join(tmpRoot, 'workshop', 'note.md');
+        const destFile = path.join(tmpRoot, 'council', 'note.md');
         fs.mkdirSync(path.dirname(destFile), { recursive: true });
         fs.writeFileSync(destFile, '# Already here\n');
 

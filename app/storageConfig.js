@@ -545,6 +545,16 @@ function migrateLegacyData(legacyDir) {
 
     try {
         copyDirSafe(srcDir, DATA_ROOT);
+        const legacyWorkshopDir = path.join(DATA_ROOT, 'workshop');
+        const councilDir = path.join(DATA_ROOT, 'council');
+        if (fs.existsSync(legacyWorkshopDir)) {
+            if (!fs.existsSync(councilDir)) {
+                fs.renameSync(legacyWorkshopDir, councilDir);
+            } else {
+                copyDirSafe(legacyWorkshopDir, councilDir);
+                fs.rmSync(legacyWorkshopDir, { recursive: true, force: true });
+            }
+        }
         result.performed = true;
         console.log('[migration] Legacy data migration complete.');
     } catch (e) {

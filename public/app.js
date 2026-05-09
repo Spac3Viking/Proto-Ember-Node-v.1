@@ -108,9 +108,8 @@ let _activeRoomId = 'hearth';
             p.classList.toggle('active', p.id === 'room-' + roomId);
         });
 
-        // Keep internal room key as "workshop" for storage/route compatibility.
-        if (roomId === 'workshop' && !window._workshopLoaded) {
-            loadWorkshopPanel();
+        if (roomId === 'council' && !window._councilLoaded) {
+            loadCouncilPanel();
         }
         if (roomId === 'threshold') {
             loadThresholdList();
@@ -1089,7 +1088,7 @@ async function sendCouncilMessage() {
             signal: _activeChatAbortController.signal,
             body: JSON.stringify({
                 query: message,
-                room: 'workshop',
+                room: 'council',
                 courtMember: getEffectiveCourtMemberForApi(),
                 requestId: _activeChatRequestId,
             }),
@@ -1509,11 +1508,11 @@ async function loadArchiveSignalPanel() {
    Ember Council — Draft / Notepad
    ================================================================ */
 
-(function initWorkshop() {
+(function initCouncil() {
     const saveNoteBtn = document.getElementById('save-note-btn');
     const clearBtn    = document.getElementById('clear-draft-btn');
-    const draftArea   = document.getElementById('workshop-draft');
-    const statusEl    = document.getElementById('workshop-status');
+    const draftArea   = document.getElementById('council-draft');
+    const statusEl    = document.getElementById('council-status');
 
     function setStatus(msg, duration) {
         if (!statusEl) return;
@@ -1551,8 +1550,8 @@ async function loadArchiveSignalPanel() {
     }
 })();
 
-function loadWorkshopPanel() {
-    window._workshopLoaded = true;
+function loadCouncilPanel() {
+    window._councilLoaded = true;
     loadCouncilArchetypes();
     updateCouncilChatActiveArchetype();
 }
@@ -1880,7 +1879,7 @@ function buildSourceCard(s) {
     card.className = 'source-card';
 
     const title       = s.title || s.file || '(untitled)';
-    const statusClass = s.status || (s.room === 'hearth' ? 'remembered' : s.room === 'workshop' ? 'indexed' : 'waiting');
+    const statusClass = s.status || (s.room === 'hearth' ? 'remembered' : s.room === 'council' ? 'indexed' : 'waiting');
     const statusLabel = statusClass.charAt(0).toUpperCase() + statusClass.slice(1);
 
     let html = '<div class="source-card-title">' + escapeHtml(title) + '</div>';
@@ -4513,7 +4512,7 @@ async function inspectSource(sourceId) {
     if (titleEl)  titleEl.textContent  = source.title || source.file || '(untitled)';
 
     if (statusEl) {
-        const st = source.status || (source.room === 'hearth' ? 'remembered' : source.room === 'workshop' ? 'indexed' : 'waiting');
+        const st = source.status || (source.room === 'hearth' ? 'remembered' : source.room === 'council' ? 'indexed' : 'waiting');
         statusEl.innerHTML = '<span class="status-badge ' + escapeHtml(st) + '">' +
             escapeHtml(st.charAt(0).toUpperCase() + st.slice(1)) + '</span>';
     }
@@ -4601,12 +4600,12 @@ function sendSourceToChat(source) {
  */
 function sendSourceToCouncilDrafts(source) {
     // Switch to Ember Council > Drafts
-    const workshopTab  = document.querySelector('.room-tab[data-room="workshop"]');
-    if (workshopTab) workshopTab.click();
+    const councilTab  = document.querySelector('.room-tab[data-room="council"]');
+    if (councilTab) councilTab.click();
     const notepadTab   = document.querySelector('.sub-tab[data-subtab="ws-drafts"]');
     if (notepadTab) notepadTab.click();
 
-    const draftArea = document.getElementById('workshop-draft');
+    const draftArea = document.getElementById('council-draft');
     if (!draftArea) return;
 
     const refBlock =

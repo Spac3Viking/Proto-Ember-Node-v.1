@@ -64,8 +64,8 @@ describe('ingest — buildSourceRecord', () => {
     });
 
     test('cacheId defaults to null', () => {
-        const filePath = '/tmp/test-ember/workshop/note.txt';
-        const record   = buildSourceRecord({ filePath, room: 'workshop' });
+        const filePath = '/tmp/test-ember/council/note.txt';
+        const record   = buildSourceRecord({ filePath, room: 'council' });
         expect(record.cacheId).toBeNull();
     });
 });
@@ -132,8 +132,8 @@ describe('chunker — makeChunkId', () => {
     });
 
     test('works without cacheId', () => {
-        const id = makeChunkId({ room: 'workshop', cacheId: null, file: 'note.txt', index: 1 });
-        expect(id).toContain('workshop');
+        const id = makeChunkId({ room: 'council', cacheId: null, file: 'note.txt', index: 1 });
+        expect(id).toContain('council');
         expect(id).toContain('001');
     });
 

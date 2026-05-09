@@ -53,7 +53,7 @@ function runLegacyCleanupPass() {
         'indexes/tmp',
         'tmp',
         'legacy',
-        'system/workshop-maps',
+        'system/council-maps',
         'system/legacy-context-maps',
     ];
 

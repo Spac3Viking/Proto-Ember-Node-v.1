@@ -22,7 +22,7 @@ const DEFAULT_TOP_K = 12;
 const DEFAULT_TARGET_SOURCES = 6;
 const DEFAULT_MAX_CHUNKS_PER_SOURCE = 2;
 const MIN_SCORE = 0.05;
-const ROOM_PRIORITY = ['hearth', 'workshop', 'threshold'];
+const ROOM_PRIORITY = ['hearth', 'council', 'threshold'];
 
 const DEFAULT_MAX_CONTEXT_CHARS = 16000;
 const DEFAULT_MAX_CHUNK_CHARS = 2200;
@@ -84,6 +84,10 @@ function toLowerString(value) {
 
 function normalizeText(value) {
     return toLowerString(value).replace(/\s+/g, ' ').trim();
+}
+
+function normalizeRoom(room) {
+    return room === 'workshop' ? 'council' : room;
 }
 
 function chunkFingerprint(text) {
@@ -231,7 +235,7 @@ function titleBonusForQuery(sourceMetaText, query) {
 }
 
 function roomPriorityIndex(room) {
-    const idx = ROOM_PRIORITY.indexOf(room);
+    const idx = ROOM_PRIORITY.indexOf(normalizeRoom(room));
     return idx === -1 ? ROOM_PRIORITY.length : idx;
 }
 
@@ -389,15 +393,18 @@ function selectBalancedEntries({
 
 function normalizeRoomCandidates(candidates, rooms, sourceClassById) {
     if (rooms !== null) {
+        const normalizedRooms = Array.isArray(rooms) ? rooms.map(normalizeRoom) : [];
         return candidates.filter(c => {
-            if (rooms.includes(c.room)) return true;
-            if (rooms.includes('hearth') && sourceClassById[c.sourceId] === SOURCE_CLASS_ARCHIVE) return true;
+            const candidateRoom = normalizeRoom(c.room);
+            if (normalizedRooms.includes(candidateRoom)) return true;
+            if (normalizedRooms.includes('hearth') && sourceClassById[c.sourceId] === SOURCE_CLASS_ARCHIVE) return true;
             return false;
         });
     }
 
     return candidates.filter(c => {
-        if (c.room === 'hearth' || c.room === 'workshop') return true;
+        const candidateRoom = normalizeRoom(c.room);
+        if (candidateRoom === 'hearth' || candidateRoom === 'council') return true;
         if (sourceClassById[c.sourceId] === SOURCE_CLASS_ARCHIVE) return true;
         return false;
     });
