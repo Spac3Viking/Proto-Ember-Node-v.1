@@ -11,7 +11,7 @@ const fs   = require('fs');
 const path = require('path');
 const { DATA_ROOT } = require('./storageConfig');
 const { loadManifests } = require('./indexStore');
-const { loadToolRegistry } = require('./toolRegistry');
+const { loadIntakeState } = require('./intakeState');
 
 // ── File detection constants ──────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ function getChangedFilesSummary(manifests) {
  */
 function generateStartupCheck(migrationResult) {
     const manifests = loadManifests();
-    const registry  = loadToolRegistry();
+    const intakeState = loadIntakeState();
 
     // File counts — Threshold intake states
     const allSources   = Object.values(manifests);
@@ -100,27 +100,21 @@ function generateStartupCheck(migrationResult) {
     const { changed } = getChangedFilesSummary(manifests);
     const changedFiles = changed.length;
 
-    // Tool counts
-    const tools        = registry.tools || [];
-    const trustedTools = tools.filter(t => t.trusted).length;
-    const runningTools = tools.filter(t => t.running === true).length;
-    const offlineTools = tools.filter(t => t.trusted && t.running === false).length;
-    const newTools     = tools.filter(t => t.status === 'detected' && !t.trusted).length;
-
-    // Active Heart
-    const heartId              = registry.active && registry.active.heart;
-    const heartTool            = heartId ? tools.find(t => t.id === heartId) : null;
-    const activeHeartAvailable = heartTool ? (heartTool.running === true) : false;
+    // Runtime stewardship counts from persisted Threshold intake decisions.
+    const runtimeEntries = Object.values((intakeState && intakeState.tools) || {});
+    const trustedRuntimeEntries = runtimeEntries.filter(t => t.state === 'trusted');
+    const trustedTools = trustedRuntimeEntries.length;
+    const newTools = runtimeEntries.filter(t => t.state === 'inspected').length;
+    const runningTools = 0;
+    const offlineTools = 0;
+    const activeHeartAvailable = trustedTools > 0;
 
     // Migration state
     const migrationState = (migrationResult && migrationResult.performed) ? 'migrated' : 'none';
 
     // Warnings
     const warnings = [];
-    if (heartId && heartTool && !activeHeartAvailable) {
-        warnings.push('Active Heart "' + (heartTool.name || heartId) + '" is offline');
-    }
-    if (tools.length > 0 && runningTools === 0) {
+    if (runtimeEntries.length > 0 && runningTools === 0) {
         warnings.push('No running local AI runtimes detected');
     }
 
@@ -132,7 +126,7 @@ function generateStartupCheck(migrationResult) {
         trustedTools,
         runningTools,
         offlineTools,
-        activeHeart:           heartId || null,
+        activeHeart:           trustedRuntimeEntries[0] ? trustedRuntimeEntries[0].id || null : null,
         activeHeartAvailable,
         migrationState,
         warnings,

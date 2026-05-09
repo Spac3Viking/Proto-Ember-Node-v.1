@@ -18,6 +18,24 @@ const BUNDLED_CACHES_DIR = path.join(__dirname, '..', 'caches');
 // TODO(phase-15-9c): remove deprecated CACHES_DIR alias after downstream migrations.
 const CACHES_DIR = BUNDLED_CACHES_DIR;
 
+function isPathInside(baseDir, targetPath) {
+    const normalize = (value) => {
+        const resolved = path.resolve(value);
+        return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    };
+    const root = normalize(baseDir);
+    const target = normalize(targetPath);
+    if (target === root) return true;
+    const rel = path.relative(root, target);
+    return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+function safeJoinInside(baseDir, ...parts) {
+    const candidate = path.resolve(baseDir, ...parts);
+    if (!isPathInside(baseDir, candidate)) return null;
+    return candidate;
+}
+
 /**
  * Attempts to read and parse manifest.json from a cache directory.
  * Returns the parsed object or null when the file is absent or invalid.
@@ -26,7 +44,9 @@ const CACHES_DIR = BUNDLED_CACHES_DIR;
  * @returns {object|null}
  */
 function loadManifest(cacheDir) {
-    const manifestPath = path.join(cacheDir, 'manifest.json');
+    if (!cacheDir || !isPathInside(BUNDLED_CACHES_DIR, cacheDir)) return null;
+    const manifestPath = safeJoinInside(cacheDir, 'manifest.json');
+    if (!manifestPath) return null;
     if (!fs.existsSync(manifestPath)) return null;
     try {
         return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -38,10 +58,19 @@ function loadManifest(cacheDir) {
 function resolveBundledCacheDir(name) {
     const cacheName = typeof name === 'string' ? name.trim() : '';
     if (!cacheName || !CACHE_ID_PATTERN.test(cacheName)) return null;
-    const resolved = path.resolve(BUNDLED_CACHES_DIR, cacheName);
-    const root = path.resolve(BUNDLED_CACHES_DIR);
-    if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
-    return resolved;
+    const cacheDirById = buildCacheDirectoryIndex();
+    return cacheDirById[cacheName] || null;
+}
+
+function buildCacheDirectoryIndex() {
+    if (!fs.existsSync(BUNDLED_CACHES_DIR)) return {};
+    return fs.readdirSync(BUNDLED_CACHES_DIR, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && CACHE_ID_PATTERN.test(entry.name))
+        .reduce((acc, entry) => {
+            const abs = safeJoinInside(BUNDLED_CACHES_DIR, entry.name);
+            if (abs) acc[entry.name] = abs;
+            return acc;
+        }, {});
 }
 
 /**
@@ -56,14 +85,14 @@ function resolveBundledCacheDir(name) {
  * @returns {Array<{ id: string, name: string, description: string, version: string, type: string, ownership: string }>}
  */
 function listCaches() {
-    if (!fs.existsSync(BUNDLED_CACHES_DIR)) return [];
-    return fs.readdirSync(BUNDLED_CACHES_DIR, { withFileTypes: true })
-        .filter(entry => entry.isDirectory())
-        .map(entry => {
-            const manifest = loadManifest(path.join(BUNDLED_CACHES_DIR, entry.name));
+    const cacheDirById = buildCacheDirectoryIndex();
+    return Object.entries(cacheDirById)
+        .map(([cacheId, cacheDir]) => {
+            if (!cacheDir) return null;
+            const manifest = loadManifest(cacheDir);
             return {
-                id:          entry.name,
-                name:        (manifest && manifest.name)        || entry.name,
+                id:          cacheId,
+                name:        (manifest && manifest.name)        || cacheId,
                 description: (manifest && manifest.description) || '',
                 version:     (manifest && manifest.version)     || '',
                 type:        (manifest && manifest.type)        || '',
@@ -71,7 +100,8 @@ function listCaches() {
                 // not created or owned by the user.
                 ownership:   'bundled',
             };
-        });
+        })
+        .filter(Boolean);
 }
 
 /**
@@ -93,34 +123,36 @@ function loadCache(name) {
     // Collect top-level text files
     const topFiles = fs.readdirSync(cacheDir)
         .filter(f => {
+            if (!CACHE_ID_PATTERN.test(f.replace(/\.(md|txt)$/i, ''))) return false;
             if (!f.endsWith('.md') && !f.endsWith('.txt')) return false;
-            return fs.statSync(path.join(cacheDir, f)).isFile();
+            const abs = safeJoinInside(cacheDir, f);
+            if (!abs) return false;
+            return fs.statSync(abs).isFile();
         })
         .sort()
-        .map(f => path.join(cacheDir, f));
+        .map(f => safeJoinInside(cacheDir, f))
+        .filter(Boolean);
 
     // Collect files from docs/ subdirectory if present
-    const docsDir   = path.join(cacheDir, 'docs');
-    const docsFiles = fs.existsSync(docsDir) && fs.statSync(docsDir).isDirectory()
+    const docsDir   = safeJoinInside(cacheDir, 'docs');
+    const docsFiles = docsDir && fs.existsSync(docsDir) && fs.statSync(docsDir).isDirectory()
         ? fs.readdirSync(docsDir)
-              .filter(f => f.endsWith('.md') || f.endsWith('.txt'))
+              .filter(f => (f.endsWith('.md') || f.endsWith('.txt')) &&
+                  CACHE_ID_PATTERN.test(f.replace(/\.(md|txt)$/i, '')))
               .sort()
-              .map(f => path.join(docsDir, f))
+              .map(f => safeJoinInside(docsDir, f))
+              .filter(Boolean)
         : [];
 
     const content = [...topFiles, ...docsFiles]
-        .map(filePath => fs.readFileSync(filePath, 'utf8'))
+        .map(filePath => {
+            if (!isPathInside(cacheDir, filePath)) return '';
+            return fs.readFileSync(filePath, 'utf8');
+        })
         .join('\n\n');
 
     return { name, manifest, content };
 }
-
-// Deprecated compatibility aliases.
-// TODO(phase-15-9c): remove after external integrations migrate to cache naming.
-const listCartridges = listCaches;
-const loadCartridge = loadCache;
-const BUNDLED_CARTRIDGES_DIR = BUNDLED_CACHES_DIR;
-const CARTRIDGES_DIR = CACHES_DIR;
 
 module.exports = {
     listCaches,
@@ -128,8 +160,4 @@ module.exports = {
     BUNDLED_CACHES_DIR,
     CACHES_DIR,
     resolveBundledCacheDir,
-    listCartridges,
-    loadCartridge,
-    BUNDLED_CARTRIDGES_DIR,
-    CARTRIDGES_DIR,
 };

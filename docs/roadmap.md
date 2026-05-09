@@ -8,7 +8,7 @@
 
 ## Phase 2 ✓ — Green Fire UI Shell
 - Green Fire Archive design system
-- Legacy five-room navigation (Hearth, Workshop, Threshold, Caches, System), now consolidated into Hearth, Ember Council, and Threshold
+- Legacy multi-room navigation removed; structure is now Hearth, Ember Council, and Threshold
 - Cache Shelf — browse, inspect, and read installed caches
 - Ember Council drafts panel
 - Threshold intake scaffold
@@ -21,7 +21,7 @@
 - Local embeddings via Ollama (nomic-embed-text) with keyword fallback
 - JSON-based local index (chunks, embeddings, manifests, exclusions)
 - Room-aware retrieval — Hearth prioritised, Threshold excluded by default
-- Grounded Heart chat via `/api/chat`
+- Grounded Council Chat via `/api/chat`
 - Signal Trace — visible source provenance on every response
 - Cache indexing from Ember Council
 - Ember Council note saving

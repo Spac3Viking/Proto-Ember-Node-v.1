@@ -26,17 +26,14 @@
  *   <data-root>/
  *     hearth/                  — curated Hearth sources (remembered knowledge)
  *       remembered-threads/    — durable thread memory objects
- *       maps/                  — Hearth working & remembered context maps
  *     workshop/                — Workshop notes and active drafts
  *       documents/             — Workshop documents
  *       notes/                 — Workshop notes
  *       drafts/                — Workshop drafts
- *       maps/                  — Workshop context maps
  *     threshold/               — quarantined imports awaiting inspection
  *       waiting/               — files pending review
  *       changed/               — files changed since last ingest
  *       flagged/               — flagged files
- *       maps/                  — Threshold context maps
  *     archive/                 — Trusted Archive (privileged curated path)
  *       core/                  — Default trusted archive (Green Fire Core)
  *         codices/             — Green Fire Codices
@@ -50,7 +47,6 @@
  *       science/               — curated scientific sources (legacy shelf)
  *       green-fire/            — Green Fire primary texts (legacy shelf)
  *     indexes/                 — local knowledge index (chunks, embeddings, manifests)
- *     projects/                — Workshop project files
  *     threads/                 — chat thread records
  *     caches/              — user-created cache metadata (NOT bundled caches)
  *     system/                  — system state
@@ -139,7 +135,6 @@ const THRESHOLD_CHANGED_DIR  = path.join(DATA_ROOT, 'threshold', 'changed');
 const THRESHOLD_FLAGGED_DIR  = path.join(DATA_ROOT, 'threshold', 'flagged');
 
 const INDEXES_DIR         = path.join(DATA_ROOT, 'indexes');
-const PROJECTS_DIR        = path.join(DATA_ROOT, 'projects');
 const THREADS_DIR         = path.join(DATA_ROOT, 'threads');
 const USER_CACHES_DIR = path.join(DATA_ROOT, 'caches');
 const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
@@ -170,10 +165,9 @@ const CACHE_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-summaries.json'
 const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries.json');
 const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
 
-/** System config, prompts, and tools directories */
+/** System config and prompts directories */
 const SYSTEM_CONFIG_DIR       = path.join(SYSTEM_DIR, 'config');
 const SYSTEM_PROMPTS_DIR      = path.join(SYSTEM_DIR, 'prompts');
-const SYSTEM_TOOLS_DIR        = path.join(SYSTEM_DIR, 'tools');
 
 // ── Phase 11.7: Core Archive + Cache Structure ────────────────────────────────
 
@@ -228,16 +222,8 @@ const THREADS_ROOM_DIRS = {
     threshold: path.join(DATA_ROOT, 'threads', 'threshold'),
 };
 
-/** Hearth sub-directories for Phase 11 features */
+/** Hearth sub-directories for continuity memory features */
 const HEARTH_REMEMBERED_THREADS_DIR = path.join(ROOM_DIRS.hearth, 'remembered-threads');
-const HEARTH_MAPS_DIR               = path.join(ROOM_DIRS.hearth, 'maps');
-
-/** Context map directories for each room */
-const MAPS_DIRS = {
-    hearth:    HEARTH_MAPS_DIR,
-    workshop:  path.join(ROOM_DIRS.workshop, 'maps'),
-    threshold: path.join(ROOM_DIRS.threshold, 'maps'),
-};
 
 // Ember Council terminology note:
 // Runtime room key remains "workshop" for compatibility with existing data and routes.
@@ -255,7 +241,6 @@ const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store', SEED_TEMPLATE_MARKER]);
 const LEGACY_DATA_DIR = path.join(__dirname, '..', 'data');
 const LEGACY_CORE_MANIFEST_REL_PATH = path.join('archive', 'core', 'manifest.json').replace(/\\/g, '/');
 const CORE_ARCHIVE_MANIFEST_PATH = path.join(ARCHIVE_CORE_DIR, 'manifest.json');
-const TOOLS_REGISTRY_PATH        = path.join(SYSTEM_DIR, 'tools.json');
 const INTAKE_STATE_PATH          = path.join(SYSTEM_DIR, 'intake.json');
 
 const DEFAULT_CORE_ARCHIVE_MANIFEST = {
@@ -274,14 +259,13 @@ const DEFAULT_CORE_ARCHIVE_MANIFEST = {
     },
 };
 
-const DEFAULT_TOOLS_REGISTRY = { tools: [], active: {} };
 const DEFAULT_INTAKE_STATE = { files: {}, tools: {} };
 const DEFAULT_ROLLING_BOOTSTRAP = {
     version: '0.1.0',
     updated_at: null,
     summary: '',
     active_themes: [],
-    current_projects: [],
+    active_threads: [],
     open_questions: [],
     recent_decisions: [],
     archetype_notes: {
@@ -365,7 +349,6 @@ function ensureDataRoot() {
         ROOM_DIRS.workshop,
         ROOM_DIRS.threshold,
         INDEXES_DIR,
-        PROJECTS_DIR,
         THREADS_DIR,
         USER_CACHES_DIR,
         SYSTEM_DIR,
@@ -376,10 +359,6 @@ function ensureDataRoot() {
         ...Object.values(ARCHIVE_DIRS),
         // Phase 11: Hearth memory dirs
         HEARTH_REMEMBERED_THREADS_DIR,
-        // Phase 11: Context map dirs
-        MAPS_DIRS.hearth,
-        MAPS_DIRS.workshop,
-        MAPS_DIRS.threshold,
         // Phase 11.5: Forge + Bootstrap
         FORGE_DIR,
         ARCHETYPES_DIR,
@@ -391,7 +370,6 @@ function ensureDataRoot() {
         ARCHIVE_LEGACY_CACHES_DIR,
         SYSTEM_CONFIG_DIR,
         SYSTEM_PROMPTS_DIR,
-        SYSTEM_TOOLS_DIR,
         THREADS_ROOM_DIRS.hearth,
         THREADS_ROOM_DIRS.workshop,
         THREADS_ROOM_DIRS.threshold,
@@ -429,7 +407,6 @@ function writeJsonIfMissing(filePath, json) {
  */
 function ensureCanonicalDataFiles() {
     writeJsonIfMissing(CORE_ARCHIVE_MANIFEST_PATH, DEFAULT_CORE_ARCHIVE_MANIFEST);
-    writeJsonIfMissing(TOOLS_REGISTRY_PATH, DEFAULT_TOOLS_REGISTRY);
     writeJsonIfMissing(INTAKE_STATE_PATH, DEFAULT_INTAKE_STATE);
     writeJsonIfMissing(ROLLING_BOOTSTRAP_PATH, DEFAULT_ROLLING_BOOTSTRAP);
     writeJsonIfMissing(CACHE_SUMMARIES_PATH, DEFAULT_CACHE_SUMMARIES);
@@ -650,7 +627,6 @@ module.exports = {
     getDataRoot,
     ROOM_DIRS,
     INDEXES_DIR,
-    PROJECTS_DIR,
     THREADS_DIR,
     USER_CACHES_DIR,
     SYSTEM_DIR,
@@ -661,8 +637,6 @@ module.exports = {
     ARCHIVE_DIR,
     ARCHIVE_DIRS,
     HEARTH_REMEMBERED_THREADS_DIR,
-    HEARTH_MAPS_DIR,
-    MAPS_DIRS,
     // Phase 11.5
     FORGE_DIR,
     ARCHETYPES_DIR,
@@ -679,7 +653,6 @@ module.exports = {
     ARCHIVE_LEGACY_CACHES_DIR,
     SYSTEM_CONFIG_DIR,
     SYSTEM_PROMPTS_DIR,
-    SYSTEM_TOOLS_DIR,
     THREADS_ROOM_DIRS,
     // Phase 11.8: Workshop + Threshold subdirectories
     WORKSHOP_DOCUMENTS_DIR,
@@ -689,7 +662,6 @@ module.exports = {
     THRESHOLD_CHANGED_DIR,
     THRESHOLD_FLAGGED_DIR,
     CORE_ARCHIVE_MANIFEST_PATH,
-    TOOLS_REGISTRY_PATH,
     INTAKE_STATE_PATH,
     ensureDataRoot,
     ensureCanonicalDataFiles,
@@ -697,8 +669,3 @@ module.exports = {
     seedDataRoot,
     resolveSourcePath,
 };
-
-// Deprecated compatibility aliases.
-// TODO(phase-15-9c): remove after all modules/tests fully migrate to cache naming.
-module.exports.USER_CARTRIDGES_DIR = USER_CACHES_DIR;
-module.exports.ARCHIVE_CARTRIDGES_DIR = ARCHIVE_LEGACY_CACHES_DIR;

@@ -23,11 +23,11 @@ const path = require('path');
 const { readLimiter, writeLimiter } = require('../rateLimiters');
 const {
     DATA_ROOT, ROOM_DIRS,
-    INDEXES_DIR, PROJECTS_DIR, THREADS_DIR,
+    INDEXES_DIR, THREADS_DIR,
     USER_CACHES_DIR, SYSTEM_DIR, EXPORTS_DIR,
     FORGE_DIR, ensureDataRoot, ensureCanonicalDataFiles,
 } = require('../storageConfig');
-const { OLLAMA_BASE_URL } = require('../toolRegistry');
+const { OLLAMA_BASE_URL } = require('../runtimeStewardship');
 const { getSelectedModel, setSelectedModel } = require('../aiConfig');
 const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
 const { getEmbeddingStatus }                        = require('../embeddings');
@@ -348,7 +348,6 @@ function createSystemRouter({ migrationResult }) {
                 workshop:   ROOM_DIRS.workshop,
                 threshold:  ROOM_DIRS.threshold,
                 indexes:    INDEXES_DIR,
-                projects:   PROJECTS_DIR,
                 threads:    THREADS_DIR,
                 caches: USER_CACHES_DIR,
                 system:     SYSTEM_DIR,

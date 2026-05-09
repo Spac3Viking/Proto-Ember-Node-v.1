@@ -175,7 +175,7 @@ let _activeRoomId = 'hearth';
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
                     loadHearthToolRegistry();
-                    loadContextMapsStatus();
+                    loadContextMemoryStatus();
                     loadBootstrapStatus();
                     loadMemoryCompressionStatus();
                 }
@@ -3528,71 +3528,34 @@ function updateSystemCacheCount(count) {
 }
 
 /* ================================================================
-   Context Maps Status (Phase 11)
+   Context Memory Status
    ================================================================ */
 
-async function loadContextMapsStatus() {
+async function loadContextMemoryStatus() {
     const el = document.getElementById('sys-context-maps-status');
     if (!el) return;
 
     el.innerHTML = '<span class="message-system">Loading…</span>';
-
-    const rooms = ['hearth', 'workshop', 'threshold'];
-    const rows  = [];
-
-    for (const room of rooms) {
-        try {
-            const res  = await fetch('/api/context-maps/' + room + '/working');
-            if (res.ok) {
-                const data = await res.json();
-                const map  = data.map;
-                const updated = map.updatedAt ? new Date(map.updatedAt).toLocaleString() : '—';
-                rows.push(
-                    '<div class="system-row">' +
-                    '<span class="system-key">' + room.charAt(0).toUpperCase() + room.slice(1) + ' map</span>' +
-                    '<span class="system-val ok">updated ' + escapeHtml(updated) + '</span>' +
-                    '</div>',
-                );
-            } else {
-                rows.push(
-                    '<div class="system-row">' +
-                    '<span class="system-key">' + room.charAt(0).toUpperCase() + room.slice(1) + ' map</span>' +
-                    '<span class="system-val warn">not generated</span>' +
-                    '</div>',
-                );
-            }
-        } catch {
-            rows.push(
-                '<div class="system-row"><span class="system-key">' + room + '</span><span class="system-val error">error</span></div>',
-            );
-        }
+    try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const rbStatus = data.rollingBootstrapStatus || 'not generated';
+        const memoryCompression = data.memoryCompression || {};
+        const rows = [
+            '<div class="system-row"><span class="system-key">Rolling Bootstrap</span><span class="system-val ' +
+                (rbStatus === 'ready' ? 'ok' : 'warn') + '">' + escapeHtml(rbStatus) + '</span></div>',
+            '<div class="system-row"><span class="system-key">Cache summaries</span><span class="system-val">' +
+                escapeHtml(String(memoryCompression.cacheSummariesCount || 0)) + '</span></div>',
+            '<div class="system-row"><span class="system-key">Document summaries</span><span class="system-val">' +
+                escapeHtml(String(memoryCompression.documentSummariesCount || 0)) + '</span></div>',
+            '<div class="system-row"><span class="system-key">Archetype memory profiles</span><span class="system-val">' +
+                escapeHtml(String(memoryCompression.archetypeMemoryCount || 0)) + '</span></div>',
+        ];
+        el.innerHTML = rows.join('');
+    } catch {
+        el.innerHTML = '<span class="message-system">Context memory status unavailable.</span>';
     }
-
-    el.innerHTML = rows.join('');
 }
-
-// Refresh all context maps button
-(function initRefreshMapsBtn() {
-    document.addEventListener('click', async (e) => {
-        if (e.target && e.target.id === 'sys-refresh-maps-btn') {
-            const btn = e.target;
-            btn.disabled = true;
-            btn.textContent = '↻ Refreshing…';
-            try {
-                await Promise.all(['hearth', 'workshop', 'threshold'].map(room =>
-                    fetch('/api/context-maps/' + room + '/refresh', { method: 'POST' }),
-                ));
-                showFlashMessage('Context maps refreshed.');
-                loadContextMapsStatus();
-            } catch {
-                showFlashMessage('Could not refresh maps.');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '↻ Refresh All';
-            }
-        }
-    });
-})();
 
 /* ================================================================
    Rolling Bootstrap Status (Phase 16D)
