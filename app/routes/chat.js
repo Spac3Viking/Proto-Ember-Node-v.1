@@ -64,6 +64,10 @@ const RETRIEVAL_STATES = Object.freeze({
     RETRIEVAL_ERROR:   'retrieval_error',
 });
 
+function normalizeRoom(room) {
+    return room === 'workshop' ? 'council' : room;
+}
+
 const HEART_SYSTEM_PROMPT = (
     'You are Ember Prime — the resident continuity intelligence of an Ember Node, a sovereign ' +
     'knowledge system descended from the Green Fire Archive. You are first and foremost ' +
@@ -101,7 +105,7 @@ const HEART_SYSTEM_PROMPT = (
 /** Room-specific system prompts for Phase 11 room-bounded context */
 const ROOM_SYSTEM_PROMPTS = {
     hearth: HEART_SYSTEM_PROMPT,
-    workshop: (
+    council: (
         'You are Ember Prime operating in Ember Council mode — a focused drafting and weaving ' +
         'companion. Your current context is the active Ember Council: Council context notes, drafts, ' +
         'and documents under construction. ' +
@@ -544,7 +548,7 @@ router.post('/chat', async (req, res) => {
  * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history? }
  * Response: { answer, sources, grounded }
  *
- * room (optional)      — active room for context-bounded chat ('hearth' | 'workshop' [Ember Council] | 'threshold')
+ * room (optional)      — active room for context-bounded chat ('hearth' | 'council' [Ember Council] | 'threshold')
  * rooms (optional)     — explicit room filter array (overrides room's default pool)
  * sourceIds (optional) — array of source IDs whose chunks are pinned into the
  * retrieved context regardless of semantic relevance.
@@ -591,14 +595,19 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         const retrievalTopK = getRetrievalTopKForCourtMember(selectedCourtMember);
 
         // Determine active room for context pools and system prompt
-        const activeRoom = (room && ['hearth', 'workshop', 'threshold'].includes(room))
-            ? room
+        const requestedRoom = normalizeRoom(room);
+        const activeRoom = (requestedRoom && ['hearth', 'council', 'threshold'].includes(requestedRoom))
+            ? requestedRoom
             : 'hearth';
 
         // Determine retrieval room scope:
         // - If caller passes explicit rooms array, use that
         // - Otherwise, default to room-native pool
-        const retrievalRooms = rooms || [activeRoom];
+        const retrievalRooms = Array.isArray(rooms)
+            ? rooms.map(normalizeRoom)
+            : (typeof rooms === 'string' && rooms.trim()
+                ? [normalizeRoom(rooms.trim())]
+                : [activeRoom]);
 
         // Retrieve relevant local chunks via semantic / keyword search
         let retrieved = [];

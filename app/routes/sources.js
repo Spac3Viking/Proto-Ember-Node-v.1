@@ -42,6 +42,19 @@ const router = express.Router();
 
 /** Maximum number of characters returned by the source preview endpoint. */
 const PREVIEW_MAX_LENGTH = 600;
+const VALID_ROOMS = ['hearth', 'council', 'threshold'];
+
+function normalizeRoom(room) {
+    return room === 'workshop' ? 'council' : room;
+}
+
+function isSafeManifestKey(value) {
+    return typeof value === 'string'
+        && value.length > 0
+        && value !== '__proto__'
+        && value !== 'prototype'
+        && value !== 'constructor';
+}
 
 /**
  * Remove any stored embeddings belonging to the old chunks of a source,
@@ -67,7 +80,7 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
         const {
             filename,
             content,
-            room        = 'threshold',
+            room: roomInput = 'threshold',
             cacheId = null,
             title       = null,
             description = null,
@@ -85,8 +98,8 @@ router.post('/api/ingest', writeLimiter, async (req, res) => {
         const ext = path.extname(filename).toLowerCase();
         const ALLOWED_EXTENSIONS = ['.txt', '.md', '.pdf', '.docx'];
 
-        const validRooms = ['hearth', 'workshop', 'threshold'];
-        if (!validRooms.includes(room)) {
+        const room = normalizeRoom(roomInput);
+        if (!VALID_ROOMS.includes(room)) {
             return res.status(400).json({ error: 'Invalid room "' + room + '"' });
         }
 
@@ -155,7 +168,7 @@ router.post('/api/index/cache/:id', indexLimiter, async (req, res) => {
             return res.status(404).json({ error: 'Cache "' + cacheId + '" not found' });
         }
 
-        const room = (req.body && req.body.room) || 'workshop';
+        const room = normalizeRoom((req.body && req.body.room) || 'council');
 
         const ingested = ingestCache({ cacheDir, cacheId, room });
 
@@ -203,9 +216,12 @@ router.post('/api/index/cache/:id', indexLimiter, async (req, res) => {
  */
 router.post('/api/index/file', indexLimiter, async (req, res) => {
     try {
-        const { sourceId, targetRoom } = req.body;
+        const { sourceId, targetRoom: targetRoomInput } = req.body;
         if (!sourceId) {
             return res.status(400).json({ error: 'sourceId is required' });
+        }
+        if (!isSafeManifestKey(sourceId)) {
+            return res.status(400).json({ error: 'Invalid source id' });
         }
 
         const manifests = loadManifests();
@@ -214,9 +230,9 @@ router.post('/api/index/file', indexLimiter, async (req, res) => {
             return res.status(404).json({ error: 'Source not found in manifest' });
         }
 
-        if (targetRoom) {
-            const validRooms = ['hearth', 'workshop', 'threshold'];
-            if (!validRooms.includes(targetRoom)) {
+        if (targetRoomInput) {
+            const targetRoom = normalizeRoom(targetRoomInput);
+            if (!VALID_ROOMS.includes(targetRoom)) {
                 return res.status(400).json({ error: 'Invalid room "' + targetRoom + '"' });
             }
 
@@ -250,7 +266,7 @@ router.post('/api/index/file', indexLimiter, async (req, res) => {
 
                 source.room   = targetRoom;
                 source.status = targetRoom === 'hearth'    ? 'remembered'
-                              : targetRoom === 'workshop'  ? 'indexed'
+                              : targetRoom === 'council'   ? 'indexed'
                               : 'waiting';
                 upsertManifest(sourceId, source);
             }
@@ -305,12 +321,16 @@ router.post('/api/index/file', indexLimiter, async (req, res) => {
 router.get('/api/sources', (req, res) => {
     const { room, cacheId } = req.query;
     let sources = Object.values(loadManifests());
-    if (room)        sources = sources.filter(s => s.room === room);
+    if (room) {
+        const normalizedRoom = normalizeRoom(room);
+        sources = sources.filter(s => normalizeRoom(s.room) === normalizedRoom);
+    }
     if (cacheId) sources = sources.filter(s => s.cacheId === cacheId);
     const documentSummaries = loadDocumentSummaries();
     const cacheSummaries = loadCacheSummaries();
     sources = sources.map(source => ({
         ...source,
+        room: normalizeRoom(source.room),
         abstract: buildSourceAbstract({
             sourceId: source.id,
             sourceName: source.title || source.file || source.id,
@@ -343,6 +363,9 @@ router.post('/api/sources/:id/exclude', writeLimiter, (req, res) => {
  * Returns the full source manifest plus a short plaintext preview.
  */
 router.get('/api/sources/:id', readLimiter, (req, res) => {
+    if (!isSafeManifestKey(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid source id' });
+    }
     const manifests = loadManifests();
     const source    = manifests[req.params.id];
     if (!source) return res.status(404).json({ error: 'Source not found' });
@@ -359,7 +382,8 @@ router.get('/api/sources/:id', readLimiter, (req, res) => {
         }
     }
 
-    res.json({ source, preview });
+    const normalizedSource = { ...source, room: normalizeRoom(source.room) };
+    res.json({ source: normalizedSource, preview });
 });
 
 /**
@@ -368,6 +392,9 @@ router.get('/api/sources/:id', readLimiter, (req, res) => {
  */
 router.post('/api/sources/:id/remember', writeLimiter, async (req, res) => {
     try {
+        if (!isSafeManifestKey(req.params.id)) {
+            return res.status(400).json({ error: 'Invalid source id' });
+        }
         const manifests = loadManifests();
         const source    = manifests[req.params.id];
         if (!source) return res.status(404).json({ error: 'Source not found' });
@@ -485,6 +512,9 @@ router.get('/api/council/drafts', readLimiter, (req, res) => {
  */
 router.post('/api/sources/:id/flag', writeLimiter, (req, res) => {
     const { id }             = req.params;
+    if (!isSafeManifestKey(id)) {
+        return res.status(400).json({ error: 'Invalid source id' });
+    }
     const { flagged = true } = req.body || {};
 
     const manifests = loadManifests();
@@ -509,6 +539,9 @@ router.post('/api/sources/:id/flag', writeLimiter, (req, res) => {
  */
 router.post('/api/sources/:id/inspect', writeLimiter, (req, res) => {
     const { id }    = req.params;
+    if (!isSafeManifestKey(id)) {
+        return res.status(400).json({ error: 'Invalid source id' });
+    }
     const manifests = loadManifests();
     const source    = manifests[id];
     if (!source) return res.status(404).json({ error: 'Source not found' });
@@ -527,6 +560,9 @@ router.post('/api/sources/:id/inspect', writeLimiter, (req, res) => {
  */
 router.post('/api/sources/:id/reject', writeLimiter, (req, res) => {
     const { id }           = req.params;
+    if (!isSafeManifestKey(id)) {
+        return res.status(400).json({ error: 'Invalid source id' });
+    }
     const { notes = null } = req.body || {};
     const manifests        = loadManifests();
     const source           = manifests[id];

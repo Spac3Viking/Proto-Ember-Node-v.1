@@ -26,6 +26,10 @@ const { rememberThread, deleteThreadSummary } = require('../threadMemory');
 
 const router = express.Router();
 
+function normalizeRoom(room) {
+    return room === 'workshop' ? 'council' : room;
+}
+
 // ── Thread persistence helpers ────────────────────────────────────────────────
 
 function loadThread(id) {
@@ -58,7 +62,7 @@ router.get('/api/threads', readLimiter, (req, res) => {
                 return {
                     id:           t.id,
                     title:        t.title,
-                    room:         t.room,
+                    room:         normalizeRoom(t.room),
                     status:       t.status || 'active',
                     createdAt:    t.createdAt,
                     updatedAt:    t.updatedAt,
@@ -67,7 +71,7 @@ router.get('/api/threads', readLimiter, (req, res) => {
             } catch { return null; }
         })
         .filter(Boolean)
-        .filter(t => !room   || t.room   === room)
+        .filter(t => !room   || t.room   === normalizeRoom(room))
         .filter(t => !status || t.status === status)
         .sort(function(a, b) { return b.updatedAt.localeCompare(a.updatedAt); });
     res.json({ threads });
@@ -78,8 +82,9 @@ router.get('/api/threads', readLimiter, (req, res) => {
  * Body: { title, room? }
  */
 router.post('/api/threads', writeLimiter, (req, res) => {
-    const { title = 'New Thread', room = 'hearth' } = req.body || {};
-    const validRooms = ['hearth', 'workshop'];
+    const { title = 'New Thread', room: roomInput = 'hearth' } = req.body || {};
+    const room = normalizeRoom(roomInput);
+    const validRooms = ['hearth', 'council'];
     if (!validRooms.includes(room)) {
         return res.status(400).json({ error: 'Invalid room "' + room + '"' });
     }

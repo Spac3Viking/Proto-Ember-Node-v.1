@@ -54,7 +54,7 @@
     <!-- Room Tab Row — 3 rooms only -->
     <nav class="room-tabs" role="tablist" aria-label="Rooms">
       <button class="room-tab active" role="tab" aria-selected="true"  data-room="hearth"    aria-controls="room-hearth">ᚺ Hearth</button>
-      <button class="room-tab"        role="tab" aria-selected="false" data-room="workshop"  aria-controls="room-workshop">ᚹ Ember Council</button>
+      <button class="room-tab"        role="tab" aria-selected="false" data-room="council"  aria-controls="room-council">ᚹ Ember Council</button>
       <button class="room-tab"        role="tab" aria-selected="false" data-room="threshold" aria-controls="room-threshold">ᚦ Threshold</button>
     </nav>
 
@@ -413,7 +413,7 @@
             EMBER COUNCIL — Circle of Perspectives
            Sub-tabs: Archetypes | Council Chat | Drafts | Caches
            ═══════════════════════════════════════════════════════════ -->
-      <section class="room-panel" id="room-workshop" role="tabpanel">
+      <section class="room-panel" id="room-council" role="tabpanel">
         <div class="room-panel-inner workshop-layout">
 
           <div class="room-header-row">
@@ -469,9 +469,9 @@
             <div class="ember-card workshop-draft-card" style="padding: 1rem;">
               <div class="workshop-section-title" style="margin-bottom:0.6rem;">Council Drafts</div>
               <div class="draft-area">
-                <label for="workshop-draft" class="visually-hidden">Draft area</label>
+                <label for="council-draft" class="visually-hidden">Draft area</label>
                 <textarea
-                  id="workshop-draft"
+                  id="council-draft"
                   placeholder="Local writing space for notes, copied responses, and rough fragments."
                   spellcheck="true"
                 ></textarea>
@@ -479,7 +479,7 @@
               <div class="workshop-controls">
                 <button class="primary" id="save-note-btn">Save Note</button>
                 <button class="primary" id="clear-draft-btn">Clear</button>
-                <span class="workshop-status" id="workshop-status"></span>
+                <span class="workshop-status" id="council-status"></span>
               </div>
             </div>
           </div>
