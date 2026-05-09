@@ -697,6 +697,8 @@ function buildGroundedPrompt({
     rawChunkStats.rawContextChars = contextChars;
     rawChunkStats.rawChunkCount = contextBlocks.length;
 
+    // Keep grounded chunks ahead of recent chat history so retrieval remains primary
+    // context while still retaining short-turn continuity near the active question.
     const prompt = (
         `You are answering based on the following local knowledge sources:\n\n` +
         `${contextBlocks.join('\n\n---\n\n')}\n\n---\n\n` +

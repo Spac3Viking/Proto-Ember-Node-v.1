@@ -378,7 +378,7 @@ function extractCourtLensLabel(member) {
     return rawName || String((member && member.id) || '').trim();
 }
 
-function buildCourtPromptModifier(member, archetypeMemoryProfile = null) {
+function buildArchetypePromptModifier(member, archetypeMemoryProfile = null) {
     if (!member && !archetypeMemoryProfile) return '';
     const profile = member ? (COURT_PROMPT_PROFILES[member.id] || COURT_PROMPT_PROFILES.scribe) : null;
     const promptModifier = archetypeMemoryProfile && archetypeMemoryProfile.prompt_modifier
@@ -391,9 +391,9 @@ function buildCourtPromptModifier(member, archetypeMemoryProfile = null) {
     const glyph = member ? (COURT_MEMBER_GLYPHS[member.id] || '') : '';
     return [
         'Active archetype: ' + (glyph ? glyph + ' ' : '') + lens,
-        posture ? ('Posture: ' + posture + '.') : '',
-        bias ? ('Bias: ' + bias + '.') : '',
-        avoid ? ('Avoid: ' + avoid + '.') : '',
+        posture ? ('Posture: ' + posture) : '',
+        bias ? ('Bias: ' + bias) : '',
+        avoid ? ('Avoid: ' + avoid) : '',
     ].filter(Boolean).join('\n');
 }
 
@@ -520,6 +520,8 @@ function buildSummaryFirstContext({
         summaries: 0,
     };
 
+    // segmentKey contributes per-layer prompt audit lengths:
+    // 'rollingBootstrap' | 'archetypeMemory' | 'summaries'
     function pushBlock(label, text, segmentKey) {
         const value = String(text || '').trim();
         if (!value) return false;
@@ -699,6 +701,8 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             archetype = null,
             courtMember = null,
             history = null,
+            contextBudgetProfile = null,
+            depthProfile = null,
             depth = null,
             requestId = null,
         } = req.body;
@@ -725,8 +729,14 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             ? selectedCourtMember.id
             : (activeArchetypeId || 'ember_prime');
         const archetypeMemoryProfile = getArchetypeMemoryProfile(activeArchetypeForMemory);
-        const requestedDepthProfileId = normalizeContextBudgetProfileId(depth);
+        // Backward-compatible aliases: depth (legacy), depthProfile (transition), contextBudgetProfile (preferred).
+        // Legacy aliases remain supported for existing clients; new callers should send contextBudgetProfile.
+        const requestedDepthProfileId = normalizeContextBudgetProfileId(
+            contextBudgetProfile || depthProfile || depth,
+        );
         const contextBudget = resolveContextBudgetProfile(requestedDepthProfileId);
+        // Retrieval keeps the larger budget so archetype/court tuning cannot undercut
+        // depth-profile breadth, while still honoring deeper court members when configured.
         const retrievalTopK = Math.max(
             contextBudget.retrievalTopK,
             getRetrievalTopKForCourtMember(selectedCourtMember),
@@ -854,10 +864,11 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             maxHistoryTurns: contextBudget.maxHistoryTurns || MAX_CHAT_HISTORY_TURNS,
             includeMetrics: true,
         });
-        const groundedPromptText = groundedPrompt && typeof groundedPrompt === 'object'
+        const hasGroundedPromptObject = groundedPrompt && typeof groundedPrompt === 'object';
+        const groundedPromptText = hasGroundedPromptObject
             ? groundedPrompt.prompt
             : String(groundedPrompt || '');
-        const groundedPromptMetrics = groundedPrompt && typeof groundedPrompt === 'object'
+        const groundedPromptMetrics = hasGroundedPromptObject
             ? groundedPrompt.metrics
             : null;
         let userContent = groundedPromptText;
@@ -880,8 +891,10 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         // Forge Core → optional archetype → retrieval
         const forgePart = formatForgeCoreForPrompt(forgeCore);
         const rollingBootstrapPart = summaryFirst.block ? '' : formatRollingBootstrapForPrompt(rollingBootstrapForPrompt);
+        // Prefer the compact archetype modifier from archetype-memory tuning.
+        // Fall back to legacy archetype formatter only when compact data is unavailable.
         const fallbackArchetypePart = archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '';
-        const compactArchetypePart = buildCourtPromptModifier(
+        const compactArchetypePart = buildArchetypePromptModifier(
             selectedCourtMember,
             archetypeMemoryProfile,
         );
