@@ -6,7 +6,7 @@ An archive is not a warehouse.
 
 A warehouse stores objects. An archive holds signal — encoded meaning that can be retrieved, recombined, and made useful again in contexts its original authors could not anticipate.
 
-The Green Fire Archive is maintained as a living system: new signal arrives through Threshold, is examined in Workshop, and is remembered in Hearth only when it has earned its place.
+The Green Fire Archive is maintained as a living system: new signal arrives through Threshold, is examined in Ember Council, and is remembered in Hearth only when it has earned its place.
 
 ---
 
@@ -40,8 +40,8 @@ A response without signal trace is a guess. A response with signal trace is a gr
 Signal moves through the node in a cycle:
 
 1. **Threshold** — external material arrives, unverified
-2. **Workshop** — material is examined, refined, recombined
+2. **Ember Council** — material is examined, refined, recombined
 3. **Hearth** — refined material is remembered, trusted
 4. **Hearth** — the Heart answers from remembered signal
-5. **Workshop** — new work is created from retrieved knowledge
+5. **Ember Council** — new work is created from retrieved knowledge
 6. **Threshold** — refined output exits the node, or returns transformed

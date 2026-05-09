@@ -6,7 +6,7 @@ This cache holds philosophical reflections, frameworks, and questions explored t
 - Stoicism and resilience
 - Threshold concepts — ideas that transform understanding once crossed
 - Local-first thinking as philosophy
-- The relationship between tools and thought
+- The relationship between runtime stewardship and thought
 
 ## Notes
 Add your own philosophical notes, quotes, and reflections as Markdown files in this directory.

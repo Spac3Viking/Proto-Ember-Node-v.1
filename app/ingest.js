@@ -34,6 +34,7 @@ const SOURCE_CLASSES = {
 };
 
 function normalizeRoom(room) {
+    // Legacy migration alias. Remove after user data migration stabilizes.
     return room === 'workshop' ? 'council' : room;
 }
 

@@ -4,15 +4,15 @@
  * Ember Node v.ᚠ — Intake State
  *
  * Single source of truth for Threshold airlock state.
- * Tracks per-file and per-tool intake decisions across restarts.
+ * Tracks per-file and per-runtime intake decisions across restarts.
  *
  * Schema for intake.json:
  *   {
  *     files: {
  *       "room/file.txt": { path, state, lastReviewed, lastKnownMtime, notes }
  *     },
- *     tools: {
- *       "tool-id": { id, state, lastReviewed }
+ *     runtimes: {
+ *       "runtime-id": { id, state, lastReviewed }
  *     }
  *   }
  */
@@ -28,26 +28,39 @@ const INTAKE_STATE_PATH = path.join(SYSTEM_DIR, 'intake.json');
  * Load the persistent intake state from disk.
  * Returns an empty state if the file does not exist or is corrupt.
  *
- * @returns {{ files: object, tools: object }}
+ * @returns {{ files: object, runtimes: object }}
  */
 function loadIntakeState() {
     if (!fs.existsSync(INTAKE_STATE_PATH)) {
-        return { files: {}, tools: {} };
+        return { files: {}, runtimes: {} };
     }
     try {
-        return JSON.parse(fs.readFileSync(INTAKE_STATE_PATH, 'utf8'));
+        const parsed = JSON.parse(fs.readFileSync(INTAKE_STATE_PATH, 'utf8'));
+        if (!parsed || typeof parsed !== 'object') {
+            return { files: {}, runtimes: {} };
+        }
+        const files = (parsed.files && typeof parsed.files === 'object') ? parsed.files : {};
+        // Legacy migration alias. Remove after user data migration stabilizes.
+        const runtimes = (parsed.runtimes && typeof parsed.runtimes === 'object')
+            ? parsed.runtimes
+            : ((parsed.tools && typeof parsed.tools === 'object') ? parsed.tools : {});
+        return { files, runtimes };
     } catch {
-        return { files: {}, tools: {} };
+        return { files: {}, runtimes: {} };
     }
 }
 
 /**
  * Persist the intake state to disk.
  *
- * @param {{ files: object, tools: object }} state
+ * @param {{ files: object, runtimes: object }} state
  */
 function saveIntakeState(state) {
-    fs.writeFileSync(INTAKE_STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
+    const normalized = {
+        files: (state && state.files && typeof state.files === 'object') ? state.files : {},
+        runtimes: (state && state.runtimes && typeof state.runtimes === 'object') ? state.runtimes : {},
+    };
+    fs.writeFileSync(INTAKE_STATE_PATH, JSON.stringify(normalized, null, 2), 'utf8');
 }
 
 /**
@@ -72,28 +85,28 @@ function upsertIntakeFile(filePath, updates) {
 }
 
 /**
- * Update (or create) a tool entry in the intake state and save immediately.
+ * Update (or create) a runtime entry in the intake state and save immediately.
  *
- * @param {string} toolId
+ * @param {string} runtimeId
  * @param {object} updates
  * @returns {object}       The updated entry
  */
-function upsertIntakeTool(toolId, updates) {
+function upsertIntakeRuntime(runtimeId, updates) {
     const state = loadIntakeState();
     const now   = new Date().toISOString();
-    state.tools[toolId] = Object.assign(
-        { id: toolId },
-        state.tools[toolId] || {},
+    state.runtimes[runtimeId] = Object.assign(
+        { id: runtimeId },
+        state.runtimes[runtimeId] || {},
         updates,
         { lastReviewed: now },
     );
     saveIntakeState(state);
-    return state.tools[toolId];
+    return state.runtimes[runtimeId];
 }
 
 module.exports = {
     loadIntakeState,
     saveIntakeState,
     upsertIntakeFile,
-    upsertIntakeTool,
+    upsertIntakeRuntime,
 };

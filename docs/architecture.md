@@ -26,7 +26,7 @@ Ember Node is descended from the Green Fire Archive — the larger philosophical
 body this system is built to serve. Where the Archive is the library, the Ember Node is the
 personal workstation a scholar carries out of the Archive. It allows the user to interact
 with remembered Green Fire works, refine new works in the same tradition, package and
-distribute knowledge, and build tools around the philosophy.
+distribute knowledge, and build Runtime Stewardship practices around the philosophy.
 
 ---
 
@@ -99,7 +99,7 @@ preserved knowledge.
 
 ### What Hearth Contains
 
-- Heart chat interface
+- Ember Prime chat interface
 - remembered prompts
 - remembered documents
 - remembered shelves

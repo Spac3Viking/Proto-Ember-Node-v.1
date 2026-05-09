@@ -8,7 +8,7 @@
 - **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/`.
 - **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
 
-Legacy Workshop/Tools/Projects/Cartridges architecture has been removed.
+Workshop is retired. Ember Council is the active archetype room. Tools registry is retired. Threshold now handles Local AI and Runtime Stewardship. Caches replaced cartridges. Signal Threads are the successor to old project/thread concepts.
 
 ## Continuity Memory Layers
 
