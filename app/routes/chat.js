@@ -679,7 +679,7 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history? }
+ * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history?, responseDepth? }
  * Response: { answer, sources, grounded }
  *
  * room (optional)      — active room for context-bounded chat ('hearth' | 'council' [Ember Council] | 'threshold')
@@ -701,6 +701,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             archetype = null,
             courtMember = null,
             history = null,
+            responseDepth = null,
             contextBudgetProfile = null,
             depthProfile = null,
             depth = null,
@@ -729,10 +730,10 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             ? selectedCourtMember.id
             : (activeArchetypeId || 'ember_prime');
         const archetypeMemoryProfile = getArchetypeMemoryProfile(activeArchetypeForMemory);
-        // Backward-compatible aliases: depth (legacy), depthProfile (transition), contextBudgetProfile (preferred).
-        // Legacy aliases remain supported for existing clients; new callers should send contextBudgetProfile.
+        // Backward-compatible aliases: depth (legacy), depthProfile/contextBudgetProfile (transition),
+        // responseDepth (UI-friendly).
         const requestedDepthProfileId = normalizeContextBudgetProfileId(
-            contextBudgetProfile || depthProfile || depth,
+            responseDepth || contextBudgetProfile || depthProfile || depth,
         );
         const contextBudget = resolveContextBudgetProfile(requestedDepthProfileId);
         // Retrieval keeps the larger budget so archetype/court tuning cannot undercut

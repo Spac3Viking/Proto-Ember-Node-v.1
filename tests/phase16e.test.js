@@ -131,5 +131,25 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(archive.status).toBe(200);
         expect(archive.body.signalTrace.depth).toBe('Archive');
         expect(archive.body.signalTrace.compact).toContain('Depth: Archive');
+
+        const hearth = await request(app)
+            .post('/api/chat')
+            .send({ query: 'Map symbolic language through practical systems.', responseDepth: 'hearth' });
+        expect(hearth.status).toBe(200);
+        expect(hearth.body.signalTrace.depth).toBe('Hearth');
+        expect(hearth.body.signalTrace.compact).toContain('Depth: Hearth');
+    });
+
+    test('chat defaults invalid response depth to Ember', async () => {
+        const mockedAxios = require('axios');
+        mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Depth fallback response' } } });
+        const { app } = require('../app/server');
+
+        const invalid = await request(app)
+            .post('/api/chat')
+            .send({ query: 'Hold a balanced context window.', responseDepth: 'volcano' });
+        expect(invalid.status).toBe(200);
+        expect(invalid.body.signalTrace.depth).toBe('Ember');
+        expect(invalid.body.signalTrace.compact).toContain('Depth: Ember');
     });
 });

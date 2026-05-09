@@ -398,6 +398,31 @@ input:focus, textarea:focus {
   align-items: flex-end;
 }
 
+.response-depth-control {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem 0;
+}
+
+.response-depth-control-inline {
+  padding: 0.45rem 0 0;
+}
+
+.response-depth-label {
+  font-size: 0.68rem;
+  color: var(--archive-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.response-depth-select {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  min-width: 8.5rem;
+  padding: 0.2rem 0.5rem;
+}
+
 .chat-input-row #message-input {
   flex: 1;
   font-size: 0.9rem;
