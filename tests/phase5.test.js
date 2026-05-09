@@ -36,7 +36,7 @@ describe('storageConfig — default data root', () => {
     test('ROOM_DIRS are sub-paths of DATA_ROOT', () => {
         const { DATA_ROOT, ROOM_DIRS } = storageConfig;
         expect(ROOM_DIRS.hearth).toBe(path.join(DATA_ROOT, 'hearth'));
-        expect(ROOM_DIRS.workshop).toBe(path.join(DATA_ROOT, 'workshop'));
+        expect(ROOM_DIRS.council).toBe(path.join(DATA_ROOT, 'council'));
         expect(ROOM_DIRS.threshold).toBe(path.join(DATA_ROOT, 'threshold'));
     });
 
@@ -106,7 +106,7 @@ describe('storageConfig — ensureDataRoot', () => {
         const expected = [
             storageConfig.DATA_ROOT,
             storageConfig.ROOM_DIRS.hearth,
-            storageConfig.ROOM_DIRS.workshop,
+            storageConfig.ROOM_DIRS.council,
             storageConfig.ROOM_DIRS.threshold,
             storageConfig.INDEXES_DIR,
             storageConfig.THREADS_DIR,
@@ -325,7 +325,7 @@ describe('GET /api/storage-info', () => {
         const res = await request(app).get('/api/storage-info');
         const dirs = res.body.directories;
         expect(dirs).toHaveProperty('hearth');
-        expect(dirs).toHaveProperty('workshop');
+        expect(dirs).toHaveProperty('council');
         expect(dirs).toHaveProperty('threshold');
         expect(dirs).toHaveProperty('indexes');
         expect(dirs).toHaveProperty('threads');

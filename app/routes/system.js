@@ -345,7 +345,7 @@ function createSystemRouter({ migrationResult }) {
                         : 'default',
             directories: {
                 hearth:     ROOM_DIRS.hearth,
-                workshop:   ROOM_DIRS.workshop,
+                council:    ROOM_DIRS.council,
                 threshold:  ROOM_DIRS.threshold,
                 indexes:    INDEXES_DIR,
                 threads:    THREADS_DIR,

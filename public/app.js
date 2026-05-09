@@ -160,7 +160,7 @@ let _activeRoomId = 'hearth';
                     updateCouncilChatActiveArchetype();
                 }
                 if (panelId === 'ws-archetypes') {
-                    loadWorkshopTools();
+                    loadCouncilArchetypes();
                 }
                 if (panelId === 'ws-caches' && !window._cachesLoaded) {
                     loadCacheShelf();
@@ -180,7 +180,7 @@ let _activeRoomId = 'hearth';
                     loadMemoryCompressionStatus();
                 }
                 if (panelId === 'th-ai') {
-                    loadThresholdTools();
+                    loadThresholdRuntimes();
                 }
             });
         });
@@ -1522,7 +1522,7 @@ async function loadArchiveSignalPanel() {
             if (!text) { setStatus('Nothing to save.', 2000); return; }
             setStatus('Saving…');
             try {
-                const res  = await fetch('/api/notes', {
+                const res  = await fetch('/api/council/drafts', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ content: text }),
@@ -1548,7 +1548,7 @@ async function loadArchiveSignalPanel() {
 
 function loadWorkshopPanel() {
     window._workshopLoaded = true;
-    loadWorkshopTools();
+    loadCouncilArchetypes();
     updateCouncilChatActiveArchetype();
 }
 
@@ -3755,21 +3755,21 @@ function updateHeaderStatus() {
  * Fetch all AI runtimes from the registry.
  * @returns {Promise<{ tools: object[], active: object }>}
  */
-async function fetchToolRegistry() {
-    const res  = await fetch('/api/tools');
+async function fetchRuntimeRegistry() {
+    const res  = await fetch('/api/runtimes');
     const data = await res.json();
-    return { tools: data.tools || [], active: data.active || {} };
+    return { tools: data.runtimes || [], active: data.active || {} };
 }
 
 /**
  * Trigger a discovery scan.
  * @returns {Promise<{ tools: object[], active: object }>}
  */
-async function scanTools() {
-    const res  = await fetch('/api/tools/scan', { method: 'POST' });
+async function scanRuntimes() {
+    const res  = await fetch('/api/runtimes/scan', { method: 'POST' });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Scan failed');
-    return { tools: data.tools || [], active: data.active || {} };
+    return { tools: data.runtimes || [], active: data.active || {} };
 }
 
 /** Status label for an AI runtime lifecycle state. */
@@ -3809,14 +3809,14 @@ function roleLabel(role) {
  * Load and render the Threshold → AI runtime list.
  * Shows detected runtimes that are not yet trusted (excluding persistently rejected ones).
  */
-async function loadThresholdTools() {
+async function loadThresholdRuntimes() {
     const listEl   = document.getElementById('th-tool-list');
     const guideEl  = document.getElementById('th-ai-setup-guide');
     if (!listEl) return;
     listEl.innerHTML = '<span class="message-system">Loading…</span>';
 
     try {
-        const { tools, active } = await fetchToolRegistry();
+        const { tools, active } = await fetchRuntimeRegistry();
 
         // Show all non-admitted detected runtimes (+ not_detected as dim)
         // Persistently rejected runtimes are shown as a separate dim section
@@ -3935,10 +3935,10 @@ function renderThresholdToolRow(tool, active, container) {
         inspBtn.addEventListener('click', async () => {
             inspBtn.disabled = true;
             try {
-                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
+                await fetch('/api/runtimes/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
             } catch { /* ignore */ }
             openToolInspector(tool, active);
-            loadThresholdTools();
+            loadThresholdRuntimes();
         });
         actions.appendChild(inspBtn);
 
@@ -3951,7 +3951,7 @@ function renderThresholdToolRow(tool, active, container) {
                 trustBtn.disabled = true;
                 trustBtn.textContent = 'Admitting…';
                 try {
-                    const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
+                    const res  = await fetch('/api/runtimes/' + encodeURIComponent(tool.id) + '/admit', {
                         method:  'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body:    JSON.stringify({ trusted: true }),
@@ -3959,8 +3959,8 @@ function renderThresholdToolRow(tool, active, container) {
                     const data = await res.json();
                     if (data.success) {
                         showFlashMessage(escapeHtml(tool.name) + ' admitted ✓ — now in Ember Council');
-                        loadThresholdTools();
-                        loadWorkshopTools();
+                        loadThresholdRuntimes();
+                        loadCouncilArchetypes();
                         loadHearthToolRegistry();
                     } else {
                         showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
@@ -4000,10 +4000,10 @@ function renderThresholdToolRow(tool, active, container) {
         rejectBtn.addEventListener('click', async () => {
             rejectBtn.disabled = true;
             try {
-                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/reject', { method: 'POST' });
+                await fetch('/api/runtimes/' + encodeURIComponent(tool.id) + '/reject', { method: 'POST' });
                 showFlashMessage(escapeHtml(tool.name) + ' rejected.');
             } catch { /* ignore */ }
-            loadThresholdTools();
+            loadThresholdRuntimes();
         });
         actions.appendChild(rejectBtn);
     } else {
@@ -4015,10 +4015,10 @@ function renderThresholdToolRow(tool, active, container) {
         undoBtn.addEventListener('click', async () => {
             undoBtn.disabled = true;
             try {
-                await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
+                await fetch('/api/runtimes/' + encodeURIComponent(tool.id) + '/inspect', { method: 'POST' });
                 showFlashMessage(escapeHtml(tool.name) + ' restored to intake.');
             } catch { /* ignore */ }
-            loadThresholdTools();
+            loadThresholdRuntimes();
         });
         actions.appendChild(undoBtn);
     }
@@ -4036,9 +4036,9 @@ function renderThresholdToolRow(tool, active, container) {
             btn.disabled = true;
             btn.textContent = '↺ Scanning…';
             try {
-                await scanTools();
+                await scanRuntimes();
                 showFlashMessage('Scan complete.');
-                loadThresholdTools();
+                loadThresholdRuntimes();
             } catch (err) {
                 showFlashMessage('Scan failed: ' + err.message);
             } finally {
@@ -4057,7 +4057,7 @@ function renderThresholdToolRow(tool, active, container) {
             btn.disabled = true;
             btn.textContent = 'Refreshing…';
             try {
-                await loadThresholdTools();
+                await loadThresholdRuntimes();
                 showFlashMessage('Local model list refreshed.');
             } finally {
                 btn.disabled = false;
@@ -4180,7 +4180,7 @@ function renderEmberCourtMembers(court) {
 /**
  * Load and render the Ember Council → Sentinel Archetypes panel.
  */
-async function loadWorkshopTools() {
+async function loadCouncilArchetypes() {
     const listEl = document.getElementById('ws-court-list');
     if (!listEl) return;
     listEl.innerHTML = '<span class="message-system">Loading archetypes…</span>';
@@ -4210,7 +4210,7 @@ async function loadHearthToolRegistry() {
     if (!listEl) return;
 
     try {
-        const { tools, active } = await fetchToolRegistry();
+        const { tools, active } = await fetchRuntimeRegistry();
         const trusted = tools.filter(t => t.trusted);
 
         if (emptyEl) emptyEl.style.display = trusted.length === 0 ? '' : 'none';
@@ -4245,7 +4245,7 @@ async function loadHearthToolRegistry() {
                 btn.disabled = true;
                 try {
                     const heartId = isHeart ? null : tool.id;
-                    const res  = await fetch('/api/tools/active', {
+                    const res  = await fetch('/api/runtimes/active', {
                         method:  'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body:    JSON.stringify({ heart: heartId }),
@@ -4333,7 +4333,7 @@ function openToolInspector(tool, active) {
                 primary: true,
                 fn: async () => {
                     try {
-                        const res  = await fetch('/api/tools/' + encodeURIComponent(tool.id) + '/trust', {
+                        const res  = await fetch('/api/runtimes/' + encodeURIComponent(tool.id) + '/admit', {
                             method:  'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body:    JSON.stringify({ trusted: true }),
@@ -4342,8 +4342,8 @@ function openToolInspector(tool, active) {
                         if (data.success) {
                             closeToolInspector();
                             showFlashMessage(escapeHtml(tool.name) + ' admitted ✓');
-                            loadThresholdTools();
-                            loadWorkshopTools();
+                            loadThresholdRuntimes();
+                            loadCouncilArchetypes();
                             loadHearthToolRegistry();
                         } else {
                             showFlashMessage('Admission failed: ' + (data.error || 'unknown'));
@@ -4361,7 +4361,7 @@ function openToolInspector(tool, active) {
                 primary: true,
                 fn: async () => {
                     try {
-                        const res  = await fetch('/api/tools/active', {
+                        const res  = await fetch('/api/runtimes/active', {
                             method:  'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body:    JSON.stringify({ heart: tool.id }),
@@ -4399,11 +4399,11 @@ function openToolInspector(tool, active) {
                 fn: async () => {
                     showFlashMessage('Testing connection to ' + tool.name + '…');
                     try {
-                        await fetch('/api/tools/scan', { method: 'POST' });
+                        await fetch('/api/runtimes/scan', { method: 'POST' });
                         showFlashMessage('Scan complete — check runtime status.');
                         closeToolInspector();
-                        loadThresholdTools();
-                        loadWorkshopTools();
+                        loadThresholdRuntimes();
+                        loadCouncilArchetypes();
                     } catch {
                         showFlashMessage('Could not reach server.');
                     }
@@ -4924,7 +4924,7 @@ async function flagSource(sourceId, flagged) {
 async function launchOllama(toolId) {
     showFlashMessage('Attempting to launch Ollama…');
     try {
-        const res  = await fetch('/api/tools/' + encodeURIComponent(toolId) + '/launch', {
+        const res  = await fetch('/api/runtimes/' + encodeURIComponent(toolId) + '/launch', {
             method: 'POST',
         });
         const data = await res.json();
@@ -4933,8 +4933,8 @@ async function launchOllama(toolId) {
         } else {
             showFlashMessage(data.message || 'Launch failed — try: ollama serve');
         }
-        loadThresholdTools();
-        loadWorkshopTools();
+        loadThresholdRuntimes();
+        loadCouncilArchetypes();
         loadHearthToolRegistry();
     } catch {
         showFlashMessage('Could not reach server.');

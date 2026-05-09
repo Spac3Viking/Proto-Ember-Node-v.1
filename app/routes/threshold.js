@@ -515,46 +515,12 @@ router.post('/api/runtimes/:id/launch', writeLimiter, async (req, res) => {
     });
 });
 
-// TODO(phase-16f): remove legacy /api/tools aliases once the UI fully migrates to /api/runtimes.
-// Legacy compatibility aliases for existing UI call sites.
-router.get('/api/tools', readLimiter, async (req, res) => {
-    const view = await buildRuntimeStewardshipView();
-    res.json({ tools: view.runtimes, active: view.active });
-});
-router.post('/api/tools/scan', writeLimiter, async (req, res) => {
-    const view = await buildRuntimeStewardshipView();
-    res.json({ success: true, tools: view.runtimes, active: view.active });
-});
-router.post('/api/tools/:id/inspect', writeLimiter, (req, res) => {
-    if (req.params.id !== 'ollama-local') return res.status(404).json({ error: 'Runtime not found' });
-    const intake = upsertIntakeTool('ollama-local', { state: 'inspected' });
-    res.json({ success: true, intake });
-});
-router.post('/api/tools/:id/reject', writeLimiter, (req, res) => {
-    if (req.params.id !== 'ollama-local') return res.status(404).json({ error: 'Runtime not found' });
-    const intake = upsertIntakeTool('ollama-local', { state: 'rejected' });
-    res.json({ success: true, intake });
-});
-router.post('/api/tools/:id/trust', writeLimiter, (req, res) => {
-    if (req.params.id !== 'ollama-local') return res.status(404).json({ error: 'Runtime not found' });
-    const trusted = req.body && typeof req.body.trusted === 'boolean' ? req.body.trusted : true;
-    const intake = upsertIntakeTool('ollama-local', { state: trusted ? 'trusted' : 'rejected' });
-    res.json({
-        success: true,
-        tool: {
-            id: 'ollama-local',
-            trusted,
-            role: trusted ? 'ember_prime' : null,
-        },
-        intake,
-    });
-});
-router.get('/api/tools/active', readLimiter, (req, res) => {
+router.get('/api/runtimes/active', readLimiter, (req, res) => {
     const intakeState = loadIntakeState();
     const trusted = intakeState.tools && intakeState.tools['ollama-local'] && intakeState.tools['ollama-local'].state === 'trusted';
     res.json({ active: trusted ? { heart: 'ollama-local' } : {} });
 });
-router.post('/api/tools/active', writeLimiter, (req, res) => {
+router.post('/api/runtimes/active', writeLimiter, (req, res) => {
     const heartId = req.body && req.body.heart;
     if (heartId === null) {
         upsertIntakeTool('ollama-local', { state: 'inspected' });
@@ -563,19 +529,6 @@ router.post('/api/tools/active', writeLimiter, (req, res) => {
     if (heartId !== 'ollama-local') return res.status(404).json({ error: 'Runtime not found' });
     upsertIntakeTool('ollama-local', { state: 'trusted' });
     return res.json({ success: true, active: { heart: 'ollama-local' } });
-});
-router.post('/api/tools/:id/launch', writeLimiter, async (req, res) => {
-    if (req.params.id !== 'ollama-local') return res.status(404).json({ error: 'Runtime not found' });
-    const launch = await launchOllamaRuntime();
-    if (launch.success) return res.json({ success: true, status: launch.status });
-    return res.json({ success: false, status: launch.status, message: launch.error || 'Launch failed' });
-});
-router.post('/api/tools/:id/role', writeLimiter, (req, res) => {
-    if (req.params.id !== 'ollama-local') return res.status(404).json({ error: 'Runtime not found' });
-    return res.json({
-        success: true,
-        tool: { id: 'ollama-local', role: 'ember_prime', trusted: true },
-    });
 });
 
 module.exports = router;

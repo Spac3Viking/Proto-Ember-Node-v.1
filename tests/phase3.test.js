@@ -549,34 +549,34 @@ describe('GET /api/sources', () => {
     });
 });
 
-describe('GET /api/notes', () => {
+describe('GET /api/council/drafts', () => {
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
     test('returns 200 with notes array', async () => {
         const { app } = require('../app/server');
-        const res = await request(app).get('/api/notes');
+        const res = await request(app).get('/api/council/drafts');
         expect(res.status).toBe(200);
-        expect(Array.isArray(res.body.notes)).toBe(true);
+        expect(Array.isArray(res.body.drafts)).toBe(true);
     });
 });
 
-describe('POST /api/notes', () => {
+describe('POST /api/council/drafts', () => {
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
     test('returns 400 when content is missing', async () => {
         const { app } = require('../app/server');
-        const res = await request(app).post('/api/notes').send({});
+        const res = await request(app).post('/api/council/drafts').send({});
         expect(res.status).toBe(400);
     });
 
     test('saves a note and returns filename', async () => {
         const { app } = require('../app/server');
         const res = await request(app)
-            .post('/api/notes')
+            .post('/api/council/drafts')
             .send({ content: 'Test note content.', title: 'Phase3 Test Note' });
 
         expect(res.status).toBe(200);
@@ -584,8 +584,8 @@ describe('POST /api/notes', () => {
         expect(typeof res.body.filename).toBe('string');
 
         // Clean up
-        const { DATA_DIR } = require('../app/ingest');
-        const fp = path.join(DATA_DIR, 'workshop', res.body.filename);
+        const { DATA_ROOT } = require('../app/storageConfig');
+        const fp = path.join(DATA_ROOT, 'council', 'drafts', res.body.filename);
         if (fs.existsSync(fp)) fs.unlinkSync(fp);
     });
 });
