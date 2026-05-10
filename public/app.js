@@ -204,6 +204,21 @@ function formatLabelValue(value) {
     return list.length ? list.join(', ') : '—';
 }
 
+function titleFromDocumentPath(relPath) {
+    const input = String(relPath || '').replace(/\\/g, '/');
+    const tail = input.split('/').pop() || input;
+    const stem = tail.replace(/\.[^.]+$/, '');
+    return stem.replace(/[_-]+/g, ' ').trim() || 'Untitled';
+}
+
+function sanitizeDraftIdInput(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
 function buildGreenFireHandoffPrompt(archetype) {
     const lens = String(archetype || '').trim().toLowerCase();
     const lensLine = lens
@@ -298,6 +313,7 @@ let _activeRoomId = 'hearth';
         }
         if (roomId === 'threshold') {
             loadThresholdList();
+            loadThresholdCacheDrafts();
         }
         if (roomId === 'hearth') {
             loadHearthThreads();
@@ -3171,6 +3187,9 @@ function renderThresholdPromptGuides() {
     const fileInput     = document.getElementById('threshold-file-input');
     const importAllBtn  = document.getElementById('threshold-import-all-btn');
     const clearQueueBtn = document.getElementById('threshold-clear-queue-btn');
+    const createDraftSelectedBtn = document.getElementById('threshold-create-draft-selected-btn');
+    const addSelectedToDraftBtn = document.getElementById('threshold-add-draft-selected-btn');
+    const closeDraftViewBtn = document.getElementById('threshold-cache-draft-close-btn');
     const copyTemplateBtn = document.getElementById('th-handoff-copy-template-btn');
     const downloadTemplateBtn = document.getElementById('th-handoff-download-template-btn');
     const openTemplateBtn = document.getElementById('th-handoff-open-template-btn');
@@ -3232,6 +3251,19 @@ function renderThresholdPromptGuides() {
         });
     }
 
+    if (createDraftSelectedBtn) {
+        createDraftSelectedBtn.addEventListener('click', createCacheDraftFromSelectedThresholdFiles);
+    }
+    if (addSelectedToDraftBtn) {
+        addSelectedToDraftBtn.addEventListener('click', addSelectedThresholdFilesToDraft);
+    }
+    if (closeDraftViewBtn) {
+        closeDraftViewBtn.addEventListener('click', () => {
+            _activeThresholdDraftId = null;
+            renderThresholdCacheDraftDetail(null);
+        });
+    }
+
     if (copyTemplateBtn) {
         copyTemplateBtn.addEventListener('click', async () => {
             await copyPlainText(
@@ -3274,7 +3306,41 @@ function renderThresholdPromptGuides() {
     }
 
     renderThresholdPromptGuides();
+    loadThresholdCacheDrafts();
 })();
+
+let _thresholdImportedFiles = [];
+let _selectedThresholdPaths = new Set();
+let _thresholdCacheDrafts = [];
+let _activeThresholdDraftId = null;
+const THRESHOLD_DRAFT_ALLOWED_LABEL = '.md/.txt/.json';
+
+function isThresholdDraftSelectableFile(file) {
+    const kind = String(file?.type || '').toLowerCase();
+    return kind === 'markdown' || kind === 'text' || kind === 'json';
+}
+
+function selectedThresholdDraftFiles(files) {
+    const available = Array.isArray(files) ? files : [];
+    return available.filter(file => isThresholdDraftSelectableFile(file) && _selectedThresholdPaths.has(file.path));
+}
+
+function refreshThresholdSelectionActions(files) {
+    const actionsEl = document.getElementById('threshold-selection-actions');
+    const countEl = document.getElementById('threshold-selection-count');
+    const createBtn = document.getElementById('threshold-create-draft-selected-btn');
+    const addBtn = document.getElementById('threshold-add-draft-selected-btn');
+    const selected = selectedThresholdDraftFiles(files);
+    const count = selected.length;
+    if (countEl) {
+        countEl.textContent = count + ' selected (' + THRESHOLD_DRAFT_ALLOWED_LABEL + ')';
+    }
+    if (createBtn) createBtn.disabled = count === 0;
+    if (addBtn) addBtn.disabled = count === 0;
+    if (actionsEl) {
+        actionsEl.style.display = files.some(isThresholdDraftSelectableFile) ? '' : 'none';
+    }
+}
 
 async function loadThresholdList() {
     const listEl = document.getElementById('threshold-file-list');
@@ -3284,6 +3350,10 @@ async function loadThresholdList() {
         const listData = await listRes.json();
         const files = listData.files || [];
         if (!listRes.ok) throw new Error(listData.error || 'Could not load Threshold files.');
+        _thresholdImportedFiles = files;
+        const availablePaths = new Set(files.filter(isThresholdDraftSelectableFile).map(file => file.path));
+        _selectedThresholdPaths = new Set([..._selectedThresholdPaths].filter(path => availablePaths.has(path)));
+        refreshThresholdSelectionActions(files);
 
         if (files.length === 0) {
             listEl.innerHTML = '<span class="message-system">No files have crossed the Threshold yet.</span>';
@@ -3294,6 +3364,9 @@ async function loadThresholdList() {
         files.forEach(file => listEl.appendChild(buildThresholdImportedRow(file)));
     } catch {
         listEl.innerHTML = '<span class="message-system threshold-error">Could not load Threshold files.</span>';
+        _thresholdImportedFiles = [];
+        _selectedThresholdPaths = new Set();
+        refreshThresholdSelectionActions([]);
     }
 }
 
@@ -3418,6 +3491,26 @@ function buildThresholdImportedRow(file) {
         '<div class="threshold-file-detail">Imported ' + escapeHtml(formatRelativeTime(file.imported_at)) + '</div>' +
         '<div class="threshold-file-detail">Source: ' + escapeHtml(file.sourceLabel || 'Threshold') + '</div>';
 
+    if (isThresholdDraftSelectableFile(file)) {
+        const ariaName = String(file.name || file.path || 'file').replace(/\s+/g, ' ').trim().slice(0, 80);
+        const selectorWrap = document.createElement('label');
+        selectorWrap.className = 'threshold-file-selector';
+        const selector = document.createElement('input');
+        selector.type = 'checkbox';
+        selector.checked = _selectedThresholdPaths.has(file.path);
+        selector.setAttribute('aria-label', 'Select ' + ariaName + ' for cache draft');
+        selector.addEventListener('change', () => {
+            if (selector.checked) _selectedThresholdPaths.add(file.path);
+            else _selectedThresholdPaths.delete(file.path);
+            refreshThresholdSelectionActions(_thresholdImportedFiles);
+        });
+        const label = document.createElement('span');
+        label.textContent = 'Select for Draft';
+        selectorWrap.appendChild(selector);
+        selectorWrap.appendChild(label);
+        metaEl.appendChild(selectorWrap);
+    }
+
     if (type === 'markdown') {
         const handoff = file.handoff || {};
 
@@ -3477,6 +3570,340 @@ function buildThresholdImportedRow(file) {
     row.appendChild(statusEl);
     row.appendChild(actions);
     return row;
+}
+
+async function createCacheDraftFromSelectedThresholdFiles() {
+    const selected = selectedThresholdDraftFiles(_thresholdImportedFiles);
+    if (selected.length === 0) {
+        showFlashMessage('Select ' + THRESHOLD_DRAFT_ALLOWED_LABEL + ' files first.');
+        return;
+    }
+    const suggestedId = selected[0] && selected[0].name
+        ? sanitizeDraftIdInput(selected[0].name)
+        : '';
+    const draftIdInput = window.prompt('Draft ID (optional)', suggestedId || '');
+    if (draftIdInput === null) return;
+    try {
+        const res = await fetch('/api/threshold/cache-drafts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                draftId: draftIdInput || undefined,
+                paths: selected.map(file => file.path),
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not create draft.');
+        }
+        _selectedThresholdPaths = new Set();
+        refreshThresholdSelectionActions(_thresholdImportedFiles);
+        showFlashMessage('Cache draft created.');
+        await loadThresholdCacheDrafts();
+        if (data.draft && data.draft.id) {
+            await openThresholdCacheDraft(data.draft.id);
+        }
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not create draft.');
+    }
+}
+
+async function addSelectedThresholdFilesToDraft() {
+    const selected = selectedThresholdDraftFiles(_thresholdImportedFiles);
+    if (selected.length === 0) {
+        showFlashMessage('Select ' + THRESHOLD_DRAFT_ALLOWED_LABEL + ' files first.');
+        return;
+    }
+    const input = window.prompt('Draft ID to add selected files');
+    const draftId = input ? String(input).trim() : '';
+    if (!draftId) return;
+    try {
+        const res = await fetch('/api/threshold/cache-drafts/' + encodeURIComponent(draftId) + '/documents/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                paths: selected.map(file => file.path),
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not add files to draft.');
+        }
+        _selectedThresholdPaths = new Set();
+        refreshThresholdSelectionActions(_thresholdImportedFiles);
+        showFlashMessage('Selected files added to draft.');
+        await loadThresholdCacheDrafts();
+        await openThresholdCacheDraft(draftId);
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not add files to draft.');
+    }
+}
+
+function draftUpdatedLabel(draft) {
+    const updated = draft && draft.updatedAt ? draft.updatedAt : draft && draft.manifest && draft.manifest.updated_at;
+    return updated ? formatRelativeTime(updated) : 'just now';
+}
+
+function buildThresholdCacheDraftRow(draft) {
+    const row = document.createElement('div');
+    row.className = 'threshold-file-row';
+    const manifest = draft && draft.manifest ? draft.manifest : {};
+    const documents = Array.isArray(manifest.documents) ? manifest.documents : [];
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'threshold-file-meta';
+    metaEl.innerHTML =
+        '<div class="threshold-file-title-row"><span class="threshold-file-icon">ᚠ</span><span class="threshold-file-title">' +
+        escapeHtml(manifest.title || draft.id || 'Cache Draft') + '</span></div>' +
+        '<div class="threshold-file-detail">Documents: ' + escapeHtml(String(documents.length)) + '</div>' +
+        '<div class="threshold-file-detail">Status: ' + escapeHtml(manifest.status || 'draft') + '</div>' +
+        '<div class="threshold-file-detail">Updated: ' + escapeHtml(draftUpdatedLabel(draft)) + '</div>';
+
+    const statusEl = document.createElement('span');
+    statusEl.className = 'threshold-file-state';
+    statusEl.textContent = manifest.status || 'draft';
+
+    const actions = document.createElement('div');
+    actions.className = 'threshold-file-actions';
+
+    const openBtn = document.createElement('button');
+    openBtn.className = 'secondary threshold-action-btn';
+    openBtn.textContent = 'Open';
+    openBtn.addEventListener('click', () => openThresholdCacheDraft(draft.id));
+
+    const openReaderBtn = document.createElement('button');
+    openReaderBtn.className = 'secondary threshold-action-btn';
+    openReaderBtn.textContent = 'Open in Reader';
+    openReaderBtn.addEventListener('click', () => openThresholdDraftInReader(draft));
+
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'secondary threshold-action-btn';
+    exportBtn.textContent = 'Export Zip';
+    exportBtn.addEventListener('click', () => exportThresholdCacheDraft(draft.id));
+
+    const installBtn = document.createElement('button');
+    installBtn.className = 'secondary threshold-action-btn';
+    installBtn.textContent = 'Install Local Cache';
+    installBtn.addEventListener('click', () => installThresholdCacheDraft(draft.id));
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => deleteThresholdCacheDraft(draft.id));
+
+    actions.appendChild(openBtn);
+    actions.appendChild(openReaderBtn);
+    actions.appendChild(exportBtn);
+    actions.appendChild(installBtn);
+    actions.appendChild(deleteBtn);
+
+    row.appendChild(metaEl);
+    row.appendChild(statusEl);
+    row.appendChild(actions);
+    return row;
+}
+
+function renderThresholdCacheDraftDetail(draft) {
+    const container = document.getElementById('threshold-cache-draft-view');
+    const titleEl = document.getElementById('threshold-cache-draft-view-title');
+    const metaEl = document.getElementById('threshold-cache-draft-view-meta');
+    const docsEl = document.getElementById('threshold-cache-draft-documents');
+    if (!container || !titleEl || !metaEl || !docsEl) return;
+    if (!draft) {
+        container.style.display = 'none';
+        docsEl.innerHTML = '';
+        return;
+    }
+    container.style.display = '';
+    const manifest = draft.manifest || {};
+    const docs = Array.isArray(manifest.documents) ? manifest.documents : [];
+    titleEl.textContent = 'Draft: ' + (manifest.title || draft.id || 'Cache Draft');
+    metaEl.textContent = 'Status: ' + (manifest.status || 'draft') + ' · Documents: ' + docs.length + ' · Updated: ' + draftUpdatedLabel(draft);
+    if (docs.length === 0) {
+        docsEl.innerHTML = '<span class="message-system">No draft documents yet.</span>';
+        return;
+    }
+    docsEl.innerHTML = '';
+    docs.forEach(documentEntry => {
+        const row = document.createElement('div');
+        row.className = 'threshold-file-row';
+
+        const meta = document.createElement('div');
+        meta.className = 'threshold-file-meta';
+        meta.innerHTML =
+            '<div class="threshold-file-title-row"><span class="threshold-file-icon">ᚲ</span><span class="threshold-file-title">' +
+            escapeHtml(documentEntry.title || titleFromDocumentPath(documentEntry.path || '')) + '</span></div>' +
+            '<div class="threshold-file-detail">Path: ' + escapeHtml(documentEntry.path || 'documents/unknown') + '</div>' +
+            '<div class="threshold-file-detail">Type: ' + escapeHtml(documentEntry.type || 'document') + '</div>' +
+            '<div class="threshold-file-detail">Tags: ' + escapeHtml(formatLabelValue(documentEntry.tags)) + '</div>';
+        const status = document.createElement('span');
+        status.className = 'threshold-file-state';
+        status.textContent = documentEntry.status || 'unverified';
+
+        const actions = document.createElement('div');
+        actions.className = 'threshold-file-actions';
+        const openBtn = document.createElement('button');
+        openBtn.className = 'secondary threshold-action-btn';
+        openBtn.textContent = 'Open in Reader';
+        openBtn.addEventListener('click', () => openThresholdDraftDocumentInReader(draft.id, documentEntry.path));
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
+        removeBtn.textContent = 'Remove from Draft';
+        removeBtn.addEventListener('click', () => removeThresholdDraftDocument(draft.id, documentEntry.path));
+        actions.appendChild(openBtn);
+        actions.appendChild(removeBtn);
+        row.appendChild(meta);
+        row.appendChild(status);
+        row.appendChild(actions);
+        docsEl.appendChild(row);
+    });
+}
+
+async function loadThresholdCacheDrafts() {
+    const listEl = document.getElementById('threshold-cache-drafts-list');
+    if (!listEl) return;
+    try {
+        const res = await fetch('/api/threshold/cache-drafts');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load drafts.');
+        const drafts = Array.isArray(data.drafts) ? data.drafts : [];
+        _thresholdCacheDrafts = drafts;
+        if (drafts.length === 0) {
+            listEl.innerHTML = '<span class="message-system">No cache drafts yet.</span>';
+        } else {
+            listEl.innerHTML = '';
+            drafts.forEach(draft => listEl.appendChild(buildThresholdCacheDraftRow(draft)));
+        }
+        if (_activeThresholdDraftId) {
+            const active = drafts.find(d => d.id === _activeThresholdDraftId);
+            if (active) {
+                await openThresholdCacheDraft(_activeThresholdDraftId);
+            } else {
+                _activeThresholdDraftId = null;
+                renderThresholdCacheDraftDetail(null);
+            }
+        }
+    } catch {
+        listEl.innerHTML = '<span class="message-system threshold-error">Could not load cache drafts.</span>';
+    }
+}
+
+async function openThresholdCacheDraft(draftId) {
+    try {
+        const res = await fetch('/api/threshold/cache-drafts/' + encodeURIComponent(draftId));
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not open draft.');
+        _activeThresholdDraftId = draftId;
+        renderThresholdCacheDraftDetail(data.draft);
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not open draft.');
+    }
+}
+
+async function openThresholdDraftDocumentInReader(draftId, documentPath) {
+    try {
+        const res = await fetch(
+            '/api/threshold/cache-drafts/' + encodeURIComponent(draftId) + '/documents/content?path=' + encodeURIComponent(documentPath),
+        );
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not open draft document.');
+        const isMarkdown = data.contentType === 'text/markdown';
+        getGreenFireReader().open({
+            title: data.title || 'Draft Document',
+            sourcePath: data.path || ('threshold/cache-drafts/' + draftId + '/' + documentPath),
+            content: data.content || '',
+            contentType: data.contentType || 'text/plain',
+            entryId: 'threshold-cache-draft:' + (data.path || (draftId + ':' + documentPath)),
+            sourceLabel: data.sourceLabel || 'Threshold Cache Draft',
+            handoff: data.handoff || null,
+            stripFrontmatter: isMarkdown,
+            rawOnly: !isMarkdown,
+            initialRawView: !isMarkdown,
+        });
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not open draft document.');
+    }
+}
+
+async function openThresholdDraftInReader(draft) {
+    const documents = draft && draft.manifest && Array.isArray(draft.manifest.documents)
+        ? draft.manifest.documents
+        : [];
+    if (documents.length === 0) {
+        showFlashMessage('Draft has no documents yet.');
+        return;
+    }
+    await openThresholdDraftDocumentInReader(draft.id, documents[0].path);
+}
+
+async function exportThresholdCacheDraft(draftId) {
+    try {
+        const res = await fetch('/api/threshold/cache-drafts/' + encodeURIComponent(draftId) + '/export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Export failed.');
+        showFlashMessage('Draft exported: ' + (data.exported && data.exported.exportPath ? data.exported.exportPath : 'done'));
+    } catch (error) {
+        showFlashMessage(error.message || 'Export failed.');
+    }
+}
+
+async function installThresholdCacheDraft(draftId) {
+    try {
+        await exportThresholdCacheDraft(draftId);
+        const res = await fetch('/api/threshold/cache-drafts/' + encodeURIComponent(draftId) + '/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Install failed.');
+        showFlashMessage('Installed to ' + (data.installed && data.installed.installedPath ? data.installed.installedPath : 'archive/caches/' + draftId));
+    } catch (error) {
+        showFlashMessage(error.message || 'Install failed.');
+    }
+}
+
+async function removeThresholdDraftDocument(draftId, documentPath) {
+    const ok = window.confirm('Remove "' + documentPath + '" from this draft?');
+    if (!ok) return;
+    try {
+        const res = await fetch('/api/threshold/cache-drafts/' + encodeURIComponent(draftId) + '/documents', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: documentPath }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Remove failed.');
+        showFlashMessage('Document removed from draft.');
+        await loadThresholdCacheDrafts();
+        await openThresholdCacheDraft(draftId);
+    } catch (error) {
+        showFlashMessage(error.message || 'Remove failed.');
+    }
+}
+
+async function deleteThresholdCacheDraft(draftId) {
+    const ok = window.confirm('Delete cache draft "' + draftId + '"? This cannot be undone.');
+    if (!ok) return;
+    try {
+        const res = await fetch('/api/threshold/cache-drafts/' + encodeURIComponent(draftId), {
+            method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Delete failed.');
+        if (_activeThresholdDraftId === draftId) {
+            _activeThresholdDraftId = null;
+            renderThresholdCacheDraftDetail(null);
+        }
+        showFlashMessage('Cache draft deleted.');
+        await loadThresholdCacheDrafts();
+    } catch (error) {
+        showFlashMessage(error.message || 'Delete failed.');
+    }
 }
 
 

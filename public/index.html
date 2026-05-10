@@ -637,9 +637,32 @@
               <!-- Indexed File List — sectioned: Waiting / Flagged / (Changed handled by intake queue) -->
               <div class="threshold-file-section">
                 <div class="council-section-title">Imported Files</div>
+                <div id="threshold-selection-actions" class="threshold-selection-actions" style="display:none;">
+                  <span id="threshold-selection-count" class="message-system">0 selected</span>
+                  <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                    <button class="secondary" id="threshold-create-draft-selected-btn">Create Draft from Selected</button>
+                    <button class="secondary" id="threshold-add-draft-selected-btn">Add Selected to Draft</button>
+                  </div>
+                </div>
                 <div id="threshold-file-list" class="threshold-file-list">
                   <span class="message-system">No files have crossed the Threshold yet.</span>
                 </div>
+              </div>
+
+              <div class="threshold-file-section">
+                <div class="council-section-title">Cache Drafts</div>
+                <div id="threshold-cache-drafts-list" class="threshold-file-list">
+                  <span class="message-system">No cache drafts yet.</span>
+                </div>
+              </div>
+
+              <div class="threshold-file-section" id="threshold-cache-draft-view" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                  <div class="council-section-title" id="threshold-cache-draft-view-title">Draft</div>
+                  <button class="secondary" id="threshold-cache-draft-close-btn">Close</button>
+                </div>
+                <div id="threshold-cache-draft-view-meta" class="message-system"></div>
+                <div id="threshold-cache-draft-documents" class="threshold-file-list"></div>
               </div>
 
               <!-- Scratch Notes -->

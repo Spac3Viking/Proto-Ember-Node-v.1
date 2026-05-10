@@ -1197,6 +1197,14 @@ button.secondary:disabled {
   gap: 0.4rem;
 }
 
+.threshold-selection-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .threshold-file-list {
   display: flex;
   flex-direction: column;
@@ -1270,6 +1278,19 @@ button.secondary:disabled {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+.threshold-file-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.66rem;
+  color: var(--archive-muted);
+}
+
+.threshold-file-selector input[type="checkbox"] {
+  width: 0.82rem;
+  height: 0.82rem;
 }
 
 .threshold-action-btn {
