@@ -34,6 +34,7 @@
  *       waiting/               — files pending review
  *       changed/               — files changed since last ingest
  *       flagged/               — flagged files
+ *       cache-drafts/          — local cache draft bundles built from threshold imports
  *     archive/                 — Trusted Archive (privileged curated path)
  *       core/                  — Default trusted archive (Green Fire Core)
  *         codices/             — Green Fire Codices
@@ -129,10 +130,11 @@ const COUNCIL_DRAFTS_DIR    = path.join(DATA_ROOT, 'council', 'drafts');
 
 // ── Phase 11.8: Threshold subdirectories ─────────────────────────────────────
 
-/** Threshold sub-directories (waiting, changed, flagged, maps) */
+/** Threshold sub-directories (waiting, changed, flagged, cache drafts) */
 const THRESHOLD_WAITING_DIR  = path.join(DATA_ROOT, 'threshold', 'waiting');
 const THRESHOLD_CHANGED_DIR  = path.join(DATA_ROOT, 'threshold', 'changed');
 const THRESHOLD_FLAGGED_DIR  = path.join(DATA_ROOT, 'threshold', 'flagged');
+const THRESHOLD_CACHE_DRAFTS_DIR = path.join(DATA_ROOT, 'threshold', 'cache-drafts');
 
 const INDEXES_DIR         = path.join(DATA_ROOT, 'indexes');
 const THREADS_DIR         = path.join(DATA_ROOT, 'threads');
@@ -377,6 +379,7 @@ function ensureDataRoot() {
         THRESHOLD_WAITING_DIR,
         THRESHOLD_CHANGED_DIR,
         THRESHOLD_FLAGGED_DIR,
+        THRESHOLD_CACHE_DRAFTS_DIR,
     ];
     for (const dir of dirs) {
         if (!fs.existsSync(dir)) {
@@ -678,6 +681,7 @@ module.exports = {
     THRESHOLD_WAITING_DIR,
     THRESHOLD_CHANGED_DIR,
     THRESHOLD_FLAGGED_DIR,
+    THRESHOLD_CACHE_DRAFTS_DIR,
     CORE_ARCHIVE_MANIFEST_PATH,
     INTAKE_STATE_PATH,
     ensureDataRoot,
