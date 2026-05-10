@@ -5,7 +5,7 @@
 - **🜂 Hearth** → Ember Prime continuity layer and remembered conversation.
 - **🜁 Ember Council** → archetypal perspectives that shape interpretation, never replace continuity.
 - **🜃 Archive** → installed memory, including `archive/core/`, `archive/caches/`, and `archive/mirror/`.
-- **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/` and draft cache bundles in `threshold/cache-drafts/`.
+- **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/` and natural cache draft continuity bundles in `threshold/cache-drafts/`.
 - **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
 
 Workshop is retired. Ember Council is the active archetype room. Tools registry is retired. Threshold now handles Local AI and Runtime Stewardship. Caches replaced cartridges. Signal Threads are the successor to old project/thread concepts.
@@ -28,6 +28,26 @@ Workshop is retired. Ember Council is the active archetype room. Tools registry 
 ## Cache Philosophy
 
 Caches are portable memory bundles.
+
+### Natural Continuity Scaling
+
+- small thoughts → copy/paste
+- single useful continuity document → one `.md` handoff
+- larger continuity collection → a cache draft folder in `threshold/cache-drafts/`
+- major continuity package → exported zip cache in `exports/cache-drafts/`
+
+Cache drafts stay lightweight, markdown-first, and non-bureaucratic.
+
+Typical draft structure:
+
+```text
+threshold/cache-drafts/<draft-id>/
+  manifest.json
+  README.md
+  handoff.md
+  docs/
+    *.md
+```
 
 Examples include:
 

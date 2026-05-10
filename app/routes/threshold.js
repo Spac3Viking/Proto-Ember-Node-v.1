@@ -324,23 +324,66 @@ function parseManifestIfPresent(filePath) {
     }
 }
 
-function createCacheDraftFromThresholdFile({ relPath, draftId, title, description }) {
-    const sourceAbsPath = resolveThresholdInboxPath(relPath);
-    if (!sourceAbsPath || !fs.existsSync(sourceAbsPath)) {
-        const error = new Error('Threshold source file not found.');
-        error.status = 404;
-        throw error;
+function collectCacheDraftMarkdownSources({ relPath, relPaths }) {
+    const candidates = [];
+    if (Array.isArray(relPaths)) {
+        for (const value of relPaths) {
+            const text = String(value || '').trim();
+            if (text) candidates.push(text);
+        }
     }
-    const ext = path.extname(sourceAbsPath).toLowerCase();
-    if (ext !== '.md') {
-        const error = new Error('Cache draft source must be a markdown file.');
+    const single = String(relPath || '').trim();
+    if (single) candidates.push(single);
+    if (candidates.length === 0) {
+        const error = new Error('path is required');
         error.status = 400;
         throw error;
     }
 
-    const markdown = fs.readFileSync(sourceAbsPath, 'utf8');
+    const seen = new Set();
+    const sources = [];
+    for (const candidate of candidates) {
+        const normalized = candidate.replace(/\\/g, '/');
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+
+        const absPath = resolveThresholdInboxPath(normalized);
+        if (!absPath || !fs.existsSync(absPath)) {
+            const error = new Error('Threshold source file not found.');
+            error.status = 404;
+            throw error;
+        }
+        const ext = path.extname(absPath).toLowerCase();
+        if (ext !== '.md') {
+            const error = new Error('Cache draft source must be a markdown file.');
+            error.status = 400;
+            throw error;
+        }
+        sources.push({
+            relPath: toRootRelative(absPath) || normalized,
+            absPath,
+            markdown: fs.readFileSync(absPath, 'utf8'),
+        });
+    }
+
+    if (sources.length === 0) {
+        const error = new Error('path is required');
+        error.status = 400;
+        throw error;
+    }
+    return sources;
+}
+
+function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, description }) {
+    const sources = collectCacheDraftMarkdownSources({ relPath, relPaths });
+    const primarySource = sources[0];
+    if (!primarySource) {
+        const error = new Error('Threshold source file not found.');
+        error.status = 404;
+        throw error;
+    }
     const resolvedDraft = resolveCacheDraftDir(
-        draftId || path.basename(sourceAbsPath, path.extname(sourceAbsPath)),
+        draftId || path.basename(primarySource.absPath, path.extname(primarySource.absPath)),
     );
     if (!resolvedDraft) {
         const error = new Error('Invalid draftId.');
@@ -352,10 +395,10 @@ function createCacheDraftFromThresholdFile({ relPath, draftId, title, descriptio
     fs.mkdirSync(resolvedDraft.path, { recursive: true });
 
     const now = new Date().toISOString();
-    const sourceRelPath = toRootRelative(sourceAbsPath) || relPath.replace(/\\/g, '/');
+    const sourceRelPath = primarySource.relPath;
     const manifestPath = path.join(resolvedDraft.path, 'manifest.json');
     const priorManifest = parseManifestIfPresent(manifestPath);
-    const resolvedTitle = String(title || '').trim() || extractMarkdownDisplayTitle(markdown, resolvedDraft.id);
+    const resolvedTitle = String(title || '').trim() || extractMarkdownDisplayTitle(primarySource.markdown, resolvedDraft.id);
     const defaultDescription = 'Cache draft generated from Threshold handoff markdown.';
     const priorDescription = priorManifest && typeof priorManifest.description === 'string'
         ? priorManifest.description
@@ -363,6 +406,28 @@ function createCacheDraftFromThresholdFile({ relPath, draftId, title, descriptio
     const resolvedDescription = String(description || '').trim() || priorDescription || defaultDescription;
     const readmePath = path.join(resolvedDraft.path, 'README.md');
     const handoffPath = path.join(resolvedDraft.path, 'handoff.md');
+    const docsDir = path.join(resolvedDraft.path, 'docs');
+    const docsRelPaths = [];
+    const usedDocNames = new Set();
+    fs.mkdirSync(docsDir, { recursive: true });
+    for (let i = 0; i < sources.length; i++) {
+        const source = sources[i];
+        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('handoff-' + (i + 1) + '.md');
+        const ext = path.extname(baseName).toLowerCase();
+        const stem = ext ? path.basename(baseName, ext) : baseName;
+        const targetExt = ext === '.md' ? '.md' : '.md';
+        let candidate = stem + targetExt;
+        let suffix = 2;
+        while (usedDocNames.has(candidate)) {
+            candidate = stem + '-' + suffix + targetExt;
+            suffix += 1;
+        }
+        usedDocNames.add(candidate);
+        const absDocPath = path.join(docsDir, candidate);
+        fs.writeFileSync(absDocPath, source.markdown, 'utf8');
+        docsRelPaths.push('docs/' + candidate);
+    }
+    const primaryDocRelPath = docsRelPaths[0] || null;
     const manifest = {
         id: resolvedDraft.id,
         name: resolvedTitle,
@@ -371,8 +436,14 @@ function createCacheDraftFromThresholdFile({ relPath, draftId, title, descriptio
         source: {
             room: 'threshold',
             path: sourceRelPath,
+            paths: sources.map(source => source.relPath),
         },
         description: resolvedDescription,
+        continuity: {
+            markdownCenter: true,
+            primary: primaryDocRelPath,
+            docs: docsRelPaths,
+        },
         generatedAt: now,
     };
     const readme = [
@@ -391,13 +462,16 @@ function createCacheDraftFromThresholdFile({ relPath, draftId, title, descriptio
         '- `manifest.json`',
         '- `README.md`',
         '- `handoff.md`',
+        '- `docs/`',
+        '',
+        ...docsRelPaths.map(rel => '- `' + rel + '`'),
         '',
         'This cache draft is local-first and portable.',
     ].join('\n');
 
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
     fs.writeFileSync(readmePath, readme + '\n', 'utf8');
-    fs.writeFileSync(handoffPath, markdown, 'utf8');
+    fs.writeFileSync(handoffPath, primarySource.markdown, 'utf8');
 
     return {
         id: resolvedDraft.id,
@@ -407,6 +481,7 @@ function createCacheDraftFromThresholdFile({ relPath, draftId, title, descriptio
             manifest: 'threshold/cache-drafts/' + resolvedDraft.id + '/manifest.json',
             readme: 'threshold/cache-drafts/' + resolvedDraft.id + '/README.md',
             handoff: 'threshold/cache-drafts/' + resolvedDraft.id + '/handoff.md',
+            docs: docsRelPaths.map(rel => 'threshold/cache-drafts/' + resolvedDraft.id + '/' + rel),
         },
     };
 }
@@ -794,14 +869,16 @@ router.get('/api/threshold/files', readLimiter, (req, res) => {
 
 /**
  * POST /api/threshold/cache-drafts
- * Body: { path: "threshold/inbox/<name>.md", draftId?, title?, description? }
+ * Body: { path?: "threshold/inbox/<name>.md", paths?: string[], draftId?, title?, description? }
  */
 router.post('/api/threshold/cache-drafts', writeLimiter, (req, res) => {
     try {
         const relPath = req.body && req.body.path ? String(req.body.path) : '';
-        if (!relPath) return res.status(400).json({ error: 'path is required' });
+        const relPaths = Array.isArray(req.body && req.body.paths) ? req.body.paths : null;
+        if (!relPath && (!relPaths || relPaths.length === 0)) return res.status(400).json({ error: 'path is required' });
         const draft = createCacheDraftFromThresholdFile({
             relPath,
+            relPaths,
             draftId: req.body && req.body.draftId,
             title: req.body && req.body.title,
             description: req.body && req.body.description,

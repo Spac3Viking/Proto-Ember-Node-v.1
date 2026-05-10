@@ -34,6 +34,7 @@ Open `http://localhost:3477`.
 
 - Chat: `POST /api/chat`
 - Threshold intake: `POST /api/threshold/import`, `GET /api/threshold/files`
+- Threshold cache drafts: `POST /api/threshold/cache-drafts`, `GET /api/threshold/cache-drafts`, `POST /api/threshold/cache-drafts/:id/export`, `POST /api/threshold/cache-drafts/:id/install`
 - Reader: `GET /api/threshold/files/content`, `GET /api/archive/read`
 - Runtime/model stewardship: `GET /api/ai/models`, `POST /api/ai/models/select`
 - Continuity + memory: `GET /api/bootstrap`, `POST /api/bootstrap/refresh`, `POST /api/system/memory-compression/refresh`
