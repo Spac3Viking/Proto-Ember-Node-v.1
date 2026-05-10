@@ -123,6 +123,61 @@ const COURT_MEMBER_RUNES = Object.freeze({
     scribe: 'ᛋ',
     mystic: 'ᛗ',
 });
+const GREEN_FIRE_HANDOFF_TEMPLATE = `---
+title:
+type: research-brief | field-note | bootstrap | manual-summary | cache-readme | source-summary
+source:
+created:
+status: unverified | reviewed | trusted | local
+archetypes:
+tags:
+license:
+---
+# Summary
+# Key Knowledge
+# Practical Use
+# Risks / Unknowns
+# Suggested Cache Placement
+# Sources
+`;
+const GREEN_FIRE_PROMPT_GUIDES = Object.freeze([
+    {
+        id: 'general',
+        label: 'General Handoff Prompt',
+        filename: 'green-fire-handoff-prompt-general.md',
+        archetype: '',
+    },
+    {
+        id: 'builder',
+        label: 'ᛒ Builder Handoff Prompt',
+        filename: 'green-fire-handoff-prompt-builder.md',
+        archetype: 'builder',
+    },
+    {
+        id: 'warrior',
+        label: 'ᛏ Warrior Handoff Prompt',
+        filename: 'green-fire-handoff-prompt-warrior.md',
+        archetype: 'warrior',
+    },
+    {
+        id: 'scholar',
+        label: 'ᚨ Scholar Handoff Prompt',
+        filename: 'green-fire-handoff-prompt-scholar.md',
+        archetype: 'scholar',
+    },
+    {
+        id: 'scribe',
+        label: 'ᚲ Scribe Handoff Prompt',
+        filename: 'green-fire-handoff-prompt-scribe.md',
+        archetype: 'scribe',
+    },
+    {
+        id: 'mystic',
+        label: 'ᛇ Mystic Handoff Prompt',
+        filename: 'green-fire-handoff-prompt-mystic.md',
+        archetype: 'mystic',
+    },
+]);
 
 /* ================================================================
    Utility
@@ -136,6 +191,81 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function toArrayList(value) {
+    if (Array.isArray(value)) return value.filter(Boolean).map(v => String(v).trim()).filter(Boolean);
+    if (!value && value !== 0) return [];
+    return [String(value).trim()].filter(Boolean);
+}
+
+function formatLabelValue(value) {
+    const list = toArrayList(value);
+    return list.length ? list.join(', ') : '—';
+}
+
+function buildGreenFireHandoffPrompt(archetype) {
+    const lens = String(archetype || '').trim().toLowerCase();
+    const lensLine = lens
+        ? `Apply a ${lens} lens and include that in frontmatter archetypes.`
+        : 'Use the best-fit lens for the material.';
+    return `You are preparing a Green Fire Markdown Handoff for Ember Node.
+
+Return only one complete markdown document.
+Do not include commentary before or after the markdown.
+
+Requirements:
+- Use this exact frontmatter key set:
+  title
+  type (research-brief | field-note | bootstrap | manual-summary | cache-readme | source-summary)
+  source
+  created
+  status (unverified | reviewed | trusted | local)
+  archetypes
+  tags
+  license
+- Keep values concise and practical.
+- Fill all sections with useful content.
+- Preserve section order exactly:
+  # Summary
+  # Key Knowledge
+  # Practical Use
+  # Risks / Unknowns
+  # Suggested Cache Placement
+  # Sources
+- Use markdown only.
+- ${lensLine}
+
+Template to follow:
+${GREEN_FIRE_HANDOFF_TEMPLATE}`;
+}
+
+async function copyPlainText(text, successMessage, failureMessage) {
+    try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+            showFlashMessage('Clipboard unavailable.');
+            return false;
+        }
+        await navigator.clipboard.writeText(text || '');
+        if (successMessage) showFlashMessage(successMessage);
+        return true;
+    } catch {
+        if (failureMessage) showFlashMessage(failureMessage);
+        return false;
+    }
+}
+
+function downloadPlainText(filename, content, contentType = 'text/plain') {
+    const safeName = String(filename || 'download.txt').trim() || 'download.txt';
+    const blob = new Blob([content || ''], { type: contentType + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = safeName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }
 
 /* ================================================================
@@ -2419,6 +2549,7 @@ function getGreenFireReader() {
 
     const overlay = document.getElementById('gf-reader-overlay');
     const bodyEl = document.getElementById('gf-reader-body');
+    const metadataEl = document.getElementById('gf-reader-metadata');
     const titleEl = document.getElementById('gf-reader-title');
     const sourceEl = document.getElementById('gf-reader-source');
     const toggleBtn = document.getElementById('gf-reader-toggle-btn');
@@ -2443,6 +2574,7 @@ function getGreenFireReader() {
         backAction: null,
         pendingResumePercent: 0,
         sourceLabel: '',
+        handoff: null,
     };
 
     let scrollSaveTimer = null;
@@ -2460,6 +2592,24 @@ function getGreenFireReader() {
 
     function renderBody() {
         if (!bodyEl) return;
+        if (metadataEl) {
+            const meta = state.handoff && state.handoff.detected ? state.handoff : null;
+            if (meta && !state.rawView) {
+                metadataEl.style.display = '';
+                metadataEl.innerHTML =
+                    '<div class="gf-reader-meta-grid">' +
+                    '<div class="gf-reader-meta-row"><span class="trace-key">Type</span><span>' + escapeHtml(meta.type || '—') + '</span></div>' +
+                    '<div class="gf-reader-meta-row"><span class="trace-key">Status</span><span>' + escapeHtml(meta.status || '—') + '</span></div>' +
+                    '<div class="gf-reader-meta-row"><span class="trace-key">Source</span><span>' + escapeHtml(meta.source || '—') + '</span></div>' +
+                    '<div class="gf-reader-meta-row"><span class="trace-key">Archetypes</span><span>' + escapeHtml(formatLabelValue(meta.archetypes)) + '</span></div>' +
+                    '<div class="gf-reader-meta-row"><span class="trace-key">Tags</span><span>' + escapeHtml(formatLabelValue(meta.tags)) + '</span></div>' +
+                    '<div class="gf-reader-meta-row"><span class="trace-key">License</span><span>' + escapeHtml(meta.license || '—') + '</span></div>' +
+                    '</div>';
+            } else {
+                metadataEl.style.display = 'none';
+                metadataEl.innerHTML = '';
+            }
+        }
         if (state.rawView) {
             const pre = document.createElement('pre');
             pre.className = 'gf-reader-raw';
@@ -2504,6 +2654,7 @@ function getGreenFireReader() {
         state.rawOnly = options.rawOnly === true;
         state.rawView = state.rawOnly ? true : options.initialRawView === true;
         state.sourceLabel = options.sourceLabel || '';
+        state.handoff = options.handoff || null;
 
         if (titleEl) titleEl.textContent = state.title;
         if (sourceEl) sourceEl.textContent = state.sourceLabel ? ('Source: ' + state.sourceLabel) : '';
@@ -2543,16 +2694,7 @@ function getGreenFireReader() {
     }
     if (copyBtn) {
         copyBtn.addEventListener('click', async () => {
-            try {
-                if (!navigator.clipboard || !navigator.clipboard.writeText) {
-                    showFlashMessage('Clipboard unavailable.');
-                    return;
-                }
-                await navigator.clipboard.writeText(state.content || '');
-                showFlashMessage('Markdown copied.');
-            } catch {
-                showFlashMessage('Could not copy markdown.');
-            }
+            await copyPlainText(state.content || '', 'Markdown copied.', 'Could not copy markdown.');
         });
     }
     if (downloadBtn) {
@@ -2567,15 +2709,7 @@ function getGreenFireReader() {
                 : state.contentType === 'text/plain'
                     ? '.txt'
                     : '.md';
-            const blob = new Blob([state.content || ''], { type: (state.contentType || 'text/plain') + ';charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = safeBase + ext;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadPlainText(safeBase + ext, state.content || '', state.contentType || 'text/plain');
         });
     }
     if (resumeBtn) {
@@ -2982,11 +3116,64 @@ function enqueueFiles(files) {
     renderIntakeQueue();
 }
 
+function renderThresholdPromptGuides() {
+    const listEl = document.getElementById('th-handoff-prompt-guides');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    GREEN_FIRE_PROMPT_GUIDES.forEach(guide => {
+        const row = document.createElement('div');
+        row.className = 'threshold-file-row';
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'threshold-file-meta';
+        metaEl.innerHTML =
+            '<div class="threshold-file-title-row"><span class="threshold-file-icon">ᚲ</span><span class="threshold-file-title">' +
+            escapeHtml(guide.label) + '</span></div>' +
+            '<div class="threshold-file-detail">Outputs a complete Green Fire Markdown Handoff file.</div>' +
+            '<div class="threshold-file-detail">Download: ' + escapeHtml(guide.filename) + '</div>';
+
+        const statusEl = document.createElement('span');
+        statusEl.className = 'threshold-file-state';
+        statusEl.textContent = 'Prompt ready';
+
+        const actions = document.createElement('div');
+        actions.className = 'threshold-file-actions';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'secondary threshold-action-btn';
+        copyBtn.textContent = 'Copy Prompt';
+        copyBtn.addEventListener('click', async () => {
+            const prompt = buildGreenFireHandoffPrompt(guide.archetype);
+            await copyPlainText(prompt, 'Prompt copied.', 'Could not copy prompt.');
+        });
+
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'secondary threshold-action-btn';
+        downloadBtn.textContent = 'Download Prompt .md';
+        downloadBtn.addEventListener('click', () => {
+            const prompt = buildGreenFireHandoffPrompt(guide.archetype);
+            downloadPlainText(guide.filename, prompt, 'text/markdown');
+        });
+
+        actions.appendChild(copyBtn);
+        actions.appendChild(downloadBtn);
+
+        row.appendChild(metaEl);
+        row.appendChild(statusEl);
+        row.appendChild(actions);
+        listEl.appendChild(row);
+    });
+}
+
 (function initThreshold() {
     const dropZone      = document.getElementById('threshold-drop-zone');
     const fileInput     = document.getElementById('threshold-file-input');
     const importAllBtn  = document.getElementById('threshold-import-all-btn');
     const clearQueueBtn = document.getElementById('threshold-clear-queue-btn');
+    const copyTemplateBtn = document.getElementById('th-handoff-copy-template-btn');
+    const downloadTemplateBtn = document.getElementById('th-handoff-download-template-btn');
+    const openTemplateBtn = document.getElementById('th-handoff-open-template-btn');
 
     if (dropZone) {
         dropZone.addEventListener('dragover', e => {
@@ -3044,6 +3231,49 @@ function enqueueFiles(files) {
             renderIntakeQueue();
         });
     }
+
+    if (copyTemplateBtn) {
+        copyTemplateBtn.addEventListener('click', async () => {
+            await copyPlainText(
+                GREEN_FIRE_HANDOFF_TEMPLATE,
+                'Handoff template copied.',
+                'Could not copy template.',
+            );
+        });
+    }
+
+    if (downloadTemplateBtn) {
+        downloadTemplateBtn.addEventListener('click', () => {
+            downloadPlainText('green-fire-markdown-handoff-template.md', GREEN_FIRE_HANDOFF_TEMPLATE, 'text/markdown');
+        });
+    }
+
+    if (openTemplateBtn) {
+        openTemplateBtn.addEventListener('click', () => {
+            getGreenFireReader().open({
+                title: 'Blank Green Fire Handoff',
+                sourcePath: 'threshold/template',
+                content: GREEN_FIRE_HANDOFF_TEMPLATE,
+                contentType: 'text/markdown',
+                entryId: 'threshold:template:green-fire-handoff',
+                sourceLabel: 'Threshold',
+                stripFrontmatter: false,
+                rawOnly: false,
+                initialRawView: true,
+                handoff: {
+                    detected: true,
+                    type: null,
+                    status: null,
+                    source: null,
+                    archetypes: [],
+                    tags: [],
+                    license: null,
+                },
+            });
+        });
+    }
+
+    renderThresholdPromptGuides();
 })();
 
 async function loadThresholdList() {
@@ -3088,6 +3318,9 @@ function formatRelativeTime(isoString) {
 }
 
 function thresholdStatusLabel(file) {
+    if (file.type === 'markdown' && file.handoff && file.handoff.detected) {
+        return 'Handoff detected';
+    }
     return file.type === 'pdf'
         ? 'PDF stored — support pending'
         : 'Ready in Reader';
@@ -3128,6 +3361,7 @@ async function openThresholdImportedFile(file) {
             contentType: data.contentType || 'text/plain',
             entryId: 'threshold:' + (data.path || file.path),
             sourceLabel: data.sourceLabel || 'Threshold',
+            handoff: data.handoff || file.handoff || null,
             stripFrontmatter: isMarkdown,
             rawOnly: !isMarkdown,
             initialRawView: !isMarkdown,
@@ -3138,16 +3372,7 @@ async function openThresholdImportedFile(file) {
 }
 
 async function copyThresholdPath(pathText) {
-    try {
-        if (!navigator.clipboard || !navigator.clipboard.writeText) {
-            showFlashMessage('Clipboard unavailable.');
-            return;
-        }
-        await navigator.clipboard.writeText(pathText || '');
-        showFlashMessage('Path copied.');
-    } catch {
-        showFlashMessage('Could not copy path.');
-    }
+    await copyPlainText(pathText || '', 'Path copied.', 'Could not copy path.');
 }
 
 async function deleteThresholdImportedFile(file) {
@@ -3192,6 +3417,35 @@ function buildThresholdImportedRow(file) {
         escapeHtml(formatBytes(file.size)) + '</div>' +
         '<div class="threshold-file-detail">Imported ' + escapeHtml(formatRelativeTime(file.imported_at)) + '</div>' +
         '<div class="threshold-file-detail">Source: ' + escapeHtml(file.sourceLabel || 'Threshold') + '</div>';
+
+    if (type === 'markdown') {
+        const handoff = file.handoff || {};
+
+        const handoffEl = document.createElement('div');
+        handoffEl.className = 'threshold-file-detail';
+        handoffEl.textContent = 'Handoff: ' + (handoff.detected ? 'detected' : 'not detected');
+        metaEl.appendChild(handoffEl);
+
+        const handoffTypeEl = document.createElement('div');
+        handoffTypeEl.className = 'threshold-file-detail';
+        handoffTypeEl.textContent = 'Type: ' + formatLabelValue(handoff.type);
+        metaEl.appendChild(handoffTypeEl);
+
+        const handoffStatusEl = document.createElement('div');
+        handoffStatusEl.className = 'threshold-file-detail';
+        handoffStatusEl.textContent = 'Status: ' + formatLabelValue(handoff.status);
+        metaEl.appendChild(handoffStatusEl);
+
+        const handoffArchetypesEl = document.createElement('div');
+        handoffArchetypesEl.className = 'threshold-file-detail';
+        handoffArchetypesEl.textContent = 'Archetypes: ' + formatLabelValue(handoff.archetypes);
+        metaEl.appendChild(handoffArchetypesEl);
+
+        const handoffTagsEl = document.createElement('div');
+        handoffTagsEl.className = 'threshold-file-detail';
+        handoffTagsEl.textContent = 'Tags: ' + formatLabelValue(handoff.tags);
+        metaEl.appendChild(handoffTagsEl);
+    }
 
     const statusEl = document.createElement('span');
     statusEl.className = 'threshold-file-state';

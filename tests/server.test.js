@@ -305,6 +305,78 @@ describe('Threshold inbox import + reader endpoints', () => {
         await request(app).delete('/api/threshold/files').send({ path: memoPath });
     });
 
+    test('GET /api/threshold/files detects Green Fire handoff frontmatter', async () => {
+        const handoffDoc = [
+            '---',
+            'title: Builder Handoff',
+            'type: research-brief',
+            'source: local notes',
+            'created: 2026-05-10',
+            'status: reviewed',
+            'archetypes: builder, scribe',
+            'tags: ember, threshold',
+            'license: CC-BY-4.0',
+            '---',
+            '# Summary',
+            'Signal',
+        ].join('\n');
+        const upload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from(handoffDoc, 'utf8'), 'builder-handoff.md');
+        const handoffPath = upload.body.imported[0].path;
+
+        const list = await request(app).get('/api/threshold/files');
+        expect(list.status).toBe(200);
+        const found = (list.body.files || []).find(f => f.path === handoffPath);
+        expect(found).toBeTruthy();
+        expect(found.handoff).toBeTruthy();
+        expect(found.handoff.detected).toBe(true);
+        expect(found.handoff.type).toBe('research-brief');
+        expect(found.handoff.status).toBe('reviewed');
+        expect(found.handoff.archetypes).toEqual(['builder', 'scribe']);
+        expect(found.handoff.tags).toEqual(['ember', 'threshold']);
+        expect(found.handoff.source).toBe('local notes');
+        expect(found.handoff.license).toBe('CC-BY-4.0');
+
+        await request(app).delete('/api/threshold/files').send({ path: handoffPath });
+    });
+
+    test('GET /api/threshold/files/content returns handoff metadata for reader display', async () => {
+        const handoffDoc = [
+            '---',
+            'title: Research Brief',
+            'type: field-note',
+            'status: local',
+            'source: signal capture',
+            'archetypes: scholar',
+            'tags: note, field',
+            'license: proprietary',
+            '---',
+            '# Summary',
+            'Captured.',
+        ].join('\n');
+        const upload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from(handoffDoc, 'utf8'), 'research-brief.md');
+        const handoffPath = upload.body.imported[0].path;
+
+        const res = await request(app)
+            .get('/api/threshold/files/content')
+            .query({ path: handoffPath });
+
+        expect(res.status).toBe(200);
+        expect(res.body.handoff).toBeTruthy();
+        expect(res.body.handoff.detected).toBe(true);
+        expect(res.body.handoff.type).toBe('field-note');
+        expect(res.body.handoff.status).toBe('local');
+        expect(res.body.handoff.archetypes).toEqual(['scholar']);
+        expect(res.body.handoff.tags).toEqual(['note', 'field']);
+        expect(res.body.handoff.source).toBe('signal capture');
+        expect(res.body.handoff.license).toBe('proprietary');
+
+        await request(app).delete('/api/threshold/files').send({ path: handoffPath });
+    });
+
     test('DELETE /api/threshold/files deletes imported inbox file', async () => {
         const del = await request(app)
             .delete('/api/threshold/files')

@@ -1932,6 +1932,26 @@ button.secondary:disabled {
   font-size: 0.75rem;
 }
 
+.gf-reader-metadata {
+  padding: 0.55rem 1.1rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+  background: hsla(120, 16%, 4%, 0.86);
+}
+
+.gf-reader-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.35rem 0.75rem;
+}
+
+.gf-reader-meta-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  font-size: 0.72rem;
+  color: var(--archive-muted);
+}
+
 .gf-reader-body {
   max-height: 76vh;
   overflow-y: auto;
