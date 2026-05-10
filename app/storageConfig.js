@@ -166,6 +166,7 @@ const ROLLING_BOOTSTRAP_PATH  = path.join(SYSTEM_MEMORY_DIR, 'rolling-bootstrap.
 const CACHE_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-summaries.json');
 const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries.json');
 const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
+const CACHE_INTERACTIONS_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-interactions.json');
 
 /** System config and prompts directories */
 const SYSTEM_CONFIG_DIR       = path.join(SYSTEM_DIR, 'config');
@@ -279,6 +280,10 @@ const DEFAULT_ROLLING_BOOTSTRAP = {
         enabled: false,
         notes: [],
     },
+    cache_memory: {
+        summary: '',
+        recent: [],
+    },
 };
 const DEFAULT_CACHE_SUMMARIES = {
     version: '0.1.0',
@@ -331,6 +336,11 @@ const DEFAULT_ARCHETYPE_MEMORY = {
             compression_style: 'symbolic density, threshold resonance, hidden pattern',
         },
     },
+};
+const DEFAULT_CACHE_INTERACTIONS = {
+    version: '0.1.0',
+    updated_at: null,
+    interactions: [],
 };
 
 // ── First-run initialisation ──────────────────────────────────────────────────
@@ -411,6 +421,7 @@ function ensureCanonicalDataFiles() {
     writeJsonIfMissing(CACHE_SUMMARIES_PATH, DEFAULT_CACHE_SUMMARIES);
     writeJsonIfMissing(DOCUMENT_SUMMARIES_PATH, DEFAULT_DOCUMENT_SUMMARIES);
     writeJsonIfMissing(ARCHETYPE_MEMORY_PATH, DEFAULT_ARCHETYPE_MEMORY);
+    writeJsonIfMissing(CACHE_INTERACTIONS_PATH, DEFAULT_CACHE_INTERACTIONS);
 }
 
 // ── Legacy migration ──────────────────────────────────────────────────────────
@@ -666,6 +677,7 @@ module.exports = {
     CACHE_SUMMARIES_PATH,
     DOCUMENT_SUMMARIES_PATH,
     ARCHETYPE_MEMORY_PATH,
+    CACHE_INTERACTIONS_PATH,
     // Phase 11.7: Core Archive + Cache Structure
     ARCHIVE_CORE_DIR,
     ARCHIVE_CORE_DIRS,

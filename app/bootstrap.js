@@ -39,6 +39,10 @@ const {
     FORGE_DIR, ARCHETYPES_DIR, BOOTSTRAP_DIR, ROLLING_BOOTSTRAP_PATH,
 } = require('./storageConfig');
 const { listThreadSummaries } = require('./threadMemory');
+const {
+    getCacheInteractionSummary,
+    getRecentCacheInteractions,
+} = require('./cacheInteractionMemory');
 
 // ── File paths ────────────────────────────────────────────────────────────────
 
@@ -440,6 +444,14 @@ function buildRollingBootstrap(opts) {
     const normalizedQuestions = Array.isArray(openQuestions)
         ? openQuestions.filter(Boolean).map(String).slice(0, 8)
         : [];
+    const cacheInteractionSummary = getCacheInteractionSummary({ limit: 4 });
+    const cacheInteractionRecent = getRecentCacheInteractions(6).map(entry => ({
+        kind: entry.kind,
+        at: entry.at,
+        draftId: entry.draftId,
+        cacheId: entry.cacheId,
+        handoffType: entry.handoffType,
+    }));
 
     const archetypeNotes = {
         ember_prime: [],
@@ -461,6 +473,7 @@ function buildRollingBootstrap(opts) {
     if (normalizedQuestions.length > 0) summaryParts.push('Open questions: ' + normalizedQuestions.slice(0, 3).join('; ') + '.');
     if (normalizedDecisions.length > 0) summaryParts.push('Recent decisions: ' + normalizedDecisions.slice(0, 3).join('; ') + '.');
     if (sourceThreads.length > 0) summaryParts.push('Signal Threads groundwork: ' + sourceThreads.length + ' remembered thread summaries.');
+    if (cacheInteractionSummary) summaryParts.push('Cache memory: ' + cacheInteractionSummary);
 
     return {
         version: '0.1.0',
@@ -477,6 +490,10 @@ function buildRollingBootstrap(opts) {
         place_memory: {
             enabled: false,
             notes: [],
+        },
+        cache_memory: {
+            summary: cacheInteractionSummary,
+            recent: cacheInteractionRecent,
         },
     };
 }

@@ -26,11 +26,14 @@ describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
         sc.ensureCanonicalDataFiles();
 
         expect(sc.ROLLING_BOOTSTRAP_PATH).toBe(path.join(sc.DATA_ROOT, 'system', 'memory', 'rolling-bootstrap.json'));
+        expect(sc.CACHE_INTERACTIONS_PATH).toBe(path.join(sc.DATA_ROOT, 'system', 'memory', 'cache-interactions.json'));
         expect(fs.existsSync(sc.ROLLING_BOOTSTRAP_PATH)).toBe(true);
+        expect(fs.existsSync(sc.CACHE_INTERACTIONS_PATH)).toBe(true);
 
         const seeded = JSON.parse(fs.readFileSync(sc.ROLLING_BOOTSTRAP_PATH, 'utf8'));
         expect(seeded.version).toBe('0.1.0');
         expect(seeded.place_memory).toEqual({ enabled: false, notes: [] });
+        expect(seeded.cache_memory).toEqual({ summary: '', recent: [] });
     });
 
     test('refreshRollingBootstrap writes continuity summary and status', () => {
@@ -68,5 +71,29 @@ describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
         const rollingRes = await request(app).get('/api/bootstrap/rolling');
         expect(rollingRes.status).toBe(200);
         expect(rollingRes.body.rollingBootstrap).toBeDefined();
+    });
+
+    test('rolling bootstrap includes cache interaction memory summaries', () => {
+        const cacheMemory = require('../app/cacheInteractionMemory');
+        const bootstrap = require('../app/bootstrap');
+
+        cacheMemory.recordCacheInteraction({
+            kind: 'cache_draft_created',
+            draftId: 'phase-16h-d-memory-draft',
+            sourcePaths: ['threshold/inbox/memory-source.md'],
+        });
+        cacheMemory.recordCacheInteraction({
+            kind: 'threshold_handoff_viewed',
+            sourcePaths: ['threshold/inbox/memory-source.md'],
+            handoffType: 'research-brief',
+            handoffStatus: 'reviewed',
+        });
+
+        const rb = bootstrap.refreshRollingBootstrap({});
+        expect(rb.cache_memory).toBeDefined();
+        expect(typeof rb.cache_memory.summary).toBe('string');
+        expect(rb.cache_memory.summary).toMatch(/cache draft|handoff/i);
+        expect(Array.isArray(rb.cache_memory.recent)).toBe(true);
+        expect(rb.cache_memory.recent.length).toBeGreaterThan(0);
     });
 });
