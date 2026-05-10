@@ -962,11 +962,11 @@ function renderSignalTrace(sources, signalTrace = null) {
     const memoryFlow = metadata && metadata.memoryFlow && typeof metadata.memoryFlow === 'object'
         ? metadata.memoryFlow
         : null;
-    const equippedCacheCount = metadata && Number.isFinite(metadata.equippedCacheCount)
-        ? Number(metadata.equippedCacheCount)
+    const loadedCacheCount = metadata && Number.isFinite(metadata.loadedCacheCount)
+        ? Number(metadata.loadedCacheCount)
         : null;
-    const equippedCacheLoadout = metadata && Array.isArray(metadata.equippedCacheLoadout)
-        ? metadata.equippedCacheLoadout.map(String).slice(0, 5)
+    const cacheLoadout = metadata && Array.isArray(metadata.cacheLoadout)
+        ? metadata.cacheLoadout.map(String).slice(0, 5)
         : [];
 
     function boundedListText(list) {
@@ -1028,12 +1028,12 @@ function renderSignalTrace(sources, signalTrace = null) {
                     : null,
             },
             {
-                key: 'Equipped Caches',
-                value: equippedCacheCount !== null
+                key: 'Cache Loadout',
+                value: loadedCacheCount !== null
                     ? (
-                        equippedCacheLoadout.length > 0
-                            ? String(equippedCacheCount) + ' · ' + boundedListText(equippedCacheLoadout)
-                            : String(equippedCacheCount)
+                        cacheLoadout.length > 0
+                            ? String(loadedCacheCount) + ' · ' + boundedListText(cacheLoadout)
+                            : String(loadedCacheCount)
                     )
                     : null,
             },
@@ -2226,19 +2226,23 @@ async function loadCacheShelf() {
         listEl.appendChild(installedHeader);
         caches.forEach(cache => listEl.appendChild(buildInstalledCacheItem(cache)));
 
-        const equipped = caches.filter(cache => cache.equipped);
-        const equippedHeader = document.createElement('div');
-        equippedHeader.className = 'message-system';
-        equippedHeader.style.marginTop = '0.6rem';
-        equippedHeader.textContent = 'Equipped Caches (' + equipped.length + ')';
-        listEl.appendChild(equippedHeader);
-        if (equipped.length === 0) {
+        const loaded = caches.filter(cache => cache.loaded);
+        const loadoutHeader = document.createElement('div');
+        loadoutHeader.className = 'message-system';
+        loadoutHeader.style.marginTop = '0.6rem';
+        loadoutHeader.textContent = 'Cache Loadout';
+        listEl.appendChild(loadoutHeader);
+        const loadedHeader = document.createElement('div');
+        loadedHeader.className = 'message-system';
+        loadedHeader.textContent = 'Loaded Caches (' + loaded.length + ')';
+        listEl.appendChild(loadedHeader);
+        if (loaded.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'message-system';
-            empty.textContent = 'None equipped.';
+            empty.textContent = 'None loaded.';
             listEl.appendChild(empty);
         } else {
-            equipped.forEach(cache => {
+            loaded.forEach(cache => {
                 const row = document.createElement('div');
                 row.className = 'cache-item';
                 row.innerHTML =
@@ -2271,12 +2275,12 @@ function installedCacheMetaBadges(cache) {
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.status || 'unverified')) + '</strong>&nbsp;status</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(formatCacheScope(cache.scope)) + '</strong>&nbsp;scope</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.documentCount || 0)) + '</strong>&nbsp;documents</span>');
-    badges.push('<span class="meta-badge"><strong>' + (cache.equipped ? 'equipped' : 'not equipped') + '</strong>&nbsp;loadout</span>');
+    badges.push('<span class="meta-badge"><strong>' + (cache.loaded ? 'loaded' : 'not loaded') + '</strong>&nbsp;state</span>');
     return badges.join('');
 }
 
-async function setCacheEquippedState(cacheId, equip) {
-    const endpoint = equip ? '/api/caches/equip' : '/api/caches/unequip';
+async function setCacheLoadedState(cacheId, shouldLoad) {
+    const endpoint = shouldLoad ? '/api/caches/load' : '/api/caches/unload';
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2362,20 +2366,20 @@ function buildInstalledCacheItem(cache) {
     const actions = document.createElement('div');
     actions.className = 'source-card-actions';
 
-    const equipBtn = document.createElement('button');
-    equipBtn.className = 'secondary source-action-btn';
-    equipBtn.textContent = cache.equipped ? 'Unequip' : 'Equip';
-    equipBtn.addEventListener('click', async (event) => {
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'secondary source-action-btn';
+    loadBtn.textContent = cache.loaded ? 'Unload Cache' : 'Load Cache';
+    loadBtn.addEventListener('click', async (event) => {
         event.stopPropagation();
-        equipBtn.disabled = true;
+        loadBtn.disabled = true;
         try {
-            await setCacheEquippedState(cache.id, !cache.equipped);
+            await setCacheLoadedState(cache.id, !cache.loaded);
             await loadCacheShelf();
-            showFlashMessage((!cache.equipped ? 'Equipped' : 'Unequipped') + ': ' + (cache.title || cache.id));
+            showFlashMessage((!cache.loaded ? 'Loaded' : 'Unloaded') + ': ' + (cache.title || cache.id));
         } catch (error) {
             showFlashMessage(error.message || 'Could not update loadout.');
         } finally {
-            equipBtn.disabled = false;
+            loadBtn.disabled = false;
         }
     });
 
@@ -2395,7 +2399,7 @@ function buildInstalledCacheItem(cache) {
         await openInstalledCacheInReader(cache);
     });
 
-    actions.appendChild(equipBtn);
+    actions.appendChild(loadBtn);
     actions.appendChild(openBtn);
     actions.appendChild(openReaderBtn);
     item.appendChild(actions);
@@ -4568,14 +4572,14 @@ async function loadBootstrapStatus() {
         }
         rows.push(
             '<div class="system-row">' +
-            '<span class="system-key">Equipped caches</span>' +
-            '<span class="system-val">' + escapeHtml(String(data.equippedCacheCount || 0)) + '</span></div>',
+            '<span class="system-key">Loaded Caches</span>' +
+            '<span class="system-val">' + escapeHtml(String(data.loadedCacheCount || 0)) + '</span></div>',
         );
-        if (Array.isArray(data.equippedCacheLoadout) && data.equippedCacheLoadout.length > 0) {
+        if (Array.isArray(data.cacheLoadout) && data.cacheLoadout.length > 0) {
             rows.push(
                 '<div class="system-row">' +
-                '<span class="system-key">Loadout</span>' +
-                '<span class="system-val">' + escapeHtml(data.equippedCacheLoadout.slice(0, 5).join(', ')) + '</span></div>',
+                '<span class="system-key">Cache Loadout</span>' +
+                '<span class="system-val">' + escapeHtml(data.cacheLoadout.slice(0, 5).join(', ')) + '</span></div>',
             );
         }
         rows.push(

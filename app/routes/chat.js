@@ -31,7 +31,7 @@ const {
     formatForgeCoreForPrompt,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
-const { listEquippedCaches } = require('../equippedCaches');
+const { listLoadedCaches } = require('../loadedCaches');
 const {
     loadCacheSummaries,
     loadDocumentSummaries,
@@ -1018,8 +1018,8 @@ state: ${retrievalState}
             .slice(0, MAX_SIGNAL_TRACE_SOURCES);
         const sourcesActuallyUsed = compactContextList.slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST);
         const sourceList = compactContextList;
-        const equippedCaches = listEquippedCaches();
-        const equippedLoadoutNames = equippedCaches
+        const loadedCaches = listLoadedCaches();
+        const cacheLoadoutNames = loadedCaches
             .map(cache => cache && cache.title ? String(cache.title) : (cache && cache.id ? String(cache.id) : ''))
             .filter(Boolean)
             .slice(0, 5);
@@ -1053,8 +1053,8 @@ state: ${retrievalState}
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
             rollingBootstrapStatus,
             rollingBootstrapThemes,
-            equippedCacheCount: equippedCaches.length,
-            equippedCacheLoadout: equippedLoadoutNames,
+            loadedCacheCount: loadedCaches.length,
+            cacheLoadout: cacheLoadoutNames,
             memoryFlow: {
                 rollingBootstrap: rollingBootstrapStatus,
                 archetypeMemory: activeArchetypeForMemory,
@@ -1073,8 +1073,8 @@ state: ${retrievalState}
                 'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
                     ' · chunks ' + rawChunksForPrompt.length,
-                'Equipped Caches: ' + equippedCaches.length,
-                'Loadout: ' + (equippedLoadoutNames.length > 0 ? equippedLoadoutNames.join(', ') : 'none'),
+                'Cache Loadout: ' + loadedCaches.length + ' loaded',
+                'Cache Loadout: ' + (cacheLoadoutNames.length > 0 ? cacheLoadoutNames.join(', ') : 'none'),
                 'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
                 'Model: ' + heart.model + ' / Ollama',
             ].join('\n'),
