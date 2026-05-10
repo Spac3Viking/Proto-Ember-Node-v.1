@@ -40,6 +40,7 @@ const THRESHOLD_INBOX_DIR = path.join(DATA_ROOT, 'threshold', 'inbox');
 const THRESHOLD_CACHE_DRAFTS_DIR = path.join(DATA_ROOT, 'threshold', 'cache-drafts');
 const CACHE_DRAFT_EXPORTS_DIR = path.join(EXPORTS_DIR, 'cache-drafts');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
+const MAX_DRAFT_ID_LENGTH = 64;
 const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'research-brief',
     'field-note',
@@ -247,11 +248,10 @@ function sanitizeDraftId(value) {
 
     let out = '';
     let previousWasDash = false;
-    for (let i = 0; i < raw.length && out.length < 64; i++) {
+    for (let i = 0; i < raw.length && out.length < MAX_DRAFT_ID_LENGTH; i++) {
         const ch = raw[i];
-        const code = ch.charCodeAt(0);
-        const isAlpha = code >= 97 && code <= 122;
-        const isDigit = code >= 48 && code <= 57;
+        const isAlpha = ch >= 'a' && ch <= 'z';
+        const isDigit = ch >= '0' && ch <= '9';
         const isAllowed = isAlpha || isDigit || ch === '.' || ch === '_' || ch === '-';
         if (isAllowed) {
             out += ch;
@@ -269,15 +269,13 @@ function sanitizeDraftId(value) {
     if (!out) return null;
 
     const first = out[0];
-    const firstCode = first.charCodeAt(0);
-    const firstValid = (firstCode >= 97 && firstCode <= 122) || (firstCode >= 48 && firstCode <= 57);
+    const firstValid = (first >= 'a' && first <= 'z') || (first >= '0' && first <= '9');
     if (!firstValid) return null;
 
     for (let i = 0; i < out.length; i++) {
         const ch = out[i];
-        const code = ch.charCodeAt(0);
-        const isAlpha = code >= 97 && code <= 122;
-        const isDigit = code >= 48 && code <= 57;
+        const isAlpha = ch >= 'a' && ch <= 'z';
+        const isDigit = ch >= '0' && ch <= '9';
         if (!(isAlpha || isDigit || ch === '.' || ch === '_' || ch === '-')) return null;
     }
     return out;
@@ -358,8 +356,11 @@ function createCacheDraftFromThresholdFile({ relPath, draftId, title, descriptio
     const manifestPath = path.join(resolvedDraft.path, 'manifest.json');
     const priorManifest = parseManifestIfPresent(manifestPath);
     const resolvedTitle = String(title || '').trim() || extractMarkdownDisplayTitle(markdown, resolvedDraft.id);
-    const resolvedDescription = String(description || '').trim() ||
-        (priorManifest && typeof priorManifest.description === 'string' ? priorManifest.description : 'Cache draft generated from Threshold handoff markdown.');
+    const defaultDescription = 'Cache draft generated from Threshold handoff markdown.';
+    const priorDescription = priorManifest && typeof priorManifest.description === 'string'
+        ? priorManifest.description
+        : '';
+    const resolvedDescription = String(description || '').trim() || priorDescription || defaultDescription;
     const readmePath = path.join(resolvedDraft.path, 'README.md');
     const handoffPath = path.join(resolvedDraft.path, 'handoff.md');
     const manifest = {
