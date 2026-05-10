@@ -377,11 +377,6 @@ function collectCacheDraftMarkdownSources({ relPath, relPaths }) {
 function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, description }) {
     const sources = collectCacheDraftMarkdownSources({ relPath, relPaths });
     const primarySource = sources[0];
-    if (!primarySource) {
-        const error = new Error('Threshold source file not found.');
-        error.status = 404;
-        throw error;
-    }
     const resolvedDraft = resolveCacheDraftDir(
         draftId || path.basename(primarySource.absPath, path.extname(primarySource.absPath)),
     );
@@ -412,7 +407,7 @@ function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, 
     fs.mkdirSync(docsDir, { recursive: true });
     for (let i = 0; i < sources.length; i++) {
         const source = sources[i];
-        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('handoff-' + (i + 1));
+        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('doc-' + (i + 1));
         const ext = path.extname(baseName).toLowerCase();
         const stem = ext ? path.basename(baseName, ext) : baseName;
         const targetExt = '.md';
