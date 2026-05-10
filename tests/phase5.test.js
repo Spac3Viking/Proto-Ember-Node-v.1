@@ -113,6 +113,7 @@ describe('storageConfig — ensureDataRoot', () => {
             storageConfig.USER_CACHES_DIR,
             storageConfig.SYSTEM_DIR,
             storageConfig.EXPORTS_DIR,
+            storageConfig.THRESHOLD_CACHE_DRAFTS_DIR,
         ];
 
         for (const dir of expected) {

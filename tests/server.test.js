@@ -1,6 +1,10 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
+const AdmZip = require('adm-zip');
 const request = require('supertest');
 const { app, MODEL, OLLAMA_CHAT_URL, OLLAMA_BASE_URL } = require('../app/server');
+const { DATA_ROOT } = require('../app/storageConfig');
 const { setSelectedModel } = require('../app/aiConfig');
 
 jest.mock('axios');
@@ -395,5 +399,90 @@ describe('Threshold inbox import + reader endpoints', () => {
             .attach('files', Buffer.from('bad', 'utf8'), 'bad.exe');
         expect(res.status).toBe(400);
         expect(String(res.body.error || '')).toMatch(/Unsupported file type/i);
+    });
+});
+
+describe('Threshold cache draft workflow', () => {
+    const draftId = 'phase-16h-b-test-cache-draft';
+    let importedPath = null;
+
+    test('creates cache draft from threshold markdown and writes manifest + readme', async () => {
+        const upload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from('# Draft Seed\n\nFrom threshold.', 'utf8'), 'cache-draft-source.md');
+        expect(upload.status).toBe(200);
+        importedPath = upload.body.imported[0].path;
+
+        const createRes = await request(app)
+            .post('/api/threshold/cache-drafts')
+            .send({
+                path: importedPath,
+                draftId,
+                title: 'Phase 16H-B Test Draft',
+                description: 'Portable local cache draft from Threshold.',
+            });
+        expect(createRes.status).toBe(200);
+        expect(createRes.body.success).toBe(true);
+        expect(createRes.body.draft.id).toBe(draftId);
+        expect(createRes.body.draft.files.manifest).toBe('threshold/cache-drafts/' + draftId + '/manifest.json');
+        expect(createRes.body.draft.files.readme).toBe('threshold/cache-drafts/' + draftId + '/README.md');
+
+        const listRes = await request(app).get('/api/threshold/cache-drafts');
+        expect(listRes.status).toBe(200);
+        const found = (listRes.body.drafts || []).find(d => d.id === draftId);
+        expect(found).toBeTruthy();
+        expect(found.manifest).toBeTruthy();
+        expect(found.manifest.type).toBe('cache-draft');
+    });
+
+    test('exports cache draft as zip containing manifest and readme', async () => {
+        const res = await request(app)
+            .post('/api/threshold/cache-drafts/' + draftId + '/export')
+            .send({});
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.exported.exportPath).toBe('exports/cache-drafts/' + draftId + '.zip');
+
+        const absZipPath = path.join(DATA_ROOT, res.body.exported.exportPath);
+        expect(fs.existsSync(absZipPath)).toBe(true);
+        const zip = new AdmZip(absZipPath);
+        const names = zip.getEntries().map(entry => entry.entryName);
+        expect(names).toContain(draftId + '/manifest.json');
+        expect(names).toContain(draftId + '/README.md');
+    });
+
+    test('installs exported draft zip into archive/caches/<id>', async () => {
+        const installRes = await request(app)
+            .post('/api/threshold/cache-drafts/' + draftId + '/install')
+            .send({});
+        expect(installRes.status).toBe(200);
+        expect(installRes.body.success).toBe(true);
+        expect(installRes.body.installed.installedPath).toBe('archive/caches/' + draftId);
+        expect(installRes.body.installed.manifest).toBeTruthy();
+        expect(installRes.body.installed.manifest.id).toBe(draftId);
+
+        const catalog = await request(app).get('/api/archive/reader/catalog');
+        expect(catalog.status).toBe(200);
+        const cacheRoot = (catalog.body.roots || []).find(root => root.id === 'archive-caches');
+        const installedCache = (cacheRoot && cacheRoot.caches ? cacheRoot.caches : [])
+            .find(cache => cache.cacheId === draftId);
+        const hasInstalledReadme = Boolean(
+            installedCache &&
+            Array.isArray(installedCache.files) &&
+            installedCache.files.some(entry => entry.sourcePath === 'archive/caches/' + draftId + '/README.md'),
+        );
+        expect(hasInstalledReadme).toBe(true);
+    });
+
+    afterAll(async () => {
+        if (importedPath) {
+            await request(app).delete('/api/threshold/files').send({ path: importedPath });
+        }
+        const draftDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId);
+        const draftZip = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '.zip');
+        const installDir = path.join(DATA_ROOT, 'archive', 'caches', draftId);
+        await fs.promises.rm(draftDir, { recursive: true, force: true });
+        await fs.promises.rm(draftZip, { force: true });
+        await fs.promises.rm(installDir, { recursive: true, force: true });
     });
 });

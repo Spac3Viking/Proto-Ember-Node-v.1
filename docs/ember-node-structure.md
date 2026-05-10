@@ -5,7 +5,7 @@
 - **🜂 Hearth** → Ember Prime continuity layer and remembered conversation.
 - **🜁 Ember Council** → archetypal perspectives that shape interpretation, never replace continuity.
 - **🜃 Archive** → installed memory, including `archive/core/`, `archive/caches/`, and `archive/mirror/`.
-- **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/`.
+- **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/` and draft cache bundles in `threshold/cache-drafts/`.
 - **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
 
 Workshop is retired. Ember Council is the active archetype room. Tools registry is retired. Threshold now handles Local AI and Runtime Stewardship. Caches replaced cartridges. Signal Threads are the successor to old project/thread concepts.

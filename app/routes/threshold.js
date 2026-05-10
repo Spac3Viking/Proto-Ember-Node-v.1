@@ -13,8 +13,14 @@
 const express = require('express');
 const fs      = require('fs');
 const path    = require('path');
+const AdmZip  = require('adm-zip');
 const { readLimiter, writeLimiter } = require('../rateLimiters');
-const { DATA_ROOT, resolveSourcePath } = require('../storageConfig');
+const {
+    DATA_ROOT,
+    resolveSourcePath,
+    ARCHIVE_CACHES_DIR,
+    EXPORTS_DIR,
+} = require('../storageConfig');
 const { buildSourceRecord }      = require('../ingest');
 const {
     upsertManifest, loadManifests,
@@ -31,7 +37,10 @@ const {
 
 const router = express.Router();
 const THRESHOLD_INBOX_DIR = path.join(DATA_ROOT, 'threshold', 'inbox');
+const THRESHOLD_CACHE_DRAFTS_DIR = path.join(DATA_ROOT, 'threshold', 'cache-drafts');
+const CACHE_DRAFT_EXPORTS_DIR = path.join(EXPORTS_DIR, 'cache-drafts');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
+const MAX_DRAFT_ID_LENGTH = 64;
 const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'research-brief',
     'field-note',
@@ -55,6 +64,15 @@ function isPathInside(baseDir, targetPath) {
 function ensureThresholdInboxDir() {
     if (!fs.existsSync(THRESHOLD_INBOX_DIR)) {
         fs.mkdirSync(THRESHOLD_INBOX_DIR, { recursive: true });
+    }
+}
+
+function ensureThresholdCacheDraftDirs() {
+    if (!fs.existsSync(THRESHOLD_CACHE_DRAFTS_DIR)) {
+        fs.mkdirSync(THRESHOLD_CACHE_DRAFTS_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(CACHE_DRAFT_EXPORTS_DIR)) {
+        fs.mkdirSync(CACHE_DRAFT_EXPORTS_DIR, { recursive: true });
     }
 }
 
@@ -222,6 +240,298 @@ function resolveThresholdInboxPath(relPath) {
     const absPath = path.resolve(THRESHOLD_INBOX_DIR, tail);
     if (!isPathInside(THRESHOLD_INBOX_DIR, absPath)) return null;
     return absPath;
+}
+
+function sanitizeDraftId(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return null;
+
+    let out = '';
+    let previousWasDash = false;
+    for (let i = 0; i < raw.length && out.length < MAX_DRAFT_ID_LENGTH; i++) {
+        const ch = raw[i];
+        const isAlpha = ch >= 'a' && ch <= 'z';
+        const isDigit = ch >= '0' && ch <= '9';
+        const isAllowed = isAlpha || isDigit || ch === '.' || ch === '_' || ch === '-';
+        if (isAllowed) {
+            out += ch;
+            previousWasDash = ch === '-';
+            continue;
+        }
+        if (!previousWasDash && out.length > 0) {
+            out += '-';
+            previousWasDash = true;
+        }
+    }
+
+    while (out.startsWith('-')) out = out.slice(1);
+    while (out.endsWith('-')) out = out.slice(0, -1);
+    if (!out) return null;
+
+    const first = out[0];
+    const firstValid = (first >= 'a' && first <= 'z') || (first >= '0' && first <= '9');
+    if (!firstValid) return null;
+
+    for (let i = 0; i < out.length; i++) {
+        const ch = out[i];
+        const isAlpha = ch >= 'a' && ch <= 'z';
+        const isDigit = ch >= '0' && ch <= '9';
+        if (!(isAlpha || isDigit || ch === '.' || ch === '_' || ch === '-')) return null;
+    }
+    return out;
+}
+
+function resolveCacheDraftDir(draftId) {
+    const normalized = sanitizeDraftId(draftId);
+    if (!normalized) return null;
+    const abs = path.resolve(THRESHOLD_CACHE_DRAFTS_DIR, normalized);
+    if (!isPathInside(THRESHOLD_CACHE_DRAFTS_DIR, abs)) return null;
+    return { id: normalized, path: abs };
+}
+
+function listFilesRecursive(baseDir) {
+    if (!fs.existsSync(baseDir)) return [];
+    const out = [];
+    const stack = [baseDir];
+    while (stack.length > 0) {
+        const current = stack.pop();
+        const entries = fs.readdirSync(current, { withFileTypes: true });
+        for (const entry of entries) {
+            const abs = path.join(current, entry.name);
+            if (!isPathInside(baseDir, abs)) continue;
+            if (entry.isDirectory()) {
+                stack.push(abs);
+                continue;
+            }
+            if (!entry.isFile()) continue;
+            out.push(abs);
+        }
+    }
+    return out;
+}
+
+function toRootRelative(absPath) {
+    const rel = path.relative(DATA_ROOT, absPath).replace(/\\/g, '/');
+    return rel.startsWith('../') ? null : rel;
+}
+
+function parseManifestIfPresent(filePath) {
+    if (!fs.existsSync(filePath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+        return null;
+    }
+}
+
+function createCacheDraftFromThresholdFile({ relPath, draftId, title, description }) {
+    const sourceAbsPath = resolveThresholdInboxPath(relPath);
+    if (!sourceAbsPath || !fs.existsSync(sourceAbsPath)) {
+        const error = new Error('Threshold source file not found.');
+        error.status = 404;
+        throw error;
+    }
+    const ext = path.extname(sourceAbsPath).toLowerCase();
+    if (ext !== '.md') {
+        const error = new Error('Cache draft source must be a markdown file.');
+        error.status = 400;
+        throw error;
+    }
+
+    const markdown = fs.readFileSync(sourceAbsPath, 'utf8');
+    const resolvedDraft = resolveCacheDraftDir(
+        draftId || path.basename(sourceAbsPath, path.extname(sourceAbsPath)),
+    );
+    if (!resolvedDraft) {
+        const error = new Error('Invalid draftId.');
+        error.status = 400;
+        throw error;
+    }
+
+    ensureThresholdCacheDraftDirs();
+    fs.mkdirSync(resolvedDraft.path, { recursive: true });
+
+    const now = new Date().toISOString();
+    const sourceRelPath = toRootRelative(sourceAbsPath) || relPath.replace(/\\/g, '/');
+    const manifestPath = path.join(resolvedDraft.path, 'manifest.json');
+    const priorManifest = parseManifestIfPresent(manifestPath);
+    const resolvedTitle = String(title || '').trim() || extractMarkdownDisplayTitle(markdown, resolvedDraft.id);
+    const defaultDescription = 'Cache draft generated from Threshold handoff markdown.';
+    const priorDescription = priorManifest && typeof priorManifest.description === 'string'
+        ? priorManifest.description
+        : '';
+    const resolvedDescription = String(description || '').trim() || priorDescription || defaultDescription;
+    const readmePath = path.join(resolvedDraft.path, 'README.md');
+    const handoffPath = path.join(resolvedDraft.path, 'handoff.md');
+    const manifest = {
+        id: resolvedDraft.id,
+        name: resolvedTitle,
+        version: '0.1.0-draft',
+        type: 'cache-draft',
+        source: {
+            room: 'threshold',
+            path: sourceRelPath,
+        },
+        description: resolvedDescription,
+        generatedAt: now,
+    };
+    const readme = [
+        '# ' + resolvedTitle,
+        '',
+        resolvedDescription,
+        '',
+        '## Source',
+        '',
+        '- room: threshold',
+        '- file: `' + sourceRelPath + '`',
+        '- generated: ' + now,
+        '',
+        '## Files',
+        '',
+        '- `manifest.json`',
+        '- `README.md`',
+        '- `handoff.md`',
+        '',
+        'This cache draft is local-first and portable.',
+    ].join('\n');
+
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    fs.writeFileSync(readmePath, readme + '\n', 'utf8');
+    fs.writeFileSync(handoffPath, markdown, 'utf8');
+
+    return {
+        id: resolvedDraft.id,
+        path: 'threshold/cache-drafts/' + resolvedDraft.id,
+        manifest,
+        files: {
+            manifest: 'threshold/cache-drafts/' + resolvedDraft.id + '/manifest.json',
+            readme: 'threshold/cache-drafts/' + resolvedDraft.id + '/README.md',
+            handoff: 'threshold/cache-drafts/' + resolvedDraft.id + '/handoff.md',
+        },
+    };
+}
+
+function listCacheDrafts() {
+    ensureThresholdCacheDraftDirs();
+    const entries = fs.readdirSync(THRESHOLD_CACHE_DRAFTS_DIR, { withFileTypes: true });
+    return entries
+        .filter(entry => entry.isDirectory())
+        .map(entry => {
+            const resolved = resolveCacheDraftDir(entry.name);
+            if (!resolved || !fs.existsSync(resolved.path)) return null;
+            const manifestPath = path.join(resolved.path, 'manifest.json');
+            const readmePath = path.join(resolved.path, 'README.md');
+            if (!fs.existsSync(manifestPath) || !fs.existsSync(readmePath)) return null;
+            const manifest = parseManifestIfPresent(manifestPath) || {};
+            const stats = fs.statSync(manifestPath);
+            return {
+                id: resolved.id,
+                path: 'threshold/cache-drafts/' + resolved.id,
+                manifest,
+                updatedAt: (stats.mtime || stats.birthtime || new Date()).toISOString(),
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function exportCacheDraftZip(draftId) {
+    const resolved = resolveCacheDraftDir(draftId);
+    if (!resolved || !fs.existsSync(resolved.path)) {
+        const error = new Error('Cache draft not found.');
+        error.status = 404;
+        throw error;
+    }
+    const manifestPath = path.join(resolved.path, 'manifest.json');
+    const readmePath = path.join(resolved.path, 'README.md');
+    if (!fs.existsSync(manifestPath) || !fs.existsSync(readmePath)) {
+        const error = new Error('Cache draft is incomplete (manifest.json + README.md required).');
+        error.status = 400;
+        throw error;
+    }
+
+    ensureThresholdCacheDraftDirs();
+    const zip = new AdmZip();
+    const files = listFilesRecursive(resolved.path);
+    for (const filePath of files) {
+        const rel = path.relative(resolved.path, filePath).replace(/\\/g, '/');
+        if (!rel || rel.includes('..')) continue;
+        zip.addFile(resolved.id + '/' + rel, fs.readFileSync(filePath));
+    }
+    const exportPath = path.join(CACHE_DRAFT_EXPORTS_DIR, resolved.id + '.zip');
+    zip.writeZip(exportPath);
+
+    return {
+        id: resolved.id,
+        exportPath: toRootRelative(exportPath) || ('exports/cache-drafts/' + resolved.id + '.zip'),
+    };
+}
+
+function resolveExportZipPath(exportRelPath, draftId) {
+    if (!exportRelPath) {
+        return path.join(CACHE_DRAFT_EXPORTS_DIR, draftId + '.zip');
+    }
+    const candidate = resolveSourcePath(String(exportRelPath).replace(/\\/g, '/'));
+    if (!candidate) return null;
+    const abs = path.resolve(candidate);
+    if (!isPathInside(EXPORTS_DIR, abs)) return null;
+    return abs;
+}
+
+function installCacheDraftFromExport({ draftId, exportRelPath }) {
+    const normalizedDraftId = sanitizeDraftId(draftId);
+    if (!normalizedDraftId) {
+        const error = new Error('Invalid draftId.');
+        error.status = 400;
+        throw error;
+    }
+    const zipPath = resolveExportZipPath(exportRelPath, normalizedDraftId);
+    if (!zipPath || !fs.existsSync(zipPath)) {
+        const error = new Error('Export zip not found.');
+        error.status = 404;
+        throw error;
+    }
+
+    const destinationRoot = path.join(ARCHIVE_CACHES_DIR, normalizedDraftId);
+    fs.rmSync(destinationRoot, { recursive: true, force: true });
+    fs.mkdirSync(destinationRoot, { recursive: true });
+
+    const zip = new AdmZip(zipPath);
+    for (const entry of zip.getEntries()) {
+        let rel = String(entry.entryName || '').replace(/\\/g, '/').replace(/^\/+/, '');
+        if (!rel) continue;
+        if (rel.startsWith(normalizedDraftId + '/')) {
+            rel = rel.slice(normalizedDraftId.length + 1);
+        }
+        if (!rel || rel === '.' || rel.includes('..')) continue;
+
+        const destination = path.resolve(destinationRoot, rel);
+        if (!isPathInside(destinationRoot, destination)) {
+            throw new Error('Unsafe zip path detected: ' + entry.entryName);
+        }
+
+        if (entry.isDirectory) {
+            fs.mkdirSync(destination, { recursive: true });
+            continue;
+        }
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.writeFileSync(destination, entry.getData());
+    }
+
+    const manifestPath = path.join(destinationRoot, 'manifest.json');
+    const readmePath = path.join(destinationRoot, 'README.md');
+    if (!fs.existsSync(manifestPath) || !fs.existsSync(readmePath)) {
+        const error = new Error('Installed cache is missing manifest.json or README.md.');
+        error.status = 400;
+        throw error;
+    }
+
+    return {
+        id: normalizedDraftId,
+        installedPath: 'archive/caches/' + normalizedDraftId,
+        exportPath: toRootRelative(zipPath) || ('exports/cache-drafts/' + normalizedDraftId + '.zip'),
+        manifest: parseManifestIfPresent(manifestPath),
+    };
 }
 
 /**
@@ -479,6 +789,71 @@ router.get('/api/threshold/files', readLimiter, (req, res) => {
     } catch (error) {
         console.error('Error listing threshold files:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * POST /api/threshold/cache-drafts
+ * Body: { path: "threshold/inbox/<name>.md", draftId?, title?, description? }
+ */
+router.post('/api/threshold/cache-drafts', writeLimiter, (req, res) => {
+    try {
+        const relPath = req.body && req.body.path ? String(req.body.path) : '';
+        if (!relPath) return res.status(400).json({ error: 'path is required' });
+        const draft = createCacheDraftFromThresholdFile({
+            relPath,
+            draftId: req.body && req.body.draftId,
+            title: req.body && req.body.title,
+            description: req.body && req.body.description,
+        });
+        res.json({ success: true, draft });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
+/**
+ * GET /api/threshold/cache-drafts
+ * List created cache drafts in threshold/cache-drafts/.
+ */
+router.get('/api/threshold/cache-drafts', readLimiter, (req, res) => {
+    try {
+        res.json({ drafts: listCacheDrafts() });
+    } catch (error) {
+        console.error('Error listing cache drafts:', error.message);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * POST /api/threshold/cache-drafts/:id/export
+ * Export a cache draft as zip in exports/cache-drafts/<id>.zip
+ */
+router.post('/api/threshold/cache-drafts/:id/export', writeLimiter, (req, res) => {
+    try {
+        const exported = exportCacheDraftZip(req.params.id);
+        res.json({ success: true, exported });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
+/**
+ * POST /api/threshold/cache-drafts/:id/install
+ * Body (optional): { exportPath: "exports/cache-drafts/<id>.zip" }
+ */
+router.post('/api/threshold/cache-drafts/:id/install', writeLimiter, (req, res) => {
+    try {
+        const installed = installCacheDraftFromExport({
+            draftId: req.params.id,
+            exportRelPath: req.body && req.body.exportPath ? String(req.body.exportPath) : null,
+        });
+        res.json({ success: true, installed });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
     }
 });
 
