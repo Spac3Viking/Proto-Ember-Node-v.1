@@ -167,7 +167,9 @@ const CACHE_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-summaries.json'
 const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries.json');
 const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
 const CACHE_INTERACTIONS_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-interactions.json');
-const EQUIPPED_CACHES_PATH = path.join(SYSTEM_MEMORY_DIR, 'equipped-caches.json');
+const LOADED_CACHES_PATH = path.join(SYSTEM_MEMORY_DIR, 'loaded-caches.json');
+const LEGACY_EQUIPPED_CACHES_PATH = path.join(SYSTEM_MEMORY_DIR, 'equipped-caches.json');
+const EQUIPPED_CACHES_PATH = LOADED_CACHES_PATH;
 const IMPORTED_BOOTSTRAPS_DIR = path.join(SYSTEM_MEMORY_DIR, 'imported-bootstraps');
 
 /** System config and prompts directories */
@@ -297,10 +299,10 @@ const DEFAULT_DOCUMENT_SUMMARIES = {
     updated_at: null,
     documents: {},
 };
-const DEFAULT_EQUIPPED_CACHES = {
+const DEFAULT_LOADED_CACHES = {
     version: '0.1.0',
     updated_at: null,
-    equipped: [],
+    loaded: [],
 };
 const DEFAULT_ARCHETYPE_MEMORY = {
     version: '0.1.0',
@@ -430,7 +432,11 @@ function ensureCanonicalDataFiles() {
     writeJsonIfMissing(DOCUMENT_SUMMARIES_PATH, DEFAULT_DOCUMENT_SUMMARIES);
     writeJsonIfMissing(ARCHETYPE_MEMORY_PATH, DEFAULT_ARCHETYPE_MEMORY);
     writeJsonIfMissing(CACHE_INTERACTIONS_PATH, DEFAULT_CACHE_INTERACTIONS);
-    writeJsonIfMissing(EQUIPPED_CACHES_PATH, DEFAULT_EQUIPPED_CACHES);
+    if (fs.existsSync(LEGACY_EQUIPPED_CACHES_PATH) && !fs.existsSync(LOADED_CACHES_PATH)) {
+        fs.mkdirSync(path.dirname(LOADED_CACHES_PATH), { recursive: true });
+        fs.copyFileSync(LEGACY_EQUIPPED_CACHES_PATH, LOADED_CACHES_PATH);
+    }
+    writeJsonIfMissing(LOADED_CACHES_PATH, DEFAULT_LOADED_CACHES);
 }
 
 // ── Legacy migration ──────────────────────────────────────────────────────────
@@ -687,6 +693,8 @@ module.exports = {
     DOCUMENT_SUMMARIES_PATH,
     ARCHETYPE_MEMORY_PATH,
     CACHE_INTERACTIONS_PATH,
+    LOADED_CACHES_PATH,
+    LEGACY_EQUIPPED_CACHES_PATH,
     EQUIPPED_CACHES_PATH,
     IMPORTED_BOOTSTRAPS_DIR,
     // Phase 11.7: Core Archive + Cache Structure

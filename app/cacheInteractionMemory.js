@@ -15,6 +15,9 @@ const KNOWN_KINDS = new Set([
     'cache_draft_exported',
     'cache_draft_installed',
     'threshold_handoff_viewed',
+    'cache_loaded',
+    'cache_unloaded',
+    // Legacy aliases retained for historical records
     'cache_equipped',
     'cache_unequipped',
     'bootstrap_exported',
@@ -99,11 +102,11 @@ function summarizeInteraction(interaction) {
         const type = interaction.handoffType || 'handoff';
         return 'Viewed threshold handoff (`' + type + '`).';
     }
-    if (interaction.kind === 'cache_equipped') {
-        return 'Equipped cache `' + (interaction.cacheId || 'unknown') + '`.';
+    if (interaction.kind === 'cache_loaded' || interaction.kind === 'cache_equipped') {
+        return 'Loaded cache `' + (interaction.cacheId || 'unknown') + '`.';
     }
-    if (interaction.kind === 'cache_unequipped') {
-        return 'Unequipped cache `' + (interaction.cacheId || 'unknown') + '`.';
+    if (interaction.kind === 'cache_unloaded' || interaction.kind === 'cache_unequipped') {
+        return 'Unloaded cache `' + (interaction.cacheId || 'unknown') + '`.';
     }
     if (interaction.kind === 'bootstrap_exported') {
         return 'Exported continuity bootstrap.';

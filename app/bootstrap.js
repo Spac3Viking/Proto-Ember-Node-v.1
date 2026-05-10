@@ -43,7 +43,7 @@ const {
     getCacheInteractionSummary,
     getRecentCacheInteractions,
 } = require('./cacheInteractionMemory');
-const { listEquippedCaches } = require('./equippedCaches');
+const { listLoadedCaches } = require('./loadedCaches');
 
 // ── File paths ────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ const ROLLING_BOOTSTRAP_STALE_MS = 1000 * 60 * 60 * 24 * 7;
 const MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS = 420;
 const BOOTSTRAP_CACHE_SUMMARY_LIMIT = 4;
 const BOOTSTRAP_CACHE_RECENT_LIMIT = 6;
-const BOOTSTRAP_EQUIPPED_LIST_LIMIT = 5;
+const BOOTSTRAP_LOADED_LIST_LIMIT = 5;
 
 // ── Forge v1.3 canonical markdown ─────────────────────────────────────────────
 
@@ -461,11 +461,11 @@ function buildRollingBootstrap(opts) {
         cacheId: entry.cacheId,
         handoffType: entry.handoffType,
     }));
-    const equippedCaches = listEquippedCaches().slice(0, BOOTSTRAP_EQUIPPED_LIST_LIMIT).map(entry => ({
+    const loadedCaches = listLoadedCaches().slice(0, BOOTSTRAP_LOADED_LIST_LIMIT).map(entry => ({
         id: entry.id,
         title: entry.title || entry.id,
         level: entry.level || 'spark',
-        equipped_at: entry.equipped_at || null,
+        loaded_at: entry.loaded_at || null,
     }));
     const recentCacheEncounters = cacheInteractionRecent
         .map(entry => entry.cacheId || entry.draftId || null)
@@ -492,10 +492,10 @@ function buildRollingBootstrap(opts) {
     if (normalizedQuestions.length > 0) summaryParts.push('Open questions: ' + normalizedQuestions.slice(0, 3).join('; ') + '.');
     if (normalizedDecisions.length > 0) summaryParts.push('Recent decisions: ' + normalizedDecisions.slice(0, 3).join('; ') + '.');
     if (sourceThreads.length > 0) summaryParts.push('Signal Threads groundwork: ' + sourceThreads.length + ' remembered thread summaries.');
-    if (equippedCaches.length > 0) {
+    if (loadedCaches.length > 0) {
         summaryParts.push(
-            'Equipped caches: ' +
-            equippedCaches.slice(0, 3).map(cache => cache.title + ' (' + cache.level + ')').join(', ') +
+            'Loaded caches: ' +
+            loadedCaches.slice(0, 3).map(cache => cache.title + ' (' + cache.level + ')').join(', ') +
             '.',
         );
     }
@@ -513,7 +513,7 @@ function buildRollingBootstrap(opts) {
         recent_decisions: normalizedDecisions,
         archetype_notes: archetypeNotes,
         source_threads: sourceThreads,
-        equipped_caches: equippedCaches,
+        loaded_caches: loadedCaches,
         recent_cache_encounters: recentCacheEncounters,
         node_state: {
             active_archetype: activeArchetype || null,
@@ -736,13 +736,13 @@ function formatRollingBootstrapForPrompt(rollingBootstrap) {
     if (recentDecisions.length > 0) {
         lines.push('Recent decisions: ' + recentDecisions.join(' | ') + '.');
     }
-    const equippedCaches = Array.isArray(rollingBootstrap.equipped_caches)
-        ? rollingBootstrap.equipped_caches.slice(0, 4)
+    const loadedCaches = Array.isArray(rollingBootstrap.loaded_caches)
+        ? rollingBootstrap.loaded_caches.slice(0, 4)
             .map(cache => cache && cache.title ? String(cache.title) : (cache && cache.id ? String(cache.id) : ''))
             .filter(Boolean)
         : [];
-    if (equippedCaches.length > 0) {
-        lines.push('Equipped: ' + equippedCaches.join(', ') + '.');
+    if (loadedCaches.length > 0) {
+        lines.push('Cache Loadout: ' + loadedCaches.join(', ') + '.');
     }
     const recentCacheEncounters = Array.isArray(rollingBootstrap.recent_cache_encounters)
         ? rollingBootstrap.recent_cache_encounters.slice(0, 3).map(String)
@@ -777,9 +777,9 @@ function extractCacheDisplayName(cache) {
 function buildContinuityBootstrapMarkdown(opts = {}) {
     const rollingBootstrap = opts.rollingBootstrap || loadRollingBootstrap() || {};
     const now = new Date().toISOString();
-    const equippedCaches = Array.isArray(rollingBootstrap.equipped_caches)
-        ? rollingBootstrap.equipped_caches
-        : listEquippedCaches().slice(0, BOOTSTRAP_EQUIPPED_LIST_LIMIT);
+    const loadedCaches = Array.isArray(rollingBootstrap.loaded_caches)
+        ? rollingBootstrap.loaded_caches
+        : listLoadedCaches().slice(0, BOOTSTRAP_LOADED_LIST_LIMIT);
     const recentInteractions = getRecentCacheInteractions(6);
     const recentCacheEncounters = Array.isArray(rollingBootstrap.recent_cache_encounters) &&
         rollingBootstrap.recent_cache_encounters.length > 0
@@ -818,15 +818,26 @@ function buildContinuityBootstrapMarkdown(opts = {}) {
             ? String(rollingBootstrap.summary).trim()
             : 'Continuity summary is not generated yet.',
         '',
-        '## Equipped Caches',
-        ...(equippedCaches.length > 0
-            ? equippedCaches.map(cache => {
+        '## Cache Loadout',
+        (loadedCaches.length > 0
+            ? ('- ' + loadedCaches.length + ' loaded')
+            : '- 0 loaded'),
+        ...(loadedCaches.length > 0
+            ? ['- ' + loadedCaches
+                .map(cache => extractCacheDisplayName(cache) || 'unknown')
+                .slice(0, 5)
+                .join(', ')]
+            : ['- none']),
+        '',
+        '## Loaded Caches',
+        ...(loadedCaches.length > 0
+            ? loadedCaches.map(cache => {
                 const displayName = extractCacheDisplayName(cache) || 'unknown';
                 const cacheId = cache && cache.id ? cache.id : 'unknown';
                 const cacheLevel = cache && cache.level ? cache.level : 'spark';
                 return '- ' + displayName + ' (`' + cacheId + '`, level: ' + cacheLevel + ')';
             })
-            : ['- none equipped']),
+            : ['- none loaded']),
         '',
         '## Recent Cache Encounters',
         ...(recentCacheEncounters.length > 0
@@ -850,7 +861,7 @@ function buildContinuityBootstrapMarkdown(opts = {}) {
         '',
         '## Suggested Next Steps',
         '- Refresh Rolling Bootstrap after major continuity updates.',
-        '- Review equipped cache loadout before next deep synthesis.',
+        '- Review cache loadout before next deep synthesis.',
         '- Use Threshold to import external bootstrap notes conservatively.',
         '',
     ];

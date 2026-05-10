@@ -31,11 +31,11 @@ describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
             baseline.updated_at = null;
             fs.mkdirSync(path.dirname(sc.CACHE_INTERACTIONS_PATH), { recursive: true });
             fs.writeFileSync(sc.CACHE_INTERACTIONS_PATH, JSON.stringify(baseline, null, 2), 'utf8');
-            if (sc.EQUIPPED_CACHES_PATH) {
-                fs.writeFileSync(sc.EQUIPPED_CACHES_PATH, JSON.stringify({
+            if (sc.LOADED_CACHES_PATH) {
+                fs.writeFileSync(sc.LOADED_CACHES_PATH, JSON.stringify({
                     version: '0.1.0',
                     updated_at: null,
-                    equipped: [],
+                    loaded: [],
                 }, null, 2), 'utf8');
             }
         } catch { /* ignore cleanup issues in tests */ }
@@ -48,18 +48,45 @@ describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
 
         expect(sc.ROLLING_BOOTSTRAP_PATH).toBe(path.join(sc.DATA_ROOT, 'system', 'memory', 'rolling-bootstrap.json'));
         expect(sc.CACHE_INTERACTIONS_PATH).toBe(path.join(sc.DATA_ROOT, 'system', 'memory', 'cache-interactions.json'));
-        expect(sc.EQUIPPED_CACHES_PATH).toBe(path.join(sc.DATA_ROOT, 'system', 'memory', 'equipped-caches.json'));
+        expect(sc.LOADED_CACHES_PATH).toBe(path.join(sc.DATA_ROOT, 'system', 'memory', 'loaded-caches.json'));
         expect(fs.existsSync(sc.ROLLING_BOOTSTRAP_PATH)).toBe(true);
         expect(fs.existsSync(sc.CACHE_INTERACTIONS_PATH)).toBe(true);
-        expect(fs.existsSync(sc.EQUIPPED_CACHES_PATH)).toBe(true);
+        expect(fs.existsSync(sc.LOADED_CACHES_PATH)).toBe(true);
 
         const seeded = JSON.parse(fs.readFileSync(sc.ROLLING_BOOTSTRAP_PATH, 'utf8'));
-        const equipped = JSON.parse(fs.readFileSync(sc.EQUIPPED_CACHES_PATH, 'utf8'));
+        const loaded = JSON.parse(fs.readFileSync(sc.LOADED_CACHES_PATH, 'utf8'));
         expect(seeded.version).toBe('0.1.0');
         expect(seeded.place_memory).toEqual({ enabled: false, notes: [] });
         expect(seeded.cache_memory).toEqual({ summary: '', recent: [] });
-        expect(equipped.version).toBe('0.1.0');
-        expect(Array.isArray(equipped.equipped)).toBe(true);
+        expect(loaded.version).toBe('0.1.0');
+        expect(Array.isArray(loaded.loaded)).toBe(true);
+    });
+
+    test('migrates legacy equipped-caches.json into loaded-caches.json non-destructively', () => {
+        const sc = require('../app/storageConfig');
+        sc.ensureDataRoot();
+        const legacyPayload = {
+            version: '0.1.0',
+            updated_at: new Date().toISOString(),
+            equipped: [{
+                id: 'green-fire-core',
+                title: 'Green Fire Core',
+                level: 'spark',
+                source: 'archive/core',
+                equipped_at: new Date().toISOString(),
+            }],
+        };
+        try { fs.rmSync(sc.LOADED_CACHES_PATH, { force: true }); } catch { /* ignore */ }
+        fs.writeFileSync(sc.LEGACY_EQUIPPED_CACHES_PATH, JSON.stringify(legacyPayload, null, 2), 'utf8');
+
+        sc.ensureCanonicalDataFiles();
+
+        expect(fs.existsSync(sc.LOADED_CACHES_PATH)).toBe(true);
+        expect(fs.existsSync(sc.LEGACY_EQUIPPED_CACHES_PATH)).toBe(true);
+        const loadedCaches = require('../app/loadedCaches');
+        const state = loadedCaches.readLoadedCachesState();
+        expect(Array.isArray(state.loaded)).toBe(true);
+        expect(state.loaded.some(entry => entry.id === 'green-fire-core')).toBe(true);
     });
 
     test('refreshRollingBootstrap writes continuity summary and status', () => {
@@ -102,10 +129,10 @@ describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
     test('rolling bootstrap includes cache interaction memory summaries', () => {
         const cacheMemory = require('../app/cacheInteractionMemory');
         const bootstrap = require('../app/bootstrap');
-        const equippedCaches = require('../app/equippedCaches');
-        const installed = equippedCaches.listInstalledCaches();
+        const loadedCaches = require('../app/loadedCaches');
+        const installed = loadedCaches.listInstalledCaches();
         if (installed[0]) {
-            equippedCaches.equipCache(installed[0]);
+            loadedCaches.loadCache(installed[0]);
         }
 
         cacheMemory.recordCacheInteraction({
@@ -126,7 +153,7 @@ describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
         expect(rb.cache_memory.summary).toMatch(/cache draft|handoff/i);
         expect(Array.isArray(rb.cache_memory.recent)).toBe(true);
         expect(rb.cache_memory.recent.length).toBeGreaterThan(0);
-        expect(Array.isArray(rb.equipped_caches)).toBe(true);
-        expect(rb.equipped_caches.length).toBeGreaterThan(0);
+        expect(Array.isArray(rb.loaded_caches)).toBe(true);
+        expect(rb.loaded_caches.length).toBeGreaterThan(0);
     });
 });

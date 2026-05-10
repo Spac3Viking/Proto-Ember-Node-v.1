@@ -37,7 +37,7 @@ const {
     loadBootstrap, refreshBootstrap,
     getRollingBootstrapStatus, refreshRollingBootstrap, buildContinuityBootstrapMarkdown,
 } = require('../bootstrap');
-const { listEquippedCaches } = require('../equippedCaches');
+const { listLoadedCaches } = require('../loadedCaches');
 const { recordCacheInteraction } = require('../cacheInteractionMemory');
 const { loadCourtConfig }                           = require('../courtConfig');
 // Reuse canonical archive cache logic for installed/update status.
@@ -211,7 +211,7 @@ function createSystemRouter({ migrationResult }) {
         const legacyLastRefresh = bootstrap ? (bootstrap.nodeState || {}).lastRefresh || null : null;
         const activeArchetype = bootstrap ? (bootstrap.nodeState || {}).activeArchetype || null : null;
         const rollingBootstrap = getRollingBootstrapStatus();
-        const equippedCaches = listEquippedCaches();
+        const loadedCaches = listLoadedCaches();
         const memoryCompression = getMemoryCompressionStatus();
 
         res.json({
@@ -249,8 +249,8 @@ function createSystemRouter({ migrationResult }) {
             rollingBootstrapOpenQuestionsCount: rollingBootstrap.openQuestionsCount,
             rollingBootstrapSummary: rollingBootstrap.summary,
             rollingBootstrapThemes: rollingBootstrap.themes,
-            equippedCacheCount: equippedCaches.length,
-            equippedCacheLoadout: equippedCaches.slice(0, 5).map(cache => cache.title || cache.id),
+            loadedCacheCount: loadedCaches.length,
+            cacheLoadout: loadedCaches.slice(0, 5).map(cache => cache.title || cache.id),
             memoryCompression,
         });
     });
