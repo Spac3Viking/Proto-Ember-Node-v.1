@@ -463,8 +463,13 @@ describe('Threshold cache draft workflow', () => {
 
         const catalog = await request(app).get('/api/archive/reader/catalog');
         expect(catalog.status).toBe(200);
-        const hasInstalledReadme = (catalog.body.entries || []).some(
-            entry => entry.sourcePath === 'archive/caches/' + draftId + '/README.md',
+        const cacheRoot = (catalog.body.roots || []).find(root => root.id === 'archive-caches');
+        const installedCache = (cacheRoot && cacheRoot.caches ? cacheRoot.caches : [])
+            .find(cache => cache.cacheId === draftId);
+        const hasInstalledReadme = Boolean(
+            installedCache &&
+            Array.isArray(installedCache.files) &&
+            installedCache.files.some(entry => entry.sourcePath === 'archive/caches/' + draftId + '/README.md'),
         );
         expect(hasInstalledReadme).toBe(true);
     });
