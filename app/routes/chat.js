@@ -1074,7 +1074,7 @@ state: ${retrievalState}
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
                     ' · chunks ' + rawChunksForPrompt.length,
                 'Cache Loadout: ' + loadedCaches.length + ' loaded',
-                'Cache Loadout: ' + (cacheLoadoutNames.length > 0 ? cacheLoadoutNames.join(', ') : 'none'),
+                'Loaded Caches: ' + (cacheLoadoutNames.length > 0 ? cacheLoadoutNames.join(', ') : 'none'),
                 'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
                 'Model: ' + heart.model + ' / Ollama',
             ].join('\n'),

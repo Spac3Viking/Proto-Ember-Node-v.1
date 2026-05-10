@@ -2230,12 +2230,8 @@ async function loadCacheShelf() {
         const loadoutHeader = document.createElement('div');
         loadoutHeader.className = 'message-system';
         loadoutHeader.style.marginTop = '0.6rem';
-        loadoutHeader.textContent = 'Cache Loadout';
+        loadoutHeader.textContent = 'Cache Loadout — Loaded Caches (' + loaded.length + ')';
         listEl.appendChild(loadoutHeader);
-        const loadedHeader = document.createElement('div');
-        loadedHeader.className = 'message-system';
-        loadedHeader.textContent = 'Loaded Caches (' + loaded.length + ')';
-        listEl.appendChild(loadedHeader);
         if (loaded.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'message-system';
