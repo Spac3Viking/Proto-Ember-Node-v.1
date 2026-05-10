@@ -46,6 +46,8 @@ const COURT_PRIORITY_SOURCE_BOOST = 1.25;
 const COURT_PRIORITY_DOMAIN_BOOST = 1.12;
 const ARCHETYPE_MEMORY_SOURCE_BOOST = 1.08;
 const ARCHETYPE_MEMORY_DOMAIN_BOOST = 1.05;
+// Keep equipped-cache preference modest so equipped sources are favored
+// without overpowering concept routing, archetype memory, or court lenses.
 const EQUIPPED_CACHE_SOURCE_BOOST = 1.06;
 
 const ROUTE_DEFINITIONS = [

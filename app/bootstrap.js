@@ -760,6 +760,20 @@ function formatRollingBootstrapForPrompt(rollingBootstrap) {
     return lines.join('\n');
 }
 
+function extractCacheDisplayName(cache) {
+    if (!cache || typeof cache !== 'object') return '';
+    if (cache.title) return String(cache.title);
+    if (cache.id) return String(cache.id);
+    return '';
+}
+
+/**
+ * Build a portable, human-readable Continuity Bootstrap markdown export.
+ *
+ * @param {object} [opts]
+ * @param {object|null} [opts.rollingBootstrap] Optional rolling bootstrap payload override.
+ * @returns {string}
+ */
 function buildContinuityBootstrapMarkdown(opts = {}) {
     const rollingBootstrap = opts.rollingBootstrap || loadRollingBootstrap() || {};
     const now = new Date().toISOString();
@@ -806,7 +820,12 @@ function buildContinuityBootstrapMarkdown(opts = {}) {
         '',
         '## Equipped Caches',
         ...(equippedCaches.length > 0
-            ? equippedCaches.map(cache => '- ' + (cache.title || cache.id) + ' (`' + (cache.id || 'unknown') + '`, level: ' + (cache.level || 'spark') + ')')
+            ? equippedCaches.map(cache => {
+                const displayName = extractCacheDisplayName(cache) || 'unknown';
+                const cacheId = cache && cache.id ? cache.id : 'unknown';
+                const cacheLevel = cache && cache.level ? cache.level : 'spark';
+                return '- ' + displayName + ' (`' + cacheId + '`, level: ' + cacheLevel + ')';
+            })
             : ['- none equipped']),
         '',
         '## Recent Cache Encounters',

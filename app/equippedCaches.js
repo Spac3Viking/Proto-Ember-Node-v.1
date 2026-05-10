@@ -72,7 +72,7 @@ function normalizeEquippedEntry(entry) {
         title: String(entry.title || id).trim() || id,
         level: normalizeLevel(entry.level),
         source: String(entry.source || '').trim() || null,
-        equipped_at: String(entry.equipped_at || '').trim() || new Date().toISOString(),
+        equipped_at: String(entry.equipped_at || '').trim() || null,
     };
 }
 
@@ -145,6 +145,8 @@ function countDocuments(rootDir) {
                 continue;
             }
             if (!entry.isFile()) continue;
+            // Keep this lightweight: only skip manifest metadata explicitly.
+            // README.md is counted as a document because it is user-readable content.
             if (entry.name === 'manifest.json') continue;
             const ext = path.extname(entry.name).toLowerCase();
             if (DOCUMENT_EXTS.has(ext)) count++;

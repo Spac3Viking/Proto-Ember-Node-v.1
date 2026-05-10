@@ -2371,7 +2371,7 @@ function buildInstalledCacheItem(cache) {
         try {
             await setCacheEquippedState(cache.id, !cache.equipped);
             await loadCacheShelf();
-            showFlashMessage((cache.equipped ? 'Unequipped' : 'Equipped') + ': ' + (cache.title || cache.id));
+            showFlashMessage((!cache.equipped ? 'Equipped' : 'Unequipped') + ': ' + (cache.title || cache.id));
         } catch (error) {
             showFlashMessage(error.message || 'Could not update loadout.');
         } finally {
@@ -3582,7 +3582,7 @@ function thresholdStatusLabel(file) {
 async function useThresholdBootstrap(file) {
     if (!file || !file.path) return;
     const overwrite = window.confirm(
-        'Use this file as Continuity Bootstrap?\n\nPress OK to overwrite existing summary. Press Cancel to attempt conservative import.',
+        'Use this file as Continuity Bootstrap?\n\nPress OK to overwrite an existing summary. Press Cancel to send a no-overwrite import request (the server may reject it if summary confirmation is required).',
     );
     try {
         const res = await fetch('/api/threshold/bootstrap/use', {

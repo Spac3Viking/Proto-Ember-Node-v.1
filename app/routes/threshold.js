@@ -58,6 +58,7 @@ const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'source-summary',
 ]);
 const GREEN_FIRE_HANDOFF_STATUS = new Set(['unverified', 'reviewed', 'trusted', 'local']);
+const MAX_IMPORTED_BOOTSTRAP_SUMMARY_LENGTH = 4000;
 
 function isPathInside(baseDir, targetPath) {
     const normalize = (value) => {
@@ -1409,7 +1410,7 @@ router.post('/api/threshold/bootstrap/use', writeLimiter, (req, res) => {
             });
         }
 
-        const importedSummary = stripFrontmatter(content).trim().slice(0, 4000);
+        const importedSummary = stripFrontmatter(content).trim().slice(0, MAX_IMPORTED_BOOTSTRAP_SUMMARY_LENGTH);
         const now = new Date().toISOString();
         const importedName = path.basename(absPath);
         fs.mkdirSync(IMPORTED_BOOTSTRAPS_DIR, { recursive: true });
