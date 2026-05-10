@@ -30,12 +30,12 @@ router.get('/api/bootstrap', readLimiter, (req, res) => {
  * POST /api/bootstrap/refresh
  * Rebuild the rolling continuity summary from context memory and thread memory.
  *
- * Body (optional): { activeArchetype: "scribe" }
+ * Body (optional): { activeArchetype: "scribe", responseDepth: "ember" }
  */
 router.post('/api/bootstrap/refresh', writeLimiter, (req, res) => {
-    const { activeArchetype = null } = req.body || {};
+    const { activeArchetype = null, responseDepth = null } = req.body || {};
     try {
-        const rollingBootstrap = refreshRollingBootstrap({ activeArchetype });
+        const rollingBootstrap = refreshRollingBootstrap({ activeArchetype, responseDepth });
         res.json({ success: true, rollingBootstrap });
     } catch (err) {
         res.status(500).json({ error: err.message });

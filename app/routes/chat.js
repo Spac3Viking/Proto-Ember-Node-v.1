@@ -31,6 +31,7 @@ const {
     formatForgeCoreForPrompt,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
+const { listEquippedCaches } = require('../equippedCaches');
 const {
     loadCacheSummaries,
     loadDocumentSummaries,
@@ -1017,6 +1018,11 @@ state: ${retrievalState}
             .slice(0, MAX_SIGNAL_TRACE_SOURCES);
         const sourcesActuallyUsed = compactContextList.slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST);
         const sourceList = compactContextList;
+        const equippedCaches = listEquippedCaches();
+        const equippedLoadoutNames = equippedCaches
+            .map(cache => cache && cache.title ? String(cache.title) : (cache && cache.id ? String(cache.id) : ''))
+            .filter(Boolean)
+            .slice(0, 5);
         const lensName = selectedCourtMember ? extractCourtLensLabel(selectedCourtMember) : 'Ember Prime';
         const lensGlyph = selectedCourtMember ? (COURT_MEMBER_GLYPHS[selectedCourtMember.id] || '') : '';
         const courtSourcesConsidered = courtPrioritySourcesConsidered.length > 0
@@ -1047,6 +1053,8 @@ state: ${retrievalState}
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
             rollingBootstrapStatus,
             rollingBootstrapThemes,
+            equippedCacheCount: equippedCaches.length,
+            equippedCacheLoadout: equippedLoadoutNames,
             memoryFlow: {
                 rollingBootstrap: rollingBootstrapStatus,
                 archetypeMemory: activeArchetypeForMemory,
@@ -1065,6 +1073,8 @@ state: ${retrievalState}
                 'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
                     ' · chunks ' + rawChunksForPrompt.length,
+                'Equipped Caches: ' + equippedCaches.length,
+                'Loadout: ' + (equippedLoadoutNames.length > 0 ? equippedLoadoutNames.join(', ') : 'none'),
                 'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
                 'Model: ' + heart.model + ' / Ollama',
             ].join('\n'),

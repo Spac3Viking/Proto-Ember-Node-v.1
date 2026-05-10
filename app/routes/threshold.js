@@ -20,11 +20,14 @@ const {
     resolveSourcePath,
     ARCHIVE_CACHES_DIR,
     EXPORTS_DIR,
+    IMPORTED_BOOTSTRAPS_DIR,
+    ROLLING_BOOTSTRAP_PATH,
 } = require('../storageConfig');
 const { buildSourceRecord }      = require('../ingest');
 const {
     upsertManifest, loadManifests,
 }                                                  = require('../indexStore');
+const { loadRollingBootstrap, refreshRollingBootstrap } = require('../bootstrap');
 const { loadIntakeState, upsertIntakeRuntime } = require('../intakeState');
 const {
     probeOllamaRuntime,
@@ -55,6 +58,7 @@ const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'source-summary',
 ]);
 const GREEN_FIRE_HANDOFF_STATUS = new Set(['unverified', 'reviewed', 'trusted', 'local']);
+const MAX_IMPORTED_BOOTSTRAP_SUMMARY_LENGTH = 4000;
 
 function isPathInside(baseDir, targetPath) {
     const normalize = (value) => {
@@ -298,6 +302,7 @@ function listThresholdInboxFiles() {
                 sourceLabel: 'Threshold',
                 status: ext === '.pdf' ? 'pdf_stored' : 'ready',
                 handoff,
+                bootstrapDetected: Boolean(handoff && handoff.detected && handoff.type === 'bootstrap'),
             };
         })
         .filter(Boolean)
@@ -406,6 +411,10 @@ function parseManifestIfPresent(filePath) {
     } catch {
         return null;
     }
+}
+
+function stripFrontmatter(content) {
+    return String(content || '').replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(\r?\n)?/, '');
 }
 
 function normalizeIsoTimestamp(value, fallback) {
@@ -1366,6 +1375,76 @@ router.get('/api/threshold/files', readLimiter, (req, res) => {
     } catch (error) {
         console.error('Error listing threshold files:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+router.post('/api/threshold/bootstrap/use', writeLimiter, (req, res) => {
+    try {
+        const relPath = String(req.body && req.body.path ? req.body.path : '').trim();
+        if (!relPath) {
+            return res.status(400).json({ error: 'path is required' });
+        }
+        const absPath = resolveThresholdInboxPath(relPath);
+        if (!absPath || !fs.existsSync(absPath)) {
+            return res.status(404).json({ error: 'Bootstrap file not found.' });
+        }
+        const ext = path.extname(absPath).toLowerCase();
+        if (ext !== '.md') {
+            return res.status(400).json({ error: 'Bootstrap import requires a .md file.' });
+        }
+        const content = fs.readFileSync(absPath, 'utf8');
+        const handoff = parseGreenFireHandoff(content);
+        if (!handoff.detected || handoff.type !== 'bootstrap') {
+            return res.status(400).json({ error: 'Bootstrap detected metadata not found (type: bootstrap).' });
+        }
+
+        const overwrite = Boolean(req.body && req.body.overwrite === true);
+        const existing = loadRollingBootstrap();
+        const existingSummary = existing && typeof existing.summary === 'string'
+            ? existing.summary.trim()
+            : '';
+        if (existingSummary && !overwrite) {
+            return res.status(409).json({
+                error: 'Existing Rolling Bootstrap summary present. Confirm overwrite to continue.',
+                confirmationRequired: true,
+            });
+        }
+
+        const importedSummary = stripFrontmatter(content).trim().slice(0, MAX_IMPORTED_BOOTSTRAP_SUMMARY_LENGTH);
+        const now = new Date().toISOString();
+        const importedName = path.basename(absPath);
+        fs.mkdirSync(IMPORTED_BOOTSTRAPS_DIR, { recursive: true });
+        const importedTarget = path.join(IMPORTED_BOOTSTRAPS_DIR, now.replace(/[:.]/g, '-') + '-' + importedName);
+        fs.writeFileSync(importedTarget, content, 'utf8');
+
+        const refreshed = existing || refreshRollingBootstrap({});
+        const updated = {
+            ...refreshed,
+            updated_at: now,
+            summary: importedSummary || refreshed.summary || '',
+            imported_bootstrap: {
+                path: 'system/memory/imported-bootstraps/' + path.basename(importedTarget),
+                imported_at: now,
+                source: relPath.replace(/\\/g, '/'),
+            },
+        };
+        fs.mkdirSync(path.dirname(ROLLING_BOOTSTRAP_PATH), { recursive: true });
+        fs.writeFileSync(ROLLING_BOOTSTRAP_PATH, JSON.stringify(updated, null, 2), 'utf8');
+        try {
+            recordCacheInteraction({
+                kind: 'bootstrap_imported',
+                bootstrapPath: updated.imported_bootstrap.path,
+                sourcePaths: [relPath.replace(/\\/g, '/')],
+            });
+        } catch { /* non-blocking memory update */ }
+        return res.json({
+            success: true,
+            message: 'Bootstrap detected',
+            rollingBootstrap: updated,
+        });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        return res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
     }
 });
 

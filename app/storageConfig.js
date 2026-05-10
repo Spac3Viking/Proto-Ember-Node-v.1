@@ -167,6 +167,8 @@ const CACHE_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-summaries.json'
 const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries.json');
 const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
 const CACHE_INTERACTIONS_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-interactions.json');
+const EQUIPPED_CACHES_PATH = path.join(SYSTEM_MEMORY_DIR, 'equipped-caches.json');
+const IMPORTED_BOOTSTRAPS_DIR = path.join(SYSTEM_MEMORY_DIR, 'imported-bootstraps');
 
 /** System config and prompts directories */
 const SYSTEM_CONFIG_DIR       = path.join(SYSTEM_DIR, 'config');
@@ -295,6 +297,11 @@ const DEFAULT_DOCUMENT_SUMMARIES = {
     updated_at: null,
     documents: {},
 };
+const DEFAULT_EQUIPPED_CACHES = {
+    version: '0.1.0',
+    updated_at: null,
+    equipped: [],
+};
 const DEFAULT_ARCHETYPE_MEMORY = {
     version: '0.1.0',
     updated_at: null,
@@ -372,6 +379,7 @@ function ensureDataRoot() {
         ARCHETYPES_DIR,
         BOOTSTRAP_DIR,
         SYSTEM_MEMORY_DIR,
+        IMPORTED_BOOTSTRAPS_DIR,
         // Phase 11.7: Core Archive + Cache Structure
         ARCHIVE_CORE_DIR,
         ARCHIVE_CACHES_DIR,
@@ -422,6 +430,7 @@ function ensureCanonicalDataFiles() {
     writeJsonIfMissing(DOCUMENT_SUMMARIES_PATH, DEFAULT_DOCUMENT_SUMMARIES);
     writeJsonIfMissing(ARCHETYPE_MEMORY_PATH, DEFAULT_ARCHETYPE_MEMORY);
     writeJsonIfMissing(CACHE_INTERACTIONS_PATH, DEFAULT_CACHE_INTERACTIONS);
+    writeJsonIfMissing(EQUIPPED_CACHES_PATH, DEFAULT_EQUIPPED_CACHES);
 }
 
 // ── Legacy migration ──────────────────────────────────────────────────────────
@@ -678,6 +687,8 @@ module.exports = {
     DOCUMENT_SUMMARIES_PATH,
     ARCHETYPE_MEMORY_PATH,
     CACHE_INTERACTIONS_PATH,
+    EQUIPPED_CACHES_PATH,
+    IMPORTED_BOOTSTRAPS_DIR,
     // Phase 11.7: Core Archive + Cache Structure
     ARCHIVE_CORE_DIR,
     ARCHIVE_CORE_DIRS,

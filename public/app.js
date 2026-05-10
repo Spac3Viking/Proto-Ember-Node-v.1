@@ -962,6 +962,12 @@ function renderSignalTrace(sources, signalTrace = null) {
     const memoryFlow = metadata && metadata.memoryFlow && typeof metadata.memoryFlow === 'object'
         ? metadata.memoryFlow
         : null;
+    const equippedCacheCount = metadata && Number.isFinite(metadata.equippedCacheCount)
+        ? Number(metadata.equippedCacheCount)
+        : null;
+    const equippedCacheLoadout = metadata && Array.isArray(metadata.equippedCacheLoadout)
+        ? metadata.equippedCacheLoadout.map(String).slice(0, 5)
+        : [];
 
     function boundedListText(list) {
         const listText = list.join(', ');
@@ -1018,6 +1024,16 @@ function renderSignalTrace(sources, signalTrace = null) {
                         rollingBootstrapThemes.length > 0
                             ? rollingBootstrapStatus + ' — ' + boundedListText(rollingBootstrapThemes.slice(0, 5))
                             : rollingBootstrapStatus
+                    )
+                    : null,
+            },
+            {
+                key: 'Equipped Caches',
+                value: equippedCacheCount !== null
+                    ? (
+                        equippedCacheLoadout.length > 0
+                            ? String(equippedCacheCount) + ' · ' + boundedListText(equippedCacheLoadout)
+                            : String(equippedCacheCount)
                     )
                     : null,
             },
@@ -2188,11 +2204,12 @@ async function loadCacheShelf() {
 
     const listEl    = document.getElementById('cache-list');
     const loadingEl = document.getElementById('cache-loading');
+    if (!listEl) return;
 
     try {
-        const res  = await fetch('/caches');
+        const res = await fetch('/api/caches/installed');
         const data = await res.json();
-        const caches = data.caches || [];
+        const caches = Array.isArray(data.caches) ? data.caches : [];
 
         if (loadingEl) loadingEl.remove();
 
@@ -2203,16 +2220,34 @@ async function loadCacheShelf() {
         }
 
         listEl.innerHTML = '';
-        caches.forEach(c => {
-            const item = document.createElement('div');
-            item.className = 'cache-item';
-            item.dataset.cacheId = c.id;
-            item.innerHTML =
-                '<div class="cache-item-name">' + escapeHtml(c.name) + '</div>' +
-                '<div class="cache-item-type">' + escapeHtml(c.type || 'cache') + '</div>';
-            item.addEventListener('click', () => inspectCache(c.id, item));
-            listEl.appendChild(item);
-        });
+        const installedHeader = document.createElement('div');
+        installedHeader.className = 'message-system';
+        installedHeader.textContent = 'Installed Caches';
+        listEl.appendChild(installedHeader);
+        caches.forEach(cache => listEl.appendChild(buildInstalledCacheItem(cache)));
+
+        const equipped = caches.filter(cache => cache.equipped);
+        const equippedHeader = document.createElement('div');
+        equippedHeader.className = 'message-system';
+        equippedHeader.style.marginTop = '0.6rem';
+        equippedHeader.textContent = 'Equipped Caches (' + equipped.length + ')';
+        listEl.appendChild(equippedHeader);
+        if (equipped.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'message-system';
+            empty.textContent = 'None equipped.';
+            listEl.appendChild(empty);
+        } else {
+            equipped.forEach(cache => {
+                const row = document.createElement('div');
+                row.className = 'cache-item';
+                row.innerHTML =
+                    '<div class="cache-item-name">' + escapeHtml(cache.title || cache.id) + '</div>' +
+                    '<div class="cache-item-type">level: ' + escapeHtml(String(cache.level || 'spark')) + '</div>';
+                row.addEventListener('click', () => inspectInstalledCache(cache, row));
+                listEl.appendChild(row);
+            });
+        }
 
         updateSystemCacheCount(caches.length);
     } catch {
@@ -2223,6 +2258,148 @@ async function loadCacheShelf() {
     // Also load user caches
     loadUserCaches();
     loadArchiveReaderCatalog();
+}
+
+function formatCacheScope(scope) {
+    if (!Array.isArray(scope) || scope.length === 0) return 'practical';
+    return scope.map(String).slice(0, 4).join(', ');
+}
+
+function installedCacheMetaBadges(cache) {
+    const badges = [];
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.level || 'spark')) + '</strong>&nbsp;level</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.status || 'unverified')) + '</strong>&nbsp;status</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(formatCacheScope(cache.scope)) + '</strong>&nbsp;scope</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.documentCount || 0)) + '</strong>&nbsp;documents</span>');
+    badges.push('<span class="meta-badge"><strong>' + (cache.equipped ? 'equipped' : 'not equipped') + '</strong>&nbsp;loadout</span>');
+    return badges.join('');
+}
+
+async function setCacheEquippedState(cacheId, equip) {
+    const endpoint = equip ? '/api/caches/equip' : '/api/caches/unequip';
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cacheId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Could not update cache loadout.');
+    }
+}
+
+function inspectInstalledCache(cache, itemEl) {
+    document.querySelectorAll('.cache-item').forEach(el => {
+        el.classList.toggle('active', el === itemEl);
+    });
+    const emptyEl = document.getElementById('inspector-empty');
+    const contentArea = document.getElementById('inspector-content-area');
+    const nameEl = document.getElementById('inspector-name');
+    const descEl = document.getElementById('inspector-description');
+    const metaEl = document.getElementById('inspector-meta');
+    const permsEl = document.getElementById('inspector-perms');
+    const contentEl = document.getElementById('inspector-content');
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (contentArea) contentArea.style.display = 'flex';
+    if (nameEl) nameEl.textContent = cache.title || cache.id;
+    if (descEl) {
+        const description = cache.manifest && cache.manifest.description
+            ? cache.manifest.description
+            : ('Source: ' + (cache.source || 'archive'));
+        descEl.textContent = description;
+    }
+    if (metaEl) {
+        metaEl.innerHTML = installedCacheMetaBadges(cache);
+    }
+    if (permsEl) permsEl.innerHTML = '';
+    if (contentEl) {
+        contentEl.textContent = [
+            'Source: ' + (cache.source || 'archive'),
+            'Document count: ' + String(cache.documentCount || 0),
+            'Reader entries: ' + String(Array.isArray(cache.readerEntries) ? cache.readerEntries.length : 0),
+        ].join('\n');
+    }
+}
+
+async function openInstalledCacheInReader(cache) {
+    if (!cache || !cache.firstReaderEntryId) {
+        showFlashMessage('No markdown reader entry found for this cache.');
+        return;
+    }
+    try {
+        const res = await fetch('/api/archive/reader/document/' + encodeURIComponent(cache.firstReaderEntryId));
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not open cache in reader.');
+        getGreenFireReader().open({
+            title: data.title || cache.title || cache.id,
+            sourcePath: data.sourcePath || cache.source,
+            content: data.content || '',
+            contentType: data.contentType || 'text/markdown',
+            entryId: data.entryId || cache.firstReaderEntryId,
+            sourceLabel: data.sourceLabel || 'Archive Cache',
+            stripFrontmatter: true,
+            rawOnly: false,
+            initialRawView: false,
+        });
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not open cache in reader.');
+    }
+}
+
+function buildInstalledCacheItem(cache) {
+    const item = document.createElement('div');
+    item.className = 'cache-item';
+    item.dataset.cacheId = cache.id;
+    item.innerHTML =
+        '<div class="cache-item-name">' + escapeHtml(cache.title || cache.id) + '</div>' +
+        '<div class="cache-item-type">' +
+        escapeHtml(String(cache.level || 'spark')) + ' · ' +
+        escapeHtml(String(cache.status || 'unverified')) + ' · ' +
+        escapeHtml(String(cache.documentCount || 0)) + ' docs' +
+        '</div>';
+    item.addEventListener('click', () => inspectInstalledCache(cache, item));
+
+    const actions = document.createElement('div');
+    actions.className = 'source-card-actions';
+
+    const equipBtn = document.createElement('button');
+    equipBtn.className = 'secondary source-action-btn';
+    equipBtn.textContent = cache.equipped ? 'Unequip' : 'Equip';
+    equipBtn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        equipBtn.disabled = true;
+        try {
+            await setCacheEquippedState(cache.id, !cache.equipped);
+            await loadCacheShelf();
+            showFlashMessage((!cache.equipped ? 'Equipped' : 'Unequipped') + ': ' + (cache.title || cache.id));
+        } catch (error) {
+            showFlashMessage(error.message || 'Could not update loadout.');
+        } finally {
+            equipBtn.disabled = false;
+        }
+    });
+
+    const openBtn = document.createElement('button');
+    openBtn.className = 'secondary source-action-btn';
+    openBtn.textContent = 'Open';
+    openBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        inspectInstalledCache(cache, item);
+    });
+
+    const openReaderBtn = document.createElement('button');
+    openReaderBtn.className = 'secondary source-action-btn';
+    openReaderBtn.textContent = 'Open in Reader';
+    openReaderBtn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await openInstalledCacheInReader(cache);
+    });
+
+    actions.appendChild(equipBtn);
+    actions.appendChild(openBtn);
+    actions.appendChild(openReaderBtn);
+    item.appendChild(actions);
+    return item;
 }
 
 async function loadUserCaches() {
@@ -3391,12 +3568,37 @@ function formatRelativeTime(isoString) {
 }
 
 function thresholdStatusLabel(file) {
+    if (file && file.bootstrapDetected) {
+        return 'Bootstrap detected';
+    }
     if (file.type === 'markdown' && file.handoff && file.handoff.detected) {
         return 'Handoff detected';
     }
     return file.type === 'pdf'
         ? 'PDF stored — support pending'
         : 'Ready in Reader';
+}
+
+async function useThresholdBootstrap(file) {
+    if (!file || !file.path) return;
+    const overwrite = window.confirm(
+        'Use this file as Continuity Bootstrap?\n\nPress OK to overwrite an existing summary. Press Cancel to send a no-overwrite import request (the server may reject it if summary confirmation is required).',
+    );
+    try {
+        const res = await fetch('/api/threshold/bootstrap/use', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: file.path, overwrite }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Bootstrap import failed.');
+        }
+        showFlashMessage('Bootstrap detected. Continuity Bootstrap imported.');
+        if (typeof loadBootstrapStatus === 'function') loadBootstrapStatus();
+    } catch (error) {
+        showFlashMessage(error.message || 'Bootstrap import failed.');
+    }
 }
 
 async function openThresholdImportedFile(file) {
@@ -3561,6 +3763,14 @@ function buildThresholdImportedRow(file) {
     deleteBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', () => deleteThresholdImportedFile(file));
+
+    if (file.bootstrapDetected) {
+        const useBtn = document.createElement('button');
+        useBtn.className = 'secondary threshold-action-btn';
+        useBtn.textContent = 'Use as Continuity Bootstrap';
+        useBtn.addEventListener('click', () => useThresholdBootstrap(file));
+        actions.appendChild(useBtn);
+    }
 
     actions.appendChild(openBtn);
     actions.appendChild(copyBtn);
@@ -4358,6 +4568,18 @@ async function loadBootstrapStatus() {
         }
         rows.push(
             '<div class="system-row">' +
+            '<span class="system-key">Equipped caches</span>' +
+            '<span class="system-val">' + escapeHtml(String(data.equippedCacheCount || 0)) + '</span></div>',
+        );
+        if (Array.isArray(data.equippedCacheLoadout) && data.equippedCacheLoadout.length > 0) {
+            rows.push(
+                '<div class="system-row">' +
+                '<span class="system-key">Loadout</span>' +
+                '<span class="system-val">' + escapeHtml(data.equippedCacheLoadout.slice(0, 5).join(', ')) + '</span></div>',
+            );
+        }
+        rows.push(
+            '<div class="system-row">' +
             '<span class="system-key">Forge v1.3</span>' +
             '<span class="system-val ' + (data.forgeLoaded ? 'ok' : 'warn') + '">' +
             (data.forgeLoaded ? 'loaded' : 'not found') + '</span></div>',
@@ -4479,6 +4701,25 @@ async function loadMemoryCompressionStatus() {
                 showFlashMessage('Rolling Bootstrap summary copied.');
             } catch {
                 showFlashMessage('Could not copy Rolling Bootstrap summary.');
+            }
+            return;
+        }
+        if (e.target && e.target.id === 'sys-export-bootstrap-md-btn') {
+            try {
+                const res = await fetch('/api/system/bootstrap/export-md');
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Could not export continuity bootstrap.');
+                }
+                const markdown = await res.text();
+                downloadPlainText(
+                    'ember-node-continuity-bootstrap.md',
+                    markdown,
+                    'text/markdown',
+                );
+                showFlashMessage('Continuity Bootstrap exported.');
+            } catch (error) {
+                showFlashMessage(error.message || 'Could not export continuity bootstrap.');
             }
         }
     });

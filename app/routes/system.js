@@ -35,8 +35,10 @@ const { listCaches }                            = require('../cacheLoader');
 const { loadIntakeState }                           = require('../intakeState');
 const {
     loadBootstrap, refreshBootstrap,
-    getRollingBootstrapStatus, refreshRollingBootstrap,
+    getRollingBootstrapStatus, refreshRollingBootstrap, buildContinuityBootstrapMarkdown,
 } = require('../bootstrap');
+const { listEquippedCaches } = require('../equippedCaches');
+const { recordCacheInteraction } = require('../cacheInteractionMemory');
 const { loadCourtConfig }                           = require('../courtConfig');
 // Reuse canonical archive cache logic for installed/update status.
 const { compareInstalledWithUpstream } = require('../archiveCacheService');
@@ -209,6 +211,7 @@ function createSystemRouter({ migrationResult }) {
         const legacyLastRefresh = bootstrap ? (bootstrap.nodeState || {}).lastRefresh || null : null;
         const activeArchetype = bootstrap ? (bootstrap.nodeState || {}).activeArchetype || null : null;
         const rollingBootstrap = getRollingBootstrapStatus();
+        const equippedCaches = listEquippedCaches();
         const memoryCompression = getMemoryCompressionStatus();
 
         res.json({
@@ -246,6 +249,8 @@ function createSystemRouter({ migrationResult }) {
             rollingBootstrapOpenQuestionsCount: rollingBootstrap.openQuestionsCount,
             rollingBootstrapSummary: rollingBootstrap.summary,
             rollingBootstrapThemes: rollingBootstrap.themes,
+            equippedCacheCount: equippedCaches.length,
+            equippedCacheLoadout: equippedCaches.slice(0, 5).map(cache => cache.title || cache.id),
             memoryCompression,
         });
     });
@@ -458,6 +463,26 @@ function createSystemRouter({ migrationResult }) {
                 success: false,
                 error: 'Could not refresh node: ' + err.message,
             });
+        }
+    });
+
+    router.get('/api/system/bootstrap/export-md', readLimiter, (req, res) => {
+        try {
+            const markdown = buildContinuityBootstrapMarkdown();
+            try {
+                recordCacheInteraction({
+                    kind: 'bootstrap_exported',
+                    bootstrapPath: 'exports/ember-node-continuity-bootstrap.md',
+                });
+            } catch { /* non-blocking memory update */ }
+            res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+            res.setHeader(
+                'Content-Disposition',
+                'attachment; filename="ember-node-continuity-bootstrap.md"',
+            );
+            return res.send(markdown);
+        } catch (err) {
+            return res.status(500).json({ error: 'Could not export continuity bootstrap: ' + err.message });
         }
     });
 
