@@ -67,6 +67,7 @@ const threadsRouter        = require('./routes/threads');
 const documentsRouter      = require('./routes/documents');
 const archiveRouter        = require('./routes/archive');
 const bootstrapRouter      = require('./routes/bootstrap');
+const cachesRouter         = require('./routes/caches');
 
 // ── Express setup ─────────────────────────────────────────────────────────────
 
@@ -89,16 +90,7 @@ app.use(threadsRouter);
 app.use(documentsRouter);
 app.use(archiveRouter);
 app.use(bootstrapRouter);
-
-// Cache manager endpoints
-app.get('/caches', (req, res) => {
-    res.json({ caches: listCaches() });
-});
-app.get('/caches/:name', (req, res) => {
-    const cache = loadCache(req.params.name);
-    if (!cache) return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
-    return res.json(cache);
-});
+app.use(cachesRouter);
 
 // ── Server start ──────────────────────────────────────────────────────────────
 

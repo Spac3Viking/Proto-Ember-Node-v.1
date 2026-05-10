@@ -27,6 +27,9 @@ describe('cacheLoader', () => {
                 expect(typeof c.description).toBe('string');
                 expect(typeof c.version).toBe('string');
                 expect(typeof c.type).toBe('string');
+                expect(typeof c.level).toBe('string');
+                expect(typeof c.status).toBe('string');
+                expect(Array.isArray(c.scope)).toBe(true);
             });
         });
 
@@ -134,5 +137,53 @@ describe('GET /caches/:name', () => {
         const res = await request(app).get('/caches/__unknown__');
         expect(res.status).toBe(404);
         expect(res.body.error).toMatch(/__unknown__/);
+    });
+});
+
+describe('Equipped cache routes', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('lists installed caches with metadata and equipped state', async () => {
+        const { app } = require('../app/server');
+        const res = await request(app).get('/api/caches/installed');
+        expect(res.status).toBe(200);
+        expect(Array.isArray(res.body.caches)).toBe(true);
+        expect(res.body.caches.length).toBeGreaterThan(0);
+        const first = res.body.caches[0];
+        expect(typeof first.id).toBe('string');
+        expect(typeof first.level).toBe('string');
+        expect(typeof first.status).toBe('string');
+        expect(Array.isArray(first.scope)).toBe(true);
+        expect(typeof first.documentCount).toBe('number');
+        expect(typeof first.equipped).toBe('boolean');
+    });
+
+    test('equip + unequip updates equipped state without duplicates', async () => {
+        const { app } = require('../app/server');
+        const installed = await request(app).get('/api/caches/installed');
+        const target = installed.body.caches.find(cache => cache && cache.id) || null;
+        expect(target).toBeTruthy();
+        await request(app).post('/api/caches/unequip').send({ cacheId: target.id });
+
+        const equip = await request(app).post('/api/caches/equip').send({ cacheId: target.id });
+        expect(equip.status).toBe(200);
+        expect(equip.body.success).toBe(true);
+        expect(equip.body.changed).toBe(true);
+
+        const equipAgain = await request(app).post('/api/caches/equip').send({ cacheId: target.id });
+        expect(equipAgain.status).toBe(200);
+        expect(equipAgain.body.success).toBe(true);
+        expect(equipAgain.body.changed).toBe(false);
+
+        const equipped = await request(app).get('/api/caches/equipped');
+        expect(equipped.status).toBe(200);
+        const found = (equipped.body.equipped || []).filter(entry => entry.id === target.id);
+        expect(found.length).toBe(1);
+
+        const unequip = await request(app).post('/api/caches/unequip').send({ cacheId: target.id });
+        expect(unequip.status).toBe(200);
+        expect(unequip.body.success).toBe(true);
     });
 });

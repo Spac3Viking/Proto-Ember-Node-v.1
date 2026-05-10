@@ -341,8 +341,43 @@ describe('Threshold inbox import + reader endpoints', () => {
         expect(found.handoff.tags).toEqual(['ember', 'threshold']);
         expect(found.handoff.source).toBe('local notes');
         expect(found.handoff.license).toBe('CC-BY-4.0');
+        expect(found.bootstrapDetected).toBe(false);
 
         await request(app).delete('/api/threshold/files').send({ path: handoffPath });
+    });
+
+    test('GET /api/threshold/files flags bootstrap markdown handoff', async () => {
+        const bootstrapDoc = [
+            '---',
+            'title: Continuity Bootstrap',
+            'type: bootstrap',
+            'status: local',
+            'source: ember-node',
+            '---',
+            '# Ember Node Continuity Bootstrap',
+            '## Current Orientation',
+            'Signal',
+        ].join('\n');
+        const upload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from(bootstrapDoc, 'utf8'), 'continuity-bootstrap.md');
+        const bootstrapPath = upload.body.imported[0].path;
+
+        const list = await request(app).get('/api/threshold/files');
+        expect(list.status).toBe(200);
+        const found = (list.body.files || []).find(f => f.path === bootstrapPath);
+        expect(found).toBeTruthy();
+        expect(found.bootstrapDetected).toBe(true);
+
+        const useRes = await request(app)
+            .post('/api/threshold/bootstrap/use')
+            .send({ path: bootstrapPath, overwrite: true });
+        expect(useRes.status).toBe(200);
+        expect(useRes.body.success).toBe(true);
+        expect(useRes.body.message).toMatch(/Bootstrap detected/i);
+        expect(useRes.body.rollingBootstrap).toBeTruthy();
+
+        await request(app).delete('/api/threshold/files').send({ path: bootstrapPath });
     });
 
     test('GET /api/threshold/files/content returns handoff metadata for reader display', async () => {
@@ -629,5 +664,15 @@ describe('Threshold cache draft workflow', () => {
         await fs.promises.rm(textDraftDir, { recursive: true, force: true });
         await fs.promises.rm(draftZipMulti, { force: true });
         await fs.promises.rm(draftZipText, { force: true });
+    });
+});
+
+describe('System bootstrap export route', () => {
+    test('GET /api/system/bootstrap/export-md returns markdown bootstrap download', async () => {
+        const res = await request(app).get('/api/system/bootstrap/export-md');
+        expect(res.status).toBe(200);
+        expect(String(res.headers['content-type'] || '')).toMatch(/text\/markdown/i);
+        expect(res.text).toMatch(/# Ember Node Continuity Bootstrap/);
+        expect(res.text).toMatch(/type: bootstrap/);
     });
 });

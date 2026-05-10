@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { normalizeCacheManifestMetadata } = require('./equippedCaches');
 const CACHE_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 /**
@@ -90,12 +91,17 @@ function listCaches() {
         .map(([cacheId, cacheDir]) => {
             if (!cacheDir) return null;
             const manifest = loadManifest(cacheDir);
+            const cacheMeta = normalizeCacheManifestMetadata(manifest || {});
             return {
                 id:          cacheId,
                 name:        (manifest && manifest.name)        || cacheId,
                 description: (manifest && manifest.description) || '',
                 version:     (manifest && manifest.version)     || '',
                 type:        (manifest && manifest.type)        || '',
+                level:       cacheMeta.level,
+                status:      cacheMeta.status,
+                scope:       cacheMeta.scope,
+                equipped:    cacheMeta.equipped,
                 // Explicit ownership tag — these caches are bundled with the app,
                 // not created or owned by the user.
                 ownership:   'bundled',

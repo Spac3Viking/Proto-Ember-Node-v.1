@@ -43,6 +43,7 @@ const {
     getCacheInteractionSummary,
     getRecentCacheInteractions,
 } = require('./cacheInteractionMemory');
+const { listEquippedCaches } = require('./equippedCaches');
 
 // ── File paths ────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ const ROLLING_BOOTSTRAP_STALE_MS = 1000 * 60 * 60 * 24 * 7;
 const MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS = 420;
 const BOOTSTRAP_CACHE_SUMMARY_LIMIT = 4;
 const BOOTSTRAP_CACHE_RECENT_LIMIT = 6;
+const BOOTSTRAP_EQUIPPED_LIST_LIMIT = 5;
 
 // ── Forge v1.3 canonical markdown ─────────────────────────────────────────────
 
@@ -416,7 +418,12 @@ function summarizeThresholdMap(map) {
  * @returns {object}
  */
 function buildRollingBootstrap(opts) {
-    const { activeArchetype = null, recentDecisions = [], openQuestions = [] } = opts || {};
+    const {
+        activeArchetype = null,
+        responseDepth = null,
+        recentDecisions = [],
+        openQuestions = [],
+    } = opts || {};
     const now = new Date().toISOString();
 
     const threadSummaries = listThreadSummaries().slice(0, 12);
@@ -454,6 +461,16 @@ function buildRollingBootstrap(opts) {
         cacheId: entry.cacheId,
         handoffType: entry.handoffType,
     }));
+    const equippedCaches = listEquippedCaches().slice(0, BOOTSTRAP_EQUIPPED_LIST_LIMIT).map(entry => ({
+        id: entry.id,
+        title: entry.title || entry.id,
+        level: entry.level || 'spark',
+        equipped_at: entry.equipped_at || null,
+    }));
+    const recentCacheEncounters = cacheInteractionRecent
+        .map(entry => entry.cacheId || entry.draftId || null)
+        .filter(Boolean)
+        .slice(0, BOOTSTRAP_CACHE_RECENT_LIMIT);
 
     const archetypeNotes = {
         ember_prime: [],
@@ -475,6 +492,15 @@ function buildRollingBootstrap(opts) {
     if (normalizedQuestions.length > 0) summaryParts.push('Open questions: ' + normalizedQuestions.slice(0, 3).join('; ') + '.');
     if (normalizedDecisions.length > 0) summaryParts.push('Recent decisions: ' + normalizedDecisions.slice(0, 3).join('; ') + '.');
     if (sourceThreads.length > 0) summaryParts.push('Signal Threads groundwork: ' + sourceThreads.length + ' remembered thread summaries.');
+    if (equippedCaches.length > 0) {
+        summaryParts.push(
+            'Equipped caches: ' +
+            equippedCaches.slice(0, 3).map(cache => cache.title + ' (' + cache.level + ')').join(', ') +
+            '.',
+        );
+    }
+    if (activeArchetype) summaryParts.push('Active archetype: ' + activeArchetype + '.');
+    if (responseDepth) summaryParts.push('Response depth: ' + String(responseDepth) + '.');
     if (cacheInteractionSummary) summaryParts.push('Cache memory: ' + cacheInteractionSummary);
 
     return {
@@ -487,6 +513,12 @@ function buildRollingBootstrap(opts) {
         recent_decisions: normalizedDecisions,
         archetype_notes: archetypeNotes,
         source_threads: sourceThreads,
+        equipped_caches: equippedCaches,
+        recent_cache_encounters: recentCacheEncounters,
+        node_state: {
+            active_archetype: activeArchetype || null,
+            response_depth: responseDepth ? String(responseDepth) : null,
+        },
         // Reserved for future place memory attachment:
         // place_notes, field_observations, map_regions, waypoints, routes.
         place_memory: {
@@ -704,7 +736,105 @@ function formatRollingBootstrapForPrompt(rollingBootstrap) {
     if (recentDecisions.length > 0) {
         lines.push('Recent decisions: ' + recentDecisions.join(' | ') + '.');
     }
+    const equippedCaches = Array.isArray(rollingBootstrap.equipped_caches)
+        ? rollingBootstrap.equipped_caches.slice(0, 4)
+            .map(cache => cache && cache.title ? String(cache.title) : (cache && cache.id ? String(cache.id) : ''))
+            .filter(Boolean)
+        : [];
+    if (equippedCaches.length > 0) {
+        lines.push('Equipped: ' + equippedCaches.join(', ') + '.');
+    }
+    const recentCacheEncounters = Array.isArray(rollingBootstrap.recent_cache_encounters)
+        ? rollingBootstrap.recent_cache_encounters.slice(0, 3).map(String)
+        : [];
+    if (recentCacheEncounters.length > 0) {
+        lines.push('Recent cache encounters: ' + recentCacheEncounters.join(', ') + '.');
+    }
+    if (rollingBootstrap.node_state && rollingBootstrap.node_state.active_archetype) {
+        lines.push('Active archetype: ' + String(rollingBootstrap.node_state.active_archetype) + '.');
+    }
+    if (rollingBootstrap.node_state && rollingBootstrap.node_state.response_depth) {
+        lines.push('Response depth: ' + String(rollingBootstrap.node_state.response_depth) + '.');
+    }
     lines.push('=== END ROLLING BOOTSTRAP ===');
+    return lines.join('\n');
+}
+
+function buildContinuityBootstrapMarkdown(opts = {}) {
+    const rollingBootstrap = opts.rollingBootstrap || loadRollingBootstrap() || {};
+    const now = new Date().toISOString();
+    const equippedCaches = Array.isArray(rollingBootstrap.equipped_caches)
+        ? rollingBootstrap.equipped_caches
+        : listEquippedCaches().slice(0, BOOTSTRAP_EQUIPPED_LIST_LIMIT);
+    const recentInteractions = getRecentCacheInteractions(6);
+    const recentCacheEncounters = Array.isArray(rollingBootstrap.recent_cache_encounters) &&
+        rollingBootstrap.recent_cache_encounters.length > 0
+        ? rollingBootstrap.recent_cache_encounters
+        : recentInteractions
+            .map(entry => entry.cacheId || entry.draftId || '')
+            .filter(Boolean)
+            .slice(0, 6);
+    const activeArchetype = rollingBootstrap.node_state && rollingBootstrap.node_state.active_archetype
+        ? rollingBootstrap.node_state.active_archetype
+        : 'ember_prime';
+    const responseDepth = rollingBootstrap.node_state && rollingBootstrap.node_state.response_depth
+        ? rollingBootstrap.node_state.response_depth
+        : 'ember';
+    const activeThemes = Array.isArray(rollingBootstrap.active_themes)
+        ? rollingBootstrap.active_themes.slice(0, 8)
+        : [];
+    const openQuestions = Array.isArray(rollingBootstrap.open_questions)
+        ? rollingBootstrap.open_questions.slice(0, 6)
+        : [];
+    const archetypeNotes = rollingBootstrap.archetype_notes && rollingBootstrap.archetype_notes[activeArchetype]
+        ? rollingBootstrap.archetype_notes[activeArchetype]
+        : [];
+
+    const lines = [
+        '---',
+        'title: Ember Node Continuity Bootstrap',
+        'type: bootstrap',
+        'source: ember-node',
+        'created: ' + now,
+        'status: local',
+        '---',
+        '# Ember Node Continuity Bootstrap',
+        '## Current Orientation',
+        (rollingBootstrap.summary && String(rollingBootstrap.summary).trim())
+            ? String(rollingBootstrap.summary).trim()
+            : 'Continuity summary is not generated yet.',
+        '',
+        '## Equipped Caches',
+        ...(equippedCaches.length > 0
+            ? equippedCaches.map(cache => '- ' + (cache.title || cache.id) + ' (`' + (cache.id || 'unknown') + '`, level: ' + (cache.level || 'spark') + ')')
+            : ['- none equipped']),
+        '',
+        '## Recent Cache Encounters',
+        ...(recentCacheEncounters.length > 0
+            ? recentCacheEncounters.map(item => '- ' + String(item))
+            : ['- none recorded']),
+        '',
+        '## Active Themes',
+        ...(activeThemes.length > 0 ? activeThemes.map(theme => '- ' + String(theme)) : ['- none']),
+        '',
+        '## Open Questions',
+        ...(openQuestions.length > 0 ? openQuestions.map(question => '- ' + String(question)) : ['- none']),
+        '',
+        '## Archetype Notes',
+        '- Active archetype: ' + String(activeArchetype),
+        '- Response depth: ' + String(responseDepth),
+        ...(archetypeNotes.length > 0 ? archetypeNotes.map(note => '- ' + String(note)) : ['- no active notes']),
+        '',
+        '## Steward Notes',
+        '- Exported from local Ember Node continuity memory.',
+        '- Metadata only; no full cache document payloads included.',
+        '',
+        '## Suggested Next Steps',
+        '- Refresh Rolling Bootstrap after major continuity updates.',
+        '- Review equipped cache loadout before next deep synthesis.',
+        '- Use Threshold to import external bootstrap notes conservatively.',
+        '',
+    ];
     return lines.join('\n');
 }
 
@@ -751,6 +881,7 @@ module.exports = {
     loadRollingBootstrap,
     refreshRollingBootstrap,
     getRollingBootstrapStatus,
+    buildContinuityBootstrapMarkdown,
     // Prompt helpers
     formatForgeCoreForPrompt,
     formatBootstrapForPrompt,

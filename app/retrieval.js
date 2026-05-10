@@ -9,7 +9,7 @@
 
 const { generateEmbedding, cosineSimilarity, keywordScore } = require('./embeddings');
 const { loadChunks, loadEmbeddings, loadExcluded, loadManifests } = require('./indexStore');
-const { SOURCE_CLASS_ARCHIVE } = require('./archiveService');
+const { SOURCE_CLASS_ARCHIVE, SOURCE_CLASS_ARCHIVE_CACHE } = require('./archiveService');
 const {
     loadConceptIndex,
     detectConceptDomains,
@@ -17,6 +17,7 @@ const {
     getPrioritySourcesForQuery,
     conceptBonusForSource,
 } = require('./conceptIndex');
+const { getEquippedCacheLookup } = require('./equippedCaches');
 
 const DEFAULT_TOP_K = 12;
 const DEFAULT_TARGET_SOURCES = 6;
@@ -45,6 +46,7 @@ const COURT_PRIORITY_SOURCE_BOOST = 1.25;
 const COURT_PRIORITY_DOMAIN_BOOST = 1.12;
 const ARCHETYPE_MEMORY_SOURCE_BOOST = 1.08;
 const ARCHETYPE_MEMORY_DOMAIN_BOOST = 1.05;
+const EQUIPPED_CACHE_SOURCE_BOOST = 1.06;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -136,6 +138,24 @@ function buildSourceMetaText(chunk, manifestsById) {
         chunk.path,
         chunk.cacheId,
     ].filter(Boolean).join(' '));
+}
+
+function normalizeCacheKey(value) {
+    return normalizeText(String(value || ''));
+}
+
+function isEquippedSourceMatch({ entry, manifest, equippedIds }) {
+    if (!entry || !entry.chunk || !manifest) return false;
+    const chunkCacheId = normalizeCacheKey(entry.chunk.cacheId);
+    if (chunkCacheId && equippedIds.has(chunkCacheId)) return true;
+    const manifestCacheId = normalizeCacheKey(manifest.cacheId);
+    if (manifestCacheId && equippedIds.has(manifestCacheId)) return true;
+    const archiveCacheShelf = manifest.sourceClass === SOURCE_CLASS_ARCHIVE_CACHE &&
+        normalizeCacheKey(manifest.shelf);
+    if (archiveCacheShelf && equippedIds.has(archiveCacheShelf)) return true;
+    const sourcePath = normalizeText(manifest.path || '');
+    if (equippedIds.has('green-fire-core') && sourcePath.startsWith('archive/core/')) return true;
+    return false;
 }
 
 function findMatchedPrioritySources(sourceMetaText, prioritySources) {
@@ -452,6 +472,8 @@ async function retrieve({
     const routedAs = routeHint || detectRoute(query);
     const normalizedCourtMember = normalizeCourtMemberConfig(courtMember);
     const normalizedArchetypeMemory = normalizeArchetypeMemoryProfile(archetypeMemoryProfile);
+    const equippedLookup = getEquippedCacheLookup();
+    const equippedIds = new Set(Array.from(equippedLookup.ids || []).map(normalizeCacheKey).filter(Boolean));
     let conceptRouting = {
         primary: 'general',
         domains: ['general'],
@@ -485,6 +507,7 @@ async function retrieve({
 
     const scored = baseScored
         .map(entry => {
+            const manifest = manifests[entry.chunk.sourceId] || {};
             const sourceMetaText = buildSourceMetaText(entry.chunk, manifests);
             const routeBonus = routeBonusForSource(sourceMetaText, routedAs);
             const titleBonus = titleBonusForQuery(sourceMetaText, query);
@@ -516,11 +539,18 @@ async function retrieve({
             const courtDomainBoost = courtPriorityDomainMatch ? COURT_PRIORITY_DOMAIN_BOOST : 1;
             const archetypeMemorySourceBoost = archetypeMemorySourceMatch ? ARCHETYPE_MEMORY_SOURCE_BOOST : 1;
             const archetypeMemoryDomainBoost = archetypeMemoryDomainMatch ? ARCHETYPE_MEMORY_DOMAIN_BOOST : 1;
+            const equippedCacheMatch = equippedIds.size > 0 && isEquippedSourceMatch({
+                entry,
+                manifest,
+                equippedIds,
+            });
+            const equippedCacheBoost = equippedCacheMatch ? EQUIPPED_CACHE_SOURCE_BOOST : 1;
             const finalScore = postConceptScore *
                 courtSourceBoost *
                 courtDomainBoost *
                 archetypeMemorySourceBoost *
-                archetypeMemoryDomainBoost;
+                archetypeMemoryDomainBoost *
+                equippedCacheBoost;
 
             return {
                 chunk: entry.chunk,
@@ -548,6 +578,8 @@ async function retrieve({
                 archetypeMemoryDomainMatch,
                 archetypeMemorySourceBoost,
                 archetypeMemoryDomainBoost,
+                equippedCacheMatch,
+                equippedCacheBoost,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);

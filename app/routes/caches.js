@@ -16,6 +16,15 @@ const path    = require('path');
 const { readLimiter, writeLimiter } = require('../rateLimiters');
 const { USER_CACHES_DIR } = require('../storageConfig');
 const { listCaches, loadCache } = require('../cacheLoader');
+const {
+    normalizeCacheManifestMetadata,
+    listInstalledCaches,
+    getInstalledCacheById,
+    readEquippedCachesState,
+    equipCache,
+    unequipCache,
+} = require('../equippedCaches');
+const { recordCacheInteraction } = require('../cacheInteractionMemory');
 
 const router = express.Router();
 
@@ -42,7 +51,11 @@ router.post('/api/user-caches', writeLimiter, (req, res) => {
 });
 
 router.get('/caches', (req, res) => {
-    res.json({ caches: listCaches() });
+    const caches = listCaches().map(cache => ({
+        ...cache,
+        ...normalizeCacheManifestMetadata(cache),
+    }));
+    res.json({ caches });
 });
 
 router.get('/caches/:name', (req, res) => {
@@ -50,7 +63,80 @@ router.get('/caches/:name', (req, res) => {
     if (!cache) {
         return res.status(404).json({ error: 'Cache "' + req.params.name + '" not found.' });
     }
+    const metadata = normalizeCacheManifestMetadata(cache.manifest || {});
+    const equippedState = readEquippedCachesState();
+    const cacheId = cache && cache.manifest && cache.manifest.id
+        ? String(cache.manifest.id)
+        : String(req.params.name || '');
+    const equipped = equippedState.equipped.some(entry => entry.id === cacheId);
+    cache.manifest = {
+        ...(cache.manifest || {}),
+        ...metadata,
+        equipped,
+    };
     res.json(cache);
+});
+
+router.get('/api/caches/installed', readLimiter, (req, res) => {
+    res.json({ caches: listInstalledCaches() });
+});
+
+router.get('/api/caches/equipped', readLimiter, (req, res) => {
+    const state = readEquippedCachesState();
+    res.json({
+        version: state.version,
+        updated_at: state.updated_at,
+        equipped: state.equipped,
+    });
+});
+
+router.post('/api/caches/equip', writeLimiter, (req, res) => {
+    const cacheId = String(req.body && req.body.cacheId ? req.body.cacheId : '').trim();
+    if (!cacheId) return res.status(400).json({ error: 'cacheId is required' });
+    const installed = getInstalledCacheById(cacheId);
+    if (!installed) return res.status(404).json({ error: 'Cache "' + cacheId + '" not found.' });
+    try {
+        const result = equipCache(installed);
+        if (result.changed) {
+            try {
+                recordCacheInteraction({
+                    kind: 'cache_equipped',
+                    cacheId: installed.id,
+                    sourcePaths: [installed.source],
+                });
+            } catch { /* non-blocking memory update */ }
+        }
+        return res.json({
+            success: true,
+            changed: result.changed,
+            equipped: result.state.equipped,
+        });
+    } catch (err) {
+        return res.status(err.status || 500).json({ error: err.message || 'Could not equip cache.' });
+    }
+});
+
+router.post('/api/caches/unequip', writeLimiter, (req, res) => {
+    const cacheId = String(req.body && req.body.cacheId ? req.body.cacheId : '').trim();
+    if (!cacheId) return res.status(400).json({ error: 'cacheId is required' });
+    try {
+        const result = unequipCache(cacheId);
+        if (result.changed) {
+            try {
+                recordCacheInteraction({
+                    kind: 'cache_unequipped',
+                    cacheId,
+                });
+            } catch { /* non-blocking memory update */ }
+        }
+        return res.json({
+            success: true,
+            changed: result.changed,
+            equipped: result.state.equipped,
+        });
+    } catch (err) {
+        return res.status(err.status || 500).json({ error: err.message || 'Could not unequip cache.' });
+    }
 });
 
 module.exports = router;
