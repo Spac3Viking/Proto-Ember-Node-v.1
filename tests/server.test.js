@@ -481,8 +481,8 @@ describe('Threshold cache draft workflow', () => {
         const draftDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId);
         const draftZip = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '.zip');
         const installDir = path.join(DATA_ROOT, 'archive', 'caches', draftId);
-        fs.rmSync(draftDir, { recursive: true, force: true });
-        fs.rmSync(draftZip, { force: true });
-        fs.rmSync(installDir, { recursive: true, force: true });
+        await fs.promises.rm(draftDir, { recursive: true, force: true });
+        await fs.promises.rm(draftZip, { force: true });
+        await fs.promises.rm(installDir, { recursive: true, force: true });
     });
 });

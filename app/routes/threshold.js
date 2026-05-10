@@ -40,7 +40,6 @@ const THRESHOLD_INBOX_DIR = path.join(DATA_ROOT, 'threshold', 'inbox');
 const THRESHOLD_CACHE_DRAFTS_DIR = path.join(DATA_ROOT, 'threshold', 'cache-drafts');
 const CACHE_DRAFT_EXPORTS_DIR = path.join(EXPORTS_DIR, 'cache-drafts');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
-const CACHE_DRAFT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'research-brief',
     'field-note',
@@ -243,14 +242,45 @@ function resolveThresholdInboxPath(relPath) {
 }
 
 function sanitizeDraftId(value) {
-    const normalized = String(value || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9._-]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 64);
-    if (!normalized || !CACHE_DRAFT_ID_PATTERN.test(normalized)) return null;
-    return normalized;
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return null;
+
+    let out = '';
+    let previousWasDash = false;
+    for (let i = 0; i < raw.length && out.length < 64; i++) {
+        const ch = raw[i];
+        const code = ch.charCodeAt(0);
+        const isAlpha = code >= 97 && code <= 122;
+        const isDigit = code >= 48 && code <= 57;
+        const isAllowed = isAlpha || isDigit || ch === '.' || ch === '_' || ch === '-';
+        if (isAllowed) {
+            out += ch;
+            previousWasDash = ch === '-';
+            continue;
+        }
+        if (!previousWasDash && out.length > 0) {
+            out += '-';
+            previousWasDash = true;
+        }
+    }
+
+    while (out.startsWith('-')) out = out.slice(1);
+    while (out.endsWith('-')) out = out.slice(0, -1);
+    if (!out) return null;
+
+    const first = out[0];
+    const firstCode = first.charCodeAt(0);
+    const firstValid = (firstCode >= 97 && firstCode <= 122) || (firstCode >= 48 && firstCode <= 57);
+    if (!firstValid) return null;
+
+    for (let i = 0; i < out.length; i++) {
+        const ch = out[i];
+        const code = ch.charCodeAt(0);
+        const isAlpha = code >= 97 && code <= 122;
+        const isDigit = code >= 48 && code <= 57;
+        if (!(isAlpha || isDigit || ch === '.' || ch === '_' || ch === '-')) return null;
+    }
+    return out;
 }
 
 function resolveCacheDraftDir(draftId) {
@@ -425,7 +455,7 @@ function exportCacheDraftZip(draftId) {
     for (const filePath of files) {
         const rel = path.relative(resolved.path, filePath).replace(/\\/g, '/');
         if (!rel || rel.includes('..')) continue;
-        zip.addLocalFile(filePath, resolved.id, rel);
+        zip.addFile(resolved.id + '/' + rel, fs.readFileSync(filePath));
     }
     const exportPath = path.join(CACHE_DRAFT_EXPORTS_DIR, resolved.id + '.zip');
     zip.writeZip(exportPath);
