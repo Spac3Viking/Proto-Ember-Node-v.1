@@ -32,6 +32,15 @@ const {
 const router = express.Router();
 const THRESHOLD_INBOX_DIR = path.join(DATA_ROOT, 'threshold', 'inbox');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
+const GREEN_FIRE_HANDOFF_TYPES = new Set([
+    'research-brief',
+    'field-note',
+    'bootstrap',
+    'manual-summary',
+    'cache-readme',
+    'source-summary',
+]);
+const GREEN_FIRE_HANDOFF_STATUS = new Set(['unverified', 'reviewed', 'trusted', 'local']);
 
 function isPathInside(baseDir, targetPath) {
     const normalize = (value) => {
@@ -76,6 +85,67 @@ function extractMarkdownDisplayTitle(content, fallbackTitle) {
     return fallback;
 }
 
+function extractFrontmatterBlock(content) {
+    const text = typeof content === 'string' ? content : '';
+    const match = text.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+    return match && match[1] ? match[1] : '';
+}
+
+function cleanFrontmatterValue(value) {
+    const trimmed = String(value || '').trim();
+    return trimmed.replace(/^["']|["']$/g, '').trim();
+}
+
+function parseFrontmatterList(value) {
+    const raw = cleanFrontmatterValue(value);
+    if (!raw) return [];
+    const normalized = raw.startsWith('[') && raw.endsWith(']')
+        ? raw.slice(1, -1)
+        : raw;
+    return normalized
+        .split(',')
+        .map(item => cleanFrontmatterValue(item))
+        .filter(Boolean);
+}
+
+function parseSimpleFrontmatter(content) {
+    const block = extractFrontmatterBlock(content);
+    if (!block) return {};
+    return block.split(/\r?\n/).reduce((acc, line) => {
+        const match = line.match(/^\s*([a-zA-Z0-9_-]+)\s*:\s*(.*?)\s*$/);
+        if (!match) return acc;
+        acc[match[1].toLowerCase()] = match[2];
+        return acc;
+    }, {});
+}
+
+function parseGreenFireHandoff(content) {
+    const frontmatter = parseSimpleFrontmatter(content);
+    const hasFrontmatter = Object.keys(frontmatter).length > 0;
+    const type = cleanFrontmatterValue(frontmatter.type || '').toLowerCase();
+    const status = cleanFrontmatterValue(frontmatter.status || '').toLowerCase();
+    const archetypes = parseFrontmatterList(frontmatter.archetypes || '');
+    const tags = parseFrontmatterList(frontmatter.tags || '');
+    const source = cleanFrontmatterValue(frontmatter.source || '');
+    const license = cleanFrontmatterValue(frontmatter.license || '');
+
+    const detected = Boolean(
+        hasFrontmatter &&
+        GREEN_FIRE_HANDOFF_TYPES.has(type) &&
+        GREEN_FIRE_HANDOFF_STATUS.has(status)
+    );
+
+    return {
+        detected,
+        type: type || null,
+        status: status || null,
+        archetypes,
+        tags,
+        source: source || null,
+        license: license || null,
+    };
+}
+
 function sanitizeFilename(filename) {
     const base = path.basename(String(filename || '').replace(/\\/g, '/'));
     return base.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+/, '') || 'imported-file';
@@ -111,6 +181,23 @@ function listThresholdInboxFiles() {
             let stats = null;
             try { stats = fs.statSync(absPath); } catch { return null; }
             const importedAt = (stats.birthtime || stats.mtime || new Date()).toISOString();
+            let handoff = null;
+            if (ext === '.md') {
+                try {
+                    const content = fs.readFileSync(absPath, 'utf8');
+                    handoff = parseGreenFireHandoff(content);
+                } catch {
+                    handoff = {
+                        detected: false,
+                        type: null,
+                        status: null,
+                        archetypes: [],
+                        tags: [],
+                        source: null,
+                        license: null,
+                    };
+                }
+            }
             return {
                 name: entry.name,
                 path: 'threshold/inbox/' + entry.name,
@@ -120,6 +207,7 @@ function listThresholdInboxFiles() {
                 imported_at: importedAt,
                 sourceLabel: 'Threshold',
                 status: ext === '.pdf' ? 'pdf_stored' : 'ready',
+                handoff,
             };
         })
         .filter(Boolean)
@@ -418,6 +506,9 @@ router.get('/api/threshold/files/content', readLimiter, (req, res) => {
         }
 
         const content = fs.readFileSync(absPath, 'utf8');
+        const handoff = ext === '.md'
+            ? parseGreenFireHandoff(content)
+            : null;
         const contentType = ext === '.md'
             ? 'text/markdown'
             : ext === '.json'
@@ -435,6 +526,7 @@ router.get('/api/threshold/files/content', readLimiter, (req, res) => {
             content,
             sourceLabel: 'Threshold',
             sourceType: normalizeImportType(ext),
+            handoff,
         });
     } catch (error) {
         console.error('Error reading threshold file:', error.message);

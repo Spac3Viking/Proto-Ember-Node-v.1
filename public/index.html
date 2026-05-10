@@ -603,6 +603,23 @@
                 </div>
               </div>
 
+              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
+                <div class="council-section-title" style="margin:0;">Create Handoff Template</div>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                  <button class="secondary" id="th-handoff-copy-template-btn">Copy Template</button>
+                  <button class="secondary" id="th-handoff-download-template-btn">Download .md Template</button>
+                  <button class="secondary" id="th-handoff-open-template-btn">Open Blank Handoff in Reader</button>
+                </div>
+              </div>
+
+              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
+                <div class="council-section-title" style="margin:0;">External AI Prompt Guides</div>
+                <div class="message-system" style="font-size:0.78rem;">
+                  Generate copyable prompts that ask external AI tools to output complete Green Fire Markdown Handoff files.
+                </div>
+                <div id="th-handoff-prompt-guides" class="threshold-file-list" style="max-height:none;"></div>
+              </div>
+
               <!-- Intake Queue (multi-file) -->
               <div class="threshold-file-section" id="threshold-queue-section" style="display:none;">
                 <div class="threshold-queue-header">
@@ -837,6 +854,7 @@
         <button class="secondary" id="gf-reader-resume-btn">Resume</button>
         <button class="secondary" id="gf-reader-start-btn">Start at beginning</button>
       </div>
+      <div class="gf-reader-metadata" id="gf-reader-metadata" style="display:none;"></div>
       <div class="source-inspector-body gf-reader-body" id="gf-reader-body"></div>
     </div>
   </div>
