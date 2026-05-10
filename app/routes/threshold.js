@@ -412,10 +412,10 @@ function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, 
     fs.mkdirSync(docsDir, { recursive: true });
     for (let i = 0; i < sources.length; i++) {
         const source = sources[i];
-        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('handoff-' + (i + 1) + '.md');
+        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('handoff-' + (i + 1));
         const ext = path.extname(baseName).toLowerCase();
         const stem = ext ? path.basename(baseName, ext) : baseName;
-        const targetExt = ext === '.md' ? '.md' : '.md';
+        const targetExt = '.md';
         let candidate = stem + targetExt;
         let suffix = 2;
         while (usedDocNames.has(candidate)) {
