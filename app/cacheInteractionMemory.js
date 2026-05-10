@@ -6,6 +6,9 @@ const path = require('path');
 const { CACHE_INTERACTIONS_PATH } = require('./storageConfig');
 
 const MAX_INTERACTIONS = 200;
+const MAX_SOURCE_PATHS = 16;
+const DEFAULT_RECENT_INTERACTION_LIMIT = 8;
+const MAX_RECENT_INTERACTION_LIMIT = 32;
 
 const KNOWN_KINDS = new Set([
     'cache_draft_created',
@@ -55,17 +58,19 @@ function normalizePaths(sourcePaths) {
         seen.add(pathText);
         out.push(pathText);
     }
-    return out.slice(0, 16);
+    return out.slice(0, MAX_SOURCE_PATHS);
 }
 
-function normalizeInteraction(input) {
-    const kind = String(input && input.kind || '').trim().toLowerCase();
+function normalizeInteraction(input, opts) {
+    const options = opts || {};
+    const preserveMetadata = options.preserveMetadata !== false;
+    const kind = String(input?.kind ?? '').trim().toLowerCase();
     if (!KNOWN_KINDS.has(kind)) return null;
     const now = new Date().toISOString();
     return {
-        id: input && input.id ? String(input.id) : crypto.randomUUID(),
+        id: preserveMetadata && input && input.id ? String(input.id) : crypto.randomUUID(),
         kind,
-        at: input && input.at ? String(input.at) : now,
+        at: preserveMetadata && input && input.at ? String(input.at) : now,
         draftId: input && input.draftId ? String(input.draftId).trim() : null,
         cacheId: input && input.cacheId ? String(input.cacheId).trim() : null,
         sourcePaths: normalizePaths(input && input.sourcePaths),
@@ -93,7 +98,7 @@ function summarizeInteraction(interaction) {
 }
 
 function recordCacheInteraction(input) {
-    const normalized = normalizeInteraction(input);
+    const normalized = normalizeInteraction(input, { preserveMetadata: false });
     if (!normalized) return null;
     const memory = readMemory();
     const interactions = Array.isArray(memory.interactions) ? memory.interactions.slice() : [];
@@ -104,10 +109,12 @@ function recordCacheInteraction(input) {
     return normalized;
 }
 
-function getRecentCacheInteractions(limit = 8) {
+function getRecentCacheInteractions(limit = DEFAULT_RECENT_INTERACTION_LIMIT) {
     const memory = readMemory();
     const interactions = Array.isArray(memory.interactions) ? memory.interactions : [];
-    const cap = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 32) : 8;
+    const cap = Number.isFinite(limit) && limit > 0
+        ? Math.min(Math.floor(limit), MAX_RECENT_INTERACTION_LIMIT)
+        : DEFAULT_RECENT_INTERACTION_LIMIT;
     return interactions.slice(0, cap).map(item => normalizeInteraction(item)).filter(Boolean);
 }
 

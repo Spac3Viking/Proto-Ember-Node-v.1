@@ -51,6 +51,8 @@ const FORGE_MD_PATH        = path.join(FORGE_DIR, 'ember-node-forge-v1.3.md');
 const ACTIVE_BOOTSTRAP_PATH = path.join(BOOTSTRAP_DIR, 'active-bootstrap.json');
 const ROLLING_BOOTSTRAP_STALE_MS = 1000 * 60 * 60 * 24 * 7;
 const MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS = 420;
+const BOOTSTRAP_CACHE_SUMMARY_LIMIT = 4;
+const BOOTSTRAP_CACHE_RECENT_LIMIT = 6;
 
 // ── Forge v1.3 canonical markdown ─────────────────────────────────────────────
 
@@ -444,8 +446,8 @@ function buildRollingBootstrap(opts) {
     const normalizedQuestions = Array.isArray(openQuestions)
         ? openQuestions.filter(Boolean).map(String).slice(0, 8)
         : [];
-    const cacheInteractionSummary = getCacheInteractionSummary({ limit: 4 });
-    const cacheInteractionRecent = getRecentCacheInteractions(6).map(entry => ({
+    const cacheInteractionSummary = getCacheInteractionSummary({ limit: BOOTSTRAP_CACHE_SUMMARY_LIMIT });
+    const cacheInteractionRecent = getRecentCacheInteractions(BOOTSTRAP_CACHE_RECENT_LIMIT).map(entry => ({
         kind: entry.kind,
         at: entry.at,
         draftId: entry.draftId,

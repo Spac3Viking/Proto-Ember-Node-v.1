@@ -20,6 +20,20 @@ describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
         try { fs.rmSync(DATA_ROOT, { recursive: true, force: true }); } catch { /* ignore */ }
     });
 
+    afterEach(() => {
+        try {
+            const sc = require('../app/storageConfig');
+            let baseline = { interactions: [] };
+            if (fs.existsSync(sc.CACHE_INTERACTIONS_PATH)) {
+                baseline = JSON.parse(fs.readFileSync(sc.CACHE_INTERACTIONS_PATH, 'utf8'));
+            }
+            baseline.interactions = [];
+            baseline.updated_at = null;
+            fs.mkdirSync(path.dirname(sc.CACHE_INTERACTIONS_PATH), { recursive: true });
+            fs.writeFileSync(sc.CACHE_INTERACTIONS_PATH, JSON.stringify(baseline, null, 2), 'utf8');
+        } catch { /* ignore cleanup issues in tests */ }
+    });
+
     test('storageConfig exposes and seeds rolling-bootstrap.json', () => {
         const sc = require('../app/storageConfig');
         sc.ensureDataRoot();

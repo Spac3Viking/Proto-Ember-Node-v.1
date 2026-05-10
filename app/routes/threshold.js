@@ -43,6 +43,7 @@ const CACHE_DRAFT_EXPORTS_DIR = path.join(EXPORTS_DIR, 'cache-drafts');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
 const MAX_DRAFT_ID_LENGTH = 64;
 const MAX_DOC_NAME_COLLISION_ATTEMPTS = 1000;
+const DEFAULT_HANDOFF_STEM = 'threshold-handoff';
 const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'research-brief',
     'field-note',
@@ -190,12 +191,15 @@ function uniqueInboxName(filename) {
 }
 
 function normalizeMarkdownFilename(filename, fallbackStem) {
-    const fallback = String(fallbackStem || 'threshold-handoff').trim() || 'threshold-handoff';
-    const safe = sanitizeFilename(filename || (fallback + '.md'));
-    const ext = path.extname(safe).toLowerCase();
-    if (ext === '.md') return safe;
-    if (!ext) return safe + '.md';
-    return path.basename(safe, ext) + '.md';
+    const fallback = String(fallbackStem || '').trim() || DEFAULT_HANDOFF_STEM;
+    const raw = String(filename || (fallback + '.md')).trim();
+    const ext = path.extname(raw).toLowerCase();
+    const withMarkdownExt = ext === '.md'
+        ? raw
+        : ext
+            ? path.basename(raw, ext) + '.md'
+            : raw + '.md';
+    return sanitizeFilename(withMarkdownExt);
 }
 
 function createInboxMarkdownFromText(markdown, preferredFilename) {
@@ -206,8 +210,8 @@ function createInboxMarkdownFromText(markdown, preferredFilename) {
         throw error;
     }
     ensureThresholdInboxDir();
-    const filename = uniqueInboxName(normalizeMarkdownFilename(preferredFilename, 'threshold-handoff'));
-    const absPath = path.resolve(THRESHOLD_INBOX_DIR, filename);
+    const uniqueFilename = uniqueInboxName(normalizeMarkdownFilename(preferredFilename, DEFAULT_HANDOFF_STEM));
+    const absPath = path.resolve(THRESHOLD_INBOX_DIR, uniqueFilename);
     if (!isPathInside(THRESHOLD_INBOX_DIR, absPath)) {
         const error = new Error('Invalid markdown target path.');
         error.status = 400;
@@ -215,10 +219,42 @@ function createInboxMarkdownFromText(markdown, preferredFilename) {
     }
     fs.writeFileSync(absPath, content, 'utf8');
     return {
-        relPath: 'threshold/inbox/' + filename,
+        relPath: 'threshold/inbox/' + uniqueFilename,
         absPath,
         markdown: content,
     };
+}
+
+/**
+ * Extract markdown text from a block input.
+ * Accepted formats:
+ * - string markdown
+ * - object with `markdown` string
+ * - object with `content` string
+ * Precedence: markdown > content.
+ *
+ * @param {string|object} item
+ * @returns {string}
+ */
+function extractMarkdownFromBlock(item) {
+    if (typeof item === 'string') return item;
+    if (item && typeof item.markdown === 'string') return item.markdown;
+    if (item && typeof item.content === 'string') return item.content;
+    return '';
+}
+
+/**
+ * Resolve a preferred markdown filename for a block input.
+ * Precedence: filename > name > title > generated fallback.
+ *
+ * @param {string|object} item
+ * @param {number} index
+ * @returns {string}
+ */
+function resolveMarkdownBlockFilename(item, index) {
+    const fallback = `${DEFAULT_HANDOFF_STEM}-${index + 1}.md`;
+    if (typeof item === 'string') return fallback;
+    return item.filename || item.name || item.title || fallback;
 }
 
 function listThresholdInboxFiles() {
@@ -403,17 +439,9 @@ function collectCacheDraftMarkdownSources({ relPath, relPaths, markdown, markdow
     if (Array.isArray(markdownBlocks)) {
         for (let i = 0; i < markdownBlocks.length; i++) {
             const item = markdownBlocks[i];
-            const text = typeof item === 'string'
-                ? item
-                : item && typeof item.markdown === 'string'
-                    ? item.markdown
-                    : item && typeof item.content === 'string'
-                        ? item.content
-                        : '';
+            const text = extractMarkdownFromBlock(item);
             if (!String(text || '').trim()) continue;
-            const preferredFilename = typeof item === 'string'
-                ? ('threshold-handoff-' + (i + 1) + '.md')
-                : (item.filename || item.name || item.title || ('threshold-handoff-' + (i + 1) + '.md'));
+            const preferredFilename = resolveMarkdownBlockFilename(item, i);
             sources.push(createInboxMarkdownFromText(text, preferredFilename));
         }
     }
