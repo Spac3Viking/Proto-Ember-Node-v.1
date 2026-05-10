@@ -380,6 +380,12 @@ function listFilesRecursive(baseDir) {
     return out;
 }
 
+function isVisiblePath(relPath) {
+    const parts = String(relPath || '').split('/').filter(Boolean);
+    if (parts.length === 0) return false;
+    return parts.every(part => !part.startsWith('.'));
+}
+
 function toRootRelative(absPath) {
     const rel = path.relative(DATA_ROOT, absPath).replace(/\\/g, '/');
     return rel.startsWith('../') ? null : rel;
@@ -495,11 +501,10 @@ function createCacheDraftFromThresholdFile({
         : '';
     const resolvedDescription = String(description || '').trim() || priorDescription || defaultDescription;
     const readmePath = path.join(resolvedDraft.path, 'README.md');
-    const handoffPath = path.join(resolvedDraft.path, 'handoff.md');
-    const docsDir = path.join(resolvedDraft.path, 'docs');
-    const docsRelPaths = [];
+    const documentsDir = path.join(resolvedDraft.path, 'documents');
+    const documentRelPaths = [];
     const usedDocNames = new Set();
-    fs.mkdirSync(docsDir, { recursive: true });
+    fs.mkdirSync(documentsDir, { recursive: true });
     for (let i = 0; i < sources.length; i++) {
         const source = sources[i];
         const baseName = sanitizeFilename(path.basename(source.absPath)) || ('draft-doc-' + (i + 1));
@@ -520,11 +525,11 @@ function createCacheDraftFromThresholdFile({
             guard += 1;
         }
         usedDocNames.add(candidate);
-        const absDocPath = path.join(docsDir, candidate);
+        const absDocPath = path.join(documentsDir, candidate);
         fs.writeFileSync(absDocPath, source.markdown, 'utf8');
-        docsRelPaths.push('docs/' + candidate);
+        documentRelPaths.push('documents/' + candidate);
     }
-    const primaryDocRelPath = docsRelPaths[0] || null;
+    const primaryDocRelPath = documentRelPaths[0] || null;
     const manifest = {
         id: resolvedDraft.id,
         name: resolvedTitle,
@@ -539,7 +544,7 @@ function createCacheDraftFromThresholdFile({
         continuity: {
             markdownCenter: true,
             primary: primaryDocRelPath,
-            docs: docsRelPaths,
+            documents: documentRelPaths,
         },
         generatedAt: now,
     };
@@ -558,17 +563,20 @@ function createCacheDraftFromThresholdFile({
         '',
         '- `manifest.json`',
         '- `README.md`',
-        '- `handoff.md`',
-        '- `docs/`',
+        '- `documents/`',
         '',
-        ...docsRelPaths.map(rel => '- `' + rel + '`'),
+        ...documentRelPaths.map(rel => '- `' + rel + '`'),
+        '',
+        '## Continuity note',
+        '',
+        'This cache was prepared through Ember Node Threshold.',
+        'Review all sources before treating this cache as trusted continuity memory.',
         '',
         'This cache draft is local-first and portable.',
     ].join('\n');
 
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
     fs.writeFileSync(readmePath, readme + '\n', 'utf8');
-    fs.writeFileSync(handoffPath, primarySource.markdown, 'utf8');
     try {
         recordCacheInteraction({
             kind: 'cache_draft_created',
@@ -584,8 +592,7 @@ function createCacheDraftFromThresholdFile({
         files: {
             manifest: 'threshold/cache-drafts/' + resolvedDraft.id + '/manifest.json',
             readme: 'threshold/cache-drafts/' + resolvedDraft.id + '/README.md',
-            handoff: 'threshold/cache-drafts/' + resolvedDraft.id + '/handoff.md',
-            docs: docsRelPaths.map(rel => 'threshold/cache-drafts/' + resolvedDraft.id + '/' + rel),
+            documents: documentRelPaths.map(rel => 'threshold/cache-drafts/' + resolvedDraft.id + '/' + rel),
         },
     };
 }
@@ -631,10 +638,19 @@ function exportCacheDraftZip(draftId) {
 
     ensureThresholdCacheDraftDirs();
     const zip = new AdmZip();
-    const files = listFilesRecursive(resolved.path);
-    for (const filePath of files) {
+    const requiredFiles = ['manifest.json', 'README.md'];
+    for (const rel of requiredFiles) {
+        const abs = path.join(resolved.path, rel);
+        if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
+        zip.addFile(resolved.id + '/' + rel, fs.readFileSync(abs));
+    }
+    const documentsDir = path.join(resolved.path, 'documents');
+    const documentFiles = listFilesRecursive(documentsDir);
+    for (const filePath of documentFiles) {
         const rel = path.relative(resolved.path, filePath).replace(/\\/g, '/');
         if (!rel || rel.includes('..')) continue;
+        if (!rel.startsWith('documents/')) continue;
+        if (!isVisiblePath(rel)) continue;
         zip.addFile(resolved.id + '/' + rel, fs.readFileSync(filePath));
     }
     const exportPath = path.join(CACHE_DRAFT_EXPORTS_DIR, resolved.id + '.zip');
@@ -690,6 +706,14 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
             rel = rel.slice(normalizedDraftId.length + 1);
         }
         if (!rel || rel === '.' || rel.includes('..')) continue;
+        if (rel === 'handoff.md') continue;
+        if (rel.startsWith('docs/')) {
+            rel = 'documents/' + rel.slice('docs/'.length);
+        }
+        if (!(rel === 'manifest.json' || rel === 'README.md' || rel.startsWith('documents/'))) {
+            continue;
+        }
+        if (!isVisiblePath(rel)) continue;
 
         const destination = path.resolve(destinationRoot, rel);
         if (!isPathInside(destinationRoot, destination)) {
