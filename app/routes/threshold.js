@@ -41,6 +41,7 @@ const THRESHOLD_CACHE_DRAFTS_DIR = path.join(DATA_ROOT, 'threshold', 'cache-draf
 const CACHE_DRAFT_EXPORTS_DIR = path.join(EXPORTS_DIR, 'cache-drafts');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
 const MAX_DRAFT_ID_LENGTH = 64;
+const MAX_DOC_NAME_COLLISION_ATTEMPTS = 1000;
 const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'research-brief',
     'field-note',
@@ -407,7 +408,7 @@ function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, 
     fs.mkdirSync(docsDir, { recursive: true });
     for (let i = 0; i < sources.length; i++) {
         const source = sources[i];
-        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('source-' + (i + 1));
+        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('draft-doc-' + (i + 1));
         const ext = path.extname(baseName).toLowerCase();
         const stem = ext ? path.basename(baseName, ext) : baseName;
         const targetExt = '.md';
@@ -415,7 +416,7 @@ function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, 
         let suffix = 2;
         let guard = 0;
         while (usedDocNames.has(candidate)) {
-            if (guard >= 1000) {
+            if (guard >= MAX_DOC_NAME_COLLISION_ATTEMPTS) {
                 const error = new Error('Unable to generate unique cache draft document name.');
                 error.status = 500;
                 throw error;
