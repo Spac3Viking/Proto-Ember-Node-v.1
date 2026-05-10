@@ -211,6 +211,14 @@ function titleFromDocumentPath(relPath) {
     return stem.replace(/[_-]+/g, ' ').trim() || 'Untitled';
 }
 
+function sanitizeDraftIdInput(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
 function buildGreenFireHandoffPrompt(archetype) {
     const lens = String(archetype || '').trim().toLowerCase();
     const lensLine = lens
@@ -3305,9 +3313,10 @@ let _thresholdImportedFiles = [];
 let _selectedThresholdPaths = new Set();
 let _thresholdCacheDrafts = [];
 let _activeThresholdDraftId = null;
+const THRESHOLD_DRAFT_ALLOWED_LABEL = '.md/.txt/.json';
 
 function isThresholdDraftSelectableFile(file) {
-    const kind = String(file && file.type || '').toLowerCase();
+    const kind = String(file?.type || '').toLowerCase();
     return kind === 'markdown' || kind === 'text' || kind === 'json';
 }
 
@@ -3324,7 +3333,7 @@ function refreshThresholdSelectionActions(files) {
     const selected = selectedThresholdDraftFiles(files);
     const count = selected.length;
     if (countEl) {
-        countEl.textContent = count + ' selected (.md/.txt/.json)';
+        countEl.textContent = count + ' selected (' + THRESHOLD_DRAFT_ALLOWED_LABEL + ')';
     }
     if (createBtn) createBtn.disabled = count === 0;
     if (addBtn) addBtn.disabled = count === 0;
@@ -3483,12 +3492,13 @@ function buildThresholdImportedRow(file) {
         '<div class="threshold-file-detail">Source: ' + escapeHtml(file.sourceLabel || 'Threshold') + '</div>';
 
     if (isThresholdDraftSelectableFile(file)) {
+        const ariaName = String(file.name || file.path || 'file').replace(/\s+/g, ' ').trim().slice(0, 80);
         const selectorWrap = document.createElement('label');
         selectorWrap.className = 'threshold-file-selector';
         const selector = document.createElement('input');
         selector.type = 'checkbox';
         selector.checked = _selectedThresholdPaths.has(file.path);
-        selector.setAttribute('aria-label', 'Select ' + (file.name || file.path) + ' for cache draft');
+        selector.setAttribute('aria-label', 'Select ' + ariaName + ' for cache draft');
         selector.addEventListener('change', () => {
             if (selector.checked) _selectedThresholdPaths.add(file.path);
             else _selectedThresholdPaths.delete(file.path);
@@ -3565,11 +3575,11 @@ function buildThresholdImportedRow(file) {
 async function createCacheDraftFromSelectedThresholdFiles() {
     const selected = selectedThresholdDraftFiles(_thresholdImportedFiles);
     if (selected.length === 0) {
-        showFlashMessage('Select .md, .txt, or .json files first.');
+        showFlashMessage('Select ' + THRESHOLD_DRAFT_ALLOWED_LABEL + ' files first.');
         return;
     }
     const suggestedId = selected[0] && selected[0].name
-        ? String(selected[0].name).replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
+        ? sanitizeDraftIdInput(selected[0].name)
         : '';
     const draftIdInput = window.prompt('Draft ID (optional)', suggestedId || '');
     if (draftIdInput === null) return;
@@ -3601,7 +3611,7 @@ async function createCacheDraftFromSelectedThresholdFiles() {
 async function addSelectedThresholdFilesToDraft() {
     const selected = selectedThresholdDraftFiles(_thresholdImportedFiles);
     if (selected.length === 0) {
-        showFlashMessage('Select .md, .txt, or .json files first.');
+        showFlashMessage('Select ' + THRESHOLD_DRAFT_ALLOWED_LABEL + ' files first.');
         return;
     }
     const input = window.prompt('Draft ID to add selected files');

@@ -431,6 +431,8 @@ function titleFromDocumentPath(relPath) {
 function normalizeDraftDocumentPath(inputPath) {
     let normalized = String(inputPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
     if (!normalized) return null;
+    // Backward compatibility for pre-normalization draft zips/manifests:
+    // older payloads used top-level handoff.md and docs/ instead of documents/.
     if (normalized === 'handoff.md') {
         normalized = 'documents/handoff.md';
     }
@@ -474,7 +476,7 @@ function normalizeDraftManifest(manifest, draftId, updatedAtFallback) {
     const updatedAt = normalizeIsoTimestamp(raw.updated_at || raw.generatedAt || nowIso, nowIso);
     const documentEntries = [];
     if (Array.isArray(raw.documents)) {
-        raw.documents.forEach((entry, index) => {
+        raw.documents.forEach((entry) => {
             const normalizedEntry = normalizeDraftDocumentEntry(entry, typeof entry === 'string' ? entry : null);
             if (normalizedEntry) documentEntries.push(normalizedEntry);
             else if (typeof entry === 'string') {
@@ -482,9 +484,6 @@ function normalizeDraftManifest(manifest, draftId, updatedAtFallback) {
                 if (fallback) documentEntries.push(fallback);
             } else if (entry && typeof entry.path === 'string') {
                 const fallback = normalizeDraftDocumentEntry(null, entry.path);
-                if (fallback) documentEntries.push(fallback);
-            } else if (typeof entry === 'object' && entry && typeof entry[index] === 'string') {
-                const fallback = normalizeDraftDocumentEntry(null, entry[index]);
                 if (fallback) documentEntries.push(fallback);
             }
         });
@@ -592,7 +591,10 @@ function collectCacheDraftSources({ relPath, relPaths, markdown, markdownBlocks,
         }
         const ext = path.extname(absPath).toLowerCase();
         if (!THRESHOLD_DRAFT_SOURCE_EXTS.has(ext)) {
-            const error = new Error('Cache draft source must be .md, .txt, or .json.');
+            const allowed = Array.from(THRESHOLD_DRAFT_SOURCE_EXTS)
+                .map(value => value.startsWith('.') ? value : '.' + value)
+                .join(', ');
+            const error = new Error('Cache draft source must be one of: ' + allowed + '.');
             error.status = 400;
             throw error;
         }
@@ -905,12 +907,11 @@ function removeDocumentFromCacheDraft({ draftId, documentPath }) {
     }
     fs.unlinkSync(resolvedDoc.absPath);
     const manifestPath = path.join(resolvedDoc.draft.path, 'manifest.json');
+    const currentManifest = parseDraftManifestAtPath(manifestPath, resolvedDoc.draft.id, new Date().toISOString());
     const nextManifest = syncManifestDocumentsFromDisk(
         {
-            ...parseDraftManifestAtPath(manifestPath, resolvedDoc.draft.id, new Date().toISOString()),
-            documents: parseDraftManifestAtPath(manifestPath, resolvedDoc.draft.id, new Date().toISOString())
-                .documents
-                .filter(entry => entry.path !== resolvedDoc.relPath),
+            ...currentManifest,
+            documents: currentManifest.documents.filter(entry => entry.path !== resolvedDoc.relPath),
             updated_at: new Date().toISOString(),
         },
         resolvedDoc.draft.path,
