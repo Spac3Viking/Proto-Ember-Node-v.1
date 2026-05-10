@@ -386,6 +386,12 @@ function isVisiblePath(relPath) {
     return parts.every(part => !part.startsWith('.'));
 }
 
+function isAllowedDraftPayloadPath(relPath) {
+    return relPath === 'manifest.json' ||
+        relPath === 'README.md' ||
+        relPath.startsWith('documents/');
+}
+
 function toRootRelative(absPath) {
     const rel = path.relative(DATA_ROOT, absPath).replace(/\\/g, '/');
     return rel.startsWith('../') ? null : rel;
@@ -645,7 +651,7 @@ function exportCacheDraftZip(draftId) {
         zip.addFile(resolved.id + '/' + rel, fs.readFileSync(abs));
     }
     const documentsDir = path.join(resolved.path, 'documents');
-    const documentFiles = listFilesRecursive(documentsDir);
+    const documentFiles = fs.existsSync(documentsDir) ? listFilesRecursive(documentsDir) : [];
     for (const filePath of documentFiles) {
         const rel = path.relative(resolved.path, filePath).replace(/\\/g, '/');
         if (!rel || rel.includes('..')) continue;
@@ -706,16 +712,19 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
             rel = rel.slice(normalizedDraftId.length + 1);
         }
         if (!rel || rel === '.' || rel.includes('..')) continue;
-        if (rel === 'handoff.md') continue;
-        if (rel.startsWith('docs/')) {
-            rel = 'documents/' + rel.slice('docs/'.length);
+        let normalizedRel = rel;
+        if (normalizedRel === 'handoff.md') {
+            normalizedRel = 'documents/handoff.md';
         }
-        if (!(rel === 'manifest.json' || rel === 'README.md' || rel.startsWith('documents/'))) {
+        if (normalizedRel.startsWith('docs/')) {
+            normalizedRel = 'documents/' + normalizedRel.slice('docs/'.length);
+        }
+        if (!isAllowedDraftPayloadPath(normalizedRel)) {
             continue;
         }
-        if (!isVisiblePath(rel)) continue;
+        if (!isVisiblePath(normalizedRel)) continue;
 
-        const destination = path.resolve(destinationRoot, rel);
+        const destination = path.resolve(destinationRoot, normalizedRel);
         if (!isPathInside(destinationRoot, destination)) {
             throw new Error('Unsafe zip path detected: ' + entry.entryName);
         }
