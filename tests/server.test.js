@@ -489,6 +489,35 @@ describe('Threshold cache draft workflow', () => {
         expect(found.manifest.continuity.docs).toEqual(['docs/multi-a.md', 'docs/multi-b.md']);
     });
 
+    test('creates cache draft directly from markdown text block and stages inbox .md source', async () => {
+        const textDraftId = draftId + '-text';
+        const createRes = await request(app)
+            .post('/api/threshold/cache-drafts')
+            .send({
+                draftId: textDraftId,
+                markdownFilename: 'text-block-handoff',
+                markdown: '# Text Block Draft\n\nCreated from pasted markdown.',
+                title: 'Phase 16H-D Text Draft',
+            });
+
+        expect(createRes.status).toBe(200);
+        expect(createRes.body.success).toBe(true);
+        expect(createRes.body.draft.id).toBe(textDraftId);
+        expect(createRes.body.draft.path).toBe('threshold/cache-drafts/' + textDraftId);
+
+        const sourcePath = createRes.body.draft.manifest.source.path;
+        expect(sourcePath).toMatch(/^threshold\/inbox\/text-block-handoff(?:-[0-9]+(?:-[0-9]+)?)?\.md$/);
+        importedPaths.push(sourcePath);
+
+        expect(createRes.body.draft.manifest.source.paths).toEqual([sourcePath]);
+        expect(createRes.body.draft.manifest.continuity.markdownCenter).toBe(true);
+        expect(Array.isArray(createRes.body.draft.manifest.continuity.docs)).toBe(true);
+        expect(createRes.body.draft.manifest.continuity.docs.length).toBe(1);
+        expect(createRes.body.draft.files.docs[0]).toMatch(
+            new RegExp('^threshold/cache-drafts/' + textDraftId + '/docs/text-block-handoff(?:-[0-9]+(?:-[0-9]+)?)?\\.md$'),
+        );
+    });
+
     test('exports cache draft as zip containing manifest and readme', async () => {
         const res = await request(app)
             .post('/api/threshold/cache-drafts/' + draftId + '/export')
@@ -539,9 +568,11 @@ describe('Threshold cache draft workflow', () => {
         const draftZip = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '.zip');
         const installDir = path.join(DATA_ROOT, 'archive', 'caches', draftId);
         const multiDraftDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId + '-multi');
+        const textDraftDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId + '-text');
         await fs.promises.rm(draftDir, { recursive: true, force: true });
         await fs.promises.rm(draftZip, { force: true });
         await fs.promises.rm(installDir, { recursive: true, force: true });
         await fs.promises.rm(multiDraftDir, { recursive: true, force: true });
+        await fs.promises.rm(textDraftDir, { recursive: true, force: true });
     });
 });

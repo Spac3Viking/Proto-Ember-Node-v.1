@@ -39,6 +39,10 @@ const {
     FORGE_DIR, ARCHETYPES_DIR, BOOTSTRAP_DIR, ROLLING_BOOTSTRAP_PATH,
 } = require('./storageConfig');
 const { listThreadSummaries } = require('./threadMemory');
+const {
+    getCacheInteractionSummary,
+    getRecentCacheInteractions,
+} = require('./cacheInteractionMemory');
 
 // ── File paths ────────────────────────────────────────────────────────────────
 
@@ -47,6 +51,8 @@ const FORGE_MD_PATH        = path.join(FORGE_DIR, 'ember-node-forge-v1.3.md');
 const ACTIVE_BOOTSTRAP_PATH = path.join(BOOTSTRAP_DIR, 'active-bootstrap.json');
 const ROLLING_BOOTSTRAP_STALE_MS = 1000 * 60 * 60 * 24 * 7;
 const MAX_ROLLING_BOOTSTRAP_PROMPT_CHARS = 420;
+const BOOTSTRAP_CACHE_SUMMARY_LIMIT = 4;
+const BOOTSTRAP_CACHE_RECENT_LIMIT = 6;
 
 // ── Forge v1.3 canonical markdown ─────────────────────────────────────────────
 
@@ -440,6 +446,14 @@ function buildRollingBootstrap(opts) {
     const normalizedQuestions = Array.isArray(openQuestions)
         ? openQuestions.filter(Boolean).map(String).slice(0, 8)
         : [];
+    const cacheInteractionSummary = getCacheInteractionSummary({ limit: BOOTSTRAP_CACHE_SUMMARY_LIMIT });
+    const cacheInteractionRecent = getRecentCacheInteractions(BOOTSTRAP_CACHE_RECENT_LIMIT).map(entry => ({
+        kind: entry.kind,
+        at: entry.at,
+        draftId: entry.draftId,
+        cacheId: entry.cacheId,
+        handoffType: entry.handoffType,
+    }));
 
     const archetypeNotes = {
         ember_prime: [],
@@ -461,6 +475,7 @@ function buildRollingBootstrap(opts) {
     if (normalizedQuestions.length > 0) summaryParts.push('Open questions: ' + normalizedQuestions.slice(0, 3).join('; ') + '.');
     if (normalizedDecisions.length > 0) summaryParts.push('Recent decisions: ' + normalizedDecisions.slice(0, 3).join('; ') + '.');
     if (sourceThreads.length > 0) summaryParts.push('Signal Threads groundwork: ' + sourceThreads.length + ' remembered thread summaries.');
+    if (cacheInteractionSummary) summaryParts.push('Cache memory: ' + cacheInteractionSummary);
 
     return {
         version: '0.1.0',
@@ -477,6 +492,10 @@ function buildRollingBootstrap(opts) {
         place_memory: {
             enabled: false,
             notes: [],
+        },
+        cache_memory: {
+            summary: cacheInteractionSummary,
+            recent: cacheInteractionRecent,
         },
     };
 }

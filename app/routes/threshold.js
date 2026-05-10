@@ -30,6 +30,7 @@ const {
     probeOllamaRuntime,
     launchOllamaRuntime,
 } = require('../runtimeStewardship');
+const { recordCacheInteraction } = require('../cacheInteractionMemory');
 const {
     DETECT_SUPPORTED_EXTS,
     DETECT_IGNORE_FILES,
@@ -42,6 +43,7 @@ const CACHE_DRAFT_EXPORTS_DIR = path.join(EXPORTS_DIR, 'cache-drafts');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
 const MAX_DRAFT_ID_LENGTH = 64;
 const MAX_DOC_NAME_COLLISION_ATTEMPTS = 1000;
+const DEFAULT_HANDOFF_STEM = 'threshold-handoff';
 const GREEN_FIRE_HANDOFF_TYPES = new Set([
     'research-brief',
     'field-note',
@@ -188,6 +190,73 @@ function uniqueInboxName(filename) {
     return candidate;
 }
 
+function normalizeMarkdownFilename(filename, fallbackStem) {
+    const fallback = String(fallbackStem || '').trim() || DEFAULT_HANDOFF_STEM;
+    const raw = String(filename || (fallback + '.md')).trim();
+    const ext = path.extname(raw).toLowerCase();
+    const withMarkdownExt = ext === '.md'
+        ? raw
+        : ext
+            ? path.basename(raw, ext) + '.md'
+            : raw + '.md';
+    return sanitizeFilename(withMarkdownExt);
+}
+
+function createInboxMarkdownFromText(markdown, preferredFilename) {
+    const content = typeof markdown === 'string' ? markdown : '';
+    if (!content.trim()) {
+        const error = new Error('markdown is required');
+        error.status = 400;
+        throw error;
+    }
+    ensureThresholdInboxDir();
+    const uniqueFilename = uniqueInboxName(normalizeMarkdownFilename(preferredFilename, DEFAULT_HANDOFF_STEM));
+    const absPath = path.resolve(THRESHOLD_INBOX_DIR, uniqueFilename);
+    if (!isPathInside(THRESHOLD_INBOX_DIR, absPath)) {
+        const error = new Error('Invalid markdown target path.');
+        error.status = 400;
+        throw error;
+    }
+    fs.writeFileSync(absPath, content, 'utf8');
+    return {
+        relPath: 'threshold/inbox/' + uniqueFilename,
+        absPath,
+        markdown: content,
+    };
+}
+
+/**
+ * Extract markdown text from a block input.
+ * Accepted formats:
+ * - string markdown
+ * - object with `markdown` string
+ * - object with `content` string
+ * Precedence: markdown > content.
+ *
+ * @param {string|object} item
+ * @returns {string}
+ */
+function extractMarkdownFromBlock(item) {
+    if (typeof item === 'string') return item;
+    if (item && typeof item.markdown === 'string') return item.markdown;
+    if (item && typeof item.content === 'string') return item.content;
+    return '';
+}
+
+/**
+ * Resolve a preferred markdown filename for a block input.
+ * Precedence: filename > name > title > generated fallback.
+ *
+ * @param {string|object} item
+ * @param {number} index
+ * @returns {string}
+ */
+function resolveMarkdownBlockFilename(item, index) {
+    const fallback = `${DEFAULT_HANDOFF_STEM}-${index + 1}.md`;
+    if (typeof item === 'string') return fallback;
+    return item.filename || item.name || item.title || fallback;
+}
+
 function listThresholdInboxFiles() {
     ensureThresholdInboxDir();
     const entries = fs.readdirSync(THRESHOLD_INBOX_DIR, { withFileTypes: true });
@@ -325,7 +394,7 @@ function parseManifestIfPresent(filePath) {
     }
 }
 
-function collectCacheDraftMarkdownSources({ relPath, relPaths }) {
+function collectCacheDraftMarkdownSources({ relPath, relPaths, markdown, markdownBlocks, markdownFilename }) {
     const candidates = [];
     if (Array.isArray(relPaths)) {
         for (const value of relPaths) {
@@ -335,12 +404,6 @@ function collectCacheDraftMarkdownSources({ relPath, relPaths }) {
     }
     const single = String(relPath || '').trim();
     if (single) candidates.push(single);
-    if (candidates.length === 0) {
-        const error = new Error('path is required');
-        error.status = 400;
-        throw error;
-    }
-
     const seen = new Set();
     const sources = [];
     for (const candidate of candidates) {
@@ -367,16 +430,47 @@ function collectCacheDraftMarkdownSources({ relPath, relPaths }) {
         });
     }
 
+    const singleMarkdown = typeof markdown === 'string' ? markdown.trim() : '';
+    if (singleMarkdown) {
+        const source = createInboxMarkdownFromText(markdown, markdownFilename);
+        sources.push(source);
+    }
+
+    if (Array.isArray(markdownBlocks)) {
+        for (let i = 0; i < markdownBlocks.length; i++) {
+            const item = markdownBlocks[i];
+            const text = extractMarkdownFromBlock(item);
+            if (!String(text || '').trim()) continue;
+            const preferredFilename = resolveMarkdownBlockFilename(item, i);
+            sources.push(createInboxMarkdownFromText(text, preferredFilename));
+        }
+    }
+
     if (sources.length === 0) {
-        const error = new Error('path is required');
+        const error = new Error('path or markdown is required');
         error.status = 400;
         throw error;
     }
     return sources;
 }
 
-function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, description }) {
-    const sources = collectCacheDraftMarkdownSources({ relPath, relPaths });
+function createCacheDraftFromThresholdFile({
+    relPath,
+    relPaths,
+    markdown,
+    markdownBlocks,
+    markdownFilename,
+    draftId,
+    title,
+    description,
+}) {
+    const sources = collectCacheDraftMarkdownSources({
+        relPath,
+        relPaths,
+        markdown,
+        markdownBlocks,
+        markdownFilename,
+    });
     const primarySource = sources[0];
     const resolvedDraft = resolveCacheDraftDir(
         draftId || path.basename(primarySource.absPath, path.extname(primarySource.absPath)),
@@ -475,6 +569,13 @@ function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, 
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
     fs.writeFileSync(readmePath, readme + '\n', 'utf8');
     fs.writeFileSync(handoffPath, primarySource.markdown, 'utf8');
+    try {
+        recordCacheInteraction({
+            kind: 'cache_draft_created',
+            draftId: resolvedDraft.id,
+            sourcePaths: sources.map(source => source.relPath),
+        });
+    } catch { /* non-blocking memory update */ }
 
     return {
         id: resolvedDraft.id,
@@ -538,6 +639,13 @@ function exportCacheDraftZip(draftId) {
     }
     const exportPath = path.join(CACHE_DRAFT_EXPORTS_DIR, resolved.id + '.zip');
     zip.writeZip(exportPath);
+    try {
+        recordCacheInteraction({
+            kind: 'cache_draft_exported',
+            draftId: resolved.id,
+            sourcePaths: [toRootRelative(exportPath) || ('exports/cache-drafts/' + resolved.id + '.zip')],
+        });
+    } catch { /* non-blocking memory update */ }
 
     return {
         id: resolved.id,
@@ -603,6 +711,14 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
         error.status = 400;
         throw error;
     }
+    try {
+        recordCacheInteraction({
+            kind: 'cache_draft_installed',
+            draftId: normalizedDraftId,
+            cacheId: normalizedDraftId,
+            sourcePaths: [toRootRelative(zipPath) || ('exports/cache-drafts/' + normalizedDraftId + '.zip')],
+        });
+    } catch { /* non-blocking memory update */ }
 
     return {
         id: normalizedDraftId,
@@ -878,10 +994,18 @@ router.post('/api/threshold/cache-drafts', writeLimiter, (req, res) => {
     try {
         const relPath = req.body && req.body.path ? String(req.body.path) : '';
         const relPaths = Array.isArray(req.body && req.body.paths) ? req.body.paths : null;
-        if (!relPath && (!relPaths || relPaths.length === 0)) return res.status(400).json({ error: 'path is required' });
+        const markdown = req.body && typeof req.body.markdown === 'string' ? req.body.markdown : '';
+        const markdownBlocks = Array.isArray(req.body && req.body.markdownBlocks) ? req.body.markdownBlocks : null;
+        const markdownFilename = req.body && req.body.markdownFilename ? String(req.body.markdownFilename) : null;
+        if (!relPath && (!relPaths || relPaths.length === 0) && !markdown.trim() && (!markdownBlocks || markdownBlocks.length === 0)) {
+            return res.status(400).json({ error: 'path or markdown is required' });
+        }
         const draft = createCacheDraftFromThresholdFile({
             relPath,
             relPaths,
+            markdown,
+            markdownBlocks,
+            markdownFilename,
             draftId: req.body && req.body.draftId,
             title: req.body && req.body.title,
             description: req.body && req.body.description,
@@ -964,6 +1088,16 @@ router.get('/api/threshold/files/content', readLimiter, (req, res) => {
         const handoff = ext === '.md'
             ? parseGreenFireHandoff(content)
             : null;
+        if (handoff && handoff.detected) {
+            try {
+                recordCacheInteraction({
+                    kind: 'threshold_handoff_viewed',
+                    sourcePaths: [relPath.replace(/\\/g, '/')],
+                    handoffType: handoff.type,
+                    handoffStatus: handoff.status,
+                });
+            } catch { /* non-blocking memory update */ }
+        }
         const contentType = ext === '.md'
             ? 'text/markdown'
             : ext === '.json'
