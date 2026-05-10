@@ -430,18 +430,22 @@ describe('Threshold cache draft workflow', () => {
         expect(Array.isArray(createRes.body.draft.files.documents)).toBe(true);
         expect(createRes.body.draft.files.documents.length).toBe(1);
         expect(createRes.body.draft.files.documents[0]).toBe('threshold/cache-drafts/' + draftId + '/documents/cache-draft-source.md');
-        expect(createRes.body.draft.manifest.source.path).toBe(importedPath);
-        expect(createRes.body.draft.manifest.source.paths).toEqual([importedPath]);
-        expect(createRes.body.draft.manifest.continuity.markdownCenter).toBe(true);
-        expect(createRes.body.draft.manifest.continuity.primary).toBe('documents/cache-draft-source.md');
-        expect(createRes.body.draft.manifest.continuity.documents).toEqual(['documents/cache-draft-source.md']);
+        expect(createRes.body.draft.manifest.id).toBe(draftId);
+        expect(createRes.body.draft.manifest.title).toBe('Phase 16H-B Test Draft');
+        expect(createRes.body.draft.manifest.type).toBe('local-cache-draft');
+        expect(createRes.body.draft.manifest.status).toBe('draft');
+        expect(createRes.body.draft.manifest.source).toBe('threshold');
+        expect(createRes.body.draft.manifest.recommended_destination).toBe('archive/caches/' + draftId);
+        expect(Array.isArray(createRes.body.draft.manifest.documents)).toBe(true);
+        expect(createRes.body.draft.manifest.documents[0].path).toBe('documents/cache-draft-source.md');
+        expect(createRes.body.draft.manifest.documents[0].status).toBe('unverified');
 
         const listRes = await request(app).get('/api/threshold/cache-drafts');
         expect(listRes.status).toBe(200);
         const found = (listRes.body.drafts || []).find(d => d.id === draftId);
         expect(found).toBeTruthy();
         expect(found.manifest).toBeTruthy();
-        expect(found.manifest.type).toBe('cache-draft');
+        expect(found.manifest.type).toBe('local-cache-draft');
     });
 
     test('creates multi-file cache draft from threshold markdown paths array', async () => {
@@ -469,13 +473,8 @@ describe('Threshold cache draft workflow', () => {
         expect(createRes.status).toBe(200);
         expect(createRes.body.success).toBe(true);
         expect(createRes.body.draft.id).toBe(multiDraftId);
-        expect(createRes.body.draft.manifest.source.path).toBe(firstPath);
-        expect(createRes.body.draft.manifest.source.paths).toEqual([firstPath, secondPath]);
-        expect(createRes.body.draft.manifest.continuity.markdownCenter).toBe(true);
-        expect(createRes.body.draft.manifest.continuity.documents).toEqual([
-            'documents/multi-a.md',
-            'documents/multi-b.md',
-        ]);
+        expect(createRes.body.draft.manifest.type).toBe('local-cache-draft');
+        expect(createRes.body.draft.manifest.documents.map(doc => doc.path)).toEqual(['documents/multi-a.md', 'documents/multi-b.md']);
         expect(createRes.body.draft.files.documents).toEqual([
             'threshold/cache-drafts/' + multiDraftId + '/documents/multi-a.md',
             'threshold/cache-drafts/' + multiDraftId + '/documents/multi-b.md',
@@ -485,7 +484,7 @@ describe('Threshold cache draft workflow', () => {
         expect(listRes.status).toBe(200);
         const found = (listRes.body.drafts || []).find(d => d.id === multiDraftId);
         expect(found).toBeTruthy();
-        expect(found.manifest.continuity.documents).toEqual(['documents/multi-a.md', 'documents/multi-b.md']);
+        expect(found.manifest.documents.map(doc => doc.path)).toEqual(['documents/multi-a.md', 'documents/multi-b.md']);
     });
 
     test('creates cache draft directly from markdown text block and stages inbox .md source', async () => {
@@ -503,18 +502,61 @@ describe('Threshold cache draft workflow', () => {
         expect(createRes.body.success).toBe(true);
         expect(createRes.body.draft.id).toBe(textDraftId);
         expect(createRes.body.draft.path).toBe('threshold/cache-drafts/' + textDraftId);
-
-        const sourcePath = createRes.body.draft.manifest.source.path;
-        expect(sourcePath).toMatch(/^threshold\/inbox\/text-block-handoff(?:-[0-9]+(?:-[0-9]+)?)?\.md$/);
-        importedPaths.push(sourcePath);
-
-        expect(createRes.body.draft.manifest.source.paths).toEqual([sourcePath]);
-        expect(createRes.body.draft.manifest.continuity.markdownCenter).toBe(true);
-        expect(Array.isArray(createRes.body.draft.manifest.continuity.documents)).toBe(true);
-        expect(createRes.body.draft.manifest.continuity.documents.length).toBe(1);
+        expect(Array.isArray(createRes.body.draft.source_paths)).toBe(true);
+        if (createRes.body.draft.source_paths[0]) importedPaths.push(createRes.body.draft.source_paths[0]);
+        expect(Array.isArray(createRes.body.draft.manifest.documents)).toBe(true);
+        expect(createRes.body.draft.manifest.documents.length).toBe(1);
+        const createdDocPath = createRes.body.draft.manifest.documents[0].path;
+        expect(createdDocPath).toMatch(/^documents\/text-block-handoff(?:-[0-9]+(?:-[0-9]+)?)?\.md$/);
         expect(createRes.body.draft.files.documents[0]).toMatch(
             new RegExp('^threshold/cache-drafts/' + textDraftId + '/documents/text-block-handoff(?:-[0-9]+(?:-[0-9]+)?)?\\.md$'),
         );
+    });
+
+    test('supports adding selected non-pdf files to existing draft and opening/removing draft documents', async () => {
+        const txtUpload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from('plain threshold text', 'utf8'), 'draft-extra.txt');
+        const jsonUpload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from(JSON.stringify({ k: 'v' }, null, 2), 'utf8'), 'draft-extra.json');
+        expect(txtUpload.status).toBe(200);
+        expect(jsonUpload.status).toBe(200);
+        const txtPath = txtUpload.body.imported[0].path;
+        const jsonPath = jsonUpload.body.imported[0].path;
+        importedPaths.push(txtPath, jsonPath);
+
+        const addRes = await request(app)
+            .post('/api/threshold/cache-drafts/' + draftId + '/documents/add')
+            .send({ paths: [txtPath, jsonPath] });
+        expect(addRes.status).toBe(200);
+        expect(addRes.body.success).toBe(true);
+        expect(Array.isArray(addRes.body.draft.added)).toBe(true);
+        expect(addRes.body.draft.added.length).toBe(2);
+        expect(addRes.body.draft.added.map(doc => doc.path)).toEqual(
+            expect.arrayContaining(['documents/draft-extra.txt', 'documents/draft-extra.json']),
+        );
+
+        const getRes = await request(app).get('/api/threshold/cache-drafts/' + draftId);
+        expect(getRes.status).toBe(200);
+        expect(getRes.body.success).toBe(true);
+        expect(getRes.body.draft.manifest.documents.some(doc => doc.path === 'documents/draft-extra.txt')).toBe(true);
+        expect(getRes.body.draft.manifest.documents.some(doc => doc.path === 'documents/draft-extra.json')).toBe(true);
+
+        const readRes = await request(app)
+            .get('/api/threshold/cache-drafts/' + draftId + '/documents/content')
+            .query({ path: 'documents/draft-extra.json' });
+        expect(readRes.status).toBe(200);
+        expect(readRes.body.success).toBe(true);
+        expect(readRes.body.path).toBe('threshold/cache-drafts/' + draftId + '/documents/draft-extra.json');
+        expect(readRes.body.contentType).toBe('application/json');
+
+        const removeRes = await request(app)
+            .delete('/api/threshold/cache-drafts/' + draftId + '/documents')
+            .send({ path: 'documents/draft-extra.txt' });
+        expect(removeRes.status).toBe(200);
+        expect(removeRes.body.success).toBe(true);
+        expect(removeRes.body.updated.manifest.documents.some(doc => doc.path === 'documents/draft-extra.txt')).toBe(false);
     });
 
     test('exports cache draft as zip containing only normalized draft files', async () => {
@@ -578,10 +620,14 @@ describe('Threshold cache draft workflow', () => {
         const installDir = path.join(DATA_ROOT, 'archive', 'caches', draftId);
         const multiDraftDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId + '-multi');
         const textDraftDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId + '-text');
+        const draftZipMulti = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '-multi.zip');
+        const draftZipText = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '-text.zip');
         await fs.promises.rm(draftDir, { recursive: true, force: true });
         await fs.promises.rm(draftZip, { force: true });
         await fs.promises.rm(installDir, { recursive: true, force: true });
         await fs.promises.rm(multiDraftDir, { recursive: true, force: true });
         await fs.promises.rm(textDraftDir, { recursive: true, force: true });
+        await fs.promises.rm(draftZipMulti, { force: true });
+        await fs.promises.rm(draftZipText, { force: true });
     });
 });

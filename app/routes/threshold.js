@@ -41,6 +41,8 @@ const THRESHOLD_INBOX_DIR = path.join(DATA_ROOT, 'threshold', 'inbox');
 const THRESHOLD_CACHE_DRAFTS_DIR = path.join(DATA_ROOT, 'threshold', 'cache-drafts');
 const CACHE_DRAFT_EXPORTS_DIR = path.join(EXPORTS_DIR, 'cache-drafts');
 const THRESHOLD_IMPORT_EXTS = new Set(['.md', '.txt', '.json', '.pdf']);
+const THRESHOLD_DRAFT_SOURCE_EXTS = new Set(['.md', '.txt', '.json']);
+const THRESHOLD_DRAFT_READER_EXTS = new Set(['.md', '.txt', '.json']);
 const MAX_DRAFT_ID_LENGTH = 64;
 const MAX_DOC_NAME_COLLISION_ATTEMPTS = 1000;
 const DEFAULT_HANDOFF_STEM = 'threshold-handoff';
@@ -406,7 +408,166 @@ function parseManifestIfPresent(filePath) {
     }
 }
 
-function collectCacheDraftMarkdownSources({ relPath, relPaths, markdown, markdownBlocks, markdownFilename }) {
+function normalizeIsoTimestamp(value, fallback) {
+    const candidate = String(value || '').trim();
+    if (!candidate) return fallback;
+    const date = new Date(candidate);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : fallback;
+}
+
+function documentTypeFromExt(ext) {
+    if (ext === '.md') return 'research-brief';
+    if (ext === '.txt') return 'field-note';
+    if (ext === '.json') return 'source-summary';
+    return 'document';
+}
+
+function titleFromDocumentPath(relPath) {
+    const filename = path.basename(String(relPath || ''), path.extname(String(relPath || '')));
+    const cleaned = filename.replace(/[_-]+/g, ' ').trim();
+    return cleaned || 'Untitled';
+}
+
+function normalizeDraftDocumentPath(inputPath) {
+    let normalized = String(inputPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!normalized) return null;
+    if (normalized === 'handoff.md') {
+        normalized = 'documents/handoff.md';
+    }
+    if (normalized.startsWith('docs/')) {
+        normalized = 'documents/' + normalized.slice('docs/'.length);
+    }
+    if (!normalized.startsWith('documents/')) return null;
+    if (normalized.includes('..')) return null;
+    return normalized;
+}
+
+function normalizeDraftDocumentEntry(entry, fallbackPath) {
+    const source = entry && typeof entry === 'object' ? entry : {};
+    const relPath = normalizeDraftDocumentPath(source.path || fallbackPath);
+    if (!relPath) return null;
+    return {
+        path: relPath,
+        title: String(source.title || titleFromDocumentPath(relPath)).trim() || titleFromDocumentPath(relPath),
+        type: String(source.type || documentTypeFromExt(path.extname(relPath).toLowerCase())).trim() || 'document',
+        tags: Array.isArray(source.tags) ? source.tags.map(v => String(v).trim()).filter(Boolean) : [],
+        archetypes: Array.isArray(source.archetypes) ? source.archetypes.map(v => String(v).trim()).filter(Boolean) : [],
+        status: String(source.status || 'unverified').trim() || 'unverified',
+    };
+}
+
+function listDraftDocumentPaths(draftRoot) {
+    const documentsDir = path.join(draftRoot, 'documents');
+    if (!fs.existsSync(documentsDir)) return [];
+    return listFilesRecursive(documentsDir)
+        .map(filePath => path.relative(draftRoot, filePath).replace(/\\/g, '/'))
+        .filter(rel => rel.startsWith('documents/') && isVisiblePath(rel))
+        .sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeDraftManifest(manifest, draftId, updatedAtFallback) {
+    const raw = manifest && typeof manifest === 'object' ? manifest : {};
+    const nowIso = normalizeIsoTimestamp(updatedAtFallback, new Date().toISOString());
+    const normalizedId = sanitizeDraftId(raw.id || draftId) || sanitizeDraftId(draftId) || 'cache-draft';
+    const title = String(raw.title || raw.name || normalizedId).trim() || normalizedId;
+    const createdAt = normalizeIsoTimestamp(raw.created_at || raw.generatedAt, nowIso);
+    const updatedAt = normalizeIsoTimestamp(raw.updated_at || raw.generatedAt || nowIso, nowIso);
+    const documentEntries = [];
+    if (Array.isArray(raw.documents)) {
+        raw.documents.forEach((entry, index) => {
+            const normalizedEntry = normalizeDraftDocumentEntry(entry, typeof entry === 'string' ? entry : null);
+            if (normalizedEntry) documentEntries.push(normalizedEntry);
+            else if (typeof entry === 'string') {
+                const fallback = normalizeDraftDocumentEntry(null, entry);
+                if (fallback) documentEntries.push(fallback);
+            } else if (entry && typeof entry.path === 'string') {
+                const fallback = normalizeDraftDocumentEntry(null, entry.path);
+                if (fallback) documentEntries.push(fallback);
+            } else if (typeof entry === 'object' && entry && typeof entry[index] === 'string') {
+                const fallback = normalizeDraftDocumentEntry(null, entry[index]);
+                if (fallback) documentEntries.push(fallback);
+            }
+        });
+    }
+    if (documentEntries.length === 0 && raw.continuity && Array.isArray(raw.continuity.documents)) {
+        raw.continuity.documents.forEach(rel => {
+            const fallback = normalizeDraftDocumentEntry(null, rel);
+            if (fallback) documentEntries.push(fallback);
+        });
+    }
+    return {
+        id: normalizedId,
+        title,
+        version: String(raw.version || '0.1.0').trim() || '0.1.0',
+        type: 'local-cache-draft',
+        status: String(raw.status || 'draft').trim() || 'draft',
+        trusted: Boolean(raw.trusted),
+        auto_load: Boolean(raw.auto_load),
+        created_at: createdAt,
+        updated_at: updatedAt,
+        description: String(raw.description || '').trim(),
+        source: 'threshold',
+        recommended_destination: String(raw.recommended_destination || ('archive/caches/' + normalizedId)).trim() || ('archive/caches/' + normalizedId),
+        documents: documentEntries,
+        tags: Array.isArray(raw.tags) ? raw.tags.map(v => String(v).trim()).filter(Boolean) : [],
+        archetypes: Array.isArray(raw.archetypes) ? raw.archetypes.map(v => String(v).trim()).filter(Boolean) : [],
+        license: String(raw.license || 'unknown').trim() || 'unknown',
+    };
+}
+
+function syncManifestDocumentsFromDisk(normalizedManifest, draftRoot) {
+    const byPath = new Map();
+    (normalizedManifest.documents || []).forEach(entry => {
+        const normalized = normalizeDraftDocumentEntry(entry, entry && entry.path ? entry.path : null);
+        if (normalized) byPath.set(normalized.path, normalized);
+    });
+    const diskPaths = listDraftDocumentPaths(draftRoot);
+    diskPaths.forEach(relPath => {
+        if (!byPath.has(relPath)) {
+            byPath.set(relPath, normalizeDraftDocumentEntry(null, relPath));
+        }
+    });
+    return {
+        ...normalizedManifest,
+        documents: [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path)),
+    };
+}
+
+function parseDraftManifestAtPath(manifestPath, draftId, updatedAtFallback) {
+    const raw = parseManifestIfPresent(manifestPath) || {};
+    const normalized = normalizeDraftManifest(raw, draftId, updatedAtFallback);
+    const draftRoot = path.dirname(manifestPath);
+    return syncManifestDocumentsFromDisk(normalized, draftRoot);
+}
+
+function resolveDraftDocumentAbsolutePath(draftId, relPath) {
+    const resolved = resolveCacheDraftDir(draftId);
+    if (!resolved || !fs.existsSync(resolved.path)) return null;
+    const normalizedRel = normalizeDraftDocumentPath(relPath);
+    if (!normalizedRel) return null;
+    const absPath = path.resolve(resolved.path, normalizedRel);
+    if (!isPathInside(resolved.path, absPath)) return null;
+    if (!fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) return null;
+    return {
+        draft: resolved,
+        relPath: normalizedRel,
+        absPath,
+    };
+}
+
+function buildDraftDocumentEntryFromSource(source, relPath) {
+    const fallbackTitle = titleFromDocumentPath(relPath);
+    return normalizeDraftDocumentEntry({
+        path: relPath,
+        title: source.title || fallbackTitle,
+        type: source.documentType || documentTypeFromExt(source.ext),
+        tags: source.tags || [],
+        archetypes: source.archetypes || [],
+        status: source.documentStatus || 'unverified',
+    }, relPath);
+}
+
+function collectCacheDraftSources({ relPath, relPaths, markdown, markdownBlocks, markdownFilename }) {
     const candidates = [];
     if (Array.isArray(relPaths)) {
         for (const value of relPaths) {
@@ -430,22 +591,41 @@ function collectCacheDraftMarkdownSources({ relPath, relPaths, markdown, markdow
             throw error;
         }
         const ext = path.extname(absPath).toLowerCase();
-        if (ext !== '.md') {
-            const error = new Error('Cache draft source must be a markdown file.');
+        if (!THRESHOLD_DRAFT_SOURCE_EXTS.has(ext)) {
+            const error = new Error('Cache draft source must be .md, .txt, or .json.');
             error.status = 400;
             throw error;
         }
+        const content = fs.readFileSync(absPath, 'utf8');
+        const handoff = ext === '.md' ? parseGreenFireHandoff(content) : null;
         sources.push({
             relPath: toRootRelative(absPath) || normalized,
             absPath,
-            markdown: fs.readFileSync(absPath, 'utf8'),
+            ext,
+            content,
+            title: ext === '.md' ? extractMarkdownDisplayTitle(content, path.basename(absPath, ext)) : titleFromDocumentPath(path.basename(absPath)),
+            documentType: handoff && handoff.type ? handoff.type : documentTypeFromExt(ext),
+            tags: handoff && Array.isArray(handoff.tags) ? handoff.tags : [],
+            archetypes: handoff && Array.isArray(handoff.archetypes) ? handoff.archetypes : [],
+            documentStatus: handoff && handoff.status ? handoff.status : 'unverified',
         });
     }
 
     const singleMarkdown = typeof markdown === 'string' ? markdown.trim() : '';
     if (singleMarkdown) {
         const source = createInboxMarkdownFromText(markdown, markdownFilename);
+        const handoff = parseGreenFireHandoff(source.markdown);
         sources.push(source);
+        sources[sources.length - 1] = {
+            ...source,
+            ext: '.md',
+            content: source.markdown,
+            title: extractMarkdownDisplayTitle(source.markdown, path.basename(source.absPath, '.md')),
+            documentType: handoff && handoff.type ? handoff.type : 'research-brief',
+            tags: handoff && Array.isArray(handoff.tags) ? handoff.tags : [],
+            archetypes: handoff && Array.isArray(handoff.archetypes) ? handoff.archetypes : [],
+            documentStatus: handoff && handoff.status ? handoff.status : 'unverified',
+        };
     }
 
     if (Array.isArray(markdownBlocks)) {
@@ -454,7 +634,18 @@ function collectCacheDraftMarkdownSources({ relPath, relPaths, markdown, markdow
             const text = extractMarkdownFromBlock(item);
             if (!String(text || '').trim()) continue;
             const preferredFilename = resolveMarkdownBlockFilename(item, i);
-            sources.push(createInboxMarkdownFromText(text, preferredFilename));
+            const source = createInboxMarkdownFromText(text, preferredFilename);
+            const handoff = parseGreenFireHandoff(source.markdown);
+            sources.push({
+                ...source,
+                ext: '.md',
+                content: source.markdown,
+                title: extractMarkdownDisplayTitle(source.markdown, path.basename(source.absPath, '.md')),
+                documentType: handoff && handoff.type ? handoff.type : 'research-brief',
+                tags: handoff && Array.isArray(handoff.tags) ? handoff.tags : [],
+                archetypes: handoff && Array.isArray(handoff.archetypes) ? handoff.archetypes : [],
+                documentStatus: handoff && handoff.status ? handoff.status : 'unverified',
+            });
         }
     }
 
@@ -464,6 +655,134 @@ function collectCacheDraftMarkdownSources({ relPath, relPaths, markdown, markdow
         throw error;
     }
     return sources;
+}
+
+function writeCacheDraftReadme({ draftId, title, description, updatedAt, documents }) {
+    const readme = [
+        '# ' + title,
+        '',
+        description || 'Cache draft generated from Threshold.',
+        '',
+        '## Cache Draft',
+        '',
+        '- id: `' + draftId + '`',
+        '- source: threshold',
+        '- updated: ' + updatedAt,
+        '',
+        '## Files',
+        '',
+        '- `manifest.json`',
+        '- `README.md`',
+        '- `documents/`',
+        '',
+        ...documents.map(entry => '- `' + entry.path + '`'),
+        '',
+        '## Note',
+        '',
+        'This cache draft is local-first and portable.',
+        'Review all source material before treating this cache as trusted continuity memory.',
+    ].join('\n');
+    return readme + '\n';
+}
+
+function writeCacheDraftManifest({ draftPath, manifest }) {
+    const manifestPath = path.join(draftPath, 'manifest.json');
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+}
+
+function buildCacheDraftState({ resolvedDraft, title, description }) {
+    const manifestPath = path.join(resolvedDraft.path, 'manifest.json');
+    const existingManifest = parseDraftManifestAtPath(manifestPath, resolvedDraft.id, new Date().toISOString());
+    const now = new Date().toISOString();
+    const normalized = {
+        ...existingManifest,
+        id: resolvedDraft.id,
+        title: String(title || '').trim() || existingManifest.title || resolvedDraft.id,
+        description: String(description || '').trim() || existingManifest.description || 'Cache draft generated from Threshold.',
+        created_at: normalizeIsoTimestamp(existingManifest.created_at, now),
+        updated_at: now,
+        recommended_destination: 'archive/caches/' + resolvedDraft.id,
+        source: 'threshold',
+        type: 'local-cache-draft',
+        status: existingManifest.status || 'draft',
+        trusted: Boolean(existingManifest.trusted),
+        auto_load: Boolean(existingManifest.auto_load),
+    };
+    return normalized;
+}
+
+function appendSourcesToCacheDraft({ draftId, sources, title, description }) {
+    const resolvedDraft = resolveCacheDraftDir(draftId);
+    if (!resolvedDraft) {
+        const error = new Error('Invalid draftId.');
+        error.status = 400;
+        throw error;
+    }
+    ensureThresholdCacheDraftDirs();
+    fs.mkdirSync(resolvedDraft.path, { recursive: true });
+    const documentsDir = path.join(resolvedDraft.path, 'documents');
+    fs.mkdirSync(documentsDir, { recursive: true });
+
+    const manifest = buildCacheDraftState({ resolvedDraft, title, description });
+    const usedDocNames = new Set(
+        listDraftDocumentPaths(resolvedDraft.path).map(rel => path.basename(rel).toLowerCase()),
+    );
+    const appended = [];
+    for (let i = 0; i < sources.length; i++) {
+        const source = sources[i];
+        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('draft-doc-' + (i + 1));
+        const baseExt = path.extname(baseName).toLowerCase();
+        const stem = baseExt ? path.basename(baseName, baseExt) : baseName;
+        const ext = THRESHOLD_DRAFT_SOURCE_EXTS.has(source.ext) ? source.ext : '.md';
+        let candidate = stem + ext;
+        let suffix = 2;
+        let guard = 0;
+        while (usedDocNames.has(candidate.toLowerCase())) {
+            if (guard >= MAX_DOC_NAME_COLLISION_ATTEMPTS) {
+                const error = new Error('Unable to generate unique cache draft document name.');
+                error.status = 500;
+                throw error;
+            }
+            candidate = stem + '-' + suffix + ext;
+            suffix += 1;
+            guard += 1;
+        }
+        usedDocNames.add(candidate.toLowerCase());
+        const relPath = 'documents/' + candidate;
+        const absDocPath = path.join(resolvedDraft.path, relPath);
+        fs.mkdirSync(path.dirname(absDocPath), { recursive: true });
+        fs.writeFileSync(absDocPath, source.content, 'utf8');
+        appended.push(buildDraftDocumentEntryFromSource(source, relPath));
+    }
+
+    const byPath = new Map((manifest.documents || []).map(entry => [entry.path, normalizeDraftDocumentEntry(entry, entry.path)]));
+    appended.forEach(entry => {
+        if (entry) byPath.set(entry.path, entry);
+    });
+    const nextManifest = syncManifestDocumentsFromDisk({
+        ...manifest,
+        documents: [...byPath.values()].filter(Boolean),
+        updated_at: new Date().toISOString(),
+    }, resolvedDraft.path);
+
+    writeCacheDraftManifest({ draftPath: resolvedDraft.path, manifest: nextManifest });
+    fs.writeFileSync(
+        path.join(resolvedDraft.path, 'README.md'),
+        writeCacheDraftReadme({
+            draftId: resolvedDraft.id,
+            title: nextManifest.title,
+            description: nextManifest.description,
+            updatedAt: nextManifest.updated_at,
+            documents: nextManifest.documents,
+        }),
+        'utf8',
+    );
+
+    return {
+        resolvedDraft,
+        manifest: nextManifest,
+        appended,
+    };
 }
 
 function createCacheDraftFromThresholdFile({
@@ -476,7 +795,7 @@ function createCacheDraftFromThresholdFile({
     title,
     description,
 }) {
-    const sources = collectCacheDraftMarkdownSources({
+    const sources = collectCacheDraftSources({
         relPath,
         relPaths,
         markdown,
@@ -493,96 +812,13 @@ function createCacheDraftFromThresholdFile({
         throw error;
     }
 
-    ensureThresholdCacheDraftDirs();
-    fs.mkdirSync(resolvedDraft.path, { recursive: true });
+    const { manifest, appended } = appendSourcesToCacheDraft({
+        draftId: resolvedDraft.id,
+        sources,
+        title: String(title || '').trim() || primarySource.title || resolvedDraft.id,
+        description,
+    });
 
-    const now = new Date().toISOString();
-    const sourceRelPath = primarySource.relPath;
-    const manifestPath = path.join(resolvedDraft.path, 'manifest.json');
-    const priorManifest = parseManifestIfPresent(manifestPath);
-    const resolvedTitle = String(title || '').trim() || extractMarkdownDisplayTitle(primarySource.markdown, resolvedDraft.id);
-    const defaultDescription = 'Cache draft generated from Threshold handoff markdown.';
-    const priorDescription = priorManifest && typeof priorManifest.description === 'string'
-        ? priorManifest.description
-        : '';
-    const resolvedDescription = String(description || '').trim() || priorDescription || defaultDescription;
-    const readmePath = path.join(resolvedDraft.path, 'README.md');
-    const documentsDir = path.join(resolvedDraft.path, 'documents');
-    const documentRelPaths = [];
-    const usedDocNames = new Set();
-    fs.mkdirSync(documentsDir, { recursive: true });
-    for (let i = 0; i < sources.length; i++) {
-        const source = sources[i];
-        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('draft-doc-' + (i + 1));
-        const ext = path.extname(baseName).toLowerCase();
-        const stem = ext ? path.basename(baseName, ext) : baseName;
-        const targetExt = '.md';
-        let candidate = stem + targetExt;
-        let suffix = 2;
-        let guard = 0;
-        while (usedDocNames.has(candidate)) {
-            if (guard >= MAX_DOC_NAME_COLLISION_ATTEMPTS) {
-                const error = new Error('Unable to generate unique cache draft document name.');
-                error.status = 500;
-                throw error;
-            }
-            candidate = stem + '-' + suffix + targetExt;
-            suffix += 1;
-            guard += 1;
-        }
-        usedDocNames.add(candidate);
-        const absDocPath = path.join(documentsDir, candidate);
-        fs.writeFileSync(absDocPath, source.markdown, 'utf8');
-        documentRelPaths.push('documents/' + candidate);
-    }
-    const primaryDocRelPath = documentRelPaths[0] || null;
-    const manifest = {
-        id: resolvedDraft.id,
-        name: resolvedTitle,
-        version: '0.1.0-draft',
-        type: 'cache-draft',
-        source: {
-            room: 'threshold',
-            path: sourceRelPath,
-            paths: sources.map(source => source.relPath),
-        },
-        description: resolvedDescription,
-        continuity: {
-            markdownCenter: true,
-            primary: primaryDocRelPath,
-            documents: documentRelPaths,
-        },
-        generatedAt: now,
-    };
-    const readme = [
-        '# ' + resolvedTitle,
-        '',
-        resolvedDescription,
-        '',
-        '## Source',
-        '',
-        '- room: threshold',
-        '- file: `' + sourceRelPath + '`',
-        '- generated: ' + now,
-        '',
-        '## Files',
-        '',
-        '- `manifest.json`',
-        '- `README.md`',
-        '- `documents/`',
-        '',
-        ...documentRelPaths.map(rel => '- `' + rel + '`'),
-        '',
-        '## Continuity note',
-        '',
-        'This cache was prepared through Ember Node Threshold.',
-        'Review all sources before treating this cache as trusted continuity memory.',
-        '',
-        'This cache draft is local-first and portable.',
-    ].join('\n');
-
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-    fs.writeFileSync(readmePath, readme + '\n', 'utf8');
     try {
         recordCacheInteraction({
             kind: 'cache_draft_created',
@@ -595,11 +831,123 @@ function createCacheDraftFromThresholdFile({
         id: resolvedDraft.id,
         path: 'threshold/cache-drafts/' + resolvedDraft.id,
         manifest,
+        source_paths: sources.map(source => source.relPath),
         files: {
             manifest: 'threshold/cache-drafts/' + resolvedDraft.id + '/manifest.json',
             readme: 'threshold/cache-drafts/' + resolvedDraft.id + '/README.md',
-            documents: documentRelPaths.map(rel => 'threshold/cache-drafts/' + resolvedDraft.id + '/' + rel),
+            documents: appended.map(entry => 'threshold/cache-drafts/' + resolvedDraft.id + '/' + entry.path),
         },
+    };
+}
+
+function addFilesToCacheDraft({ draftId, relPaths, title, description }) {
+    const resolved = resolveCacheDraftDir(draftId);
+    if (!resolved || !fs.existsSync(resolved.path)) {
+        const error = new Error('Cache draft not found.');
+        error.status = 404;
+        throw error;
+    }
+    const sources = collectCacheDraftSources({
+        relPaths,
+        relPath: '',
+        markdown: '',
+        markdownBlocks: null,
+        markdownFilename: null,
+    });
+    const { manifest, appended } = appendSourcesToCacheDraft({
+        draftId: resolved.id,
+        sources,
+        title,
+        description,
+    });
+    return {
+        id: resolved.id,
+        path: 'threshold/cache-drafts/' + resolved.id,
+        manifest,
+        added: appended,
+    };
+}
+
+function readCacheDraft(draftId) {
+    const resolved = resolveCacheDraftDir(draftId);
+    if (!resolved || !fs.existsSync(resolved.path)) {
+        const error = new Error('Cache draft not found.');
+        error.status = 404;
+        throw error;
+    }
+    const manifestPath = path.join(resolved.path, 'manifest.json');
+    const readmePath = path.join(resolved.path, 'README.md');
+    if (!fs.existsSync(manifestPath) || !fs.existsSync(readmePath)) {
+        const error = new Error('Cache draft is incomplete (manifest.json + README.md required).');
+        error.status = 400;
+        throw error;
+    }
+    const stats = fs.statSync(manifestPath);
+    const manifest = parseDraftManifestAtPath(
+        manifestPath,
+        resolved.id,
+        (stats.mtime || stats.birthtime || new Date()).toISOString(),
+    );
+    return {
+        id: resolved.id,
+        path: 'threshold/cache-drafts/' + resolved.id,
+        manifest,
+        updatedAt: manifest.updated_at,
+    };
+}
+
+function removeDocumentFromCacheDraft({ draftId, documentPath }) {
+    const resolvedDoc = resolveDraftDocumentAbsolutePath(draftId, documentPath);
+    if (!resolvedDoc) {
+        const error = new Error('Draft document not found.');
+        error.status = 404;
+        throw error;
+    }
+    fs.unlinkSync(resolvedDoc.absPath);
+    const manifestPath = path.join(resolvedDoc.draft.path, 'manifest.json');
+    const nextManifest = syncManifestDocumentsFromDisk(
+        {
+            ...parseDraftManifestAtPath(manifestPath, resolvedDoc.draft.id, new Date().toISOString()),
+            documents: parseDraftManifestAtPath(manifestPath, resolvedDoc.draft.id, new Date().toISOString())
+                .documents
+                .filter(entry => entry.path !== resolvedDoc.relPath),
+            updated_at: new Date().toISOString(),
+        },
+        resolvedDoc.draft.path,
+    );
+    writeCacheDraftManifest({ draftPath: resolvedDoc.draft.path, manifest: nextManifest });
+    fs.writeFileSync(
+        path.join(resolvedDoc.draft.path, 'README.md'),
+        writeCacheDraftReadme({
+            draftId: resolvedDoc.draft.id,
+            title: nextManifest.title,
+            description: nextManifest.description,
+            updatedAt: nextManifest.updated_at,
+            documents: nextManifest.documents,
+        }),
+        'utf8',
+    );
+    return {
+        id: resolvedDoc.draft.id,
+        removed: resolvedDoc.relPath,
+        manifest: nextManifest,
+    };
+}
+
+function deleteCacheDraft(draftId) {
+    const resolved = resolveCacheDraftDir(draftId);
+    if (!resolved || !fs.existsSync(resolved.path)) {
+        const error = new Error('Cache draft not found.');
+        error.status = 404;
+        throw error;
+    }
+    fs.rmSync(resolved.path, { recursive: true, force: true });
+    const zipPath = path.join(CACHE_DRAFT_EXPORTS_DIR, resolved.id + '.zip');
+    fs.rmSync(zipPath, { force: true });
+    return {
+        id: resolved.id,
+        path: 'threshold/cache-drafts/' + resolved.id,
+        deleted: true,
     };
 }
 
@@ -614,13 +962,14 @@ function listCacheDrafts() {
             const manifestPath = path.join(resolved.path, 'manifest.json');
             const readmePath = path.join(resolved.path, 'README.md');
             if (!fs.existsSync(manifestPath) || !fs.existsSync(readmePath)) return null;
-            const manifest = parseManifestIfPresent(manifestPath) || {};
             const stats = fs.statSync(manifestPath);
+            const fallbackUpdatedAt = (stats.mtime || stats.birthtime || new Date()).toISOString();
+            const manifest = parseDraftManifestAtPath(manifestPath, resolved.id, fallbackUpdatedAt);
             return {
                 id: resolved.id,
                 path: 'threshold/cache-drafts/' + resolved.id,
                 manifest,
-                updatedAt: (stats.mtime || stats.birthtime || new Date()).toISOString(),
+                updatedAt: manifest.updated_at,
             };
         })
         .filter(Boolean)
@@ -1021,7 +1370,7 @@ router.get('/api/threshold/files', readLimiter, (req, res) => {
 
 /**
  * POST /api/threshold/cache-drafts
- * Body: { path?: "threshold/inbox/<name>.md", paths?: string[], draftId?, title?, description? }
+ * Body: { path?: "threshold/inbox/<name>", paths?: string[], draftId?, title?, description? }
  */
 router.post('/api/threshold/cache-drafts', writeLimiter, (req, res) => {
     try {
@@ -1064,6 +1413,101 @@ router.get('/api/threshold/cache-drafts', readLimiter, (req, res) => {
 });
 
 /**
+ * GET /api/threshold/cache-drafts/:id
+ * Read a single cache draft and normalized manifest.
+ */
+router.get('/api/threshold/cache-drafts/:id', readLimiter, (req, res) => {
+    try {
+        const draft = readCacheDraft(req.params.id);
+        res.json({ success: true, draft });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
+/**
+ * POST /api/threshold/cache-drafts/:id/documents/add
+ * Body: { paths: ["threshold/inbox/<name>", ...], title?, description? }
+ */
+router.post('/api/threshold/cache-drafts/:id/documents/add', writeLimiter, (req, res) => {
+    try {
+        const relPaths = Array.isArray(req.body && req.body.paths) ? req.body.paths : [];
+        if (relPaths.length === 0) {
+            return res.status(400).json({ error: 'paths is required' });
+        }
+        const draft = addFilesToCacheDraft({
+            draftId: req.params.id,
+            relPaths,
+            title: req.body && req.body.title,
+            description: req.body && req.body.description,
+        });
+        res.json({ success: true, draft });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
+/**
+ * GET /api/threshold/cache-drafts/:id/documents/content?path=documents/<name>
+ * Return reader-safe content for cache draft documents.
+ */
+router.get('/api/threshold/cache-drafts/:id/documents/content', readLimiter, (req, res) => {
+    try {
+        const resolvedDoc = resolveDraftDocumentAbsolutePath(req.params.id, req.query.path || '');
+        if (!resolvedDoc) {
+            return res.status(404).json({ error: 'Draft document not found.' });
+        }
+        const ext = path.extname(resolvedDoc.absPath).toLowerCase();
+        if (!THRESHOLD_DRAFT_READER_EXTS.has(ext)) {
+            return res.status(400).json({ error: 'Unsupported reader type.' });
+        }
+        const content = fs.readFileSync(resolvedDoc.absPath, 'utf8');
+        const fallbackTitle = path.basename(resolvedDoc.absPath, ext);
+        const handoff = ext === '.md' ? parseGreenFireHandoff(content) : null;
+        const contentType = ext === '.md'
+            ? 'text/markdown'
+            : ext === '.json'
+                ? 'application/json'
+                : 'text/plain';
+        res.json({
+            success: true,
+            id: resolvedDoc.draft.id,
+            path: 'threshold/cache-drafts/' + resolvedDoc.draft.id + '/' + resolvedDoc.relPath,
+            title: ext === '.md' ? extractMarkdownDisplayTitle(content, fallbackTitle) : fallbackTitle,
+            contentType,
+            content,
+            sourceLabel: 'Threshold Cache Draft',
+            sourceType: normalizeImportType(ext),
+            handoff,
+        });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
+/**
+ * DELETE /api/threshold/cache-drafts/:id/documents
+ * Body: { path: "documents/<name>" }
+ */
+router.delete('/api/threshold/cache-drafts/:id/documents', writeLimiter, (req, res) => {
+    try {
+        const relPath = req.body && req.body.path ? String(req.body.path) : '';
+        if (!relPath) return res.status(400).json({ error: 'path is required' });
+        const updated = removeDocumentFromCacheDraft({
+            draftId: req.params.id,
+            documentPath: relPath,
+        });
+        res.json({ success: true, updated });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
+/**
  * POST /api/threshold/cache-drafts/:id/export
  * Export a cache draft as zip in exports/cache-drafts/<id>.zip
  */
@@ -1088,6 +1532,20 @@ router.post('/api/threshold/cache-drafts/:id/install', writeLimiter, (req, res) 
             exportRelPath: req.body && req.body.exportPath ? String(req.body.exportPath) : null,
         });
         res.json({ success: true, installed });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
+/**
+ * DELETE /api/threshold/cache-drafts/:id
+ * Remove a cache draft folder and matching export zip if present.
+ */
+router.delete('/api/threshold/cache-drafts/:id', writeLimiter, (req, res) => {
+    try {
+        const deleted = deleteCacheDraft(req.params.id);
+        res.json({ success: true, deleted });
     } catch (error) {
         const status = Number.isInteger(error.status) ? error.status : 500;
         res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });

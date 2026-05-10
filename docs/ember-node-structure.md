@@ -45,8 +45,7 @@ Typical draft structure:
 threshold/cache-drafts/<draft-id>/
   manifest.json
   README.md
-  handoff.md
-  docs/
+  documents/
     *.md
 ```
 
