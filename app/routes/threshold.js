@@ -407,15 +407,22 @@ function createCacheDraftFromThresholdFile({ relPath, relPaths, draftId, title, 
     fs.mkdirSync(docsDir, { recursive: true });
     for (let i = 0; i < sources.length; i++) {
         const source = sources[i];
-        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('doc-' + (i + 1));
+        const baseName = sanitizeFilename(path.basename(source.absPath)) || ('source-' + (i + 1));
         const ext = path.extname(baseName).toLowerCase();
         const stem = ext ? path.basename(baseName, ext) : baseName;
         const targetExt = '.md';
         let candidate = stem + targetExt;
         let suffix = 2;
+        let guard = 0;
         while (usedDocNames.has(candidate)) {
+            if (guard >= 1000) {
+                const error = new Error('Unable to generate unique cache draft document name.');
+                error.status = 500;
+                throw error;
+            }
             candidate = stem + '-' + suffix + targetExt;
             suffix += 1;
+            guard += 1;
         }
         usedDocNames.add(candidate);
         const absDocPath = path.join(docsDir, candidate);
