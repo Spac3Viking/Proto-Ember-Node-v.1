@@ -26,7 +26,7 @@
 - Cache indexing from Ember Council
 - Ember Council note saving
 - Threshold file intake (drag-and-drop, file browse)
-- caches/*/docs/ recursive reading and indexing
+- cache package docs/ recursive reading and indexing (cache drafts use documents/)
 - `/api/sources`, `/api/index/cache/:id`, `/api/index/file` endpoints
 
 ## Phase 4 — Remember / Archive Mechanics
