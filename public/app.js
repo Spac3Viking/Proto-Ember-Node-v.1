@@ -238,7 +238,8 @@ function compactTextSnippet(value, maxLength = 500) {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
     if (!text) return '';
     if (text.length <= maxLength) return text;
-    return text.slice(0, Math.max(40, maxLength - 1)).trimEnd() + '…';
+    const limit = Math.max(1, Math.floor(maxLength) - 1);
+    return text.slice(0, limit).trimEnd() + '…';
 }
 
 function safeIsoTimestamp(value) {
@@ -267,6 +268,9 @@ function buildConversationFragmentMarkdown(options = {}) {
     const reflectionNotes = String(options.reflectionNotes || '').trim();
     const suggestedNextSteps = String(options.suggestedNextSteps || '').trim();
     const created = safeIsoTimestamp(options.created);
+    const exchangeBlocks = [];
+    if (userExchange) exchangeBlocks.push('## Sentinel\n' + userExchange);
+    if (assistantExchange) exchangeBlocks.push('## Ember Response\n' + assistantExchange);
     return [
         '---',
         'title: ' + title,
@@ -279,8 +283,8 @@ function buildConversationFragmentMarkdown(options = {}) {
         context || '-',
         '',
         '# Exchange',
-        userExchange ? ('## Sentinel\n' + userExchange + '\n') : '',
-        assistantExchange ? ('## Ember Response\n' + assistantExchange + '\n') : '',
+        exchangeBlocks.length ? exchangeBlocks.join('\n\n') : '-',
+        '',
         '# Reflection Notes',
         reflectionNotes || '-',
         '',
@@ -878,7 +882,21 @@ function buildResponseBridgeActions(options = {}) {
         {
             label: 'Save Conversation Fragment as .md',
             run: () => {
-                downloadPlainText(toPortableSlug(sourceTitle, 'conversation-fragment') + '.md', exchangeMarkdown, 'text/markdown');
+                const fragmentMarkdown = buildConversationFragmentMarkdown({
+                    title: sourceTitle + ' Fragment',
+                    source: sourceLabel,
+                    archetype: getCourtMemberDisplayLabel(getActiveCourtMemberId()),
+                    context: contextSummary,
+                    userExchange: userText,
+                    assistantExchange: assistantText,
+                    reflectionNotes: 'What should be validated before integrating this into continuity memory?',
+                    suggestedNextSteps: 'Integration: Decide where this fragment belongs.\nTransmission: Export a compact prompt bridge if needed.',
+                });
+                downloadPlainText(
+                    toPortableSlug(sourceTitle, 'conversation-fragment') + '.md',
+                    fragmentMarkdown,
+                    'text/markdown',
+                );
                 showFlashMessage('Conversation fragment saved.');
             },
         },
@@ -3770,7 +3788,8 @@ function renderThresholdPromptGuides() {
 function ensureMarkdownHandoffFromInput(rawInput, titleHint = 'External AI Response') {
     const input = String(rawInput || '').trim();
     if (!input) return '';
-    const hasFrontmatter = /^---\s*\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.test(input);
+    const normalized = input.replace(/\r\n/g, '\n');
+    const hasFrontmatter = normalized.startsWith('---\n') && normalized.indexOf('\n---\n', 4) > 0;
     if (hasFrontmatter) return input;
     const today = new Date().toISOString().slice(0, 10);
     return [
@@ -3780,9 +3799,9 @@ function ensureMarkdownHandoffFromInput(rawInput, titleHint = 'External AI Respo
         'source: external-ai',
         'created: ' + today,
         'status: unverified',
-        'archetypes:',
+        'archetypes: ember-prime',
         'tags: external-ai, handoff',
-        'license:',
+        'license: unknown',
         '---',
         '# Summary',
         input,
