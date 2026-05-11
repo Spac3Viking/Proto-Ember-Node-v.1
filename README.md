@@ -13,7 +13,18 @@ A local-first sovereign AI console descended from the Green Fire Archive.
 - **Rolling Bootstrap** — unfolding continuity summary.
 - **Fractal Memory Compression** — cache/document/archetype summary geometry.
 
-> Workshop is retired. Ember Council is the active archetype room. Tools registry is retired. Threshold now handles Local AI and Runtime Stewardship. Caches replaced cartridges. Signal Threads are the successor to old project/thread concepts.
+> Migration aliases (compatibility-only): workshop → council, equipped → loaded, docs/ → documents/, handoff.md → documents/handoff.md.
+
+## Terminology Alignment
+
+- **Installed Caches** = available local caches discovered from archive/core and archive/caches.
+- **Loaded Caches** = active continuity context currently loaded for retrieval and chat.
+- **Cache Loadout** = the currently loaded cache set.
+- **Markdown Handoffs** = portable AI/human continuity `.md` documents.
+- **Cache Drafts** = editable local cache bundles in `threshold/cache-drafts/`.
+- **Continuity Bootstrap** = portable `.md` orientation summary export/import.
+- **Rolling Bootstrap** = internal evolving continuity memory summary.
+- **Prompt Bridges** = external AI instructions for producing handoffs/caches.
 
 ## Quick Start
 

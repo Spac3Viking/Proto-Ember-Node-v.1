@@ -8,7 +8,7 @@
 - **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/` and natural cache draft continuity bundles in `threshold/cache-drafts/`.
 - **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
 
-Workshop is retired. Ember Council is the active archetype room. Tools registry is retired. Threshold now handles Local AI and Runtime Stewardship. Caches replaced cartridges. Signal Threads are the successor to old project/thread concepts.
+Migration aliases (compatibility-only): workshop → council, equipped → loaded, docs/ → documents/, handoff.md → documents/handoff.md.
 
 ## Continuity Memory Layers
 
@@ -29,6 +29,17 @@ Workshop is retired. Ember Council is the active archetype room. Tools registry 
 ## Cache Philosophy
 
 Caches are portable memory bundles.
+
+### Cache and Continuity Terms
+
+- **Installed Caches** = available local caches.
+- **Loaded Caches** = active continuity context.
+- **Cache Loadout** = the currently loaded cache set.
+- **Markdown Handoffs** = portable AI/human continuity documents.
+- **Cache Drafts** = editable local cache bundles.
+- **Continuity Bootstrap** = portable `.md` orientation summary.
+- **Rolling Bootstrap** = internal evolving continuity memory.
+- **Prompt Bridges** = external AI instructions for producing handoffs/caches.
 
 ### Natural Continuity Scaling
 
