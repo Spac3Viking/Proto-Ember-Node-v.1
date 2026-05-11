@@ -114,8 +114,18 @@ function extractMarkdownDisplayTitle(content, fallbackTitle) {
 
 function extractFrontmatterBlock(content) {
     const text = typeof content === 'string' ? content : '';
-    const match = text.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-    return match && match[1] ? match[1] : '';
+    const normalized = text.replace(/\r\n/g, '\n');
+    if (!normalized.startsWith('---\n')) return '';
+    const endMarker = '\n---\n';
+    const endIdx = normalized.indexOf(endMarker, 4);
+    if (endIdx >= 0) {
+        return normalized.slice(4, endIdx);
+    }
+    const terminalEndIdx = normalized.indexOf('\n---', 4);
+    if (terminalEndIdx >= 0 && terminalEndIdx + 4 === normalized.length) {
+        return normalized.slice(4, terminalEndIdx);
+    }
+    return '';
 }
 
 function cleanFrontmatterValue(value) {
@@ -138,10 +148,15 @@ function parseFrontmatterList(value) {
 function parseSimpleFrontmatter(content) {
     const block = extractFrontmatterBlock(content);
     if (!block) return {};
-    return block.split(/\r?\n/).reduce((acc, line) => {
-        const match = line.match(/^\s*([a-zA-Z0-9_-]+)\s*:\s*(.*?)\s*$/);
-        if (!match) return acc;
-        acc[match[1].toLowerCase()] = match[2];
+    return block.split('\n').reduce((acc, line) => {
+        const trimmed = String(line || '').trim();
+        if (!trimmed) return acc;
+        const delimiterIndex = trimmed.indexOf(':');
+        if (delimiterIndex <= 0) return acc;
+        const key = trimmed.slice(0, delimiterIndex).trim().toLowerCase();
+        if (!/^[a-z0-9_-]+$/.test(key)) return acc;
+        const value = trimmed.slice(delimiterIndex + 1).trim();
+        acc[key] = value;
         return acc;
     }, {});
 }
@@ -1375,6 +1390,43 @@ router.get('/api/threshold/files', readLimiter, (req, res) => {
     } catch (error) {
         console.error('Error listing threshold files:', error.message);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * POST /api/threshold/inbox/markdown
+ * Body: { markdown: string, filename?: string }
+ * Save pasted markdown/text payload as a Threshold inbox .md handoff file.
+ */
+router.post('/api/threshold/inbox/markdown', writeLimiter, (req, res) => {
+    try {
+        const markdown = req.body && typeof req.body.markdown === 'string'
+            ? req.body.markdown
+            : '';
+        const filename = req.body && typeof req.body.filename === 'string'
+            ? req.body.filename
+            : null;
+        if (!markdown.trim()) {
+            return res.status(400).json({ error: 'markdown is required' });
+        }
+        const source = createInboxMarkdownFromText(markdown, filename);
+        const stats = fs.statSync(source.absPath);
+        const handoff = parseGreenFireHandoff(source.markdown);
+        return res.json({
+            success: true,
+            file: {
+                name: path.basename(source.absPath),
+                path: source.relPath,
+                type: 'markdown',
+                size: stats.size,
+                imported_at: (stats.birthtime || stats.mtime || new Date()).toISOString(),
+                handoff,
+                bootstrapDetected: Boolean(handoff && handoff.detected && handoff.type === 'bootstrap'),
+            },
+        });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        return res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
     }
 });
 

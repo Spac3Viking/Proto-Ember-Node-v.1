@@ -284,6 +284,36 @@ describe('Threshold inbox import + reader endpoints', () => {
         expect(found.imported_at).toBeDefined();
     });
 
+    test('POST /api/threshold/inbox/markdown saves pasted markdown into threshold inbox', async () => {
+        const saveRes = await request(app)
+            .post('/api/threshold/inbox/markdown')
+            .send({
+                filename: 'external-ai-response.md',
+                markdown: '# External Response\n\nPortable handoff.',
+            });
+        expect(saveRes.status).toBe(200);
+        expect(saveRes.body.success).toBe(true);
+        expect(saveRes.body.file).toBeTruthy();
+        expect(saveRes.body.file.path).toMatch(/^threshold\/inbox\/.+\.md$/);
+        const savedPath = saveRes.body.file.path;
+
+        const listRes = await request(app).get('/api/threshold/files');
+        expect(listRes.status).toBe(200);
+        const found = (listRes.body.files || []).find(f => f.path === savedPath);
+        expect(found).toBeTruthy();
+        expect(found.type).toBe('markdown');
+
+        await request(app).delete('/api/threshold/files').send({ path: savedPath });
+    });
+
+    test('POST /api/threshold/inbox/markdown rejects empty markdown', async () => {
+        const res = await request(app)
+            .post('/api/threshold/inbox/markdown')
+            .send({ filename: 'empty.md', markdown: '   ' });
+        expect(res.status).toBe(400);
+        expect(String(res.body.error || '')).toMatch(/markdown is required/i);
+    });
+
     test('GET /api/threshold/files/content reads markdown for reader', async () => {
         const res = await request(app)
             .get('/api/threshold/files/content')

@@ -478,6 +478,20 @@ input:focus, textarea:focus {
   color: var(--gf-ember-orange);
 }
 
+.bridge-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.45rem 0.9rem;
+}
+
+.bridge-discuss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
 /* ── Council Room ─────────────────────────────────────────── */
 
 .council-layout {
@@ -1951,6 +1965,21 @@ button.secondary:disabled {
   background: hsla(120, 18%, 4%, 0.85);
   color: var(--archive-muted);
   font-size: 0.75rem;
+}
+
+.gf-reader-discuss {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.55rem 1.1rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+  background: hsla(120, 18%, 4%, 0.82);
+}
+
+.gf-reader-discuss-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .gf-reader-metadata {

@@ -178,6 +178,21 @@ const GREEN_FIRE_PROMPT_GUIDES = Object.freeze([
         archetype: 'mystic',
     },
 ]);
+const COURT_DISCUSS_ACTIONS = Object.freeze([
+    { id: EMBER_PRIME_MEMBER_ID, label: 'Discuss with Ember Prime' },
+    { id: 'builder', label: 'Discuss with Builder' },
+    { id: 'scholar', label: 'Discuss with Scholar' },
+    { id: 'scribe', label: 'Discuss with Scribe' },
+    { id: 'warrior', label: 'Discuss with Warrior' },
+    { id: 'mystic', label: 'Discuss with Mystic' },
+]);
+const EXTERNAL_PROMPT_SOURCE_IDS = Object.freeze([
+    'discussion',
+    'reader-document',
+    'selected-cache',
+    'cache-loadout',
+    'active-archetype',
+]);
 
 /* ================================================================
    Utility
@@ -217,6 +232,103 @@ function sanitizeDraftIdInput(value) {
         .replace(/\.[^.]+$/, '')
         .replace(/[^a-z0-9._-]+/g, '-')
         .replace(/^-+|-+$/g, '');
+}
+
+function compactTextSnippet(value, maxLength = 500) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    const limit = Math.max(1, Math.floor(maxLength) - 1);
+    return text.slice(0, limit).trimEnd() + '…';
+}
+
+function safeIsoTimestamp(value) {
+    if (!value) return new Date().toISOString();
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return new Date().toISOString();
+    return date.toISOString();
+}
+
+function toPortableSlug(value, fallback = 'handoff') {
+    const slug = String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    return slug || fallback;
+}
+
+function buildConversationFragmentMarkdown(options = {}) {
+    const title = String(options.title || 'Conversation Fragment').trim() || 'Conversation Fragment';
+    const source = String(options.source || 'ember-node').trim() || 'ember-node';
+    const archetype = String(options.archetype || 'Ember Prime').trim() || 'Ember Prime';
+    const context = String(options.context || '').trim();
+    const userExchange = String(options.userExchange || '').trim();
+    const assistantExchange = String(options.assistantExchange || '').trim();
+    const reflectionNotes = String(options.reflectionNotes || '').trim();
+    const suggestedNextSteps = String(options.suggestedNextSteps || '').trim();
+    const created = safeIsoTimestamp(options.created);
+    const exchangeBlocks = [];
+    if (userExchange) exchangeBlocks.push('## Sentinel\n' + userExchange);
+    if (assistantExchange) exchangeBlocks.push('## Ember Response\n' + assistantExchange);
+    return [
+        '---',
+        'title: ' + title,
+        'type: handoff',
+        'source: ' + source,
+        'archetype: ' + archetype,
+        'created: ' + created,
+        '---',
+        '# Context',
+        context || '-',
+        '',
+        '# Exchange',
+        exchangeBlocks.length ? exchangeBlocks.join('\n\n') : '-',
+        '',
+        '# Reflection Notes',
+        reflectionNotes || '-',
+        '',
+        '# Suggested Next Steps',
+        suggestedNextSteps || '-',
+        '',
+    ].filter(Boolean).join('\n');
+}
+
+function buildExternalAiPrompt(options = {}) {
+    const focus = compactTextSnippet(options.focus || 'Current Ember Node continuity context.', 900);
+    const archetype = String(options.archetype || getCourtMemberDisplayLabel(getActiveCourtMemberId())).trim() || 'Ember Prime';
+    const sourceLabel = String(options.sourceLabel || 'Ember Node').trim() || 'Ember Node';
+    const cacheLoadoutLine = Array.isArray(options.cacheLoadout) && options.cacheLoadout.length > 0
+        ? ('Loaded cache context: ' + options.cacheLoadout.join(', '))
+        : 'Loaded cache context: (not provided)';
+    return [
+        '# External AI Prompt Bridge',
+        '',
+        'You are receiving continuity context from Ember Node.',
+        'Return practical, grounded output in clean markdown.',
+        '',
+        '## Input Context',
+        '- Source: ' + sourceLabel,
+        '- Active archetype: ' + archetype,
+        '- Objective: produce a reusable markdown handoff for Ember Node continuity.',
+        '- ' + cacheLoadoutLine,
+        '',
+        '## Context Snapshot',
+        focus || '(none)',
+        '',
+        '## Return Format Requirements',
+        '- Return markdown only (no preface, no code fences around the whole file).',
+        '- Prefer a portable handoff structure with concise frontmatter and clear section headings.',
+        '- Include practical assumptions, open questions, and next tests.',
+        '- Keep output cache-ready and easy to copy into .md files.',
+        '',
+        '## Preferred Deliverables',
+        '- clean markdown handoff',
+        '- concise summary',
+        '- cache-ready document',
+        '- research report or code review when applicable',
+        '- distilled next-step options',
+    ].join('\n');
 }
 
 function buildGreenFireHandoffPrompt(archetype) {
@@ -616,6 +728,190 @@ function displayMessage(container, text, className) {
     return el;
 }
 
+function openCouncilChatWithPrompt(promptText, courtMemberId) {
+    const councilTab = document.querySelector('.room-tab[data-room="council"]');
+    if (councilTab) councilTab.click();
+    const councilChatTab = document.querySelector('.sub-tab[data-subtab="ws-council-chat"]');
+    if (councilChatTab) councilChatTab.click();
+    const normalizedMemberId = normalizeCourtMemberId(courtMemberId);
+    if (normalizedMemberId) {
+        setActiveCourtMemberId(normalizedMemberId);
+        updateCouncilChatActiveArchetype();
+        loadCouncilArchetypes();
+    }
+    const inputEl = document.getElementById('ws-council-input');
+    if (inputEl) {
+        inputEl.value = String(promptText || '').trim();
+        inputEl.focus();
+    }
+}
+
+function buildDocumentDiscussionPrompt(options = {}) {
+    const title = String(options.title || 'Document').trim() || 'Document';
+    const source = String(options.source || 'Unknown source').trim() || 'Unknown source';
+    const excerpt = compactTextSnippet(options.content || '', 1200);
+    return [
+        'Discuss this document with me:',
+        '',
+        '- Title: ' + title,
+        '- Source: ' + source,
+        '',
+        'Context excerpt:',
+        excerpt || '(no excerpt)',
+        '',
+        'Please help me surface assumptions, key tensions, and practical next steps.',
+    ].join('\n');
+}
+
+function createCouncilDiscussActions(resolvePrompt, resolveLabel) {
+    const wrap = document.createElement('div');
+    wrap.className = 'bridge-discuss-actions';
+    COURT_DISCUSS_ACTIONS.forEach(action => {
+        const btn = document.createElement('button');
+        btn.className = 'secondary threshold-action-btn';
+        btn.textContent = action.label;
+        btn.addEventListener('click', () => {
+            Promise.resolve(typeof resolvePrompt === 'function' ? resolvePrompt(action.id) : '')
+                .then(prompt => {
+                    openCouncilChatWithPrompt(prompt, action.id);
+                    const label = typeof resolveLabel === 'function' ? resolveLabel() : 'document';
+                    showFlashMessage(action.label + ' · context sent from ' + label + '.');
+                })
+                .catch(() => {
+                    showFlashMessage('Could not prepare discussion context.');
+                });
+        });
+        wrap.appendChild(btn);
+    });
+    return wrap;
+}
+
+async function saveMarkdownToThresholdInbox(markdown, filename, successMessage) {
+    const body = {
+        markdown: String(markdown || ''),
+        filename: String(filename || '').trim() || undefined,
+    };
+    const res = await fetch('/api/threshold/inbox/markdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Could not save markdown handoff.');
+    }
+    if (successMessage) showFlashMessage(successMessage);
+    await loadThresholdList();
+    return data.file || null;
+}
+
+function buildExchangeContextSummary(options = {}) {
+    const room = String(options.room || 'hearth');
+    const archetype = getCourtMemberDisplayLabel(getActiveCourtMemberId());
+    const userText = compactTextSnippet(options.user || '', 280);
+    const assistantText = compactTextSnippet(options.assistant || '', 320);
+    return [
+        'Room: ' + room,
+        'Active archetype: ' + archetype,
+        userText ? ('Sentinel: ' + userText) : '',
+        assistantText ? ('Ember: ' + assistantText) : '',
+    ].filter(Boolean).join('\n');
+}
+
+function buildResponseBridgeActions(options = {}) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bridge-action-row';
+    const room = String(options.room || 'hearth');
+    const userText = String(options.user || '').trim();
+    const assistantText = String(options.assistant || '').trim();
+    const sourceTitle = String(options.sourceTitle || 'Conversation Exchange').trim() || 'Conversation Exchange';
+    const sourceLabel = String(options.sourceLabel || 'chat').trim() || 'chat';
+    const contextSummary = buildExchangeContextSummary({
+        room,
+        user: userText,
+        assistant: assistantText,
+    });
+    const exchangeMarkdown = buildConversationFragmentMarkdown({
+        title: sourceTitle,
+        source: sourceLabel,
+        archetype: getCourtMemberDisplayLabel(getActiveCourtMemberId()),
+        context: contextSummary,
+        userExchange: userText,
+        assistantExchange: assistantText,
+        reflectionNotes: 'What assumptions in this exchange should be tested next?',
+        suggestedNextSteps: 'Study: Compare this with relevant loaded caches.\nCompression: Distill into a compact handoff if needed.',
+    });
+
+    const actions = [
+        {
+            label: 'Copy Prompt for External AI',
+            run: async () => {
+                const prompt = buildExternalAiPrompt({
+                    sourceLabel,
+                    focus: [contextSummary, assistantText].filter(Boolean).join('\n\n'),
+                });
+                await copyPlainText(prompt, 'External AI prompt copied.', 'Could not copy prompt.');
+            },
+        },
+        {
+            label: 'Copy Context Summary',
+            run: async () => {
+                await copyPlainText(contextSummary, 'Context summary copied.', 'Could not copy context summary.');
+            },
+        },
+        {
+            label: 'Save Response as .md',
+            run: () => {
+                const markdown = [
+                    '# ' + sourceTitle,
+                    '',
+                    assistantText || '(no response)',
+                    '',
+                ].join('\n');
+                downloadPlainText(toPortableSlug(sourceTitle, 'ember-response') + '.md', markdown, 'text/markdown');
+                showFlashMessage('Response saved as markdown.');
+            },
+        },
+        {
+            label: 'Save Exchange as .md Handoff',
+            run: () => {
+                downloadPlainText(toPortableSlug(sourceTitle, 'exchange-handoff') + '.md', exchangeMarkdown, 'text/markdown');
+                showFlashMessage('Exchange handoff saved.');
+            },
+        },
+        {
+            label: 'Save Conversation Fragment as .md',
+            run: () => {
+                const fragmentMarkdown = buildConversationFragmentMarkdown({
+                    title: sourceTitle + ' Fragment',
+                    source: sourceLabel,
+                    archetype: getCourtMemberDisplayLabel(getActiveCourtMemberId()),
+                    context: contextSummary,
+                    userExchange: userText,
+                    assistantExchange: assistantText,
+                    reflectionNotes: 'What should be validated before integrating this into continuity memory?',
+                    suggestedNextSteps: 'Integration: Decide where this fragment belongs.\nTransmission: Export a compact prompt bridge if needed.',
+                });
+                downloadPlainText(
+                    toPortableSlug(sourceTitle, 'conversation-fragment') + '.md',
+                    fragmentMarkdown,
+                    'text/markdown',
+                );
+                showFlashMessage('Conversation fragment saved.');
+            },
+        },
+    ];
+
+    actions.forEach(action => {
+        const btn = document.createElement('button');
+        btn.className = 'secondary threshold-action-btn';
+        btn.textContent = action.label;
+        btn.addEventListener('click', () => action.run());
+        wrapper.appendChild(btn);
+    });
+    return wrapper;
+}
+
 const HEART_TECHNICAL_ERROR = (
     'Ember Prime could not complete the response.\n' +
     'Check local AI status and try again.'
@@ -643,6 +939,8 @@ let _activeChatContainer = null;
 let _stopExtendedRuneAettirLoop = null;
 let _chatRequestSeq = 0;
 let _chatCancelledByUser = false;
+let _lastDiscussionExchange = null;
+let _lastInspectedCacheSummary = null;
 
 function setChatState(nextState) {
     _chatState = nextState;
@@ -1194,8 +1492,22 @@ async function sendMessage() {
                 setTraceStatus('response interrupted');
                 setChatState(CHAT_STATES.INTERRUPTED);
             } else {
+                const bridgeActions = buildResponseBridgeActions({
+                    room: 'hearth',
+                    user: message,
+                    assistant: data.answer,
+                    sourceTitle: 'Hearth Exchange ' + new Date().toISOString().slice(0, 10),
+                    sourceLabel: 'hearth-chat',
+                });
+                chatContainer.appendChild(bridgeActions);
                 renderSignalTrace(data.sources || [], data.signalTrace || null);
                 setChatState(CHAT_STATES.COMPLETE);
+                _lastDiscussionExchange = {
+                    room: 'hearth',
+                    user: message,
+                    assistant: data.answer,
+                    created: new Date().toISOString(),
+                };
 
                 // Persist to thread if active
                 if (hearthActiveThreadId) {
@@ -1347,7 +1659,21 @@ async function sendCouncilMessage() {
                 displayMessage(chatContainer, 'Signal stilled by user.', 'message-system');
                 setChatState(CHAT_STATES.INTERRUPTED);
             } else {
+                const bridgeActions = buildResponseBridgeActions({
+                    room: 'council',
+                    user: message,
+                    assistant: data.answer,
+                    sourceTitle: 'Council Exchange ' + new Date().toISOString().slice(0, 10),
+                    sourceLabel: 'council-chat',
+                });
+                chatContainer.appendChild(bridgeActions);
                 setChatState(CHAT_STATES.COMPLETE);
+                _lastDiscussionExchange = {
+                    room: 'council',
+                    user: message,
+                    assistant: data.answer,
+                    created: new Date().toISOString(),
+                };
             }
         } else {
             displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
@@ -2535,6 +2861,12 @@ async function inspectCache(id, itemEl) {
         if (contentEl) {
             contentEl.textContent = data.content || '(no readable documents in this cache)';
         }
+        _lastInspectedCacheSummary = [
+            'Cache: ' + (m.name || data.name || id),
+            m.description ? ('Description: ' + m.description) : '',
+            m.version ? ('Version: ' + m.version) : '',
+            compactTextSnippet(data.content || '', 900),
+        ].filter(Boolean).join('\n');
     } catch {
         if (contentEl) contentEl.textContent = 'Error loading cache content.';
     }
@@ -2748,6 +3080,16 @@ function getGreenFireReader() {
     const toggleBtn = document.getElementById('gf-reader-toggle-btn');
     const copyBtn = document.getElementById('gf-reader-copy-btn');
     const downloadBtn = document.getElementById('gf-reader-download-btn');
+    const copyPromptBtn = document.getElementById('gf-reader-copy-prompt-btn');
+    const copyContextBtn = document.getElementById('gf-reader-copy-context-btn');
+    const saveResponseBtn = document.getElementById('gf-reader-save-response-btn');
+    const saveExchangeBtn = document.getElementById('gf-reader-save-exchange-btn');
+    const discussPrimeBtn = document.getElementById('gf-reader-discuss-ember-prime-btn');
+    const discussBuilderBtn = document.getElementById('gf-reader-discuss-builder-btn');
+    const discussScholarBtn = document.getElementById('gf-reader-discuss-scholar-btn');
+    const discussScribeBtn = document.getElementById('gf-reader-discuss-scribe-btn');
+    const discussWarriorBtn = document.getElementById('gf-reader-discuss-warrior-btn');
+    const discussMysticBtn = document.getElementById('gf-reader-discuss-mystic-btn');
     const backBtn = document.getElementById('gf-reader-back-btn');
     const closeBtn = document.getElementById('gf-reader-close-btn');
     const resumeBar = document.getElementById('gf-reader-resume');
@@ -2771,6 +3113,26 @@ function getGreenFireReader() {
     };
 
     let scrollSaveTimer = null;
+
+    function readerContextSummary() {
+        return [
+            'Title: ' + (state.title || 'Green Fire Reader'),
+            state.sourceLabel ? ('Source: ' + state.sourceLabel) : '',
+            state.sourcePath ? ('Path: ' + state.sourcePath) : '',
+            'Content type: ' + (state.contentType || 'text/plain'),
+            '',
+            'Excerpt:',
+            compactTextSnippet(state.content || '', 800) || '(empty)',
+        ].filter(Boolean).join('\n');
+    }
+
+    function readerDiscussionPrompt() {
+        return buildDocumentDiscussionPrompt({
+            title: state.title || 'Reader Document',
+            source: state.sourceLabel || state.sourcePath || 'Reader',
+            content: state.content || '',
+        });
+    }
 
     function setResumePrompt(percent) {
         state.pendingResumePercent = percent;
@@ -2905,6 +3267,65 @@ function getGreenFireReader() {
             downloadPlainText(safeBase + ext, state.content || '', state.contentType || 'text/plain');
         });
     }
+    if (copyPromptBtn) {
+        copyPromptBtn.addEventListener('click', async () => {
+            const prompt = buildExternalAiPrompt({
+                sourceLabel: state.sourceLabel || state.sourcePath || 'Green Fire Reader',
+                archetype: getCourtMemberDisplayLabel(getActiveCourtMemberId()),
+                focus: readerContextSummary(),
+            });
+            await copyPlainText(prompt, 'External AI prompt copied.', 'Could not copy prompt.');
+        });
+    }
+    if (copyContextBtn) {
+        copyContextBtn.addEventListener('click', async () => {
+            await copyPlainText(readerContextSummary(), 'Context summary copied.', 'Could not copy context summary.');
+        });
+    }
+    if (saveResponseBtn) {
+        saveResponseBtn.addEventListener('click', () => {
+            const filename = toPortableSlug(state.title || 'reader-response', 'reader-response') + '.md';
+            const markdown = [
+                '# ' + (state.title || 'Reader Response'),
+                '',
+                state.content || '',
+                '',
+            ].join('\n');
+            downloadPlainText(filename, markdown, 'text/markdown');
+            showFlashMessage('Reader markdown saved.');
+        });
+    }
+    if (saveExchangeBtn) {
+        saveExchangeBtn.addEventListener('click', () => {
+            const markdown = buildConversationFragmentMarkdown({
+                title: (state.title || 'Reader Exchange') + ' Handoff',
+                source: state.sourceLabel || state.sourcePath || 'green-fire-reader',
+                archetype: getCourtMemberDisplayLabel(getActiveCourtMemberId()),
+                context: readerContextSummary(),
+                userExchange: 'Please analyze and discuss this document context.',
+                assistantExchange: compactTextSnippet(state.content || '', 2200),
+                reflectionNotes: 'What assumptions in this document need validation?',
+                suggestedNextSteps: 'Study: Compare with loaded caches.\nCompression: Distill into a smaller handoff.',
+            });
+            downloadPlainText(toPortableSlug(state.title || 'reader-exchange', 'reader-exchange') + '-handoff.md', markdown, 'text/markdown');
+            showFlashMessage('Reader exchange handoff saved.');
+        });
+    }
+    const readerDiscussButtons = [
+        [discussPrimeBtn, EMBER_PRIME_MEMBER_ID],
+        [discussBuilderBtn, 'builder'],
+        [discussScholarBtn, 'scholar'],
+        [discussScribeBtn, 'scribe'],
+        [discussWarriorBtn, 'warrior'],
+        [discussMysticBtn, 'mystic'],
+    ];
+    readerDiscussButtons.forEach(([button, memberId]) => {
+        if (!button) return;
+        button.addEventListener('click', () => {
+            openCouncilChatWithPrompt(readerDiscussionPrompt(), memberId);
+            showFlashMessage('Document context opened in Council Chat.');
+        });
+    });
     if (resumeBtn) {
         resumeBtn.addEventListener('click', () => applyResume(state.pendingResumePercent));
     }
@@ -2927,7 +3348,12 @@ function getGreenFireReader() {
         });
     }
 
-    _greenFireReader = { open, close };
+    _greenFireReader = {
+        open,
+        close,
+        getState: function() { return { ...state }; },
+        buildDiscussionPrompt: readerDiscussionPrompt,
+    };
     return _greenFireReader;
 }
 
@@ -3359,6 +3785,193 @@ function renderThresholdPromptGuides() {
     });
 }
 
+function ensureMarkdownHandoffFromInput(rawInput, titleHint = 'External AI Response') {
+    const input = String(rawInput || '').trim();
+    if (!input) return '';
+    const normalized = input.replace(/\r\n/g, '\n');
+    const hasFrontmatter = normalized.startsWith('---\n') && normalized.indexOf('\n---\n', 4) > 0;
+    if (hasFrontmatter) return input;
+    const today = new Date().toISOString().slice(0, 10);
+    return [
+        '---',
+        'title: ' + titleHint,
+        'type: research-brief',
+        'source: external-ai',
+        'created: ' + today,
+        'status: unverified',
+        'archetypes: ember-prime',
+        'tags: external-ai, handoff',
+        'license: unknown',
+        '---',
+        '# Summary',
+        input,
+        '',
+        '# Key Knowledge',
+        '-',
+        '',
+        '# Practical Use',
+        '-',
+        '',
+        '# Risks / Unknowns',
+        '-',
+        '',
+        '# Suggested Cache Placement',
+        '-',
+        '',
+        '# Sources',
+        '- external-ai-copy-paste',
+        '',
+    ].join('\n');
+}
+
+function getExternalAiInputText() {
+    const inputEl = document.getElementById('th-external-ai-response-input');
+    return inputEl ? String(inputEl.value || '').trim() : '';
+}
+
+function clearExternalAiInput() {
+    const inputEl = document.getElementById('th-external-ai-response-input');
+    if (inputEl) inputEl.value = '';
+}
+
+async function saveExternalAiResponseAsHandoff() {
+    const raw = getExternalAiInputText();
+    if (!raw) {
+        showFlashMessage('Paste external response text first.');
+        return;
+    }
+    const markdown = ensureMarkdownHandoffFromInput(raw, 'External AI Response');
+    try {
+        await saveMarkdownToThresholdInbox(markdown, 'external-ai-response.md', 'Saved to threshold/inbox/');
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not save external response.');
+    }
+}
+
+async function addExternalAiResponseToCacheDraft() {
+    const raw = getExternalAiInputText();
+    if (!raw) {
+        showFlashMessage('Paste external response text first.');
+        return;
+    }
+    const payload = {
+        markdown: ensureMarkdownHandoffFromInput(raw, 'External AI Response'),
+        markdownFilename: 'external-ai-response.md',
+    };
+    if (_activeThresholdDraftId) payload.draftId = _activeThresholdDraftId;
+    try {
+        const res = await fetch('/api/threshold/cache-drafts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not add to cache draft.');
+        await loadThresholdCacheDrafts();
+        await openThresholdCacheDraft(data.draft.id);
+        _activeThresholdDraftId = data.draft.id;
+        showFlashMessage('External response added to cache draft.');
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not add to cache draft.');
+    }
+}
+
+function discussExternalAiResponseWithCouncil() {
+    const raw = getExternalAiInputText();
+    if (!raw) {
+        showFlashMessage('Paste external response text first.');
+        return;
+    }
+    const prompt = [
+        'Discuss this pasted external AI response with me:',
+        '',
+        compactTextSnippet(raw, 1400),
+        '',
+        'Please highlight assumptions, verification points, and practical next steps.',
+    ].join('\n');
+    openCouncilChatWithPrompt(prompt, getActiveCourtMemberId() || EMBER_PRIME_MEMBER_ID);
+}
+
+async function buildExternalPromptFromSelectedSource(sourceId) {
+    const source = String(sourceId || '').trim().toLowerCase();
+    if (!EXTERNAL_PROMPT_SOURCE_IDS.includes(source)) {
+        return buildExternalAiPrompt({});
+    }
+    if (source === 'discussion') {
+        const latest = _lastDiscussionExchange;
+        return buildExternalAiPrompt({
+            sourceLabel: 'Current discussion',
+            focus: latest
+                ? buildExchangeContextSummary({
+                    room: latest.room,
+                    user: latest.user,
+                    assistant: latest.assistant,
+                })
+                : 'No completed exchange yet.',
+        });
+    }
+    if (source === 'reader-document') {
+        const reader = getGreenFireReader();
+        const state = reader && typeof reader.getState === 'function' ? reader.getState() : null;
+        return buildExternalAiPrompt({
+            sourceLabel: 'Reader document',
+            focus: state
+                ? [
+                    'Title: ' + (state.title || 'Reader Document'),
+                    'Path: ' + (state.sourcePath || ''),
+                    '',
+                    compactTextSnippet(state.content || '', 1200),
+                ].join('\n')
+                : 'Reader is not active.',
+        });
+    }
+    if (source === 'selected-cache') {
+        return buildExternalAiPrompt({
+            sourceLabel: 'Selected cache',
+            focus: _lastInspectedCacheSummary || 'No cache selected in Ember Council → Caches.',
+        });
+    }
+    if (source === 'cache-loadout') {
+        try {
+            const res = await fetch('/api/caches/loaded');
+            const data = await res.json().catch(() => ({}));
+            const loaded = Array.isArray(data.loaded) ? data.loaded : [];
+            const names = loaded
+                .map(entry => String(entry.title || entry.name || entry.id || '').trim())
+                .filter(Boolean);
+            return buildExternalAiPrompt({
+                sourceLabel: 'Cache loadout',
+                cacheLoadout: names,
+                focus: names.length > 0
+                    ? ('Loaded caches: ' + names.join(', '))
+                    : 'No caches are currently loaded.',
+            });
+        } catch {
+            return buildExternalAiPrompt({
+                sourceLabel: 'Cache loadout',
+                focus: 'Could not load cache loadout state.',
+            });
+        }
+    }
+    if (source === 'active-archetype') {
+        const member = getCourtMemberDisplayLabel(getActiveCourtMemberId());
+        return buildExternalAiPrompt({
+            sourceLabel: 'Active archetype',
+            archetype: member,
+            focus: 'Generate output tuned to the active archetype: ' + member + '.',
+        });
+    }
+    return buildExternalAiPrompt({});
+}
+
+async function generateThresholdExternalPrompt() {
+    const sourceSelect = document.getElementById('th-external-prompt-source');
+    const output = document.getElementById('th-external-prompt-output');
+    const sourceId = sourceSelect ? sourceSelect.value : 'discussion';
+    const prompt = await buildExternalPromptFromSelectedSource(sourceId);
+    if (output) output.value = prompt;
+}
+
 (function initThreshold() {
     const dropZone      = document.getElementById('threshold-drop-zone');
     const fileInput     = document.getElementById('threshold-file-input');
@@ -3370,6 +3983,12 @@ function renderThresholdPromptGuides() {
     const copyTemplateBtn = document.getElementById('th-handoff-copy-template-btn');
     const downloadTemplateBtn = document.getElementById('th-handoff-download-template-btn');
     const openTemplateBtn = document.getElementById('th-handoff-open-template-btn');
+    const saveExternalBtn = document.getElementById('th-external-save-btn');
+    const addExternalToDraftBtn = document.getElementById('th-external-add-to-draft-btn');
+    const discussExternalBtn = document.getElementById('th-external-discuss-btn');
+    const externalPromptGenerateBtn = document.getElementById('th-external-prompt-generate-btn');
+    const externalPromptCopyBtn = document.getElementById('th-external-prompt-copy-btn');
+    const externalPromptDownloadBtn = document.getElementById('th-external-prompt-download-btn');
 
     if (dropZone) {
         dropZone.addEventListener('dragover', e => {
@@ -3482,7 +4101,38 @@ function renderThresholdPromptGuides() {
         });
     }
 
+    if (saveExternalBtn) {
+        saveExternalBtn.addEventListener('click', saveExternalAiResponseAsHandoff);
+    }
+    if (addExternalToDraftBtn) {
+        addExternalToDraftBtn.addEventListener('click', addExternalAiResponseToCacheDraft);
+    }
+    if (discussExternalBtn) {
+        discussExternalBtn.addEventListener('click', discussExternalAiResponseWithCouncil);
+    }
+    if (externalPromptGenerateBtn) {
+        externalPromptGenerateBtn.addEventListener('click', generateThresholdExternalPrompt);
+    }
+    if (externalPromptCopyBtn) {
+        externalPromptCopyBtn.addEventListener('click', async () => {
+            const output = document.getElementById('th-external-prompt-output');
+            await copyPlainText(
+                output ? output.value : '',
+                'Prompt bridge copied.',
+                'Could not copy prompt bridge.',
+            );
+        });
+    }
+    if (externalPromptDownloadBtn) {
+        externalPromptDownloadBtn.addEventListener('click', () => {
+            const output = document.getElementById('th-external-prompt-output');
+            downloadPlainText('external-ai-prompt-bridge.md', output ? output.value : '', 'text/markdown');
+            showFlashMessage('Prompt bridge downloaded.');
+        });
+    }
+
     renderThresholdPromptGuides();
+    generateThresholdExternalPrompt();
     loadThresholdCacheDrafts();
 })();
 
@@ -3956,11 +4606,16 @@ function renderThresholdCacheDraftDetail(draft) {
         openBtn.className = 'secondary threshold-action-btn';
         openBtn.textContent = 'Open in Reader';
         openBtn.addEventListener('click', () => openThresholdDraftDocumentInReader(draft.id, documentEntry.path));
+        const discussActions = createCouncilDiscussActions(
+            (memberId) => buildThresholdDraftDiscussionPrompt(draft.id, documentEntry.path, memberId),
+            () => 'threshold cache draft',
+        );
         const removeBtn = document.createElement('button');
         removeBtn.className = 'secondary threshold-action-btn threshold-reject-btn';
         removeBtn.textContent = 'Remove from Draft';
         removeBtn.addEventListener('click', () => removeThresholdDraftDocument(draft.id, documentEntry.path));
         actions.appendChild(openBtn);
+        actions.appendChild(discussActions);
         actions.appendChild(removeBtn);
         row.appendChild(meta);
         row.appendChild(status);
@@ -4007,6 +4662,31 @@ async function openThresholdCacheDraft(draftId) {
         renderThresholdCacheDraftDetail(data.draft);
     } catch (error) {
         showFlashMessage(error.message || 'Could not open draft.');
+    }
+}
+
+async function buildThresholdDraftDiscussionPrompt(draftId, documentPath) {
+    const fallback = [
+        'Discuss this cache draft document with me:',
+        '',
+        '- Draft: ' + draftId,
+        '- Path: ' + documentPath,
+        '',
+        'Please help me test assumptions, identify weak points, and propose practical next steps.',
+    ].join('\n');
+    try {
+        const res = await fetch(
+            '/api/threshold/cache-drafts/' + encodeURIComponent(draftId) + '/documents/content?path=' + encodeURIComponent(documentPath),
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return fallback;
+        return buildDocumentDiscussionPrompt({
+            title: data.title || titleFromDocumentPath(documentPath),
+            source: data.path || ('threshold/cache-drafts/' + draftId + '/' + documentPath),
+            content: data.content || '',
+        });
+    } catch {
+        return fallback;
     }
 }
 

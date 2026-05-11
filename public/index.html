@@ -16,7 +16,7 @@
     <header class="app-header">
       <div class="header-brand">
         <h1 class="header-title">Ember Node v.ᚠ</h1>
-        <span class="header-subtitle">local-first sovereign console</span>
+        <span class="header-subtitle">markdown-first continuity terminal</span>
       </div>
       <div class="header-status">
         <span class="status-pill" id="model-pill">
@@ -568,9 +568,9 @@
           <div class="sub-panel active" id="th-imports">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
-                The Threshold is the intake room. All external material — documents, imports, and unverified signals —
-                lands here before touching the Hearth. Files start as <strong>Waiting</strong>, move to <strong>Indexed</strong>
-                in Ember Council, and finally become <strong>Remembered</strong> in Hearth.
+                The Threshold is the intake room for markdown-first continuity exchange. Active continuity moves through
+                <strong>.md</strong>, <strong>.txt</strong>, copy/paste dialogue, bootstrap files, cache manifests, and README files.
+                Other file types can be stored as references, but continuity work remains portable and text-first.
               </p>
             </div>
 
@@ -619,6 +619,42 @@
                   Generate copyable prompts for external AI tools to produce Green Fire Markdown Handoffs and cache-ready continuity drafts.
                 </div>
                 <div id="th-handoff-prompt-guides" class="threshold-file-list" style="max-height:none;"></div>
+              </div>
+
+              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
+                <div class="council-section-title" style="margin:0;">Paste External AI Response</div>
+                <div class="message-system" style="font-size:0.78rem;">
+                  Paste markdown/plain text summaries, reviews, or notes from external AI systems. Save to <code>threshold/inbox/</code>, add to a cache draft, or discuss with Council.
+                </div>
+                <textarea id="th-external-ai-response-input" rows="8" placeholder="Paste external AI response markdown or plain text here..."></textarea>
+                <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+                  <button class="secondary" id="th-external-save-btn">Save as Markdown Handoff</button>
+                  <button class="secondary" id="th-external-add-to-draft-btn">Add to Cache Draft</button>
+                  <button class="secondary" id="th-external-discuss-btn">Discuss with Council</button>
+                </div>
+              </div>
+
+              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
+                <div class="council-section-title" style="margin:0;">Create External AI Prompt</div>
+                <div class="message-system" style="font-size:0.78rem;">
+                  Generate a portable prompt bridge from discussion, reader document, selected cache, cache loadout, or active archetype.
+                </div>
+                <div style="display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center;">
+                  <label for="th-external-prompt-source" class="response-depth-label" style="margin:0;">Source</label>
+                  <select id="th-external-prompt-source" class="response-depth-select">
+                    <option value="discussion">Current Discussion</option>
+                    <option value="reader-document">Selected Document (Reader)</option>
+                    <option value="selected-cache">Selected Cache</option>
+                    <option value="cache-loadout">Cache Loadout</option>
+                    <option value="active-archetype">Active Archetype</option>
+                  </select>
+                  <button class="secondary" id="th-external-prompt-generate-btn">Generate Prompt</button>
+                </div>
+                <textarea id="th-external-prompt-output" rows="10" placeholder="Generated external prompt bridge will appear here..."></textarea>
+                <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+                  <button class="secondary" id="th-external-prompt-copy-btn">Copy Prompt</button>
+                  <button class="secondary" id="th-external-prompt-download-btn">Download Prompt .md</button>
+                </div>
               </div>
 
               <!-- Intake Queue (multi-file) -->
@@ -870,7 +906,22 @@
           <button class="secondary" id="gf-reader-toggle-btn">Raw Markdown</button>
           <button class="secondary" id="gf-reader-copy-btn">Copy Markdown</button>
           <button class="secondary" id="gf-reader-download-btn">Download .md</button>
+          <button class="secondary" id="gf-reader-copy-prompt-btn">Copy Prompt for External AI</button>
+          <button class="secondary" id="gf-reader-copy-context-btn">Copy Context Summary</button>
+          <button class="secondary" id="gf-reader-save-response-btn">Save Response as .md</button>
+          <button class="secondary" id="gf-reader-save-exchange-btn">Save Exchange as .md Handoff</button>
           <button class="source-inspector-close" id="gf-reader-close-btn" aria-label="Close reader">✕</button>
+        </div>
+      </div>
+      <div class="gf-reader-discuss" id="gf-reader-discuss-actions">
+        <span class="message-system" style="text-align:left; margin:0;">Discuss with Council</span>
+        <div class="gf-reader-discuss-buttons">
+          <button class="secondary threshold-action-btn" id="gf-reader-discuss-ember-prime-btn">Discuss with Ember Prime</button>
+          <button class="secondary threshold-action-btn" id="gf-reader-discuss-builder-btn">Discuss with Builder</button>
+          <button class="secondary threshold-action-btn" id="gf-reader-discuss-scholar-btn">Discuss with Scholar</button>
+          <button class="secondary threshold-action-btn" id="gf-reader-discuss-scribe-btn">Discuss with Scribe</button>
+          <button class="secondary threshold-action-btn" id="gf-reader-discuss-warrior-btn">Discuss with Warrior</button>
+          <button class="secondary threshold-action-btn" id="gf-reader-discuss-mystic-btn">Discuss with Mystic</button>
         </div>
       </div>
       <div class="gf-reader-resume" id="gf-reader-resume" style="display:none;">
