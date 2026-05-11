@@ -786,6 +786,19 @@ function createCouncilDiscussActions(resolvePrompt, resolveLabel) {
     return wrap;
 }
 
+function createCollapsibleActionPanel(title, body, className = 'gf-collapsible-panel') {
+    const panel = document.createElement('details');
+    panel.className = className;
+    const summary = document.createElement('summary');
+    summary.textContent = String(title || 'Actions');
+    panel.appendChild(summary);
+    const content = document.createElement('div');
+    content.className = 'gf-collapsible-panel-body';
+    if (body) content.appendChild(body);
+    panel.appendChild(content);
+    return panel;
+}
+
 async function saveMarkdownToThresholdInbox(markdown, filename, successMessage) {
     const body = {
         markdown: String(markdown || ''),
@@ -820,7 +833,7 @@ function buildExchangeContextSummary(options = {}) {
 
 function buildResponseBridgeActions(options = {}) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'bridge-action-row';
+    wrapper.className = 'bridge-action-stack';
     const room = String(options.room || 'hearth');
     const userText = String(options.user || '').trim();
     const assistantText = String(options.assistant || '').trim();
@@ -842,7 +855,17 @@ function buildResponseBridgeActions(options = {}) {
         suggestedNextSteps: 'Study: Compare this with relevant loaded caches.\nCompression: Distill into a compact handoff if needed.',
     });
 
-    const actions = [
+    const makeActionButton = (action) => {
+        const btn = document.createElement('button');
+        btn.className = 'secondary threshold-action-btn';
+        btn.textContent = action.label;
+        btn.addEventListener('click', () => action.run());
+        return btn;
+    };
+
+    const bridgeActionsWrap = document.createElement('div');
+    bridgeActionsWrap.className = 'bridge-action-row';
+    [
         {
             label: 'Copy Prompt for External AI',
             run: async () => {
@@ -859,6 +882,11 @@ function buildResponseBridgeActions(options = {}) {
                 await copyPlainText(contextSummary, 'Context summary copied.', 'Could not copy context summary.');
             },
         },
+    ].forEach(action => bridgeActionsWrap.appendChild(makeActionButton(action)));
+
+    const exportActionsWrap = document.createElement('div');
+    exportActionsWrap.className = 'bridge-action-row';
+    [
         {
             label: 'Save Response as .md',
             run: () => {
@@ -900,15 +928,25 @@ function buildResponseBridgeActions(options = {}) {
                 showFlashMessage('Conversation fragment saved.');
             },
         },
-    ];
+    ].forEach(action => exportActionsWrap.appendChild(makeActionButton(action)));
 
-    actions.forEach(action => {
-        const btn = document.createElement('button');
-        btn.className = 'secondary threshold-action-btn';
-        btn.textContent = action.label;
-        btn.addEventListener('click', () => action.run());
-        wrapper.appendChild(btn);
-    });
+    const councilActionsWrap = createCouncilDiscussActions(
+        () => [
+            'Discuss this exchange with me:',
+            '',
+            'Room: ' + room,
+            'Archetype: ' + getCourtMemberDisplayLabel(getActiveCourtMemberId()),
+            userText ? ('Sentinel: ' + compactTextSnippet(userText, 520)) : '',
+            assistantText ? ('Ember: ' + compactTextSnippet(assistantText, 720)) : '',
+            '',
+            'Surface assumptions, tensions, and one practical next step.',
+        ].filter(Boolean).join('\n'),
+        () => room + ' exchange',
+    );
+
+    wrapper.appendChild(createCollapsibleActionPanel('Council Discussion', councilActionsWrap));
+    wrapper.appendChild(createCollapsibleActionPanel('Bridge Actions', bridgeActionsWrap));
+    wrapper.appendChild(createCollapsibleActionPanel('Export / Save', exportActionsWrap));
     return wrapper;
 }
 
@@ -1482,7 +1520,7 @@ async function sendMessage() {
             chatContainer.scrollTop = chatContainer.scrollHeight;
             setChatState(CHAT_STATES.RESPONDING);
             const revealResult = await resolveGlyphText(responseEl, data.answer, {
-                glyphEffect: _glyphResolveEnabled,
+                glyphEffect: _glyphResolveEnabled && getActiveResponseDepth() !== 'spark',
                 onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
                 shouldStop: () => _activeChatRevealToken.cancelled,
             });
@@ -1651,7 +1689,7 @@ async function sendCouncilMessage() {
             chatContainer.scrollTop = chatContainer.scrollHeight;
             setChatState(CHAT_STATES.RESPONDING);
             const revealResult = await resolveGlyphText(responseEl, data.answer, {
-                glyphEffect: _glyphResolveEnabled,
+                glyphEffect: _glyphResolveEnabled && getActiveResponseDepth() !== 'spark',
                 onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
                 shouldStop: () => _activeChatRevealToken.cancelled,
             });
@@ -3092,6 +3130,7 @@ function getGreenFireReader() {
     const discussMysticBtn = document.getElementById('gf-reader-discuss-mystic-btn');
     const backBtn = document.getElementById('gf-reader-back-btn');
     const closeBtn = document.getElementById('gf-reader-close-btn');
+    const resumePanel = document.getElementById('gf-reader-resume-panel');
     const resumeBar = document.getElementById('gf-reader-resume');
     const resumeText = document.getElementById('gf-reader-resume-text');
     const resumeBtn = document.getElementById('gf-reader-resume-btn');
@@ -3139,10 +3178,18 @@ function getGreenFireReader() {
         if (!resumeBar || !resumeText) return;
         if (!Number.isFinite(percent) || percent < GF_READER_RESUME_THRESHOLD) {
             resumeBar.style.display = 'none';
+            if (resumePanel) {
+                resumePanel.style.display = 'none';
+                resumePanel.open = false;
+            }
             return;
         }
         resumeText.textContent = 'Resume from ' + Math.round(percent) + '%?';
         resumeBar.style.display = 'flex';
+        if (resumePanel) {
+            resumePanel.style.display = '';
+            resumePanel.open = true;
+        }
     }
 
     function renderBody() {

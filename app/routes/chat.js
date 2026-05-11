@@ -69,20 +69,20 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
     spark: {
         id: 'spark',
         label: 'Spark',
-        retrievalTopK: 4,
-        targetSources: 3,
-        maxRawChunks: 4,
+        retrievalTopK: 3,
+        targetSources: 2,
+        maxRawChunks: 3,
         minRawChunksWithSummary: 2,
-        maxContextChars: 9600,
-        maxChunkChars: 1700,
-        maxHistoryChars: 1400,
-        maxHistoryTurns: 4,
-        maxSummaryChars: 1200,
-        rollingBootstrapChars: 220,
-        cacheSummaryLimit: 1,
-        documentSummaryLimit: 2,
-        sourceLineLimit: 2,
-        includeArchetypeMemory: true,
+        maxContextChars: 5600,
+        maxChunkChars: 1400,
+        maxHistoryChars: 900,
+        maxHistoryTurns: 2,
+        maxSummaryChars: 520,
+        rollingBootstrapChars: 0,
+        cacheSummaryLimit: 0,
+        documentSummaryLimit: 1,
+        sourceLineLimit: 1,
+        includeArchetypeMemory: false,
     },
     ember: {
         id: 'ember',
@@ -505,13 +505,13 @@ function buildSummaryFirstContext({
     const archetypeProfile = getArchetypeMemoryProfile(activeArchetype || 'ember_prime');
     const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
     const maxCacheSummaryLimit = Number.isFinite(summaryLimits && summaryLimits.cacheSummaryLimit)
-        ? Math.max(1, Math.floor(summaryLimits.cacheSummaryLimit))
+        ? Math.max(0, Math.floor(summaryLimits.cacheSummaryLimit))
         : null;
     const maxDocumentSummaryLimit = Number.isFinite(summaryLimits && summaryLimits.documentSummaryLimit)
-        ? Math.max(1, Math.floor(summaryLimits.documentSummaryLimit))
+        ? Math.max(0, Math.floor(summaryLimits.documentSummaryLimit))
         : null;
     const maxSourceLineLimit = Number.isFinite(summaryLimits && summaryLimits.sourceLineLimit)
-        ? Math.max(2, Math.floor(summaryLimits.sourceLineLimit))
+        ? Math.max(1, Math.floor(summaryLimits.sourceLineLimit))
         : null;
     const cacheSummaryLimit = getGeometryLimit(geometry.cache_summary_limit, 1, 4, 3);
     const documentSummaryLimit = getGeometryLimit(geometry.document_summary_limit, 1, 6, 4);
@@ -548,7 +548,7 @@ function buildSummaryFirstContext({
         return true;
     }
 
-    if (hasValidBootstrapSummary(rollingBootstrap)) {
+    if (hasValidBootstrapSummary(rollingBootstrap) && maxRollingBootstrapChars > 0) {
         const themes = compactList(rollingBootstrap.active_themes, 4);
         const openQuestions = compactList(rollingBootstrap.open_questions, 2);
         const recentDecisions = compactList(rollingBootstrap.recent_decisions, 2);
@@ -637,6 +637,51 @@ function buildSummaryFirstContext({
             archetypeMemory: usedArchetypeMemory > 0 ? segmentLengths.archetypeMemory : 0,
         },
     };
+}
+
+function buildDepthResponseInstruction(contextBudget) {
+    const depthId = contextBudget && contextBudget.id ? contextBudget.id : 'ember';
+    if (depthId === 'spark') {
+        return [
+            'Response Depth: Spark',
+            'Answer briefly.',
+            'Use only the strongest context.',
+            'Keep to 1–3 short paragraphs OR 3–5 concise bullets.',
+            'Avoid long exposition unless explicitly requested.',
+            'Mentor posture: concise guidance plus one clarifying question when useful.',
+            'If helpful, end with one subtle line: "Load a deeper depth if you want the wider weave."',
+        ].join('\n');
+    }
+    if (depthId === 'ember') {
+        return [
+            'Response Depth: Ember',
+            'Balanced default.',
+            'Use moderate context and compact synthesis.',
+            'Keep mentor tone concise, practical, and non-lecturing.',
+            'If helpful, include one subtle deeper-path line.',
+        ].join('\n');
+    }
+    if (depthId === 'hearth') {
+        return [
+            'Response Depth: Hearth',
+            'Permit deeper synthesis and layered structure.',
+            'Stay grounded and practical; avoid unnecessary verbosity.',
+        ].join('\n');
+    }
+    return [
+        'Response Depth: Archive',
+        'Broad synthesis allowed.',
+        'Longer response acceptable when it improves fidelity.',
+    ].join('\n');
+}
+
+function shouldAppendDeeperDepthNudge(depthId, answer) {
+    if (!['spark', 'ember'].includes(depthId)) return false;
+    const text = String(answer || '').trim();
+    if (!text) return false;
+    if (/load a deeper depth if you want the wider weave/i.test(text)) return false;
+    if (depthId === 'spark') return text.length <= 900;
+    return text.length <= 420;
 }
 
 function computeRawChunkBudgetWithSummaries(archetypeProfile, contextBudget) {
@@ -924,7 +969,11 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 state: ${retrievalState}
 
 `;
-        userContent = retrievalStateBlock + userContent;
+        const depthInstructionBlock = `=== Response Depth Instruction ===
+${buildDepthResponseInstruction(contextBudget)}
+
+`;
+        userContent = retrievalStateBlock + depthInstructionBlock + userContent;
 
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
@@ -1000,6 +1049,9 @@ state: ${retrievalState}
         const answer   = response.data && response.data.message
             ? response.data.message.content
             : '';
+        const answerWithDepthNudge = shouldAppendDeeperDepthNudge(contextBudget.id, answer)
+            ? (String(answer || '').trimEnd() + '\n\nLoad a deeper depth if you want the wider weave.')
+            : answer;
         const uniqueSourceCount = new Set(
             (sources || []).map(s => [s.room, s.file, s.cacheId || '', s.shelf || ''].join('|')),
         ).size;
@@ -1040,6 +1092,32 @@ state: ${retrievalState}
             : (selectedCourtMember && Array.isArray(selectedCourtMember.prioritySources)
                 ? selectedCourtMember.prioritySources.map(String).slice(0, MAX_SIGNAL_TRACE_ROUTING_LIST)
                 : []);
+        const compactSignalTrace = contextBudget.id === 'spark'
+            ? [
+                'Depth: ' + contextBudget.label,
+                'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 1).join(' → ')),
+                'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
+                    (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
+                    ' · chunks ' + rawChunksForPrompt.length,
+                'Context: ' + (sourceList.length > 0 ? sourceList.slice(0, 3).join(', ') : 'none'),
+                'Model: ' + heart.model + ' / Ollama',
+            ].join('\n')
+            : [
+                'Active archetype: ' + (
+                    selectedCourtMember
+                        ? ((lensGlyph ? (lensGlyph + ' ') : '') + lensName)
+                        : 'Ember Prime'
+                ),
+                'Depth: ' + contextBudget.label,
+                'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 2).join(' → ')),
+                'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
+                    (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
+                    ' · chunks ' + rawChunksForPrompt.length,
+                'Cache Loadout: ' + loadedCaches.length + ' loaded',
+                'Loaded Caches: ' + (cacheLoadoutNames.length > 0 ? cacheLoadoutNames.join(', ') : 'none'),
+                'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
+                'Model: ' + heart.model + ' / Ollama',
+            ].join('\n');
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
             depth: contextBudget.label,
@@ -1072,22 +1150,7 @@ state: ${retrievalState}
                 documentSummaries: summaryFirst.summaryLayersUsed.documentSummaries,
                 rawChunks: rawChunksForPrompt.length,
             },
-            compact: [
-                'Active archetype: ' + (
-                    selectedCourtMember
-                        ? ((lensGlyph ? (lensGlyph + ' ') : '') + lensName)
-                        : 'Ember Prime'
-                ),
-                'Depth: ' + contextBudget.label,
-                'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 2).join(' → ')),
-                'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
-                    (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
-                    ' · chunks ' + rawChunksForPrompt.length,
-                'Cache Loadout: ' + loadedCaches.length + ' loaded',
-                'Loaded Caches: ' + (cacheLoadoutNames.length > 0 ? cacheLoadoutNames.join(', ') : 'none'),
-                'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
-                'Model: ' + heart.model + ' / Ollama',
-            ].join('\n'),
+            compact: compactSignalTrace,
         };
 
         const activeArchetype = selectedCourtMember
@@ -1101,7 +1164,7 @@ state: ${retrievalState}
             ' sources=' + formatSignalTraceSummary(sources),
         );
         res.json({
-            answer,
+            answer: answerWithDepthNudge,
             sources,
             grounded: sources.length > 0,
             room: activeRoom,
