@@ -1378,6 +1378,43 @@ router.get('/api/threshold/files', readLimiter, (req, res) => {
     }
 });
 
+/**
+ * POST /api/threshold/inbox/markdown
+ * Body: { markdown: string, filename?: string }
+ * Save pasted markdown/text payload as a Threshold inbox .md handoff file.
+ */
+router.post('/api/threshold/inbox/markdown', writeLimiter, (req, res) => {
+    try {
+        const markdown = req.body && typeof req.body.markdown === 'string'
+            ? req.body.markdown
+            : '';
+        const filename = req.body && typeof req.body.filename === 'string'
+            ? req.body.filename
+            : null;
+        if (!markdown.trim()) {
+            return res.status(400).json({ error: 'markdown is required' });
+        }
+        const source = createInboxMarkdownFromText(markdown, filename);
+        const stats = fs.statSync(source.absPath);
+        const handoff = parseGreenFireHandoff(source.markdown);
+        return res.json({
+            success: true,
+            file: {
+                name: path.basename(source.absPath),
+                path: source.relPath,
+                type: 'markdown',
+                size: stats.size,
+                imported_at: (stats.birthtime || stats.mtime || new Date()).toISOString(),
+                handoff,
+                bootstrapDetected: Boolean(handoff && handoff.detected && handoff.type === 'bootstrap'),
+            },
+        });
+    } catch (error) {
+        const status = Number.isInteger(error.status) ? error.status : 500;
+        return res.status(status).json({ error: status === 500 ? 'Internal Server Error' : error.message });
+    }
+});
+
 router.post('/api/threshold/bootstrap/use', writeLimiter, (req, res) => {
     try {
         const relPath = String(req.body && req.body.path ? req.body.path : '').trim();

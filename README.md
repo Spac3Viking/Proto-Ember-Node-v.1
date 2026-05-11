@@ -2,6 +2,8 @@
 
 A local-first sovereign AI console descended from the Green Fire Archive.
 
+Ember Node is now a **markdown-first continuity terminal**: active continuity exchange is centered on `.md`, `.txt`, copy/paste dialogue, bootstrap files, cache manifests, and README-driven handoffs.
+
 ## Current Architecture
 
 - **🜂 Hearth** — Ember Prime continuity and remembered signal.
@@ -45,6 +47,7 @@ Open `http://localhost:3477`.
 
 - Chat: `POST /api/chat`
 - Threshold intake: `POST /api/threshold/import`, `GET /api/threshold/files`
+- Threshold markdown intake: `POST /api/threshold/inbox/markdown`
 - Threshold cache drafts: `POST /api/threshold/cache-drafts`, `GET /api/threshold/cache-drafts`, `GET /api/threshold/cache-drafts/:id`, `POST /api/threshold/cache-drafts/:id/documents/add`, `DELETE /api/threshold/cache-drafts/:id/documents`, `GET /api/threshold/cache-drafts/:id/documents/content`, `POST /api/threshold/cache-drafts/:id/export`, `POST /api/threshold/cache-drafts/:id/install`, `DELETE /api/threshold/cache-drafts/:id`
 - Reader: `GET /api/threshold/files/content`, `GET /api/archive/read`
 - Runtime/model stewardship: `GET /api/ai/models`, `POST /api/ai/models/select`
