@@ -152,4 +152,39 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(invalid.body.signalTrace.depth).toBe('Ember');
         expect(invalid.body.signalTrace.compact).toContain('Depth: Ember');
     });
+
+    test('spark depth injects explicit response instruction and appends subtle deeper-depth nudge', async () => {
+        const mockedAxios = require('axios');
+        mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Quick orientation response.' } } });
+        const { app } = require('../app/server');
+
+        const spark = await request(app)
+            .post('/api/chat')
+            .send({ query: 'Give me the shortest orientation.', responseDepth: 'spark' });
+        expect(spark.status).toBe(200);
+        expect(spark.body.answer).toContain('Load a deeper depth if you want the wider weave.');
+
+        const payload = mockedAxios.post.mock.calls[0][1];
+        const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
+        expect(userPrompt).toContain('=== Response Depth Instruction ===');
+        expect(userPrompt).toContain('Response Depth: Spark');
+        expect(userPrompt).toContain('1–3 short paragraphs OR 3–5 concise bullets.');
+    });
+
+    test('archive depth injects archive response instruction block', async () => {
+        const mockedAxios = require('axios');
+        mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Archive sweep response.' } } });
+        const { app } = require('../app/server');
+
+        const archive = await request(app)
+            .post('/api/chat')
+            .send({ query: 'Synthesize all memory layers.', responseDepth: 'archive' });
+        expect(archive.status).toBe(200);
+
+        const payload = mockedAxios.post.mock.calls[0][1];
+        const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
+        expect(userPrompt).toContain('Response Depth: Archive');
+        expect(userPrompt).toContain('Broad synthesis allowed.');
+        expect(userPrompt).toContain('Longer response acceptable when it improves fidelity.');
+    });
 });

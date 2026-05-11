@@ -198,7 +198,7 @@
                   </div>
                   <div class="system-row" style="align-items:center; gap:0.5rem;">
                     <span class="system-key">Select model</span>
-                    <select id="sys-model-select" style="flex:1; min-width:0;">
+                    <select id="sys-model-select" class="gf-select" style="flex:1; min-width:0;">
                       <option value="">No models detected</option>
                     </select>
                     <button class="secondary" id="sys-model-save-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Save model</button>
@@ -604,58 +604,62 @@
                 </div>
               </div>
 
-              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
-                <div class="council-section-title" style="margin:0;">Create Handoff Template</div>
-                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                  <button class="secondary" id="th-handoff-copy-template-btn">Copy Template</button>
-                  <button class="secondary" id="th-handoff-download-template-btn">Download .md Template</button>
-                  <button class="secondary" id="th-handoff-open-template-btn">Open Blank Handoff in Reader</button>
+              <details class="ember-card threshold-collapsible-section">
+                <summary class="threshold-collapsible-summary">Handoff Template</summary>
+                <div class="threshold-collapsible-body">
+                  <div class="council-section-title" style="margin:0;">Create Handoff Template</div>
+                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="secondary" id="th-handoff-copy-template-btn">Copy Template</button>
+                    <button class="secondary" id="th-handoff-download-template-btn">Download .md Template</button>
+                    <button class="secondary" id="th-handoff-open-template-btn">Open Blank Handoff in Reader</button>
+                  </div>
                 </div>
-              </div>
+              </details>
 
-              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
-                <div class="council-section-title" style="margin:0;">Prompt Bridges</div>
-                <div class="message-system" style="font-size:0.78rem;">
-                  Generate copyable prompts for external AI tools to produce Green Fire Markdown Handoffs and cache-ready continuity drafts.
+              <details class="ember-card threshold-collapsible-section">
+                <summary class="threshold-collapsible-summary">Prompt Bridges</summary>
+                <div class="threshold-collapsible-body">
+                  <div class="message-system" style="font-size:0.78rem;">
+                    Generate copyable prompts for external AI tools to produce Green Fire Markdown Handoffs and cache-ready continuity drafts.
+                  </div>
+                  <div id="th-handoff-prompt-guides" class="threshold-file-list" style="max-height:none;"></div>
+                  <div class="council-section-title" style="margin:0;">Create External AI Prompt</div>
+                  <div class="message-system" style="font-size:0.78rem;">
+                    Generate a portable prompt bridge from discussion, reader document, selected cache, cache loadout, or active archetype.
+                  </div>
+                  <div style="display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center;">
+                    <label for="th-external-prompt-source" class="response-depth-label" style="margin:0;">Source</label>
+                    <select id="th-external-prompt-source" class="response-depth-select">
+                      <option value="discussion">Current Discussion</option>
+                      <option value="reader-document">Selected Document (Reader)</option>
+                      <option value="selected-cache">Selected Cache</option>
+                      <option value="cache-loadout">Cache Loadout</option>
+                      <option value="active-archetype">Active Archetype</option>
+                    </select>
+                    <button class="secondary" id="th-external-prompt-generate-btn">Generate Prompt</button>
+                  </div>
+                  <textarea id="th-external-prompt-output" rows="10" placeholder="Generated external prompt bridge will appear here..."></textarea>
+                  <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+                    <button class="secondary" id="th-external-prompt-copy-btn">Copy Prompt</button>
+                    <button class="secondary" id="th-external-prompt-download-btn">Download Prompt .md</button>
+                  </div>
                 </div>
-                <div id="th-handoff-prompt-guides" class="threshold-file-list" style="max-height:none;"></div>
-              </div>
+              </details>
 
-              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
-                <div class="council-section-title" style="margin:0;">Paste External AI Response</div>
-                <div class="message-system" style="font-size:0.78rem;">
-                  Paste markdown/plain text summaries, reviews, or notes from external AI systems. Save to <code>threshold/inbox/</code>, add to a cache draft, or discuss with Council.
+              <details class="ember-card threshold-collapsible-section" open>
+                <summary class="threshold-collapsible-summary">External AI Response</summary>
+                <div class="threshold-collapsible-body">
+                  <div class="message-system" style="font-size:0.78rem;">
+                    Paste markdown/plain text summaries, reviews, or notes from external AI systems. Save to <code>threshold/inbox/</code>, add to a cache draft, or discuss with Council.
+                  </div>
+                  <textarea id="th-external-ai-response-input" rows="8" placeholder="Paste external AI response markdown or plain text here..."></textarea>
+                  <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+                    <button class="secondary" id="th-external-save-btn">Save as Markdown Handoff</button>
+                    <button class="secondary" id="th-external-add-to-draft-btn">Add to Cache Draft</button>
+                    <button class="secondary" id="th-external-discuss-btn">Discuss with Council</button>
+                  </div>
                 </div>
-                <textarea id="th-external-ai-response-input" rows="8" placeholder="Paste external AI response markdown or plain text here..."></textarea>
-                <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
-                  <button class="secondary" id="th-external-save-btn">Save as Markdown Handoff</button>
-                  <button class="secondary" id="th-external-add-to-draft-btn">Add to Cache Draft</button>
-                  <button class="secondary" id="th-external-discuss-btn">Discuss with Council</button>
-                </div>
-              </div>
-
-              <div class="ember-card" style="padding:0.9rem 1rem; display:flex; flex-direction:column; gap:0.6rem;">
-                <div class="council-section-title" style="margin:0;">Create External AI Prompt</div>
-                <div class="message-system" style="font-size:0.78rem;">
-                  Generate a portable prompt bridge from discussion, reader document, selected cache, cache loadout, or active archetype.
-                </div>
-                <div style="display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center;">
-                  <label for="th-external-prompt-source" class="response-depth-label" style="margin:0;">Source</label>
-                  <select id="th-external-prompt-source" class="response-depth-select">
-                    <option value="discussion">Current Discussion</option>
-                    <option value="reader-document">Selected Document (Reader)</option>
-                    <option value="selected-cache">Selected Cache</option>
-                    <option value="cache-loadout">Cache Loadout</option>
-                    <option value="active-archetype">Active Archetype</option>
-                  </select>
-                  <button class="secondary" id="th-external-prompt-generate-btn">Generate Prompt</button>
-                </div>
-                <textarea id="th-external-prompt-output" rows="10" placeholder="Generated external prompt bridge will appear here..."></textarea>
-                <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
-                  <button class="secondary" id="th-external-prompt-copy-btn">Copy Prompt</button>
-                  <button class="secondary" id="th-external-prompt-download-btn">Download Prompt .md</button>
-                </div>
-              </div>
+              </details>
 
               <!-- Intake Queue (multi-file) -->
               <div class="threshold-file-section" id="threshold-queue-section" style="display:none;">
@@ -686,21 +690,22 @@
                 </div>
               </div>
 
-              <div class="threshold-file-section">
-                <div class="council-section-title">Cache Drafts</div>
-                <div id="threshold-cache-drafts-list" class="threshold-file-list">
-                  <span class="message-system">No cache drafts yet.</span>
+              <details class="threshold-file-section threshold-collapsible-section">
+                <summary class="threshold-collapsible-summary">Cache Drafts</summary>
+                <div class="threshold-collapsible-body">
+                  <div id="threshold-cache-drafts-list" class="threshold-file-list">
+                    <span class="message-system">No cache drafts yet.</span>
+                  </div>
+                  <div class="threshold-file-section" id="threshold-cache-draft-view" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                      <div class="council-section-title" id="threshold-cache-draft-view-title">Draft</div>
+                      <button class="secondary" id="threshold-cache-draft-close-btn">Close</button>
+                    </div>
+                    <div id="threshold-cache-draft-view-meta" class="message-system"></div>
+                    <div id="threshold-cache-draft-documents" class="threshold-file-list"></div>
+                  </div>
                 </div>
-              </div>
-
-              <div class="threshold-file-section" id="threshold-cache-draft-view" style="display:none;">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                  <div class="council-section-title" id="threshold-cache-draft-view-title">Draft</div>
-                  <button class="secondary" id="threshold-cache-draft-close-btn">Close</button>
-                </div>
-                <div id="threshold-cache-draft-view-meta" class="message-system"></div>
-                <div id="threshold-cache-draft-documents" class="threshold-file-list"></div>
-              </div>
+              </details>
 
               <!-- Scratch Notes -->
               <div class="threshold-scratch">
@@ -721,55 +726,60 @@
                 Inspect each runtime before admission. Threshold remains intake and inspection, not a toolbox.
               </p>
             </div>
-            <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div class="council-section-title" style="margin:0;">Runtime Status</div>
-                <button class="secondary" id="runtime-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
+            <details class="threshold-collapsible-section ember-card">
+              <summary class="threshold-collapsible-summary">Runtime Stewardship</summary>
+              <div class="threshold-collapsible-body">
+                <div class="ember-card" style="padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="council-section-title" style="margin:0;">Runtime Status</div>
+                    <button class="secondary" id="runtime-scan-btn" style="font-size:0.78rem;">↺ Scan</button>
+                  </div>
+                  <div id="th-runtime-list" class="threshold-file-list">
+                    <span class="message-system">No AI runtimes detected. Click Scan to search.</span>
+                  </div>
+                </div>
+                <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
+                  <div class="council-section-title" style="margin:0;">Local AI Guidance</div>
+                  <div class="system-row">
+                    <span class="system-key">Ollama status</span>
+                    <span class="system-val" id="th-ai-ollama-status">checking…</span>
+                  </div>
+                  <div class="system-row" style="align-items:flex-start;">
+                    <span class="system-key">Installed models</span>
+                    <span class="system-val" id="th-ai-models-list">loading…</span>
+                  </div>
+                  <div class="system-row">
+                    <span class="system-key">Selected model</span>
+                    <span class="system-val" id="th-ai-selected-model">—</span>
+                  </div>
+                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="secondary" id="th-ai-refresh-models-btn">Refresh Local Models</button>
+                    <button class="secondary" id="th-ai-open-ollama-btn">Open Ollama Website</button>
+                    <button class="secondary" id="th-ai-copy-commands-btn">Copy Suggested Ollama Commands</button>
+                  </div>
+                  <pre id="th-ai-suggested-commands" style="margin:0; padding:0.75rem; border:1px solid hsla(140,100%,70%,0.16); border-radius:8px; background:hsla(120,20%,4%,0.7); color:var(--archive-muted); font-size:0.78rem; line-height:1.55; white-space:pre-wrap;"></pre>
+                </div>
+                <!-- Guided setup — shown when no AI is running -->
+                <div class="ember-card" id="th-ai-setup-guide" style="padding: 1rem 1.25rem; display:none; gap:0.5rem; flex-direction:column;">
+                  <div class="council-section-title">No Local AI Detected</div>
+                  <p style="font-size:0.82rem; opacity:0.75; margin:0;">
+                    Ember Node works best with a local AI model host. The recommended option is <strong>Ollama</strong>.
+                  </p>
+                  <details style="font-size:0.82rem;">
+                    <summary style="cursor:pointer; opacity:0.8; margin-bottom:0.4rem;">Setup steps for Ollama</summary>
+                    <ol style="margin:0.4rem 0 0 1.2rem; opacity:0.75; line-height:1.6;">
+                      <li>Visit <strong>ollama.com</strong> and download Ollama for your OS.</li>
+                      <li>Install and run: <code>ollama serve</code></li>
+                      <li>Pull a model: <code>ollama pull gemma3:4b</code></li>
+                      <li>Return here and click <strong>↺ Scan</strong> to detect Ollama.</li>
+                    </ol>
+                  </details>
+                  <p style="font-size:0.78rem; opacity:0.55; margin:0;">
+                    Ember Node will never auto-install AI runtimes. All setup is manual and under your control.
+                  </p>
+                </div>
               </div>
-              <div id="th-runtime-list" class="threshold-file-list">
-                <span class="message-system">No AI runtimes detected. Click Scan to search.</span>
-              </div>
-            </div>
-            <div class="ember-card" style="padding: 1rem 1.25rem; display:flex; flex-direction:column; gap:0.75rem;">
-              <div class="council-section-title" style="margin:0;">Local AI Guidance</div>
-              <div class="system-row">
-                <span class="system-key">Ollama status</span>
-                <span class="system-val" id="th-ai-ollama-status">checking…</span>
-              </div>
-              <div class="system-row" style="align-items:flex-start;">
-                <span class="system-key">Installed models</span>
-                <span class="system-val" id="th-ai-models-list">loading…</span>
-              </div>
-              <div class="system-row">
-                <span class="system-key">Selected model</span>
-                <span class="system-val" id="th-ai-selected-model">—</span>
-              </div>
-              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                <button class="secondary" id="th-ai-refresh-models-btn">Refresh Local Models</button>
-                <button class="secondary" id="th-ai-open-ollama-btn">Open Ollama Website</button>
-                <button class="secondary" id="th-ai-copy-commands-btn">Copy Suggested Ollama Commands</button>
-              </div>
-              <pre id="th-ai-suggested-commands" style="margin:0; padding:0.75rem; border:1px solid hsla(140,100%,70%,0.16); border-radius:8px; background:hsla(120,20%,4%,0.7); color:var(--archive-muted); font-size:0.78rem; line-height:1.55; white-space:pre-wrap;"></pre>
-            </div>
-            <!-- Guided setup — shown when no AI is running -->
-            <div class="ember-card" id="th-ai-setup-guide" style="padding: 1rem 1.25rem; display:none; gap:0.5rem; flex-direction:column;">
-              <div class="council-section-title">No Local AI Detected</div>
-              <p style="font-size:0.82rem; opacity:0.75; margin:0;">
-                Ember Node works best with a local AI model host. The recommended option is <strong>Ollama</strong>.
-              </p>
-              <details style="font-size:0.82rem;">
-                <summary style="cursor:pointer; opacity:0.8; margin-bottom:0.4rem;">Setup steps for Ollama</summary>
-                <ol style="margin:0.4rem 0 0 1.2rem; opacity:0.75; line-height:1.6;">
-                  <li>Visit <strong>ollama.com</strong> and download Ollama for your OS.</li>
-                  <li>Install and run: <code>ollama serve</code></li>
-                  <li>Pull a model: <code>ollama pull gemma3:4b</code></li>
-                  <li>Return here and click <strong>↺ Scan</strong> to detect Ollama.</li>
-                </ol>
-              </details>
-              <p style="font-size:0.78rem; opacity:0.55; margin:0;">
-                Ember Node will never auto-install AI runtimes. All setup is manual and under your control.
-              </p>
-            </div>
+            </details>
           </div>
 
           <!-- Threshold / Exports (placeholder) -->
@@ -906,28 +916,47 @@
           <button class="secondary" id="gf-reader-toggle-btn">Raw Markdown</button>
           <button class="secondary" id="gf-reader-copy-btn">Copy Markdown</button>
           <button class="secondary" id="gf-reader-download-btn">Download .md</button>
-          <button class="secondary" id="gf-reader-copy-prompt-btn">Copy Prompt for External AI</button>
-          <button class="secondary" id="gf-reader-copy-context-btn">Copy Context Summary</button>
-          <button class="secondary" id="gf-reader-save-response-btn">Save Response as .md</button>
-          <button class="secondary" id="gf-reader-save-exchange-btn">Save Exchange as .md Handoff</button>
           <button class="source-inspector-close" id="gf-reader-close-btn" aria-label="Close reader">✕</button>
         </div>
       </div>
-      <div class="gf-reader-discuss" id="gf-reader-discuss-actions">
-        <span class="message-system" style="text-align:left; margin:0;">Discuss with Council</span>
-        <div class="gf-reader-discuss-buttons">
-          <button class="secondary threshold-action-btn" id="gf-reader-discuss-ember-prime-btn">Discuss with Ember Prime</button>
-          <button class="secondary threshold-action-btn" id="gf-reader-discuss-builder-btn">Discuss with Builder</button>
-          <button class="secondary threshold-action-btn" id="gf-reader-discuss-scholar-btn">Discuss with Scholar</button>
-          <button class="secondary threshold-action-btn" id="gf-reader-discuss-scribe-btn">Discuss with Scribe</button>
-          <button class="secondary threshold-action-btn" id="gf-reader-discuss-warrior-btn">Discuss with Warrior</button>
-          <button class="secondary threshold-action-btn" id="gf-reader-discuss-mystic-btn">Discuss with Mystic</button>
-        </div>
-      </div>
-      <div class="gf-reader-resume" id="gf-reader-resume" style="display:none;">
-        <span id="gf-reader-resume-text">Resume from saved position?</span>
-        <button class="secondary" id="gf-reader-resume-btn">Resume</button>
-        <button class="secondary" id="gf-reader-start-btn">Start at beginning</button>
+      <div class="gf-reader-collapsible-actions">
+        <details class="gf-collapsible-panel">
+          <summary>Bridge Actions</summary>
+          <div class="gf-collapsible-panel-body gf-reader-panel-actions">
+            <button class="secondary" id="gf-reader-copy-prompt-btn">Copy Prompt for External AI</button>
+            <button class="secondary" id="gf-reader-copy-context-btn">Copy Context Summary</button>
+          </div>
+        </details>
+        <details class="gf-collapsible-panel">
+          <summary>Export / Save</summary>
+          <div class="gf-collapsible-panel-body gf-reader-panel-actions">
+            <button class="secondary" id="gf-reader-save-response-btn">Save Response as .md</button>
+            <button class="secondary" id="gf-reader-save-exchange-btn">Save Exchange as .md Handoff</button>
+          </div>
+        </details>
+        <details class="gf-collapsible-panel">
+          <summary>Council Discussion</summary>
+          <div class="gf-collapsible-panel-body gf-reader-discuss" id="gf-reader-discuss-actions">
+            <div class="gf-reader-discuss-buttons">
+              <button class="secondary threshold-action-btn" id="gf-reader-discuss-ember-prime-btn">Discuss with Ember Prime</button>
+              <button class="secondary threshold-action-btn" id="gf-reader-discuss-builder-btn">Discuss with Builder</button>
+              <button class="secondary threshold-action-btn" id="gf-reader-discuss-scholar-btn">Discuss with Scholar</button>
+              <button class="secondary threshold-action-btn" id="gf-reader-discuss-scribe-btn">Discuss with Scribe</button>
+              <button class="secondary threshold-action-btn" id="gf-reader-discuss-warrior-btn">Discuss with Warrior</button>
+              <button class="secondary threshold-action-btn" id="gf-reader-discuss-mystic-btn">Discuss with Mystic</button>
+            </div>
+          </div>
+        </details>
+        <details class="gf-collapsible-panel" id="gf-reader-resume-panel" style="display:none;">
+          <summary>Raw / Reader Controls</summary>
+          <div class="gf-collapsible-panel-body">
+            <div class="gf-reader-resume" id="gf-reader-resume" style="display:none;">
+              <span id="gf-reader-resume-text">Resume from saved position?</span>
+              <button class="secondary" id="gf-reader-resume-btn">Resume</button>
+              <button class="secondary" id="gf-reader-start-btn">Start at beginning</button>
+            </div>
+          </div>
+        </details>
       </div>
       <div class="gf-reader-metadata" id="gf-reader-metadata" style="display:none;"></div>
       <div class="source-inspector-body gf-reader-body" id="gf-reader-body"></div>
