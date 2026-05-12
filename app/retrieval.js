@@ -50,6 +50,8 @@ const ARCHETYPE_MEMORY_DOMAIN_BOOST = 1.05;
 // without overpowering concept routing, archetype memory, or court lenses.
 const LOADED_CACHE_SOURCE_BOOST = 1.06;
 const NON_LOADED_ARCHIVE_PENALTY = 1;
+const MAX_LOADED_CACHE_BOOST = 1.5;
+const MIN_NON_LOADED_ARCHIVE_PENALTY = 0.7;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -211,10 +213,10 @@ function normalizeRetrievalDiscipline(profile) {
         };
     }
     const loadedCacheBoost = Number.isFinite(profile.loadedCacheBoost)
-        ? Math.max(1, Math.min(1.5, Number(profile.loadedCacheBoost)))
+        ? Math.max(1, Math.min(MAX_LOADED_CACHE_BOOST, Number(profile.loadedCacheBoost)))
         : LOADED_CACHE_SOURCE_BOOST;
     const nonLoadedArchivePenalty = Number.isFinite(profile.nonLoadedArchivePenalty)
-        ? Math.max(0.7, Math.min(1, Number(profile.nonLoadedArchivePenalty)))
+        ? Math.max(MIN_NON_LOADED_ARCHIVE_PENALTY, Math.min(1, Number(profile.nonLoadedArchivePenalty)))
         : NON_LOADED_ARCHIVE_PENALTY;
     return {
         loadedCacheBoost,

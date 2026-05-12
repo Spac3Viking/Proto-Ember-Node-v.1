@@ -168,7 +168,7 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
             .send({ query: 'Give me the shortest orientation.', responseDepth: 'spark' });
         expect(spark.status).toBe(200);
         expect(spark.body.signalTrace.compact).toContain('Depth: Spark');
-        expect(spark.body.signalTrace.compact).toContain('Budget: chunks 2 · summaries 1');
+        expect(spark.body.signalTrace.compact).toContain('Budget: 2 chunks · 1 summary');
         expect(spark.body.signalTrace.compact).toContain('Cache Loadout:');
         expect(spark.body.signalTrace.compact).toContain('Bootstrap: compact');
 
@@ -177,8 +177,8 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(userPrompt).toContain('=== Response Depth Instruction ===');
         expect(userPrompt).toContain('Response Depth: Spark');
         expect(userPrompt).toContain('Hard rule: brief orientation only.');
-        expect(userPrompt).toContain('Output target: 1–3 short paragraphs OR 3–5 concise bullets.');
-        expect(userPrompt).toContain('a subtle continuation line is allowed once.');
+        expect(userPrompt).toContain('Output target: 1–3 short paragraphs or 3–5 concise bullets.');
+        expect(userPrompt).toContain('one subtle continuation line is allowed in addition to the output target.');
     });
 
     test('archive depth injects archive response instruction block', async () => {

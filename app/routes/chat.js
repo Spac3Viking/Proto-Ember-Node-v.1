@@ -163,6 +163,8 @@ const RETRIEVAL_DISCIPLINE_PROFILES = Object.freeze({
         nonLoadedArchivePenalty: 1,
     },
 });
+const SPARK_NUDGE_MAX_CHARS = 520;
+const EMBER_NUDGE_MAX_CHARS = 320;
 
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
@@ -646,19 +648,19 @@ function buildDepthResponseInstruction(contextBudget) {
         return [
             'Response Depth: Spark',
             'Hard rule: brief orientation only.',
-            'Output target: 1–3 short paragraphs OR 3–5 concise bullets.',
+            'Output target: 1–3 short paragraphs or 3–5 concise bullets.',
             'Deliver one clear answer and one useful next step.',
             'Use minimal retrieval and only strongest context from loaded continuity when available.',
             'Mentor pacing: concise reflection plus one question OR one next step.',
             'Avoid long essays, broad archive sweeps, and repeated Green Fire philosophy restatement unless asked.',
-            'If deeper context exists, a subtle continuation line is allowed once.',
+            'If deeper context exists, one subtle continuation line is allowed in addition to the output target.',
         ].join('\n');
     }
     if (depthId === 'ember') {
         return [
             'Response Depth: Ember',
             'Balanced synthesis.',
-            'Output target: 3–7 paragraphs or structured bullets with enough context to be useful.',
+            'Output target: 3–7 paragraphs or structured bullets that include practical framing and one concrete next step when useful.',
             'Use moderate retrieval breadth; stay practical and avoid sprawling archive lecture.',
             'Mentor pacing: balanced guidance with compact reflective steering.',
             'Avoid repeated Green Fire philosophy restatement unless user asks for it directly.',
@@ -699,8 +701,8 @@ function shouldAppendDeeperDepthNudge({ depthId, answer, retrievedCount, rawChun
     const summariesUsed = countSummaryLayers(summaryLayersUsed);
     const hasMoreDepthAvailable = totalRetrieved > usedRawChunks || summariesUsed > 1;
     if (!hasMoreDepthAvailable) return false;
-    if (depthId === 'spark') return text.length <= 520;
-    return text.length <= 320;
+    if (depthId === 'spark') return text.length <= SPARK_NUDGE_MAX_CHARS;
+    return text.length <= EMBER_NUDGE_MAX_CHARS;
 }
 
 function summaryBudgetForContext(contextBudget) {
@@ -711,6 +713,10 @@ function summaryBudgetForContext(contextBudget) {
         ? Math.max(0, Math.floor(contextBudget.documentSummaryLimit))
         : 0;
     return cacheLimit + documentLimit;
+}
+
+function formatBudgetLabel(count, singular, plural) {
+    return count + ' ' + (count === 1 ? singular : plural);
 }
 
 function partialContextThresholdForBudget(contextBudget) {
@@ -1146,7 +1152,8 @@ ${buildDepthResponseInstruction(contextBudget)}
         const compactSignalTrace = contextBudget.id === 'spark'
             ? [
                 'Depth: ' + contextBudget.label,
-                'Budget: chunks ' + contextBudget.maxRawChunks + ' · summaries ' + summaryBudgetForContext(contextBudget),
+                'Budget: ' + formatBudgetLabel(contextBudget.maxRawChunks, 'chunk', 'chunks') +
+                    ' · ' + formatBudgetLabel(summaryBudgetForContext(contextBudget), 'summary', 'summaries'),
                 'Cache Loadout: ' + loadedCaches.length + ' loaded',
                 'Bootstrap: compact',
                 'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 1).join(' → ')),
