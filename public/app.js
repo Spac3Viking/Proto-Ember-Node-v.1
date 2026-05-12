@@ -16,6 +16,7 @@ const RESPONSE_DEPTH_STORAGE_KEY = 'responseDepth';
 const RESPONSE_DEPTH_IDS = new Set(['spark', 'ember', 'hearth', 'archive']);
 const DEFAULT_RESPONSE_DEPTH = 'ember';
 const RUNTIME_PROFILE_STORAGE_KEY = 'runtimeProfile';
+const LOADOUT_FOCUS_STORAGE_KEY = 'loadoutFocus';
 const RUNTIME_PROFILE_IDS = new Set([
     'spark-compression',
     'balanced-ember',
@@ -29,6 +30,7 @@ const DEFAULT_RUNTIME_PROFILE = 'balanced-ember';
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
 let _activeRuntimeProfile = null;
+let _activeLoadoutFocus = null;
 
 function normalizeCourtMemberId(value) {
     if (!value || typeof value !== 'string') return null;
@@ -134,6 +136,20 @@ function setActiveResponseDepth(depth) {
     });
 })();
 
+(function initLoadoutFocusControls() {
+    const toggles = ['loadout-focus-toggle', 'ws-loadout-focus-toggle']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    const activeLoadoutFocus = getActiveLoadoutFocus();
+    toggles.forEach(toggleEl => {
+        toggleEl.checked = activeLoadoutFocus;
+        toggleEl.addEventListener('change', () => {
+            setActiveLoadoutFocus(toggleEl.checked);
+        });
+    });
+    syncLoadoutFocusControls();
+})();
+
 function normalizeRuntimeProfile(value) {
     if (typeof value !== 'string') return DEFAULT_RUNTIME_PROFILE;
     const raw = value.trim().toLowerCase();
@@ -170,6 +186,57 @@ function setActiveRuntimeProfile(profile) {
     } catch { /* ignore storage failures */ }
     syncRuntimeProfileSelects();
     return _activeRuntimeProfile;
+}
+
+function normalizeLoadoutFocus(value) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') {
+        if (value === 1) return true;
+        if (value === 0) return false;
+        return false;
+    }
+    if (typeof value !== 'string') return false;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    if (['true', '1', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
+    return false;
+}
+
+function syncLoadoutFocusControls() {
+    const activeLoadoutFocus = getActiveLoadoutFocus();
+    const toggles = ['loadout-focus-toggle', 'ws-loadout-focus-toggle']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    toggles.forEach(toggleEl => {
+        toggleEl.checked = activeLoadoutFocus;
+    });
+    const statusLabels = ['loadout-focus-state', 'ws-loadout-focus-state']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    statusLabels.forEach(labelEl => {
+        labelEl.textContent = activeLoadoutFocus ? 'ON' : 'OFF';
+    });
+}
+
+function getActiveLoadoutFocus() {
+    if (typeof _activeLoadoutFocus === 'boolean') return _activeLoadoutFocus;
+    try {
+        _activeLoadoutFocus = normalizeLoadoutFocus(window.localStorage.getItem(LOADOUT_FOCUS_STORAGE_KEY));
+    } catch {
+        _activeLoadoutFocus = false;
+    }
+    return _activeLoadoutFocus;
+}
+
+function setActiveLoadoutFocus(enabled) {
+    const normalized = normalizeLoadoutFocus(enabled);
+    _activeLoadoutFocus = normalized;
+    try {
+        window.localStorage.setItem(LOADOUT_FOCUS_STORAGE_KEY, normalized ? 'true' : 'false');
+    } catch { /* ignore storage failures */ }
+    syncLoadoutFocusControls();
+    return _activeLoadoutFocus;
 }
 
 const COURT_MEMBER_TRANSITIONS = Object.freeze({
@@ -1338,6 +1405,9 @@ function renderSignalTrace(sources, signalTrace = null) {
     const courtDomains = metadata && Array.isArray(metadata.courtDomains) ? metadata.courtDomains : [];
     const depth = metadata && metadata.depth ? String(metadata.depth) : null;
     const runtimeProfile = metadata && metadata.runtimeProfile ? String(metadata.runtimeProfile) : null;
+    const loadoutFocus = metadata && typeof metadata.loadoutFocus === 'boolean'
+        ? metadata.loadoutFocus
+        : null;
     const model = metadata && metadata.model ? String(metadata.model) : null;
     const provider = metadata && metadata.provider ? String(metadata.provider) : null;
     const rollingBootstrapStatus = metadata && metadata.rollingBootstrapStatus
@@ -1440,6 +1510,7 @@ function renderSignalTrace(sources, signalTrace = null) {
             { key: 'Active archetype', value: courtLens || 'Ember Prime' },
             { key: 'Depth', value: depth },
             { key: 'Runtime Profile', value: runtimeProfile },
+            { key: 'Loadout Focus', value: loadoutFocus === null ? null : (loadoutFocus ? 'ON' : 'OFF') },
             { key: 'Route', value: compactRoute },
             { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
             { key: 'Model', value: model },
@@ -1558,6 +1629,7 @@ async function sendMessage() {
                 courtMember: getEffectiveCourtMemberForApi(),
                 responseDepth: getActiveResponseDepth(),
                 runtimeProfile: getActiveRuntimeProfile(),
+                loadoutFocus: getActiveLoadoutFocus(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1731,6 +1803,7 @@ async function sendCouncilMessage() {
                 courtMember: getEffectiveCourtMemberForApi(),
                 responseDepth: getActiveResponseDepth(),
                 runtimeProfile: getActiveRuntimeProfile(),
+                loadoutFocus: getActiveLoadoutFocus(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -2462,6 +2535,7 @@ async function sendDocumentToHeart() {
                 courtMember: getEffectiveCourtMemberForApi(),
                 responseDepth: getActiveResponseDepth(),
                 runtimeProfile: getActiveRuntimeProfile(),
+                loadoutFocus: getActiveLoadoutFocus(),
             }),
         });
         const data = await res.json();
