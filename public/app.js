@@ -936,35 +936,39 @@ function buildCacheCompressionPrompt(options = {}) {
     const source = String(options.source || 'archive').trim() || 'archive';
     const themes = summarizeDistillationThemes(options.continuityThemes);
     const scope = String(options.scopeHint || '').trim();
-    return [
+    const lines = [
         'Discuss cache compression with me.',
         '',
         '- Cache: ' + title,
         '- Source: ' + source,
         '- Continuity themes: ' + themes,
-        scope ? ('- Scope: ' + scope) : '',
+    ];
+    if (scope) lines.push('- Scope: ' + scope);
+    lines.push(
         '',
         'Focus on overlap, redundancy, strongest signal, and mentor-guided compression options.',
         'Use continuity compression language: signal over accumulation, compression over hoarding, clarity over volume.',
         'Surface missing perspectives, missing archetype reviews, missing continuity domains, practical grounding gaps, and narrative cohesion gaps.',
         'If one lens dominates, name what comparison lens is missing (for example Builder-heavy lacking Scholar comparison).',
         'Keep Sentinel agency central: no automatic merge or deletion.',
-    ].filter(Boolean).join('\n');
+    );
+    return lines.join('\n');
 }
 
 function buildCacheThemeComparisonPrompt(options = {}) {
     const title = String(options.title || options.id || 'Cache Set').trim() || 'Cache Set';
     const source = String(options.source || 'archive').trim() || 'archive';
     const themes = summarizeDistillationThemes(options.continuityThemes);
-    const candidates = Array.isArray(options.candidateCaches) && options.candidateCaches.length > 0
-        ? options.candidateCaches.join(', ')
-        : title;
+    const candidateInput = options.candidateCaches;
+    const candidates = Array.isArray(candidateInput)
+        ? candidateInput.filter(Boolean).join(', ')
+        : String(candidateInput || '').trim();
     return [
         'Compare cache themes with me.',
         '',
         '- Context: ' + title,
         '- Source: ' + source,
-        '- Candidate caches: ' + candidates,
+        '- Candidate caches: ' + (candidates || title),
         '- Continuity themes: ' + themes,
         '',
         'Identify shared continuity threads, repeated concepts, strongest signal, and weak continuity domains.',
@@ -3065,8 +3069,9 @@ function extractCacheLineageMetadata(cache) {
 function installedCacheMetaBadges(cache) {
     const badges = [];
     const lineage = extractCacheLineageMetadata(cache);
+    const levelMeaning = describeCacheLevel(cache.level).split(' — ').slice(1).join(' — ') || CACHE_LEVEL_MEANINGS.spark;
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.level || 'spark')) + '</strong>&nbsp;level</span>');
-    badges.push('<span class="meta-badge"><strong>' + escapeHtml(CACHE_LEVEL_MEANINGS[normalizeCacheLevel(cache.level)]) + '</strong>&nbsp;meaning</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(levelMeaning) + '</strong>&nbsp;meaning</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.status || 'unverified')) + '</strong>&nbsp;status</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(formatCacheScope(cache.scope)) + '</strong>&nbsp;scope</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(lineage.signalDensity) + '</strong>&nbsp;signal</span>');
