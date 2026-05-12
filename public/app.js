@@ -92,7 +92,12 @@ const FORGE_ARCHETYPE_LABELS = Object.freeze({
     scholar: 'Scholar',
     scribe: 'Scribe',
     mystic: 'Mystic',
+    ember_prime: 'Ember Prime',
 });
+const FORGE_MAX_ROLLING_SUMMARY_LINE = 145;
+const FORGE_MAX_ROLLING_SUMMARY_TRUNCATE = 142;
+const FORGE_MAX_BOOTSTRAP_PREVIEW_LINES = 18;
+const FORGE_MAX_CACHE_CARDS = 8;
 const MAX_DISTILLATION_THEME_DISPLAY = 8;
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
@@ -6023,9 +6028,9 @@ function humanizeDepth(depth) {
 function classifyThemeForArchetype(theme, archetypeId) {
     const text = String(theme || '').toLowerCase();
     if (!text) return false;
-    if (archetypeId === 'builder') return /(build|system|implement|repair|structure|resilien|steward|craft)/.test(text);
+    if (archetypeId === 'builder') return /(build|system|implement|repair|structure|resilience|resilient|steward|craft)/.test(text);
     if (archetypeId === 'warrior') return /(risk|pressure|survival|discipline|defense|boundary|readiness)/.test(text);
-    if (archetypeId === 'scholar') return /(study|theory|framework|analysis|synthesis|research|compar)/.test(text);
+    if (archetypeId === 'scholar') return /(study|theory|framework|analysis|synthesis|research|compare|comparison|comparative)/.test(text);
     if (archetypeId === 'scribe') return /(write|narrative|story|document|transmit|language|guide)/.test(text);
     if (archetypeId === 'mystic') return /(symbol|myth|ritual|threshold|resonance|archetype)/.test(text);
     return false;
@@ -6070,7 +6075,11 @@ function buildContinuityPostureLines({
         lines.push('Loaded themes are still forming; refresh preview after loadout changes.');
     }
     if (summary) {
-        lines.push(summary.length > 145 ? summary.slice(0, 142).trimEnd() + '...' : summary);
+        lines.push(
+            summary.length > FORGE_MAX_ROLLING_SUMMARY_LINE
+                ? summary.slice(0, FORGE_MAX_ROLLING_SUMMARY_TRUNCATE).trimEnd() + '...'
+                : summary,
+        );
     }
     return lines.slice(0, 4);
 }
@@ -6121,8 +6130,8 @@ function formatForgeBootstrapPreview(markdown) {
     const text = String(markdown || '').replace(/\r\n/g, '\n').trim();
     if (!text) return 'No Sentinel Loadout Bootstrap generated yet.';
     const lines = text.split('\n');
-    const clipped = lines.slice(0, 18).join('\n');
-    return lines.length > 18 ? clipped + '\n…' : clipped;
+    const clipped = lines.slice(0, FORGE_MAX_BOOTSTRAP_PREVIEW_LINES).join('\n');
+    return lines.length > FORGE_MAX_BOOTSTRAP_PREVIEW_LINES ? clipped + '\n…' : clipped;
 }
 
 async function loadLoadoutForgePanel() {
@@ -6215,7 +6224,7 @@ async function loadLoadoutForgePanel() {
         ).join('');
 
         cacheEl.innerHTML = mergedLoadedCaches.length > 0
-            ? mergedLoadedCaches.slice(0, 8).map(cache => {
+            ? mergedLoadedCaches.slice(0, FORGE_MAX_CACHE_CARDS).map(cache => {
                 const themeText = cache.continuity_themes.length > 0
                     ? cache.continuity_themes.slice(0, 3).join(', ')
                     : 'none';
