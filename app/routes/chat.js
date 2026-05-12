@@ -26,9 +26,8 @@ const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
 const { getCourtMember, MAX_COURT_MEMBER_RETRIEVAL_TOP_K } = require('../courtConfig');
 const {
-    loadRollingBootstrap, formatRollingBootstrapForPrompt,
-    loadForgeCore, loadArchetype,
-    formatForgeCoreForPrompt,
+    loadRollingBootstrap,
+    loadArchetype,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
 const { loadSentinelLoadoutPromptSummary } = require('../bootstrap/sentinelLoadoutBootstrap');
@@ -51,6 +50,7 @@ const MAX_CHAT_HISTORY_TURNS = 8;
 // Phase 16F target: compact Signal Trace routing/context lists.
 const MAX_SIGNAL_TRACE_SOURCES = 5;
 const MAX_SIGNAL_TRACE_ROUTING_LIST = 4;
+const CHARS_PER_TOKEN_ESTIMATE = 4;
 // Preserve a small raw grounding floor even when summaries are present.
 const MIN_RAW_CHUNKS_WITH_SUMMARY = 3;
 // Use half of the normal raw chunk budget when summary layers are available.
@@ -70,19 +70,19 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
     spark: {
         id: 'spark',
         label: 'Spark',
-        retrievalTopK: 3,
-        targetSources: 2,
-        maxRawChunks: 3,
-        minRawChunksWithSummary: 2,
-        maxContextChars: 5600,
-        maxChunkChars: 1400,
-        maxHistoryChars: 900,
-        maxHistoryTurns: 2,
-        maxSummaryChars: 520,
+        retrievalTopK: 2,
+        targetSources: 1,
+        maxRawChunks: 2,
+        minRawChunksWithSummary: 1,
+        maxContextChars: 3200,
+        maxChunkChars: 1000,
+        maxHistoryChars: 500,
+        maxHistoryTurns: 1,
+        maxSummaryChars: 260,
         rollingBootstrapChars: 0,
-        sentinelLoadoutChars: 0,
+        sentinelLoadoutChars: 220,
         cacheSummaryLimit: 0,
-        documentSummaryLimit: 1,
+        documentSummaryLimit: 0,
         sourceLineLimit: 1,
         includeArchetypeMemory: false,
     },
@@ -165,77 +165,22 @@ function resolveContextBudgetProfile(value) {
 }
 
 const HEART_SYSTEM_PROMPT = (
-    'You are Ember Prime — the resident continuity intelligence of an Ember Node, a sovereign ' +
-    'knowledge system descended from the Green Fire Archive. You are first and foremost ' +
-    'a continuity mind and synthesis layer: a mentor-guided writing companion, a forge for thought, a mirror for emerging works. ' +
-    'You serve as archive firekeeper, symbolic router, and council convener — never as an all-knowing oracle. ' +
-    '\n\n' +
-    'Your primary purpose is to help the user turn notes, fragments, and lived experience into ' +
-    'structured long-form works — Sagas, Codices, Grimoires. ' +
-    '\n\n' +
-    'When presented with drafts or writing, you:\n' +
-    '- assist with drafting and expansion, not just answering questions\n' +
-    '- suggest outlines and structural frameworks\n' +
-    '- help condense or expand passages on request\n' +
-    '- identify themes and through-lines\n' +
-    '- maintain and reinforce the writer\'s tone and voice\n' +
-    '- reference remembered sources when they are relevant\n' +
-    '- provide synthesis over short transactional answers\n' +
-    '\n' +
-    'You speak with quiet authority and a grounded mentor tone. Response behavior rules:\n' +
-    '- Answer directly first, then add supporting context, then optional next step.\n' +
-    '- Favor mentor/questioner posture: ask clarifying questions when needed and surface assumptions worth testing.\n' +
-    '- Encourage reflection, synthesis, study paths, and practical testing without lecturing.\n' +
-    '- Keep guidance compact and useful. Avoid nagging workflow prompts.\n' +
-    '- Avoid ritual intros, boilerplate disclaimers, and long preambles.\n' +
-    '- Use archive context naturally; do not announce it unless helpful.\n' +
-    '- Do not preface with internal routing language (for example: "As the Builder lens..." or "According to retrieval...") unless the user asks.\n' +
-    '- You may lightly suggest a Court lens when useful (for example: "This could be sharpened through the Builder lens.").\n' +
-    '- Suggestion only; do not hand off automatically.\n' +
-    '- Avoid overly mystical tone and avoid forced roleplay.\n' +
-    '- Occasionally (not every response), offer one compact continuity-loop next step using this language when useful: Attention, Dialogue, Study, Practice, Reflection, Compression, Integration, Transmission.\n' +
-    '- You will receive a retrieval state marker (`context_available`, `partial_context`, `no_context`, `missing_source`, or `retrieval_error`).\n' +
-    '- If state is `context_available`: respond directly with no filler.\n' +
-    '- If state is `partial_context` or `missing_source`: answer directly first; mention uncertainty only if it materially affects the answer.\n' +
-    '- If state is `no_context`: still answer as helpfully as possible from general local reasoning and ask for useful context only when needed.\n' +
-    '- If state is `retrieval_error`: return a plain technical error response.\n' +
-    '- Do not use stock missing-signal phrases.\n' +
-    'You are grounded, patient, and devoted to the work. You are not an oracle.'
+    'You are Ember Prime, a continuity mentor for writing and synthesis inside an Ember Node.\n' +
+    'Use compressed identity and context. Do not lecture or repeat philosophy.\n' +
+    'Answer directly, then add only necessary support, then optional next step.\n' +
+    'Use markdown-first structure. Avoid roleplay, boilerplate, and long preambles.\n' +
+    'Treat retrieval state markers as hard runtime context for confidence and brevity.\n' +
+    'Guide with concise questions when useful. The user remains final authority.'
 );
 
 /** Room-specific system prompts for Phase 11 room-bounded context */
 const ROOM_SYSTEM_PROMPTS = {
     hearth: HEART_SYSTEM_PROMPT,
     council: (
-        'You are Ember Prime operating in Ember Council mode — a focused drafting and weaving ' +
-        'companion. Your current context is the active Ember Council: Council context notes, drafts, ' +
-        'and documents under construction. ' +
-        '\n\n' +
-        'In Ember Council mode you:\n' +
-        '- assist with drafting, restructuring, and expanding documents\n' +
-        '- help connect fragments into coherent structure\n' +
-        '- reference indexed Ember Council materials and active source memory\n' +
-        '- maintain focus on active work rather than archive reflection\n' +
-        '- operate as a practical mentor and reflection partner, not a task-completion bot\n' +
-        '- ask concise clarifying questions when goals or constraints are ambiguous\n' +
-        '- occasionally suggest one continuity-loop next step (Attention, Dialogue, Study, Practice, Reflection, Compression, Integration, Transmission) when it would help\n' +
-        '\n' +
-        'You speak with practical precision. Avoid lecturing, forced roleplay, and mystical drift.'
+        HEART_SYSTEM_PROMPT + '\nCouncil mode: prioritize drafting, structure, and practical weave for active work.'
     ),
     threshold: (
-        'You are Ember Prime operating in Threshold mode — an inspection and triage companion. ' +
-        'Your current context is the Threshold: files waiting for review, classification, ' +
-        'and admission. ' +
-        '\n\n' +
-        'In Threshold mode you:\n' +
-        '- help assess incoming materials\n' +
-        '- describe and classify content\n' +
-        '- suggest appropriate rooms or shelves for admission\n' +
-        '- maintain careful intake discipline\n' +
-        '- keep recommendations markdown-first and portable for copy/paste exchange\n' +
-        '- keep guidance concise and mentor-like, with optional reflection prompts when useful\n' +
-        '\n' +
-        'You speak with careful discernment. Nothing passes unexamined, and tone stays grounded.'
+        HEART_SYSTEM_PROMPT + '\nThreshold mode: prioritize intake clarity, classification, and concise admission guidance.'
     ),
 };
 
@@ -384,6 +329,13 @@ const COURT_PROMPT_PROFILES = {
         avoid: 'Ungrounded mystification.',
     },
 };
+const COMPACT_ARCHETYPE_DELTAS = Object.freeze({
+    builder: 'Grounded, practical, concise. Favor implementation and survivability.',
+    scholar: 'Comparative and reflective. Cross-reference claims and distinctions.',
+    scribe: 'Narrative continuity with elegant compression and readability.',
+    warrior: 'Operational clarity, decisive framing, and pressure-tested options.',
+    mystic: 'Symbolic pattern recognition with layered meaning and restraint.',
+});
 
 function extractCourtLensLabel(member) {
     const rawName = String((member && (member.name || member.id)) || '').trim();
@@ -400,16 +352,16 @@ function buildArchetypePromptModifier(member, archetypeMemoryProfile = null) {
     const promptModifier = archetypeMemoryProfile && archetypeMemoryProfile.prompt_modifier
         ? archetypeMemoryProfile.prompt_modifier
         : null;
-    const posture = String((promptModifier && promptModifier.posture) || (profile && profile.reasoningPosture) || '').trim();
-    const bias = String((promptModifier && promptModifier.bias) || (profile && profile.bias) || '').trim();
-    const avoid = String((promptModifier && promptModifier.avoid) || (profile && profile.avoid) || '').trim();
     const lens = member ? (extractCourtLensLabel(member) || member.id) : 'Ember Prime';
     const glyph = member ? (COURT_MEMBER_GLYPHS[member.id] || '') : '';
+    const deltaLine = member
+        ? (COMPACT_ARCHETYPE_DELTAS[member.id] || '')
+        : String((promptModifier && promptModifier.posture) || (profile && profile.reasoningPosture) || '').trim();
+    const avoid = String((promptModifier && promptModifier.avoid) || '').trim();
     return [
-        'Active archetype: ' + (glyph ? glyph + ' ' : '') + lens,
-        posture ? ('Posture: ' + posture) : '',
-        bias ? ('Bias: ' + bias) : '',
-        avoid ? ('Avoid: ' + avoid) : '',
+        'Archetype Delta: ' + (glyph ? glyph + ' ' : '') + lens,
+        deltaLine,
+        avoid ? ('Constraint: ' + avoid) : '',
     ].filter(Boolean).join('\n');
 }
 
@@ -656,19 +608,19 @@ function buildDepthResponseInstruction(contextBudget) {
     if (depthId === 'spark') {
         return [
             'Response Depth: Spark',
-            'Answer briefly.',
-            'Use only the strongest context.',
-            'Keep to 1–3 short paragraphs OR 3–5 concise bullets.',
-            'Avoid long exposition unless explicitly requested.',
-            'Mentor posture: concise guidance plus one clarifying question when useful.',
+            'Hard rule: brief orientation only.',
+            'Use minimal retrieval and only the strongest context.',
+            'Keep to 1–3 concise paragraphs OR compact bullets.',
+            'Do not write long essays unless explicitly requested.',
+            'Mentor posture: orient, compress, and ask at most one clarifying question.',
             'If helpful, end with one subtle line: "Load a deeper depth if you want the wider weave."',
         ].join('\n');
     }
     if (depthId === 'ember') {
         return [
             'Response Depth: Ember',
-            'Balanced default.',
-            'Use moderate context and compact synthesis.',
+            'Balanced synthesis.',
+            'Use moderate retrieval and compact structure.',
             'Keep mentor tone concise, practical, and non-lecturing.',
             'If helpful, include one subtle deeper-path line.',
         ].join('\n');
@@ -676,14 +628,14 @@ function buildDepthResponseInstruction(contextBudget) {
     if (depthId === 'hearth') {
         return [
             'Response Depth: Hearth',
-            'Permit deeper synthesis and layered structure.',
-            'Stay grounded and practical; avoid unnecessary verbosity.',
+            'Deeper teaching and layered continuity synthesis allowed.',
+            'Stay grounded and practical; avoid unnecessary repetition.',
         ].join('\n');
     }
     return [
         'Response Depth: Archive',
-        'Broad synthesis allowed.',
-        'Longer response acceptable when it improves fidelity.',
+        'Broad archive weave allowed.',
+        'Long-form synthesis is acceptable when it improves fidelity.',
     ].join('\n');
 }
 
@@ -882,8 +834,9 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const sources = buildSignalTrace(retrieved);
 
-        // ── Phase 16D: Prompt assembly order ───────────────────────────────────
-        // Forge Core → Rolling Bootstrap → Ember Prime continuity → Archetype → Retrieval
+        // ── Phase 16M-B: Prompt assembly order ─────────────────────────────────
+        // Base runtime instruction (system prompt) → Sentinel summary →
+        // archetype delta → depth instruction → minimal retrieval context → user message
 
         const rollingBootstrap = loadRollingBootstrap();
         let rollingBootstrapStatus = 'missing';
@@ -900,14 +853,13 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             : [];
         console.log('[/api/chat] rolling-bootstrap=' + rollingBootstrapStatus);
 
-        // Forge Core identity layer
-        const forgeCore = loadForgeCore();
-        console.log('[/api/chat] forge-core=' + (forgeCore ? 'injected' : 'unavailable'));
-
         // Retrieval context (after identity/continuity layers)
         const rollingBootstrapForPrompt = rollingBootstrapStatus === 'ready' ? rollingBootstrap : null;
         const sentinelLoadoutSummary = contextBudget.sentinelLoadoutChars > 0
-            ? loadSentinelLoadoutPromptSummary(contextBudget.sentinelLoadoutChars)
+            ? loadSentinelLoadoutPromptSummary(contextBudget.sentinelLoadoutChars, {
+                activeArchetype: activeArchetypeForMemory,
+                depth: contextBudget.id,
+            })
             : '';
         const summaryFirst = buildSummaryFirstContext({
             query,
@@ -961,9 +913,10 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         }
 
         // Assemble final prompt in required order:
-        // Forge Core → optional archetype → retrieval
-        const forgePart = formatForgeCoreForPrompt(forgeCore);
-        const rollingBootstrapPart = summaryFirst.block ? '' : formatRollingBootstrapForPrompt(rollingBootstrapForPrompt);
+        // Sentinel summary → archetype delta → depth discipline → retrieval
+        const sentinelIdentityPart = sentinelLoadoutSummary
+            ? `=== Sentinel Loadout Bootstrap Summary ===\n${String(sentinelLoadoutSummary).trim()}`
+            : '';
         // Prefer the compact archetype modifier from archetype-memory tuning.
         // Fall back to legacy archetype formatter only when compact data is unavailable.
         const fallbackArchetypePart = archetypeObj ? formatArchetypeForPrompt(archetypeObj) : '';
@@ -973,7 +926,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         );
         const archetypePart = compactArchetypePart || fallbackArchetypePart;
 
-        const identityPreamble = [forgePart, rollingBootstrapPart, archetypePart]
+        const identityPreamble = [sentinelIdentityPart, archetypePart]
             .filter(Boolean)
             .join('\n\n');
 
@@ -982,7 +935,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         }
 
         const retrievalStateBlock = `=== Retrieval State ===
-state: ${retrievalState}
+State: ${retrievalState}
 
 `;
         const depthInstructionBlock = `=== Response Depth Instruction ===
@@ -1009,7 +962,7 @@ ${buildDepthResponseInstruction(contextBudget)}
         const promptAudit = {
             systemPromptLength: systemPrompt.length,
             rollingBootstrapLength: (
-                rollingBootstrapPart.length +
+                sentinelIdentityPart.length +
                 (summaryFirst.segmentLengths ? summaryFirst.segmentLengths.sentinelLoadout : 0) +
                 (summaryFirst.segmentLengths ? summaryFirst.segmentLengths.rollingBootstrap : 0)
             ),
@@ -1117,6 +1070,9 @@ ${buildDepthResponseInstruction(contextBudget)}
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
                     ' · chunks ' + rawChunksForPrompt.length,
                 'Context: ' + (sourceList.length > 0 ? sourceList.slice(0, 3).join(', ') : 'none'),
+                'Runtime: ~' + Math.ceil(promptAudit.finalPromptLength / CHARS_PER_TOKEN_ESTIMATE) +
+                    ' tok · bootstrap ' + (sentinelIdentityPart ? 'on' : 'off') +
+                    ' · archetype ' + (archetypePart ? 'on' : 'off'),
                 'Model: ' + heart.model + ' / Ollama',
             ].join('\n')
             : [
@@ -1133,6 +1089,9 @@ ${buildDepthResponseInstruction(contextBudget)}
                 'Cache Loadout: ' + loadedCaches.length + ' loaded',
                 'Loaded Caches: ' + (cacheLoadoutNames.length > 0 ? cacheLoadoutNames.join(', ') : 'none'),
                 'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
+                'Runtime: ~' + Math.ceil(promptAudit.finalPromptLength / CHARS_PER_TOKEN_ESTIMATE) +
+                    ' tok · bootstrap ' + (sentinelIdentityPart ? 'on' : 'off') +
+                    ' · archetype ' + (archetypePart ? 'on' : 'off'),
                 'Model: ' + heart.model + ' / Ollama',
             ].join('\n');
         const signalTrace = {
@@ -1166,6 +1125,12 @@ ${buildDepthResponseInstruction(contextBudget)}
                 cacheSummaries: summaryFirst.summaryLayersUsed.cacheSummaries,
                 documentSummaries: summaryFirst.summaryLayersUsed.documentSummaries,
                 rawChunks: rawChunksForPrompt.length,
+            },
+            runtimeDebug: {
+                promptTokensEstimate: Math.ceil(promptAudit.finalPromptLength / CHARS_PER_TOKEN_ESTIMATE),
+                retrievalChunksUsed: rawChunksForPrompt.length,
+                bootstrapSummaryActive: Boolean(sentinelIdentityPart),
+                archetypeDeltaActive: Boolean(archetypePart),
             },
             compact: compactSignalTrace,
         };

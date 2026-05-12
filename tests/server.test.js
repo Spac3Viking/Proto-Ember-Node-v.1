@@ -776,6 +776,6 @@ describe('Sentinel loadout bootstrap routes', () => {
         const userPrompt = payload && payload.messages && payload.messages[1]
             ? String(payload.messages[1].content || '')
             : '';
-        expect(userPrompt).toContain('=== Sentinel Loadout ===');
+        expect(userPrompt).toContain('=== Sentinel Loadout Bootstrap Summary ===');
     });
 });

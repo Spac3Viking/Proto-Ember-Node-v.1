@@ -13,6 +13,7 @@ const MAX_SUMMARY_CHARS = 420;
 const MAX_RETRIEVAL_POSTURE_CHARS = 220;
 const MAX_STEWARD_NOTE_CHARS = 220;
 const MAX_PROMPT_SUMMARY_LINES = 12;
+const MAX_RUNTIME_CACHE_LINES = 3;
 
 const ARCHETYPE_ORDER = ['builder', 'warrior', 'scholar', 'scribe', 'mystic'];
 const ARCHETYPE_RUNES = {
@@ -201,17 +202,77 @@ function stripFrontmatter(markdown) {
     return bodyStart >= 0 ? text.slice(bodyStart + 1) : '';
 }
 
-function loadSentinelLoadoutPromptSummary(maxChars = 320) {
+function compactMultilineText(value, maxChars) {
+    const text = String(value || '').replace(/\r\n/g, '\n').trim();
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+    if (maxChars <= 3) return text.slice(0, Math.max(0, maxChars));
+    return text.slice(0, Math.max(0, maxChars - 3)).trimEnd() + '...';
+}
+
+function extractSectionLines(markdownBody, heading) {
+    const lines = String(markdownBody || '').split('\n');
+    const headingLine = '## ' + heading;
+    const startIndex = lines.findIndex(line => String(line || '').trim() === headingLine);
+    if (startIndex < 0) return [];
+    const sectionLines = [];
+    for (let i = startIndex + 1; i < lines.length; i++) {
+        const line = String(lines[i] || '');
+        if (/^##\s+/.test(line.trim())) break;
+        if (line.trim()) sectionLines.push(line.trim());
+    }
+    return sectionLines;
+}
+
+function formatDepthPostureLine(depth) {
+    const id = normalizeDepth(depth || 'ember');
+    if (id === 'spark') return 'Response posture: Spark Compression.';
+    if (id === 'ember') return 'Response posture: Ember Balance.';
+    if (id === 'hearth') return 'Response posture: Hearth Deepening.';
+    return 'Response posture: Archive Weave.';
+}
+
+function formatArchetypeLoadoutLine(activeArchetype) {
+    const id = String(activeArchetype || '').trim().toLowerCase();
+    if (!ARCHETYPE_LABELS[id]) return 'Current Loadout: Ember Prime baseline.';
+    return 'Current Loadout: ' + ARCHETYPE_LABELS[id] + ' emphasis.';
+}
+
+function loadSentinelLoadoutPromptSummary(maxChars = 320, runtimeState = null) {
     const markdown = loadSentinelLoadoutBootstrapMarkdown();
-    if (!markdown) return '';
     const body = stripFrontmatter(markdown);
-    const focusLines = body
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#'))
-        .slice(0, MAX_PROMPT_SUMMARY_LINES)
-        .join(' ');
-    return compactText(focusLines, Math.max(80, Math.floor(maxChars)));
+    const normalizedState = runtimeState && typeof runtimeState === 'object' ? runtimeState : {};
+    const activeArchetype = String(normalizedState.activeArchetype || '').trim().toLowerCase();
+    const depth = normalizeDepth(normalizedState.depth || 'ember');
+    const cacheSectionLines = extractSectionLines(body, 'Cache Loadout');
+    const cacheLines = cacheSectionLines
+        .filter(line => /^-\s+/.test(line))
+        .slice(0, MAX_RUNTIME_CACHE_LINES)
+        .map(line => line.replace(/^\-\s+/, '').trim())
+        .filter(Boolean);
+    const loadedCaches = cacheLines.length > 0
+        ? cacheLines.join(', ')
+        : listLoadedCaches()
+            .slice(0, MAX_RUNTIME_CACHE_LINES)
+            .map(cache => String(cache && (cache.title || cache.id) || '').trim())
+            .filter(Boolean)
+            .join(', ');
+    const retrievalPostureLines = extractSectionLines(body, 'Retrieval Posture');
+    const retrievalPosture = compactText(retrievalPostureLines[0] || '', 120);
+    const summary = compactText((extractSectionLines(body, 'Current Purpose')[0] || ''), 120);
+    const focusLines = [
+        formatArchetypeLoadoutLine(activeArchetype),
+        loadedCaches ? ('Loaded caches: ' + loadedCaches + '.') : 'Loaded caches: none.',
+        formatDepthPostureLine(depth),
+        'Mentor style: concise practical guidance.',
+        depth === 'spark'
+            ? 'Avoid broad archive exposition unless requested.'
+            : 'Avoid repeated philosophy exposition.',
+        retrievalPosture ? ('Retrieval posture: ' + retrievalPosture) : '',
+        summary ? ('Continuity cue: ' + summary) : '',
+    ].filter(Boolean).slice(0, MAX_PROMPT_SUMMARY_LINES);
+
+    return compactMultilineText(focusLines.join('\n'), Math.max(100, Math.floor(maxChars)));
 }
 
 module.exports = {

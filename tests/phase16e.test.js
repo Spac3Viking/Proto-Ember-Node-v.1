@@ -108,6 +108,11 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(res.body).toHaveProperty('answer');
         expect(res.body).toHaveProperty('signalTrace');
         expect(res.body.signalTrace).toHaveProperty('memoryFlow');
+        expect(res.body.signalTrace).toHaveProperty('runtimeDebug');
+        expect(typeof res.body.signalTrace.runtimeDebug.promptTokensEstimate).toBe('number');
+        expect(typeof res.body.signalTrace.runtimeDebug.retrievalChunksUsed).toBe('number');
+        expect(typeof res.body.signalTrace.runtimeDebug.bootstrapSummaryActive).toBe('boolean');
+        expect(typeof res.body.signalTrace.runtimeDebug.archetypeDeltaActive).toBe('boolean');
         expect(res.body.signalTrace.depth).toBe('Ember');
         expect(typeof res.body.signalTrace.compact).toBe('string');
         expect(res.body.signalTrace.compact).toContain('Depth: Ember');
@@ -168,7 +173,8 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
         expect(userPrompt).toContain('=== Response Depth Instruction ===');
         expect(userPrompt).toContain('Response Depth: Spark');
-        expect(userPrompt).toContain('1–3 short paragraphs OR 3–5 concise bullets.');
+        expect(userPrompt).toContain('Hard rule: brief orientation only.');
+        expect(userPrompt).toContain('1–3 concise paragraphs OR compact bullets.');
     });
 
     test('archive depth injects archive response instruction block', async () => {
@@ -184,7 +190,7 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         const payload = mockedAxios.post.mock.calls[0][1];
         const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
         expect(userPrompt).toContain('Response Depth: Archive');
-        expect(userPrompt).toContain('Broad synthesis allowed.');
-        expect(userPrompt).toContain('Longer response acceptable when it improves fidelity.');
+        expect(userPrompt).toContain('Broad archive weave allowed.');
+        expect(userPrompt).toContain('Long-form synthesis is acceptable when it improves fidelity.');
     });
 });
