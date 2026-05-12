@@ -1313,8 +1313,6 @@ ${buildDepthResponseInstruction(contextBudget)}
                 retrievalChunksUsed: rawChunksForPrompt.length,
                 bootstrapSummaryActive: Boolean(sentinelIdentityPart),
                 archetypeDeltaActive: Boolean(archetypePart),
-                runtimeProfile: runtimeProfileLabel,
-                loadoutFocus: loadoutFocusEnabled,
                 numPredict: runtimeGenerationProfile.numPredict,
                 temperature: runtimeGenerationProfile.temperature,
             },
