@@ -15,8 +15,20 @@ const EMBER_PRIME_MEMBER_ID = 'ember-prime';
 const RESPONSE_DEPTH_STORAGE_KEY = 'responseDepth';
 const RESPONSE_DEPTH_IDS = new Set(['spark', 'ember', 'hearth', 'archive']);
 const DEFAULT_RESPONSE_DEPTH = 'ember';
+const RUNTIME_PROFILE_STORAGE_KEY = 'runtimeProfile';
+const RUNTIME_PROFILE_IDS = new Set([
+    'spark-compression',
+    'balanced-ember',
+    'field-guide',
+    'scholar-weave',
+    'narrative-forge',
+    'minimal-retrieval',
+    'deep-hearth',
+]);
+const DEFAULT_RUNTIME_PROFILE = 'balanced-ember';
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
+let _activeRuntimeProfile = null;
 
 function normalizeCourtMemberId(value) {
     if (!value || typeof value !== 'string') return null;
@@ -96,6 +108,19 @@ function setActiveResponseDepth(depth) {
     return _activeResponseDepth;
 }
 
+(function initRuntimeProfileControls() {
+    const selectors = ['runtime-profile-select', 'ws-runtime-profile-select']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    const activeProfile = getActiveRuntimeProfile();
+    selectors.forEach(selectEl => {
+        selectEl.value = activeProfile;
+        selectEl.addEventListener('change', () => {
+            setActiveRuntimeProfile(selectEl.value);
+        });
+    });
+})();
+
 (function initResponseDepthControls() {
     const selectors = ['response-depth-select', 'ws-response-depth-select']
         .map(id => document.getElementById(id))
@@ -108,6 +133,44 @@ function setActiveResponseDepth(depth) {
         });
     });
 })();
+
+function normalizeRuntimeProfile(value) {
+    if (typeof value !== 'string') return DEFAULT_RUNTIME_PROFILE;
+    const raw = value.trim().toLowerCase();
+    return RUNTIME_PROFILE_IDS.has(raw) ? raw : DEFAULT_RUNTIME_PROFILE;
+}
+
+function syncRuntimeProfileSelects() {
+    const activeProfile = getActiveRuntimeProfile();
+    const selectors = ['runtime-profile-select', 'ws-runtime-profile-select']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    selectors.forEach(selectEl => {
+        if (selectEl.value !== activeProfile) {
+            selectEl.value = activeProfile;
+        }
+    });
+}
+
+function getActiveRuntimeProfile() {
+    if (_activeRuntimeProfile) return _activeRuntimeProfile;
+    try {
+        _activeRuntimeProfile = normalizeRuntimeProfile(window.localStorage.getItem(RUNTIME_PROFILE_STORAGE_KEY));
+    } catch {
+        _activeRuntimeProfile = DEFAULT_RUNTIME_PROFILE;
+    }
+    return _activeRuntimeProfile;
+}
+
+function setActiveRuntimeProfile(profile) {
+    const normalized = normalizeRuntimeProfile(profile);
+    _activeRuntimeProfile = normalized;
+    try {
+        window.localStorage.setItem(RUNTIME_PROFILE_STORAGE_KEY, normalized);
+    } catch { /* ignore storage failures */ }
+    syncRuntimeProfileSelects();
+    return _activeRuntimeProfile;
+}
 
 const COURT_MEMBER_TRANSITIONS = Object.freeze({
     builder: 'Grounding signal in structure, systems, and practical sequence.',
@@ -1274,6 +1337,7 @@ function renderSignalTrace(sources, signalTrace = null) {
     const courtLens = metadata && metadata.courtLens ? String(metadata.courtLens) : null;
     const courtDomains = metadata && Array.isArray(metadata.courtDomains) ? metadata.courtDomains : [];
     const depth = metadata && metadata.depth ? String(metadata.depth) : null;
+    const runtimeProfile = metadata && metadata.runtimeProfile ? String(metadata.runtimeProfile) : null;
     const model = metadata && metadata.model ? String(metadata.model) : null;
     const provider = metadata && metadata.provider ? String(metadata.provider) : null;
     const rollingBootstrapStatus = metadata && metadata.rollingBootstrapStatus
@@ -1375,6 +1439,7 @@ function renderSignalTrace(sources, signalTrace = null) {
             },
             { key: 'Active archetype', value: courtLens || 'Ember Prime' },
             { key: 'Depth', value: depth },
+            { key: 'Runtime Profile', value: runtimeProfile },
             { key: 'Route', value: compactRoute },
             { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
             { key: 'Model', value: model },
@@ -1492,6 +1557,7 @@ async function sendMessage() {
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
                 courtMember: getEffectiveCourtMemberForApi(),
                 responseDepth: getActiveResponseDepth(),
+                runtimeProfile: getActiveRuntimeProfile(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1664,6 +1730,7 @@ async function sendCouncilMessage() {
                 room: 'council',
                 courtMember: getEffectiveCourtMemberForApi(),
                 responseDepth: getActiveResponseDepth(),
+                runtimeProfile: getActiveRuntimeProfile(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -2394,6 +2461,7 @@ async function sendDocumentToHeart() {
                 query,
                 courtMember: getEffectiveCourtMemberForApi(),
                 responseDepth: getActiveResponseDepth(),
+                runtimeProfile: getActiveRuntimeProfile(),
             }),
         });
         const data = await res.json();
@@ -5467,7 +5535,10 @@ async function loadMemoryCompressionStatus() {
                 const res = await fetch('/api/bootstrap/sentinel/ignite', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: '{}',
+                    body: JSON.stringify({
+                        responseDepth: getActiveResponseDepth(),
+                        runtimeProfile: getActiveRuntimeProfile(),
+                    }),
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {

@@ -34,12 +34,12 @@ router.get('/api/bootstrap', readLimiter, (req, res) => {
  * POST /api/bootstrap/refresh
  * Rebuild the rolling continuity summary from context memory and thread memory.
  *
- * Body (optional): { activeArchetype: "scribe", responseDepth: "ember" }
+ * Body (optional): { activeArchetype: "scribe", responseDepth: "ember", runtimeProfile: "balanced-ember" }
  */
 router.post('/api/bootstrap/refresh', writeLimiter, (req, res) => {
-    const { activeArchetype = null, responseDepth = null } = req.body || {};
+    const { activeArchetype = null, responseDepth = null, runtimeProfile = null } = req.body || {};
     try {
-        const rollingBootstrap = refreshRollingBootstrap({ activeArchetype, responseDepth });
+        const rollingBootstrap = refreshRollingBootstrap({ activeArchetype, responseDepth, runtimeProfile });
         res.json({ success: true, rollingBootstrap });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -48,9 +48,9 @@ router.post('/api/bootstrap/refresh', writeLimiter, (req, res) => {
 
 router.post('/api/bootstrap/sentinel/ignite', writeLimiter, (req, res) => {
     try {
-        const { activeArchetype = null, responseDepth = null } = req.body || {};
-        const rollingBootstrap = refreshRollingBootstrap({ activeArchetype, responseDepth });
-        const sentinelLoadout = writeSentinelLoadoutBootstrap({ rollingBootstrap });
+        const { activeArchetype = null, responseDepth = null, runtimeProfile = null } = req.body || {};
+        const rollingBootstrap = refreshRollingBootstrap({ activeArchetype, responseDepth, runtimeProfile });
+        const sentinelLoadout = writeSentinelLoadoutBootstrap({ rollingBootstrap, runtimeProfile });
         return res.json({
             success: true,
             path: sentinelLoadout.path,

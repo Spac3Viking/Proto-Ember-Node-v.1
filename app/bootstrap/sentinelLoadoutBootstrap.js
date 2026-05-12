@@ -6,6 +6,11 @@ const { BOOTSTRAP_DIR } = require('../storageConfig');
 const { loadRollingBootstrap } = require('../bootstrap');
 const { listLoadedCaches } = require('../loadedCaches');
 const { getRecentCacheInteractions, getCacheInteractionSummary } = require('../cacheInteractionMemory');
+const {
+    resolveCognitionProfile,
+    buildCognitionProfileBootstrapSummary,
+    buildCognitionProfilePromptSummary,
+} = require('../runtime/cognitionProfiles');
 
 const SENTINEL_LOADOUT_FILENAME = 'sentinel-loadout-bootstrap.md';
 const SENTINEL_LOADOUT_PATH = path.join(BOOTSTRAP_DIR, SENTINEL_LOADOUT_FILENAME);
@@ -99,6 +104,9 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
     const activeArchetypeRaw = String(rollingBootstrap?.node_state?.active_archetype || '').toLowerCase();
     const activeArchetype = ARCHETYPE_ORDER.includes(activeArchetypeRaw) ? activeArchetypeRaw : '';
     const responseDepth = normalizeDepth(rollingBootstrap?.node_state?.response_depth || 'ember');
+    const activeRuntimeProfile = resolveCognitionProfile(
+        opts.runtimeProfile || rollingBootstrap?.node_state?.runtime_profile || null,
+    );
     const recentCacheEncounters = Array.isArray(rollingBootstrap.recent_cache_encounters) &&
         rollingBootstrap.recent_cache_encounters.length > 0
         ? rollingBootstrap.recent_cache_encounters.slice(0, 5).map(item => String(item))
@@ -118,6 +126,7 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
     const stewardNotes = getStewardNotes(rollingBootstrap);
     const createdAt = new Date().toISOString();
     const archetypeBalance = inferArchetypeBalance(activeArchetype, activeThemes);
+    const runtimeProfileSummary = buildCognitionProfileBootstrapSummary(activeRuntimeProfile);
 
     return [
         '---',
@@ -145,6 +154,10 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
         'Hearth: ' + RESPONSE_DISCIPLINE.hearth,
         'Archive: ' + RESPONSE_DISCIPLINE.archive,
         '- Active response depth: ' + responseDepth,
+        '',
+        '## Runtime Profile',
+        activeRuntimeProfile.label,
+        ...runtimeProfileSummary,
         '',
         '## Retrieval Posture',
         retrievalPosture,
@@ -251,6 +264,11 @@ function loadSentinelLoadoutPromptSummary(maxChars = 320, runtimeState = null) {
     const normalizedState = runtimeState && typeof runtimeState === 'object' ? runtimeState : {};
     const activeArchetype = String(normalizedState.activeArchetype || '').trim().toLowerCase();
     const depth = normalizeDepth(normalizedState.depth || 'ember');
+    const runtimeProfile = resolveCognitionProfile(
+        normalizedState.runtimeProfile ||
+        normalizedState.runtime_profile ||
+        null,
+    );
     const cacheSectionLines = extractSectionLines(body, 'Cache Loadout');
     const cacheLines = cacheSectionLines
         .filter(line => /^-\s+/.test(line))
@@ -267,12 +285,22 @@ function loadSentinelLoadoutPromptSummary(maxChars = 320, runtimeState = null) {
     const retrievalPostureLines = extractSectionLines(body, 'Retrieval Posture');
     const retrievalPosture = compactText(retrievalPostureLines[0] || '', 120);
     const summary = compactText((extractSectionLines(body, 'Current Purpose')[0] || ''), 120);
+    const runtimeProfileSectionLines = extractSectionLines(body, 'Runtime Profile');
+    const runtimeProfilePromptSummary = buildCognitionProfilePromptSummary(runtimeProfile)
+        .split('\n')
+        .slice(2, 4)
+        .map(line => compactText(line, 100))
+        .filter(Boolean);
     const focusLines = [
         formatArchetypeLoadoutLine(activeArchetype),
+        'Runtime profile: ' + runtimeProfile.label + '.',
+        ...runtimeProfilePromptSummary,
         loadedCaches ? ('Loaded caches: ' + loadedCaches + '.') : 'Loaded caches: none.',
         formatDepthPostureLine(depth),
         formatDepthTargetLine(depth),
-        'Mentor style: concise practical guidance.',
+        runtimeProfileSectionLines[2]
+            ? String(runtimeProfileSectionLines[2]).replace(/^\-\s*/, '')
+            : 'Mentor style: concise practical guidance.',
         depth === 'spark'
             ? 'Favor loaded caches strongly; avoid broad archive expansion unless requested.'
             : 'Avoid repeated philosophy exposition.',

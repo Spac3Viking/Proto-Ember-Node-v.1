@@ -44,6 +44,7 @@ const {
     getRecentCacheInteractions,
 } = require('./cacheInteractionMemory');
 const { listLoadedCaches } = require('./loadedCaches');
+const { resolveCognitionProfile } = require('./runtime/cognitionProfiles');
 
 // ── File paths ────────────────────────────────────────────────────────────────
 
@@ -421,9 +422,11 @@ function buildRollingBootstrap(opts) {
     const {
         activeArchetype = null,
         responseDepth = null,
+        runtimeProfile = null,
         recentDecisions = [],
         openQuestions = [],
     } = opts || {};
+    const activeRuntimeProfile = resolveCognitionProfile(runtimeProfile);
     const now = new Date().toISOString();
 
     const threadSummaries = listThreadSummaries().slice(0, 12);
@@ -501,6 +504,9 @@ function buildRollingBootstrap(opts) {
     }
     if (activeArchetype) summaryParts.push('Active archetype: ' + activeArchetype + '.');
     if (responseDepth) summaryParts.push('Response depth: ' + String(responseDepth) + '.');
+    if (activeRuntimeProfile && activeRuntimeProfile.label) {
+        summaryParts.push('Runtime profile: ' + activeRuntimeProfile.label + '.');
+    }
     if (cacheInteractionSummary) summaryParts.push('Cache memory: ' + cacheInteractionSummary);
 
     return {
@@ -518,6 +524,7 @@ function buildRollingBootstrap(opts) {
         node_state: {
             active_archetype: activeArchetype || null,
             response_depth: responseDepth ? String(responseDepth) : null,
+            runtime_profile: activeRuntimeProfile.id,
         },
         // Reserved for future place memory attachment:
         // place_notes, field_observations, map_regions, waypoints, routes.
@@ -756,6 +763,10 @@ function formatRollingBootstrapForPrompt(rollingBootstrap) {
     if (rollingBootstrap.node_state && rollingBootstrap.node_state.response_depth) {
         lines.push('Response depth: ' + String(rollingBootstrap.node_state.response_depth) + '.');
     }
+    if (rollingBootstrap.node_state && rollingBootstrap.node_state.runtime_profile) {
+        const runtimeProfile = resolveCognitionProfile(rollingBootstrap.node_state.runtime_profile);
+        lines.push('Runtime profile: ' + runtimeProfile.label + '.');
+    }
     lines.push('=== END ROLLING BOOTSTRAP ===');
     return lines.join('\n');
 }
@@ -794,6 +805,11 @@ function buildContinuityBootstrapMarkdown(opts = {}) {
     const responseDepth = rollingBootstrap.node_state && rollingBootstrap.node_state.response_depth
         ? rollingBootstrap.node_state.response_depth
         : 'ember';
+    const activeRuntimeProfile = resolveCognitionProfile(
+        rollingBootstrap.node_state && rollingBootstrap.node_state.runtime_profile
+            ? rollingBootstrap.node_state.runtime_profile
+            : null,
+    );
     const activeThemes = Array.isArray(rollingBootstrap.active_themes)
         ? rollingBootstrap.active_themes.slice(0, 8)
         : [];
@@ -853,6 +869,7 @@ function buildContinuityBootstrapMarkdown(opts = {}) {
         '## Archetype Notes',
         '- Active archetype: ' + String(activeArchetype),
         '- Response depth: ' + String(responseDepth),
+        '- Runtime profile: ' + String(activeRuntimeProfile.label),
         ...(archetypeNotes.length > 0 ? archetypeNotes.map(note => '- ' + String(note)) : ['- no active notes']),
         '',
         '## Steward Notes',
