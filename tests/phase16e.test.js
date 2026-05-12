@@ -169,8 +169,10 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(spark.status).toBe(200);
         expect(spark.body.signalTrace.compact).toContain('Depth: Spark');
         expect(spark.body.signalTrace.compact).toContain('Budget: 2 chunks · 1 summary');
-        expect(spark.body.signalTrace.compact).toContain('Cache Loadout:');
+        expect(spark.body.signalTrace.compact).toContain('Predict: 180');
+        expect(spark.body.signalTrace.compact).toContain('Loadout Focus: OFF');
         expect(spark.body.signalTrace.compact).toContain('Bootstrap: compact');
+        expect(spark.body.signalTrace.compact).toContain('Caches Loaded:');
 
         const payload = mockedAxios.post.mock.calls[0][1];
         const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
@@ -196,5 +198,34 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(userPrompt).toContain('Response Depth: Archive');
         expect(userPrompt).toContain('Broad archive weave allowed.');
         expect(userPrompt).toContain('Long-form synthesis is acceptable when it improves fidelity.');
+    });
+
+    test('loadout focus toggles retrieval emphasis and runtime profile metadata', async () => {
+        const mockedAxios = require('axios');
+        mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Focused response.' } } });
+        const { app } = require('../app/server');
+
+        const focused = await request(app)
+            .post('/api/chat')
+            .send({
+                query: 'Give a direct focused synthesis.',
+                responseDepth: 'ember',
+                loadoutFocus: true,
+            });
+
+        expect(focused.status).toBe(200);
+        expect(focused.body.signalTrace.runtimeProfile).toBe('Field Guide');
+        expect(focused.body.signalTrace.loadoutFocus).toBe(true);
+        expect(focused.body.signalTrace.compact).toContain('Loadout Focus: ON');
+        expect(focused.body.signalTrace.compact).toContain('Predict: 560');
+        expect(focused.body.signalTrace.runtimeDebug.numPredict).toBe(560);
+        expect(focused.body.signalTrace.runtimeDebug.temperature).toBe(0.68);
+
+        const payload = mockedAxios.post.mock.calls[0][1];
+        expect(payload.options).toBeDefined();
+        expect(payload.options.num_predict).toBe(560);
+        expect(payload.options.temperature).toBe(0.68);
+        const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
+        expect(userPrompt).toContain('Loadout Focus: ON');
     });
 });
