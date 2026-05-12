@@ -398,6 +398,7 @@ describe('Threshold inbox import + reader endpoints', () => {
         const found = (list.body.files || []).find(f => f.path === bootstrapPath);
         expect(found).toBeTruthy();
         expect(found.bootstrapDetected).toBe(true);
+        expect(found.sentinelLoadoutDetected).toBe(false);
 
         const useRes = await request(app)
             .post('/api/threshold/bootstrap/use')
@@ -406,6 +407,33 @@ describe('Threshold inbox import + reader endpoints', () => {
         expect(useRes.body.success).toBe(true);
         expect(useRes.body.message).toMatch(/Bootstrap detected/i);
         expect(useRes.body.rollingBootstrap).toBeTruthy();
+
+        await request(app).delete('/api/threshold/files').send({ path: bootstrapPath });
+    });
+
+    test('GET /api/threshold/files detects Sentinel Loadout Bootstrap markdown', async () => {
+        const bootstrapDoc = [
+            '---',
+            'title: Sentinel Loadout Bootstrap',
+            'type: bootstrap',
+            'status: local',
+            'source: ember-node',
+            '---',
+            '# Sentinel Loadout Bootstrap',
+            '## Current Purpose',
+            'Compact continuity profile.',
+        ].join('\n');
+        const upload = await request(app)
+            .post('/api/threshold/import')
+            .attach('files', Buffer.from(bootstrapDoc, 'utf8'), 'sentinel-loadout-bootstrap.md');
+        const bootstrapPath = upload.body.imported[0].path;
+
+        const list = await request(app).get('/api/threshold/files');
+        expect(list.status).toBe(200);
+        const found = (list.body.files || []).find(f => f.path === bootstrapPath);
+        expect(found).toBeTruthy();
+        expect(found.bootstrapDetected).toBe(true);
+        expect(found.sentinelLoadoutDetected).toBe(true);
 
         await request(app).delete('/api/threshold/files').send({ path: bootstrapPath });
     });
@@ -704,5 +732,50 @@ describe('System bootstrap export route', () => {
         expect(String(res.headers['content-type'] || '')).toMatch(/text\/markdown/i);
         expect(res.text).toMatch(/# Ember Node Continuity Bootstrap/);
         expect(res.text).toMatch(/type: bootstrap/);
+    });
+});
+
+describe('Sentinel loadout bootstrap routes', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('POST /api/bootstrap/sentinel/ignite generates sentinel markdown', async () => {
+        const res = await request(app)
+            .post('/api/bootstrap/sentinel/ignite')
+            .send({});
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.path).toBe('system/bootstrap/sentinel-loadout-bootstrap.md');
+        expect(res.body.markdown).toMatch(/# Sentinel Loadout Bootstrap/);
+        expect(res.body.markdown).toMatch(/## External AI Instructions/);
+
+        const absPath = path.join(DATA_ROOT, 'system', 'bootstrap', 'sentinel-loadout-bootstrap.md');
+        expect(fs.existsSync(absPath)).toBe(true);
+    });
+
+    test('GET /api/bootstrap/sentinel/download returns markdown download', async () => {
+        await request(app).post('/api/bootstrap/sentinel/ignite').send({});
+        const res = await request(app).get('/api/bootstrap/sentinel/download');
+        expect(res.status).toBe(200);
+        expect(String(res.headers['content-type'] || '')).toMatch(/text\/markdown/i);
+        expect(res.text).toMatch(/title: Sentinel Loadout Bootstrap/);
+        expect(res.text).toMatch(/## Response Discipline/);
+    });
+
+    test('chat prompt assembly can include sentinel loadout summary when available', async () => {
+        await request(app).post('/api/bootstrap/sentinel/ignite').send({});
+        axios.post.mockResolvedValue({ data: { message: { content: 'ok' } } });
+
+        const chatRes = await request(app)
+            .post('/api/chat')
+            .send({ query: 'Use continuity posture.', responseDepth: 'ember' });
+
+        expect(chatRes.status).toBe(200);
+        const payload = axios.post.mock.calls[0][1];
+        const userPrompt = payload && payload.messages && payload.messages[1]
+            ? String(payload.messages[1].content || '')
+            : '';
+        expect(userPrompt).toContain('=== Sentinel Loadout ===');
     });
 });

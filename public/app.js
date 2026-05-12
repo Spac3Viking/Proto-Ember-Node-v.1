@@ -4265,6 +4265,9 @@ function formatRelativeTime(isoString) {
 }
 
 function thresholdStatusLabel(file) {
+    if (file && file.sentinelLoadoutDetected) {
+        return 'Sentinel Loadout Bootstrap detected';
+    }
     if (file && file.bootstrapDetected) {
         return 'Bootstrap detected';
     }
@@ -4279,7 +4282,7 @@ function thresholdStatusLabel(file) {
 async function useThresholdBootstrap(file) {
     if (!file || !file.path) return;
     const overwrite = window.confirm(
-        'Use this file as Continuity Bootstrap?\n\nPress OK to overwrite an existing summary. Press Cancel to send a no-overwrite import request (the server may reject it if summary confirmation is required).',
+        'Use this file as Active Bootstrap?\n\nPress OK to overwrite an existing summary. Press Cancel to send a no-overwrite import request (the server may reject it if summary confirmation is required).',
     );
     try {
         const res = await fetch('/api/threshold/bootstrap/use', {
@@ -4291,10 +4294,42 @@ async function useThresholdBootstrap(file) {
         if (!res.ok || !data.success) {
             throw new Error(data.error || 'Bootstrap import failed.');
         }
-        showFlashMessage('Bootstrap detected. Continuity Bootstrap imported.');
+        showFlashMessage(file.sentinelLoadoutDetected
+            ? 'Sentinel Loadout Bootstrap imported.'
+            : 'Bootstrap imported.');
         if (typeof loadBootstrapStatus === 'function') loadBootstrapStatus();
     } catch (error) {
         showFlashMessage(error.message || 'Bootstrap import failed.');
+    }
+}
+
+async function discussThresholdBootstrap(file) {
+    if (!file || !file.path) return;
+    const MAX_BOOTSTRAP_DISCUSSION_CHARS = 1200;
+    const GENERIC_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX = 'Review this bootstrap and discuss how to apply it as active continuity posture:';
+    const SENTINEL_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX = 'Review this Sentinel Loadout Bootstrap and discuss how to apply it as active continuity posture:';
+    try {
+        const res = await fetch('/api/threshold/files/content?path=' + encodeURIComponent(file.path));
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not load bootstrap content.');
+        }
+        const hearthTab = document.querySelector('.room-tab[data-room="hearth"]');
+        if (hearthTab) hearthTab.click();
+        const messageInput = document.getElementById('message-input');
+        if (!messageInput) return;
+        const excerpt = String(data.content || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, MAX_BOOTSTRAP_DISCUSSION_CHARS);
+        const promptPrefix = file.sentinelLoadoutDetected
+            ? SENTINEL_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX
+            : GENERIC_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX;
+        messageInput.value = promptPrefix + '\n\n' + excerpt;
+        messageInput.focus();
+        showFlashMessage('Bootstrap loaded into Hearth input for discussion.');
+    } catch (error) {
+        showFlashMessage(error.message || 'Could not prepare bootstrap discussion.');
     }
 }
 
@@ -4462,10 +4497,22 @@ function buildThresholdImportedRow(file) {
     deleteBtn.addEventListener('click', () => deleteThresholdImportedFile(file));
 
     if (file.bootstrapDetected) {
+        const reviewBtn = document.createElement('button');
+        reviewBtn.className = 'secondary threshold-action-btn';
+        reviewBtn.textContent = 'Review Bootstrap';
+        reviewBtn.addEventListener('click', () => openThresholdImportedFile(file));
+
+        const discussBtn = document.createElement('button');
+        discussBtn.className = 'secondary threshold-action-btn';
+        discussBtn.textContent = 'Discuss Bootstrap';
+        discussBtn.addEventListener('click', () => discussThresholdBootstrap(file));
+
         const useBtn = document.createElement('button');
         useBtn.className = 'secondary threshold-action-btn';
-        useBtn.textContent = 'Use as Continuity Bootstrap';
+        useBtn.textContent = 'Use as Active Bootstrap';
         useBtn.addEventListener('click', () => useThresholdBootstrap(file));
+        actions.appendChild(reviewBtn);
+        actions.appendChild(discussBtn);
         actions.appendChild(useBtn);
     }
 
@@ -5411,6 +5458,30 @@ async function loadMemoryCompressionStatus() {
 
 (function initRollingBootstrapActions() {
     document.addEventListener('click', async (e) => {
+        if (e.target && e.target.id === 'sys-ignite-loadout-btn') {
+            const btn = e.target;
+            btn.disabled = true;
+            const previousText = btn.textContent;
+            btn.textContent = 'Igniting…';
+            try {
+                const res = await fetch('/api/bootstrap/sentinel/ignite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}',
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Could not ignite Sentinel Loadout.');
+                }
+                showFlashMessage('Sentinel Loadout Bootstrap generated.');
+            } catch (error) {
+                showFlashMessage(error.message || 'Could not ignite Sentinel Loadout.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = previousText;
+            }
+            return;
+        }
         if (e.target && e.target.id === 'sys-open-bootstrap-json-btn') {
             window.open('/api/bootstrap/rolling', '_blank', 'noopener');
             return;
@@ -5447,6 +5518,39 @@ async function loadMemoryCompressionStatus() {
                 showFlashMessage('Continuity Bootstrap exported.');
             } catch (error) {
                 showFlashMessage(error.message || 'Could not export continuity bootstrap.');
+            }
+            return;
+        }
+        if (e.target && e.target.id === 'sys-copy-sentinel-loadout-btn') {
+            try {
+                const res = await fetch('/api/bootstrap/sentinel');
+                const data = await res.json();
+                if (!res.ok || !data.success || !data.markdown) {
+                    throw new Error(data.error || 'Sentinel Loadout Bootstrap not generated yet.');
+                }
+                await navigator.clipboard.writeText(String(data.markdown));
+                showFlashMessage('Sentinel Loadout Bootstrap copied.');
+            } catch (error) {
+                showFlashMessage(error.message || 'Could not copy Sentinel Loadout Bootstrap.');
+            }
+            return;
+        }
+        if (e.target && e.target.id === 'sys-download-sentinel-loadout-btn') {
+            try {
+                const res = await fetch('/api/bootstrap/sentinel/download');
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Sentinel Loadout Bootstrap not generated yet.');
+                }
+                const markdown = await res.text();
+                downloadPlainText(
+                    'sentinel-loadout-bootstrap.md',
+                    markdown,
+                    'text/markdown',
+                );
+                showFlashMessage('Sentinel Loadout Bootstrap downloaded.');
+            } catch (error) {
+                showFlashMessage(error.message || 'Could not download Sentinel Loadout Bootstrap.');
             }
         }
     });

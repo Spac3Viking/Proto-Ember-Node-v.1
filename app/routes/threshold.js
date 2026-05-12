@@ -188,6 +188,12 @@ function parseGreenFireHandoff(content) {
     };
 }
 
+function isSentinelLoadoutBootstrapMarkdown(content, handoff) {
+    if (!handoff || !handoff.detected || handoff.type !== 'bootstrap') return false;
+    const text = String(content || '').toLowerCase();
+    return text.includes('sentinel loadout bootstrap');
+}
+
 function sanitizeFilename(filename) {
     const base = path.basename(String(filename || '').replace(/\\/g, '/'));
     return base.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+/, '') || 'imported-file';
@@ -291,10 +297,12 @@ function listThresholdInboxFiles() {
             try { stats = fs.statSync(absPath); } catch { return null; }
             const importedAt = (stats.birthtime || stats.mtime || new Date()).toISOString();
             let handoff = null;
+            let sentinelLoadoutDetected = false;
             if (ext === '.md') {
                 try {
                     const content = fs.readFileSync(absPath, 'utf8');
                     handoff = parseGreenFireHandoff(content);
+                    sentinelLoadoutDetected = isSentinelLoadoutBootstrapMarkdown(content, handoff);
                 } catch {
                     handoff = {
                         detected: false,
@@ -305,6 +313,7 @@ function listThresholdInboxFiles() {
                         source: null,
                         license: null,
                     };
+                    sentinelLoadoutDetected = false;
                 }
             }
             return {
@@ -318,6 +327,7 @@ function listThresholdInboxFiles() {
                 status: ext === '.pdf' ? 'pdf_stored' : 'ready',
                 handoff,
                 bootstrapDetected: Boolean(handoff && handoff.detected && handoff.type === 'bootstrap'),
+                sentinelLoadoutDetected,
             };
         })
         .filter(Boolean)
@@ -1412,6 +1422,7 @@ router.post('/api/threshold/inbox/markdown', writeLimiter, (req, res) => {
         const source = createInboxMarkdownFromText(markdown, filename);
         const stats = fs.statSync(source.absPath);
         const handoff = parseGreenFireHandoff(source.markdown);
+        const sentinelLoadoutDetected = isSentinelLoadoutBootstrapMarkdown(source.markdown, handoff);
         return res.json({
             success: true,
             file: {
@@ -1422,6 +1433,7 @@ router.post('/api/threshold/inbox/markdown', writeLimiter, (req, res) => {
                 imported_at: (stats.birthtime || stats.mtime || new Date()).toISOString(),
                 handoff,
                 bootstrapDetected: Boolean(handoff && handoff.detected && handoff.type === 'bootstrap'),
+                sentinelLoadoutDetected,
             },
         });
     } catch (error) {
@@ -1446,6 +1458,7 @@ router.post('/api/threshold/bootstrap/use', writeLimiter, (req, res) => {
         }
         const content = fs.readFileSync(absPath, 'utf8');
         const handoff = parseGreenFireHandoff(content);
+        const sentinelLoadoutDetected = isSentinelLoadoutBootstrapMarkdown(content, handoff);
         if (!handoff.detected || handoff.type !== 'bootstrap') {
             return res.status(400).json({ error: 'Bootstrap detected metadata not found (type: bootstrap).' });
         }
@@ -1491,8 +1504,9 @@ router.post('/api/threshold/bootstrap/use', writeLimiter, (req, res) => {
         } catch { /* non-blocking memory update */ }
         return res.json({
             success: true,
-            message: 'Bootstrap detected',
+            message: sentinelLoadoutDetected ? 'Sentinel Loadout Bootstrap detected' : 'Bootstrap detected',
             rollingBootstrap: updated,
+            sentinelLoadoutDetected,
         });
     } catch (error) {
         const status = Number.isInteger(error.status) ? error.status : 500;
@@ -1711,6 +1725,9 @@ router.get('/api/threshold/files/content', readLimiter, (req, res) => {
         const handoff = ext === '.md'
             ? parseGreenFireHandoff(content)
             : null;
+        const sentinelLoadoutDetected = ext === '.md'
+            ? isSentinelLoadoutBootstrapMarkdown(content, handoff)
+            : false;
         if (handoff && handoff.detected) {
             try {
                 recordCacheInteraction({
@@ -1739,6 +1756,7 @@ router.get('/api/threshold/files/content', readLimiter, (req, res) => {
             sourceLabel: 'Threshold',
             sourceType: normalizeImportType(ext),
             handoff,
+            sentinelLoadoutDetected,
         });
     } catch (error) {
         console.error('Error reading threshold file:', error.message);
