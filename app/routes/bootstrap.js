@@ -13,6 +13,10 @@ const { readLimiter, writeLimiter } = require('../rateLimiters');
 const {
     loadRollingBootstrap, refreshRollingBootstrap, getRollingBootstrapStatus,
 } = require('../bootstrap');
+const {
+    writeSentinelLoadoutBootstrap,
+    loadSentinelLoadoutBootstrapMarkdown,
+} = require('../bootstrap/sentinelLoadoutBootstrap');
 
 const router = express.Router();
 
@@ -40,6 +44,44 @@ router.post('/api/bootstrap/refresh', writeLimiter, (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+router.post('/api/bootstrap/sentinel/ignite', writeLimiter, (req, res) => {
+    try {
+        const { activeArchetype = null, responseDepth = null } = req.body || {};
+        const rollingBootstrap = refreshRollingBootstrap({ activeArchetype, responseDepth });
+        const sentinelLoadout = writeSentinelLoadoutBootstrap({ rollingBootstrap });
+        return res.json({
+            success: true,
+            path: sentinelLoadout.path,
+            markdown: sentinelLoadout.markdown,
+            rollingBootstrap,
+        });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/api/bootstrap/sentinel', readLimiter, (req, res) => {
+    const markdown = loadSentinelLoadoutBootstrapMarkdown();
+    if (!markdown) {
+        return res.status(404).json({ error: 'Sentinel Loadout Bootstrap not generated yet.' });
+    }
+    return res.json({
+        success: true,
+        path: 'system/bootstrap/sentinel-loadout-bootstrap.md',
+        markdown,
+    });
+});
+
+router.get('/api/bootstrap/sentinel/download', readLimiter, (req, res) => {
+    const markdown = loadSentinelLoadoutBootstrapMarkdown();
+    if (!markdown) {
+        return res.status(404).json({ error: 'Sentinel Loadout Bootstrap not generated yet.' });
+    }
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="sentinel-loadout-bootstrap.md"');
+    return res.send(markdown);
 });
 
 router.get('/api/bootstrap/rolling', readLimiter, (req, res) => {

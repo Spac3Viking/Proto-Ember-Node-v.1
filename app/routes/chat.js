@@ -31,6 +31,7 @@ const {
     formatForgeCoreForPrompt,
     formatArchetypeForPrompt,
 } = require('../bootstrap');
+const { loadSentinelLoadoutPromptSummary } = require('../bootstrap/sentinelLoadoutBootstrap');
 const { listLoadedCaches } = require('../loadedCaches');
 const {
     loadCacheSummaries,
@@ -79,6 +80,7 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         maxHistoryTurns: 2,
         maxSummaryChars: 520,
         rollingBootstrapChars: 0,
+        sentinelLoadoutChars: 0,
         cacheSummaryLimit: 0,
         documentSummaryLimit: 1,
         sourceLineLimit: 1,
@@ -97,6 +99,7 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         maxHistoryTurns: 6,
         maxSummaryChars: 2200,
         rollingBootstrapChars: 320,
+        sentinelLoadoutChars: 220,
         cacheSummaryLimit: 2,
         documentSummaryLimit: 3,
         sourceLineLimit: 3,
@@ -115,6 +118,7 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         maxHistoryTurns: 8,
         maxSummaryChars: 3000,
         rollingBootstrapChars: 400,
+        sentinelLoadoutChars: 280,
         cacheSummaryLimit: 3,
         documentSummaryLimit: 5,
         sourceLineLimit: 4,
@@ -133,6 +137,7 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         maxHistoryTurns: 8,
         maxSummaryChars: 3800,
         rollingBootstrapChars: 480,
+        sentinelLoadoutChars: 320,
         cacheSummaryLimit: 4,
         documentSummaryLimit: 6,
         sourceLineLimit: 5,
@@ -483,6 +488,7 @@ function hasValidBootstrapSummary(rollingBootstrap) {
  * @param {object} options
  * @param {string} options.query
  * @param {object|null} options.rollingBootstrap
+ * @param {string} options.sentinelLoadoutSummary
  * @param {string|null} options.activeArchetype
  * @param {object[]} options.sourceTrace
  * @param {number} [options.maxSummaryChars]
@@ -491,6 +497,7 @@ function hasValidBootstrapSummary(rollingBootstrap) {
 function buildSummaryFirstContext({
     query,
     rollingBootstrap,
+    sentinelLoadoutSummary,
     activeArchetype,
     sourceTrace,
     maxSummaryChars = 2400,
@@ -527,6 +534,7 @@ function buildSummaryFirstContext({
         : Math.min(sourceLineLimit, maxSourceLineLimit);
     const segmentLengths = {
         rollingBootstrap: 0,
+        sentinelLoadout: 0,
         archetypeMemory: 0,
         summaries: 0,
     };
@@ -558,6 +566,10 @@ function buildSummaryFirstContext({
             openQuestions.length > 0 ? ('Open: ' + openQuestions.join(' | ')) : '',
             recentDecisions.length > 0 ? ('Decisions: ' + recentDecisions.join(' | ')) : '',
         ].filter(Boolean).join('\n'), 'rollingBootstrap');
+    }
+
+    if (sentinelLoadoutSummary) {
+        pushBlock('Sentinel Loadout', String(sentinelLoadoutSummary).trim(), 'sentinelLoadout');
     }
 
     let usedArchetypeMemory = 0;
@@ -894,9 +906,13 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         // Retrieval context (after identity/continuity layers)
         const rollingBootstrapForPrompt = rollingBootstrapStatus === 'ready' ? rollingBootstrap : null;
+        const sentinelLoadoutSummary = contextBudget.sentinelLoadoutChars > 0
+            ? loadSentinelLoadoutPromptSummary(contextBudget.sentinelLoadoutChars)
+            : '';
         const summaryFirst = buildSummaryFirstContext({
             query,
             rollingBootstrap: rollingBootstrapForPrompt,
+            sentinelLoadoutSummary,
             activeArchetype: activeArchetypeForMemory,
             sourceTrace: sources,
             maxSummaryChars: contextBudget.maxSummaryChars,
@@ -994,6 +1010,7 @@ ${buildDepthResponseInstruction(contextBudget)}
             systemPromptLength: systemPrompt.length,
             rollingBootstrapLength: (
                 rollingBootstrapPart.length +
+                (summaryFirst.segmentLengths ? summaryFirst.segmentLengths.sentinelLoadout : 0) +
                 (summaryFirst.segmentLengths ? summaryFirst.segmentLengths.rollingBootstrap : 0)
             ),
             archetypeModifierLength: archetypePart.length,
