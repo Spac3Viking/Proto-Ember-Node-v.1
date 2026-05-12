@@ -194,7 +194,7 @@ describe('Phase 15.6 — concept index layer', () => {
                 room: 'hearth',
                 shelf: 'archive',
                 file: 'unloaded.md',
-                text: 'green fire continuity mapping and practice',
+                text: 'green fire continuity mapping and theory',
             },
         ];
         const manifests = {
