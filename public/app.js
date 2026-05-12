@@ -906,6 +906,10 @@ function describeCacheLevel(value) {
     return normalized + ' — ' + CACHE_LEVEL_MEANINGS[normalized];
 }
 
+function getCacheLevelMeaning(value) {
+    return CACHE_LEVEL_MEANINGS[normalizeCacheLevel(value)];
+}
+
 function buildDocumentDiscussionPrompt(options = {}) {
     const title = String(options.title || 'Document').trim() || 'Document';
     const source = String(options.source || 'Unknown source').trim() || 'Unknown source';
@@ -1011,6 +1015,9 @@ function buildDistillationRecommendationPrompt(options = {}) {
         '## Suggested Compression Direction',
         '## Recommended Archetype Review',
         '## Suggested Next Step',
+        '',
+        'Shared Continuity Themes = recurring threads across multiple caches.',
+        'Repeated Concepts = specific ideas or terms that keep repeating.',
         '',
         'Tone: mentor-guided, practical, reflective, concise, and non-gamey.',
         'Use continuity compression language naturally: signal over accumulation, compression over hoarding, clarity over volume.',
@@ -3069,7 +3076,7 @@ function extractCacheLineageMetadata(cache) {
 function installedCacheMetaBadges(cache) {
     const badges = [];
     const lineage = extractCacheLineageMetadata(cache);
-    const levelMeaning = describeCacheLevel(cache.level).split(' — ').slice(1).join(' — ') || CACHE_LEVEL_MEANINGS.spark;
+    const levelMeaning = getCacheLevelMeaning(cache.level);
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.level || 'spark')) + '</strong>&nbsp;level</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(levelMeaning) + '</strong>&nbsp;meaning</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.status || 'unverified')) + '</strong>&nbsp;status</span>');
