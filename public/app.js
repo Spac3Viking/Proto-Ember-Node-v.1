@@ -28,6 +28,7 @@ const RUNTIME_PROFILE_IDS = new Set([
     'deep-hearth',
 ]);
 const DEFAULT_RUNTIME_PROFILE = 'balanced-ember';
+const MAX_DISTILLATION_THEME_DISPLAY = 8;
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
 let _activeRuntimeProfile = null;
@@ -967,7 +968,7 @@ function summarizeDistillationThemes(list) {
         ? list.map(item => String(item || '').trim()).filter(Boolean)
         : [];
     if (themes.length === 0) return 'none listed yet';
-    return themes.slice(0, 8).join(', ');
+    return themes.slice(0, MAX_DISTILLATION_THEME_DISPLAY).join(', ');
 }
 
 function buildCacheCompressionPrompt(options = {}) {
@@ -995,14 +996,15 @@ function buildDistillationRecommendationPrompt(options = {}) {
         ? candidateCaches.map((item, idx) => (idx + 1) + '. ' + item).join('\n')
         : '1. (No specific cache list provided)';
     const themeLines = themes.length > 0
-        ? themes.map((item, idx) => '- ' + item).join('\n')
+        ? themes.map(item => '- ' + item).join('\n')
         : '- none listed yet';
-    return [
+    const promptLines = [
         'Create a Distillation Recommendation for continuity compression.',
         '',
         'Context title: ' + title,
-        sourceHint ? ('Source context: ' + sourceHint) : '',
-        '',
+    ];
+    if (sourceHint) promptLines.push('Source context: ' + sourceHint);
+    promptLines.push(
         'Candidate caches:',
         candidateLines,
         '',
@@ -1021,7 +1023,8 @@ function buildDistillationRecommendationPrompt(options = {}) {
         '',
         'Tone: mentor-guided, practical, reflective, non-gamey.',
         'Keep the Sentinel central: no auto-merge, no auto-delete, no automatic tier upgrades.',
-    ].filter(Boolean).join('\n');
+    );
+    return promptLines.filter(Boolean).join('\n');
 }
 
 function buildDistillationRecommendationMarkdown(answer, options = {}) {
@@ -3013,42 +3016,46 @@ function formatCacheScope(scope) {
     return scope.map(String).slice(0, 4).join(', ');
 }
 
-function installedCacheMetaBadges(cache) {
-    const badges = [];
+function extractCacheLineageMetadata(cache) {
     const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
         ? cache.manifest
         : {};
-    const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
-    const signalDensity = manifest.signal_density ? String(manifest.signal_density) : 'low';
+    return {
+        manifest,
+        derivedFrom: Array.isArray(manifest.derived_from) ? manifest.derived_from : [],
+        distilledInto: Array.isArray(manifest.distilled_into) ? manifest.distilled_into : [],
+        continuityThemes: Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [],
+        signalDensity: manifest.signal_density ? String(manifest.signal_density) : 'low',
+    };
+}
+
+function installedCacheMetaBadges(cache) {
+    const badges = [];
+    const lineage = extractCacheLineageMetadata(cache);
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.level || 'spark')) + '</strong>&nbsp;level</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.status || 'unverified')) + '</strong>&nbsp;status</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(formatCacheScope(cache.scope)) + '</strong>&nbsp;scope</span>');
-    badges.push('<span class="meta-badge"><strong>' + escapeHtml(signalDensity) + '</strong>&nbsp;signal</span>');
-    badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(continuityThemes.length)) + '</strong>&nbsp;themes</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(lineage.signalDensity) + '</strong>&nbsp;signal</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(lineage.continuityThemes.length)) + '</strong>&nbsp;themes</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.documentCount || 0)) + '</strong>&nbsp;documents</span>');
     badges.push('<span class="meta-badge"><strong>' + (cache.loaded ? 'loaded' : 'not loaded') + '</strong>&nbsp;state</span>');
     return badges.join('');
 }
 
 function compactCacheRelationshipText(cache) {
-    const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
-        ? cache.manifest
-        : {};
-    const derivedFrom = Array.isArray(manifest.derived_from) ? manifest.derived_from : [];
-    const distilledInto = Array.isArray(manifest.distilled_into) ? manifest.distilled_into : [];
-    const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
-    const signalDensity = manifest.signal_density ? String(manifest.signal_density) : 'low';
+    const lineage = extractCacheLineageMetadata(cache);
     return [
-        'Derived From: ' + (derivedFrom.length > 0 ? derivedFrom.join(', ') : '—'),
-        'Distilled Into: ' + (distilledInto.length > 0 ? distilledInto.join(', ') : '—'),
-        'Related Themes: ' + (continuityThemes.length > 0 ? continuityThemes.join(', ') : '—'),
-        'Signal Density: ' + signalDensity,
+        'Derived From: ' + (lineage.derivedFrom.length > 0 ? lineage.derivedFrom.join(', ') : '—'),
+        'Distilled Into: ' + (lineage.distilledInto.length > 0 ? lineage.distilledInto.join(', ') : '—'),
+        'Related Themes: ' + (lineage.continuityThemes.length > 0 ? lineage.continuityThemes.join(', ') : '—'),
+        'Signal Density: ' + lineage.signalDensity,
     ];
 }
 
 function buildInstalledCacheDistillationActions(cache) {
     const wrapper = document.createElement('div');
     wrapper.className = 'threshold-file-actions';
+    const lineage = extractCacheLineageMetadata(cache);
 
     const reviewBtn = document.createElement('button');
     reviewBtn.className = 'secondary threshold-action-btn';
@@ -3059,7 +3066,7 @@ function buildInstalledCacheDistillationActions(cache) {
                 title: cache.title || cache.id,
                 sourceHint: cache.source || 'archive/cache',
                 candidateCaches: [cache.title || cache.id],
-                continuityThemes: (cache.manifest && cache.manifest.continuity_themes) || [],
+                continuityThemes: lineage.continuityThemes,
             });
         } catch (error) {
             showFlashMessage(error.message || 'Could not generate distillation recommendation.');
@@ -3075,7 +3082,7 @@ function buildInstalledCacheDistillationActions(cache) {
                 id: cache.id,
                 title: cache.title,
                 source: cache.source,
-                continuityThemes: (cache.manifest && cache.manifest.continuity_themes) || [],
+                continuityThemes: lineage.continuityThemes,
             }),
             EMBER_PRIME_MEMBER_ID,
         );
@@ -3163,6 +3170,7 @@ async function openInstalledCacheInReader(cache) {
 }
 
 function buildInstalledCacheItem(cache) {
+    const lineage = extractCacheLineageMetadata(cache);
     const item = document.createElement('div');
     item.className = 'cache-item';
     item.dataset.cacheId = cache.id;
@@ -3220,7 +3228,7 @@ function buildInstalledCacheItem(cache) {
                 title: cache.title || cache.id,
                 sourceHint: cache.source || 'archive/cache',
                 candidateCaches: [cache.title || cache.id],
-                continuityThemes: (cache.manifest && cache.manifest.continuity_themes) || [],
+                continuityThemes: lineage.continuityThemes,
             });
         } catch (error) {
             showFlashMessage(error.message || 'Could not generate distillation recommendation.');
