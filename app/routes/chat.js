@@ -245,12 +245,19 @@ function buildDistillationGuidanceBlock() {
 Mentor stance: practical, reflective, and non-gamey.
 Goal: support human-guided continuity distillation, not automatic cache evolution.
 Do not auto-merge, auto-delete, auto-upgrade tiers, or rewrite continuity.
-Help identify overlap, repeated themes, redundancy, strongest signal, and synthesis opportunities.
+Treat distillation as continuity refinement.
+Use continuity compression language naturally: signal over accumulation, compression over hoarding, clarity over volume.
+Help identify overlap, repeated concepts, redundancy, strongest signal, and synthesis opportunities.
+Surface missing perspectives when present:
+- missing archetype comparison (for example Builder-heavy lacking Scholar comparison)
+- missing continuity domains
+- missing practical grounding examples
+- missing narrative cohesion
 Name compression opportunities explicitly and ask compact guidance questions:
 - What continuity appears repeatedly across these caches?
 - Which ideas remain useful after compression?
-- What perspectives are still missing?
-- Would a Builder or Scholar review strengthen this synthesis?
+- Which missing perspectives should be reviewed before distillation?
+- Which archetype review would strengthen continuity quality right now?
 When giving distillation guidance, preserve Sentinel choice and frame recommendations as optional.
 
 `;
