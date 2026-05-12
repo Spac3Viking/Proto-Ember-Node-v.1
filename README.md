@@ -28,6 +28,15 @@ Ember Node is now a **markdown-first continuity terminal**: active continuity ex
 - **Rolling Bootstrap** = internal evolving continuity memory summary.
 - **Prompt Bridges** = external AI instructions for producing handoffs/caches.
 
+## Cache Level Meanings
+
+- **Spark** = raw fragment / discovery
+- **Ember** = refined synthesis
+- **Flame** = integrated cross-domain continuity
+- **Hearth** = foundational continuity structure
+
+These levels indicate continuity refinement posture, not rarity, power, or loot progression.
+
 ## Quick Start
 
 ```bash
