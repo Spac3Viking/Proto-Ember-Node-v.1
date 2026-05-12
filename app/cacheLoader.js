@@ -101,6 +101,10 @@ function listCaches() {
                 level:       cacheMeta.level,
                 status:      cacheMeta.status,
                 scope:       cacheMeta.scope,
+                derived_from: cacheMeta.derived_from,
+                distilled_into: cacheMeta.distilled_into,
+                continuity_themes: cacheMeta.continuity_themes,
+                signal_density: cacheMeta.signal_density,
                 loaded:      cacheMeta.loaded,
                 // Explicit ownership tag — these caches are bundled with the app,
                 // not created or owned by the user.

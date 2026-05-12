@@ -17,6 +17,7 @@ const RESPONSE_DEPTH_IDS = new Set(['spark', 'ember', 'hearth', 'archive']);
 const DEFAULT_RESPONSE_DEPTH = 'ember';
 const RUNTIME_PROFILE_STORAGE_KEY = 'runtimeProfile';
 const LOADOUT_FOCUS_STORAGE_KEY = 'loadoutFocus';
+const DISTILLATION_GUIDANCE_STORAGE_KEY = 'distillationGuidance';
 const RUNTIME_PROFILE_IDS = new Set([
     'spark-compression',
     'balanced-ember',
@@ -31,6 +32,7 @@ let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
 let _activeRuntimeProfile = null;
 let _activeLoadoutFocus = null;
+let _activeDistillationGuidance = null;
 
 function normalizeCourtMemberId(value) {
     if (!value || typeof value !== 'string') return null;
@@ -150,6 +152,20 @@ function setActiveResponseDepth(depth) {
     syncLoadoutFocusControls();
 })();
 
+(function initDistillationGuidanceControls() {
+    const toggles = ['distillation-guidance-toggle', 'ws-distillation-guidance-toggle']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    const active = getActiveDistillationGuidance();
+    toggles.forEach(toggleEl => {
+        toggleEl.checked = active;
+        toggleEl.addEventListener('change', () => {
+            setActiveDistillationGuidance(toggleEl.checked);
+        });
+    });
+    syncDistillationGuidanceControls();
+})();
+
 function normalizeRuntimeProfile(value) {
     if (typeof value !== 'string') return DEFAULT_RUNTIME_PROFILE;
     const raw = value.trim().toLowerCase();
@@ -237,6 +253,59 @@ function setActiveLoadoutFocus(enabled) {
     } catch { /* ignore storage failures */ }
     syncLoadoutFocusControls();
     return _activeLoadoutFocus;
+}
+
+function normalizeDistillationGuidance(value) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') {
+        if (value === 1) return true;
+        if (value === 0) return false;
+        return false;
+    }
+    if (typeof value !== 'string') return false;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    if (['true', '1', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
+    return false;
+}
+
+function syncDistillationGuidanceControls() {
+    const active = getActiveDistillationGuidance();
+    const toggles = ['distillation-guidance-toggle', 'ws-distillation-guidance-toggle']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    toggles.forEach(toggleEl => {
+        toggleEl.checked = active;
+    });
+    const labels = ['distillation-guidance-state', 'ws-distillation-guidance-state']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    labels.forEach(labelEl => {
+        labelEl.textContent = active ? 'ON' : 'OFF';
+    });
+}
+
+function getActiveDistillationGuidance() {
+    if (typeof _activeDistillationGuidance === 'boolean') return _activeDistillationGuidance;
+    try {
+        _activeDistillationGuidance = normalizeDistillationGuidance(
+            window.localStorage.getItem(DISTILLATION_GUIDANCE_STORAGE_KEY),
+        );
+    } catch {
+        _activeDistillationGuidance = false;
+    }
+    return _activeDistillationGuidance;
+}
+
+function setActiveDistillationGuidance(enabled) {
+    const normalized = normalizeDistillationGuidance(enabled);
+    _activeDistillationGuidance = normalized;
+    try {
+        window.localStorage.setItem(DISTILLATION_GUIDANCE_STORAGE_KEY, normalized ? 'true' : 'false');
+    } catch { /* ignore storage failures */ }
+    syncDistillationGuidanceControls();
+    return _activeDistillationGuidance;
 }
 
 const COURT_MEMBER_TRANSITIONS = Object.freeze({
@@ -893,6 +962,120 @@ function buildDocumentDiscussionPrompt(options = {}) {
     ].join('\n');
 }
 
+function summarizeDistillationThemes(list) {
+    const themes = Array.isArray(list)
+        ? list.map(item => String(item || '').trim()).filter(Boolean)
+        : [];
+    if (themes.length === 0) return 'none listed yet';
+    return themes.slice(0, 8).join(', ');
+}
+
+function buildCacheCompressionPrompt(options = {}) {
+    const title = String(options.title || options.id || 'Cache').trim() || 'Cache';
+    const source = String(options.source || 'archive').trim() || 'archive';
+    const themes = summarizeDistillationThemes(options.continuityThemes);
+    return [
+        'Discuss cache compression with me.',
+        '',
+        '- Cache: ' + title,
+        '- Source: ' + source,
+        '- Continuity themes: ' + themes,
+        '',
+        'Focus on overlap, redundancy, strongest signal, and mentor-guided compression options.',
+        'Keep Sentinel agency central: no automatic merge or deletion.',
+    ].join('\n');
+}
+
+function buildDistillationRecommendationPrompt(options = {}) {
+    const title = String(options.title || options.id || 'Cache Set').trim() || 'Cache Set';
+    const candidateCaches = Array.isArray(options.candidateCaches) ? options.candidateCaches : [];
+    const themes = Array.isArray(options.continuityThemes) ? options.continuityThemes : [];
+    const sourceHint = String(options.sourceHint || '').trim();
+    const candidateLines = candidateCaches.length > 0
+        ? candidateCaches.map((item, idx) => (idx + 1) + '. ' + item).join('\n')
+        : '1. (No specific cache list provided)';
+    const themeLines = themes.length > 0
+        ? themes.map((item, idx) => '- ' + item).join('\n')
+        : '- none listed yet';
+    return [
+        'Create a Distillation Recommendation for continuity compression.',
+        '',
+        'Context title: ' + title,
+        sourceHint ? ('Source context: ' + sourceHint) : '',
+        '',
+        'Candidate caches:',
+        candidateLines,
+        '',
+        'Known continuity themes:',
+        themeLines,
+        '',
+        'Use this exact structure and headings:',
+        '# Distillation Recommendation',
+        '## Candidate Caches',
+        '## Shared Themes',
+        '## Redundancies',
+        '## Strongest Signal',
+        '## Suggested Compression Direction',
+        '## Suggested Missing Perspectives',
+        '## Recommended Archetype Review',
+        '',
+        'Tone: mentor-guided, practical, reflective, non-gamey.',
+        'Keep the Sentinel central: no auto-merge, no auto-delete, no automatic tier upgrades.',
+    ].filter(Boolean).join('\n');
+}
+
+function buildDistillationRecommendationMarkdown(answer, options = {}) {
+    const content = String(answer || '').trim();
+    if (!content) return '# Distillation Recommendation\n\n_No recommendation generated._\n';
+    if (/^#\s+Distillation Recommendation\b/im.test(content)) return content + '\n';
+    const title = String(options.title || 'Distillation Recommendation').trim();
+    return [
+        '# Distillation Recommendation',
+        '',
+        '## Candidate Caches',
+        '- Context: ' + title,
+        '',
+        '## Shared Themes',
+        content,
+        '',
+    ].join('\n');
+}
+
+async function requestDistillationRecommendation(options = {}) {
+    const query = buildDistillationRecommendationPrompt(options);
+    const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            query,
+            room: 'council',
+            responseDepth: getActiveResponseDepth(),
+            runtimeProfile: getActiveRuntimeProfile(),
+            loadoutFocus: getActiveLoadoutFocus(),
+            distillationGuidance: true,
+            courtMember: undefined,
+        }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data || typeof data.answer !== 'string') {
+        throw new Error((data && data.error) || 'Could not generate distillation recommendation.');
+    }
+    const markdown = buildDistillationRecommendationMarkdown(data.answer, options);
+    const title = (options.title ? String(options.title) : 'Distillation Recommendation') + ' · Recommendation';
+    getGreenFireReader().open({
+        title,
+        sourcePath: options.sourceHint || 'distillation/recommendation',
+        sourceLabel: 'Distillation Recommendation',
+        content: markdown,
+        contentType: 'text/markdown',
+        entryId: 'distillation-recommendation:' + Date.now(),
+        stripFrontmatter: false,
+        rawOnly: false,
+        initialRawView: false,
+    });
+    showFlashMessage('Distillation recommendation generated.');
+}
+
 function createCouncilDiscussActions(resolvePrompt, resolveLabel) {
     const wrap = document.createElement('div');
     wrap.className = 'bridge-discuss-actions';
@@ -1408,6 +1591,9 @@ function renderSignalTrace(sources, signalTrace = null) {
     const loadoutFocus = metadata && typeof metadata.loadoutFocus === 'boolean'
         ? metadata.loadoutFocus
         : null;
+    const distillationGuidance = metadata && typeof metadata.distillationGuidance === 'boolean'
+        ? metadata.distillationGuidance
+        : null;
     const model = metadata && metadata.model ? String(metadata.model) : null;
     const provider = metadata && metadata.provider ? String(metadata.provider) : null;
     const rollingBootstrapStatus = metadata && metadata.rollingBootstrapStatus
@@ -1511,6 +1697,7 @@ function renderSignalTrace(sources, signalTrace = null) {
             { key: 'Depth', value: depth },
             { key: 'Runtime Profile', value: runtimeProfile },
             { key: 'Loadout Focus', value: loadoutFocus === null ? null : (loadoutFocus ? 'ON' : 'OFF') },
+            { key: 'Distillation Guidance', value: distillationGuidance === null ? null : (distillationGuidance ? 'ON' : 'OFF') },
             { key: 'Route', value: compactRoute },
             { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
             { key: 'Model', value: model },
@@ -1630,6 +1817,7 @@ async function sendMessage() {
                 responseDepth: getActiveResponseDepth(),
                 runtimeProfile: getActiveRuntimeProfile(),
                 loadoutFocus: getActiveLoadoutFocus(),
+                distillationGuidance: getActiveDistillationGuidance(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -1804,6 +1992,7 @@ async function sendCouncilMessage() {
                 responseDepth: getActiveResponseDepth(),
                 runtimeProfile: getActiveRuntimeProfile(),
                 loadoutFocus: getActiveLoadoutFocus(),
+                distillationGuidance: getActiveDistillationGuidance(),
                 requestId: _activeChatRequestId,
             }),
         });
@@ -2536,6 +2725,7 @@ async function sendDocumentToHeart() {
                 responseDepth: getActiveResponseDepth(),
                 runtimeProfile: getActiveRuntimeProfile(),
                 loadoutFocus: getActiveLoadoutFocus(),
+                distillationGuidance: getActiveDistillationGuidance(),
             }),
         });
         const data = await res.json();
@@ -2738,6 +2928,58 @@ async function loadCacheShelf() {
         loadoutHeader.style.marginTop = '0.6rem';
         loadoutHeader.textContent = 'Cache Loadout — Loaded Caches (' + loaded.length + ')';
         listEl.appendChild(loadoutHeader);
+        if (loaded.length > 0) {
+            const loadoutActions = document.createElement('div');
+            loadoutActions.className = 'threshold-file-actions';
+            loadoutActions.style.marginBottom = '0.45rem';
+
+            const reviewLoadoutBtn = document.createElement('button');
+            reviewLoadoutBtn.className = 'secondary threshold-action-btn';
+            reviewLoadoutBtn.textContent = 'Review for Distillation';
+            reviewLoadoutBtn.addEventListener('click', async () => {
+                try {
+                    const themes = loaded.flatMap(cache => {
+                        const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
+                            ? cache.manifest
+                            : {};
+                        return Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
+                    });
+                    await requestDistillationRecommendation({
+                        title: 'Cache Loadout',
+                        sourceHint: 'loaded cache loadout',
+                        candidateCaches: loaded.map(cache => cache.title || cache.id).filter(Boolean),
+                        continuityThemes: Array.from(new Set(themes.map(item => String(item || '').trim()).filter(Boolean))),
+                    });
+                } catch (error) {
+                    showFlashMessage(error.message || 'Could not generate distillation recommendation.');
+                }
+            });
+
+            const discussLoadoutBtn = document.createElement('button');
+            discussLoadoutBtn.className = 'secondary threshold-action-btn';
+            discussLoadoutBtn.textContent = 'Discuss Cache Compression';
+            discussLoadoutBtn.addEventListener('click', () => {
+                const themePool = loaded.flatMap(cache => {
+                    const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
+                        ? cache.manifest
+                        : {};
+                    return Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
+                });
+                openCouncilChatWithPrompt(
+                    buildCacheCompressionPrompt({
+                        title: 'Cache Loadout',
+                        source: 'loaded cache loadout',
+                        continuityThemes: Array.from(new Set(themePool.map(item => String(item || '').trim()).filter(Boolean))),
+                    }),
+                    EMBER_PRIME_MEMBER_ID,
+                );
+                showFlashMessage('Compression discussion opened in Council Chat.');
+            });
+
+            loadoutActions.appendChild(reviewLoadoutBtn);
+            loadoutActions.appendChild(discussLoadoutBtn);
+            listEl.appendChild(loadoutActions);
+        }
         if (loaded.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'message-system';
@@ -2773,12 +3015,76 @@ function formatCacheScope(scope) {
 
 function installedCacheMetaBadges(cache) {
     const badges = [];
+    const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
+        ? cache.manifest
+        : {};
+    const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
+    const signalDensity = manifest.signal_density ? String(manifest.signal_density) : 'low';
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.level || 'spark')) + '</strong>&nbsp;level</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.status || 'unverified')) + '</strong>&nbsp;status</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(formatCacheScope(cache.scope)) + '</strong>&nbsp;scope</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(signalDensity) + '</strong>&nbsp;signal</span>');
+    badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(continuityThemes.length)) + '</strong>&nbsp;themes</span>');
     badges.push('<span class="meta-badge"><strong>' + escapeHtml(String(cache.documentCount || 0)) + '</strong>&nbsp;documents</span>');
     badges.push('<span class="meta-badge"><strong>' + (cache.loaded ? 'loaded' : 'not loaded') + '</strong>&nbsp;state</span>');
     return badges.join('');
+}
+
+function compactCacheRelationshipText(cache) {
+    const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
+        ? cache.manifest
+        : {};
+    const derivedFrom = Array.isArray(manifest.derived_from) ? manifest.derived_from : [];
+    const distilledInto = Array.isArray(manifest.distilled_into) ? manifest.distilled_into : [];
+    const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
+    const signalDensity = manifest.signal_density ? String(manifest.signal_density) : 'low';
+    return [
+        'Derived From: ' + (derivedFrom.length > 0 ? derivedFrom.join(', ') : '—'),
+        'Distilled Into: ' + (distilledInto.length > 0 ? distilledInto.join(', ') : '—'),
+        'Related Themes: ' + (continuityThemes.length > 0 ? continuityThemes.join(', ') : '—'),
+        'Signal Density: ' + signalDensity,
+    ];
+}
+
+function buildInstalledCacheDistillationActions(cache) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'threshold-file-actions';
+
+    const reviewBtn = document.createElement('button');
+    reviewBtn.className = 'secondary threshold-action-btn';
+    reviewBtn.textContent = 'Review for Distillation';
+    reviewBtn.addEventListener('click', async () => {
+        try {
+            await requestDistillationRecommendation({
+                title: cache.title || cache.id,
+                sourceHint: cache.source || 'archive/cache',
+                candidateCaches: [cache.title || cache.id],
+                continuityThemes: (cache.manifest && cache.manifest.continuity_themes) || [],
+            });
+        } catch (error) {
+            showFlashMessage(error.message || 'Could not generate distillation recommendation.');
+        }
+    });
+
+    const discussBtn = document.createElement('button');
+    discussBtn.className = 'secondary threshold-action-btn';
+    discussBtn.textContent = 'Discuss Cache Compression';
+    discussBtn.addEventListener('click', () => {
+        openCouncilChatWithPrompt(
+            buildCacheCompressionPrompt({
+                id: cache.id,
+                title: cache.title,
+                source: cache.source,
+                continuityThemes: (cache.manifest && cache.manifest.continuity_themes) || [],
+            }),
+            EMBER_PRIME_MEMBER_ID,
+        );
+        showFlashMessage('Compression discussion opened in Council Chat.');
+    });
+
+    wrapper.appendChild(reviewBtn);
+    wrapper.appendChild(discussBtn);
+    return wrapper;
 }
 
 async function setCacheLoadedState(cacheId, shouldLoad) {
@@ -2823,7 +3129,11 @@ function inspectInstalledCache(cache, itemEl) {
             'Source: ' + (cache.source || 'archive'),
             'Document count: ' + String(cache.documentCount || 0),
             'Reader entries: ' + String(Array.isArray(cache.readerEntries) ? cache.readerEntries.length : 0),
-        ].join('\n');
+        ].concat(compactCacheRelationshipText(cache)).join('\n');
+    }
+    if (permsEl) {
+        permsEl.innerHTML = '';
+        permsEl.appendChild(buildInstalledCacheDistillationActions(cache));
     }
 }
 
@@ -2900,10 +3210,27 @@ function buildInstalledCacheItem(cache) {
         event.stopPropagation();
         await openInstalledCacheInReader(cache);
     });
+    const reviewBtn = document.createElement('button');
+    reviewBtn.className = 'secondary source-action-btn';
+    reviewBtn.textContent = 'Review for Distillation';
+    reviewBtn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        try {
+            await requestDistillationRecommendation({
+                title: cache.title || cache.id,
+                sourceHint: cache.source || 'archive/cache',
+                candidateCaches: [cache.title || cache.id],
+                continuityThemes: (cache.manifest && cache.manifest.continuity_themes) || [],
+            });
+        } catch (error) {
+            showFlashMessage(error.message || 'Could not generate distillation recommendation.');
+        }
+    });
 
     actions.appendChild(loadBtn);
     actions.appendChild(openBtn);
     actions.appendChild(openReaderBtn);
+    actions.appendChild(reviewBtn);
     item.appendChild(actions);
     return item;
 }
@@ -3264,6 +3591,8 @@ function getGreenFireReader() {
     const copyContextBtn = document.getElementById('gf-reader-copy-context-btn');
     const saveResponseBtn = document.getElementById('gf-reader-save-response-btn');
     const saveExchangeBtn = document.getElementById('gf-reader-save-exchange-btn');
+    const reviewDistillationBtn = document.getElementById('gf-reader-review-distillation-btn');
+    const discussCompressionBtn = document.getElementById('gf-reader-discuss-compression-btn');
     const discussPrimeBtn = document.getElementById('gf-reader-discuss-ember-prime-btn');
     const discussBuilderBtn = document.getElementById('gf-reader-discuss-builder-btn');
     const discussScholarBtn = document.getElementById('gf-reader-discuss-scholar-btn');
@@ -3498,6 +3827,33 @@ function getGreenFireReader() {
             });
             downloadPlainText(toPortableSlug(state.title || 'reader-exchange', 'reader-exchange') + '-handoff.md', markdown, 'text/markdown');
             showFlashMessage('Reader exchange handoff saved.');
+        });
+    }
+    if (reviewDistillationBtn) {
+        reviewDistillationBtn.addEventListener('click', async () => {
+            try {
+                await requestDistillationRecommendation({
+                    title: state.title || 'Reader Context',
+                    sourceHint: state.sourceLabel || state.sourcePath || 'Green Fire Reader',
+                    candidateCaches: [state.title || 'Reader Context'],
+                    continuityThemes: [],
+                });
+            } catch (error) {
+                showFlashMessage(error.message || 'Could not generate distillation recommendation.');
+            }
+        });
+    }
+    if (discussCompressionBtn) {
+        discussCompressionBtn.addEventListener('click', () => {
+            openCouncilChatWithPrompt(
+                buildCacheCompressionPrompt({
+                    title: state.title || 'Reader Context',
+                    source: state.sourceLabel || state.sourcePath || 'Green Fire Reader',
+                    continuityThemes: [],
+                }),
+                EMBER_PRIME_MEMBER_ID,
+            );
+            showFlashMessage('Compression discussion opened in Council Chat.');
         });
     }
     const readerDiscussButtons = [
@@ -4745,6 +5101,7 @@ function buildThresholdCacheDraftRow(draft) {
     row.className = 'threshold-file-row';
     const manifest = draft && draft.manifest ? draft.manifest : {};
     const documents = Array.isArray(manifest.documents) ? manifest.documents : [];
+    const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
 
     const metaEl = document.createElement('div');
     metaEl.className = 'threshold-file-meta';
@@ -4753,6 +5110,7 @@ function buildThresholdCacheDraftRow(draft) {
         escapeHtml(manifest.title || draft.id || 'Cache Draft') + '</span></div>' +
         '<div class="threshold-file-detail">Documents: ' + escapeHtml(String(documents.length)) + '</div>' +
         '<div class="threshold-file-detail">Status: ' + escapeHtml(manifest.status || 'draft') + '</div>' +
+        '<div class="threshold-file-detail">Themes: ' + escapeHtml(summarizeDistillationThemes(continuityThemes)) + '</div>' +
         '<div class="threshold-file-detail">Updated: ' + escapeHtml(draftUpdatedLabel(draft)) + '</div>';
 
     const statusEl = document.createElement('span');
@@ -4787,8 +5145,42 @@ function buildThresholdCacheDraftRow(draft) {
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', () => deleteThresholdCacheDraft(draft.id));
 
+    const reviewBtn = document.createElement('button');
+    reviewBtn.className = 'secondary threshold-action-btn';
+    reviewBtn.textContent = 'Review for Distillation';
+    reviewBtn.addEventListener('click', async () => {
+        try {
+            await requestDistillationRecommendation({
+                title: manifest.title || draft.id || 'Cache Draft',
+                sourceHint: draft.path || ('threshold/cache-drafts/' + draft.id),
+                candidateCaches: [manifest.title || draft.id || 'Cache Draft'],
+                continuityThemes,
+            });
+        } catch (error) {
+            showFlashMessage(error.message || 'Could not generate distillation recommendation.');
+        }
+    });
+
+    const discussBtn = document.createElement('button');
+    discussBtn.className = 'secondary threshold-action-btn';
+    discussBtn.textContent = 'Discuss Cache Compression';
+    discussBtn.addEventListener('click', () => {
+        openCouncilChatWithPrompt(
+            buildCacheCompressionPrompt({
+                id: draft.id,
+                title: manifest.title || draft.id,
+                source: draft.path || ('threshold/cache-drafts/' + draft.id),
+                continuityThemes,
+            }),
+            EMBER_PRIME_MEMBER_ID,
+        );
+        showFlashMessage('Compression discussion opened in Council Chat.');
+    });
+
     actions.appendChild(openBtn);
     actions.appendChild(openReaderBtn);
+    actions.appendChild(reviewBtn);
+    actions.appendChild(discussBtn);
     actions.appendChild(exportBtn);
     actions.appendChild(installBtn);
     actions.appendChild(deleteBtn);
@@ -4813,8 +5205,20 @@ function renderThresholdCacheDraftDetail(draft) {
     container.style.display = '';
     const manifest = draft.manifest || {};
     const docs = Array.isArray(manifest.documents) ? manifest.documents : [];
+    const derivedFrom = Array.isArray(manifest.derived_from) ? manifest.derived_from : [];
+    const distilledInto = Array.isArray(manifest.distilled_into) ? manifest.distilled_into : [];
+    const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
+    const signalDensity = manifest.signal_density ? String(manifest.signal_density) : 'low';
     titleEl.textContent = 'Draft: ' + (manifest.title || draft.id || 'Cache Draft');
-    metaEl.textContent = 'Status: ' + (manifest.status || 'draft') + ' · Documents: ' + docs.length + ' · Updated: ' + draftUpdatedLabel(draft);
+    metaEl.textContent = [
+        'Status: ' + (manifest.status || 'draft'),
+        'Documents: ' + docs.length,
+        'Updated: ' + draftUpdatedLabel(draft),
+        'Derived From: ' + (derivedFrom.length > 0 ? derivedFrom.join(', ') : '—'),
+        'Distilled Into: ' + (distilledInto.length > 0 ? distilledInto.join(', ') : '—'),
+        'Related Themes: ' + (continuityThemes.length > 0 ? continuityThemes.join(', ') : '—'),
+        'Signal Density: ' + signalDensity,
+    ].join(' · ');
     if (docs.length === 0) {
         docsEl.innerHTML = '<span class="message-system">No draft documents yet.</span>';
         return;

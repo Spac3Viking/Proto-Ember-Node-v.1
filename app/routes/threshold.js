@@ -59,6 +59,7 @@ const GREEN_FIRE_HANDOFF_TYPES = new Set([
 ]);
 const GREEN_FIRE_HANDOFF_STATUS = new Set(['unverified', 'reviewed', 'trusted', 'local']);
 const MAX_IMPORTED_BOOTSTRAP_SUMMARY_LENGTH = 4000;
+const SIGNAL_DENSITIES = new Set(['low', 'moderate', 'high']);
 
 function isPathInside(baseDir, targetPath) {
     const normalize = (value) => {
@@ -438,6 +439,20 @@ function parseManifestIfPresent(filePath) {
     }
 }
 
+function normalizeStringList(value) {
+    const input = Array.isArray(value) ? value : (value ? [value] : []);
+    return Array.from(new Set(
+        input
+            .map(item => String(item || '').trim())
+            .filter(Boolean),
+    ));
+}
+
+function normalizeSignalDensity(value) {
+    const density = String(value || '').trim().toLowerCase();
+    return SIGNAL_DENSITIES.has(density) ? density : 'low';
+}
+
 function stripFrontmatter(content) {
     return String(content || '').replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(\r?\n)?/, '');
 }
@@ -541,6 +556,10 @@ function normalizeDraftManifest(manifest, draftId, updatedAtFallback) {
         description: String(raw.description || '').trim(),
         source: 'threshold',
         recommended_destination: String(raw.recommended_destination || ('archive/caches/' + normalizedId)).trim() || ('archive/caches/' + normalizedId),
+        derived_from: normalizeStringList(raw.derived_from),
+        distilled_into: normalizeStringList(raw.distilled_into),
+        continuity_themes: normalizeStringList(raw.continuity_themes),
+        signal_density: normalizeSignalDensity(raw.signal_density),
         documents: documentEntries,
         tags: Array.isArray(raw.tags) ? raw.tags.map(v => String(v).trim()).filter(Boolean) : [],
         archetypes: Array.isArray(raw.archetypes) ? raw.archetypes.map(v => String(v).trim()).filter(Boolean) : [],

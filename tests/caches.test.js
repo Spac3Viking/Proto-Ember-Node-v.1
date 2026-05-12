@@ -30,6 +30,10 @@ describe('cacheLoader', () => {
                 expect(typeof c.level).toBe('string');
                 expect(typeof c.status).toBe('string');
                 expect(Array.isArray(c.scope)).toBe(true);
+                expect(Array.isArray(c.derived_from)).toBe(true);
+                expect(Array.isArray(c.distilled_into)).toBe(true);
+                expect(Array.isArray(c.continuity_themes)).toBe(true);
+                expect(typeof c.signal_density).toBe('string');
             });
         });
 
@@ -130,6 +134,10 @@ describe('GET /caches/:name', () => {
         expect(typeof res.body.content).toBe('string');
         expect(res.body.manifest).not.toBeNull();
         expect(res.body.manifest.name).toBe('Survival');
+        expect(Array.isArray(res.body.manifest.derived_from)).toBe(true);
+        expect(Array.isArray(res.body.manifest.distilled_into)).toBe(true);
+        expect(Array.isArray(res.body.manifest.continuity_themes)).toBe(true);
+        expect(typeof res.body.manifest.signal_density).toBe('string');
     });
 
     test('returns 404 for an unknown cache', async () => {
@@ -156,6 +164,10 @@ describe('Loaded cache routes', () => {
         expect(typeof first.level).toBe('string');
         expect(typeof first.status).toBe('string');
         expect(Array.isArray(first.scope)).toBe(true);
+        expect(Array.isArray(first.derived_from)).toBe(true);
+        expect(Array.isArray(first.distilled_into)).toBe(true);
+        expect(Array.isArray(first.continuity_themes)).toBe(true);
+        expect(typeof first.signal_density).toBe('string');
         expect(typeof first.documentCount).toBe('number');
         expect(typeof first.loaded).toBe('boolean');
     });

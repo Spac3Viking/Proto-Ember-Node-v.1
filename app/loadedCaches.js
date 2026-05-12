@@ -12,6 +12,7 @@ const {
 const CACHE_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
 const CACHE_LEVELS = new Set(['spark', 'ember', 'flame', 'hearth']);
 const CACHE_STATUSES = new Set(['unverified', 'reviewed', 'tempered', 'trusted', 'local']);
+const SIGNAL_DENSITIES = new Set(['low', 'moderate', 'high']);
 const DEFAULT_SCOPE = ['practical'];
 const LOADED_VERSION = '0.1.0';
 const READER_ALLOWED_EXTS = new Set(['.md']);
@@ -46,6 +47,20 @@ function normalizeScope(value) {
     return normalized.length > 0 ? normalized : DEFAULT_SCOPE.slice();
 }
 
+function normalizeStringList(value) {
+    const input = Array.isArray(value) ? value : (value ? [value] : []);
+    return Array.from(new Set(
+        input
+            .map(item => String(item || '').trim())
+            .filter(Boolean),
+    ));
+}
+
+function normalizeSignalDensity(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return SIGNAL_DENSITIES.has(normalized) ? normalized : 'low';
+}
+
 function normalizeCacheManifestMetadata(manifest) {
     const data = manifest && typeof manifest === 'object' ? manifest : {};
     const loaded = Object.prototype.hasOwnProperty.call(data, 'loaded')
@@ -55,6 +70,10 @@ function normalizeCacheManifestMetadata(manifest) {
         level: normalizeLevel(data.level),
         status: normalizeStatus(data.status),
         scope: normalizeScope(data.scope),
+        derived_from: normalizeStringList(data.derived_from),
+        distilled_into: normalizeStringList(data.distilled_into),
+        continuity_themes: normalizeStringList(data.continuity_themes),
+        signal_density: normalizeSignalDensity(data.signal_density),
         loaded,
     };
 }
@@ -183,11 +202,18 @@ function buildInstalledCacheRecord({ id, title, source, cacheRoot, manifest, loa
         level: meta.level,
         status: meta.status,
         scope: meta.scope,
+        derived_from: meta.derived_from,
+        distilled_into: meta.distilled_into,
+        continuity_themes: meta.continuity_themes,
+        signal_density: meta.signal_density,
         loaded: loadedSet.has(id),
         documentCount: countDocuments(cacheRoot),
         firstReaderEntryId: markdownEntries[0] ? markdownEntries[0].entryId : null,
         readerEntries: markdownEntries,
-        manifest: manifest || null,
+        manifest: {
+            ...(manifest || {}),
+            ...meta,
+        },
     };
 }
 
