@@ -396,6 +396,48 @@
                 </div>
               </div>
 
+              <div class="ember-card system-block">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem; gap:0.5rem; flex-wrap:wrap;">
+                  <div class="system-block-title" style="margin:0;">Loadout Forge</div>
+                  <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                    <button class="secondary" id="sys-forge-refresh-preview-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Refresh Preview</button>
+                    <button class="secondary" id="sys-forge-copy-bootstrap-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Copy Bootstrap</button>
+                    <button class="secondary" id="sys-forge-download-bootstrap-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Download Bootstrap</button>
+                    <button class="secondary" id="sys-forge-ignite-loadout-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Ignite Loadout</button>
+                  </div>
+                </div>
+                <div class="forge-grid">
+                  <div class="forge-card">
+                    <div class="forge-card-title">Active Loadout</div>
+                    <div id="sys-loadout-active-summary"><span class="message-system">Loading…</span></div>
+                  </div>
+                  <div class="forge-card">
+                    <div class="forge-card-title">Runtime Profile</div>
+                    <div id="sys-loadout-runtime-profile"><span class="message-system">Loading…</span></div>
+                  </div>
+                  <div class="forge-card">
+                    <div class="forge-card-title">Archetype Posture</div>
+                    <div id="sys-loadout-archetype-posture"><span class="message-system">Loading…</span></div>
+                  </div>
+                  <div class="forge-card">
+                    <div class="forge-card-title">Loaded Caches</div>
+                    <div id="sys-loadout-cache-cards"><span class="message-system">Loading…</span></div>
+                  </div>
+                  <div class="forge-card">
+                    <div class="forge-card-title">Continuity Posture</div>
+                    <div id="sys-loadout-continuity-posture"><span class="message-system">Loading…</span></div>
+                  </div>
+                  <div class="forge-card">
+                    <div class="forge-card-title">Mentor Guidance</div>
+                    <div id="sys-loadout-mentor-guidance"><span class="message-system">Loading…</span></div>
+                  </div>
+                  <div class="forge-card forge-card-wide">
+                    <div class="forge-card-title">Sentinel Loadout Bootstrap Preview</div>
+                    <pre id="sys-loadout-bootstrap-preview" class="forge-bootstrap-preview">Loading…</pre>
+                  </div>
+                </div>
+              </div>
+
               <!-- Phase 16D: Rolling Bootstrap Status -->
               <div class="ember-card system-block">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">

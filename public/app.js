@@ -27,6 +27,72 @@ const RUNTIME_PROFILE_IDS = new Set([
     'deep-hearth',
 ]);
 const DEFAULT_RUNTIME_PROFILE = 'balanced-ember';
+const RUNTIME_PROFILE_META = Object.freeze({
+    'spark-compression': {
+        label: 'Spark Compression',
+        description: [
+            'Direct concise guidance.',
+            'Minimal retrieval sweep.',
+            'Single clear next step.',
+        ],
+    },
+    'balanced-ember': {
+        label: 'Balanced Ember',
+        description: [
+            'Grounded practical synthesis.',
+            'Balanced retrieval breadth.',
+            'Steady mentor pacing.',
+        ],
+    },
+    'field-guide': {
+        label: 'Field Guide',
+        description: [
+            'Grounded practical synthesis.',
+            'Minimal symbolic drift.',
+            'Focused implementation posture.',
+        ],
+    },
+    'scholar-weave': {
+        label: 'Scholar Weave',
+        description: [
+            'Comparative synthesis emphasis.',
+            'Broader cross-reference retrieval.',
+            'Question-led mentor cadence.',
+        ],
+    },
+    'narrative-forge': {
+        label: 'Narrative Forge',
+        description: [
+            'Continuity-oriented prose posture.',
+            'Narrative-aware retrieval.',
+            'Reflective but practical pacing.',
+        ],
+    },
+    'minimal-retrieval': {
+        label: 'Minimal Retrieval',
+        description: [
+            'Bootstrap-first guidance.',
+            'Small retrieval budget.',
+            'High loadout preference.',
+        ],
+    },
+    'deep-hearth': {
+        label: 'Deep Hearth',
+        description: [
+            'Deeper synthesis posture.',
+            'Expanded retrieval depth.',
+            'Continuity teaching cadence.',
+        ],
+    },
+});
+const FORGE_ARCHETYPE_ORDER = ['builder', 'warrior', 'scholar', 'scribe', 'mystic'];
+const FORGE_ARCHETYPE_LABELS = Object.freeze({
+    builder: 'Builder',
+    warrior: 'Warrior',
+    scholar: 'Scholar',
+    scribe: 'Scribe',
+    mystic: 'Mystic',
+});
 const MAX_DISTILLATION_THEME_DISPLAY = 8;
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
@@ -631,6 +697,7 @@ let _activeRoomId = 'hearth';
                     loadHearthRuntimeRegistry();
                     loadContextMemoryStatus();
                     loadBootstrapStatus();
+                    loadLoadoutForgePanel();
                     loadMemoryCompressionStatus();
                 }
                 if (panelId === 'th-ai') {
@@ -4908,6 +4975,7 @@ async function useThresholdBootstrap(file) {
             ? 'Sentinel Loadout Bootstrap imported.'
             : 'Bootstrap imported.');
         if (typeof loadBootstrapStatus === 'function') loadBootstrapStatus();
+        if (typeof loadLoadoutForgePanel === 'function') loadLoadoutForgePanel();
     } catch (error) {
         showFlashMessage(error.message || 'Bootstrap import failed.');
     }
@@ -5939,6 +6007,270 @@ function updateSystemCacheCount(count) {
     if (el) el.textContent = String(count);
 }
 
+function getRuntimeProfileMeta(profileId) {
+    const id = normalizeRuntimeProfile(profileId || DEFAULT_RUNTIME_PROFILE);
+    return RUNTIME_PROFILE_META[id] || RUNTIME_PROFILE_META[DEFAULT_RUNTIME_PROFILE];
+}
+
+function humanizeDepth(depth) {
+    const id = normalizeResponseDepth(depth);
+    if (id === 'spark') return 'Spark';
+    if (id === 'hearth') return 'Hearth';
+    if (id === 'archive') return 'Archive';
+    return 'Ember';
+}
+
+function classifyThemeForArchetype(theme, archetypeId) {
+    const text = String(theme || '').toLowerCase();
+    if (!text) return false;
+    if (archetypeId === 'builder') return /(build|system|implement|repair|structure|resilien|steward|craft)/.test(text);
+    if (archetypeId === 'warrior') return /(risk|pressure|survival|discipline|defense|boundary|readiness)/.test(text);
+    if (archetypeId === 'scholar') return /(study|theory|framework|analysis|synthesis|research|compar)/.test(text);
+    if (archetypeId === 'scribe') return /(write|narrative|story|document|transmit|language|guide)/.test(text);
+    if (archetypeId === 'mystic') return /(symbol|myth|ritual|threshold|resonance|archetype)/.test(text);
+    return false;
+}
+
+function buildArchetypePostureRows(activeArchetype, activeThemes) {
+    const normalizedArchetype = String(activeArchetype || '').trim().toLowerCase();
+    const themes = Array.isArray(activeThemes) ? activeThemes : [];
+    return FORGE_ARCHETYPE_ORDER.map(id => {
+        const label = FORGE_ARCHETYPE_LABELS[id] || id;
+        const themeHits = themes.filter(theme => classifyThemeForArchetype(theme, id)).length;
+        const isPrimary = normalizedArchetype && normalizedArchetype === id;
+        let emphasis = 'Minimal';
+        let strength = 24;
+        if (isPrimary) {
+            emphasis = 'Primary';
+            strength = 96;
+        } else if (themeHits > 0) {
+            emphasis = 'Secondary';
+            strength = 58;
+        }
+        return { id, label, emphasis, strength };
+    });
+}
+
+function buildContinuityPostureLines({
+    activeArchetype, runtimeProfile, responseDepth, loadoutFocus, loadedCaches, activeThemes, rollingSummary,
+}) {
+    const archetypeId = String(activeArchetype || '').trim().toLowerCase();
+    const archetypeLabel = FORGE_ARCHETYPE_LABELS[archetypeId] || 'Ember Prime';
+    const runtimeMeta = getRuntimeProfileMeta(runtimeProfile);
+    const cacheCount = Array.isArray(loadedCaches) ? loadedCaches.length : 0;
+    const topThemes = Array.isArray(activeThemes) ? activeThemes.slice(0, 3).map(String).filter(Boolean) : [];
+    const summary = String(rollingSummary || '').replace(/\s+/g, ' ').trim();
+    const lines = [
+        `${runtimeMeta.label} posture with ${archetypeLabel} emphasis and ${humanizeDepth(responseDepth)} response pacing.`,
+        `${loadoutFocus ? 'Focused retrieval bias' : 'Balanced retrieval bias'} across ${cacheCount} loaded cache${cacheCount === 1 ? '' : 's'}.`,
+    ];
+    if (topThemes.length > 0) {
+        lines.push('Loaded themes center on ' + topThemes.join(', ') + '.');
+    } else {
+        lines.push('Loaded themes are still forming; refresh preview after loadout changes.');
+    }
+    if (summary) {
+        lines.push(summary.length > 145 ? summary.slice(0, 142).trimEnd() + '...' : summary);
+    }
+    return lines.slice(0, 4);
+}
+
+function buildMentorGuidanceLines({ archetypeRows, loadedCaches, activeThemes }) {
+    const lines = [];
+    const primary = (archetypeRows || []).find(row => row.emphasis === 'Primary');
+    const secondaryCount = (archetypeRows || []).filter(row => row.emphasis === 'Secondary').length;
+    if (primary) {
+        lines.push(`Current loadout heavily favors ${primary.label} continuity.`);
+    }
+    if (secondaryCount === 0) {
+        lines.push('A Scholar review may strengthen synthesis breadth.');
+    }
+
+    const caches = Array.isArray(loadedCaches) ? loadedCaches : [];
+    const themeCounts = new Map();
+    caches.forEach(cache => {
+        const themes = Array.isArray(cache && cache.continuity_themes) ? cache.continuity_themes : [];
+        themes.forEach(theme => {
+            const key = String(theme || '').trim();
+            if (!key) return;
+            themeCounts.set(key, (themeCounts.get(key) || 0) + 1);
+        });
+    });
+    const overlappingTheme = Array.from(themeCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .find(([, count]) => count > 1);
+    if (overlappingTheme) {
+        lines.push(`These loaded caches overlap around ${overlappingTheme[0]}.`);
+    }
+
+    const derivedHeavy = caches.filter(cache => {
+        const count = Array.isArray(cache && cache.derived_from) ? cache.derived_from.length : 0;
+        return count >= 3;
+    });
+    if (derivedHeavy.length >= 2) {
+        lines.push('Loadout redundancy is rising; distillation may tighten signal density.');
+    }
+
+    if (lines.length < 2 && Array.isArray(activeThemes) && activeThemes.length > 0) {
+        lines.push('Theme spread remains stable; keep practical cadence while expanding selectively.');
+    }
+    return lines.slice(0, 3);
+}
+
+function formatForgeBootstrapPreview(markdown) {
+    const text = String(markdown || '').replace(/\r\n/g, '\n').trim();
+    if (!text) return 'No Sentinel Loadout Bootstrap generated yet.';
+    const lines = text.split('\n');
+    const clipped = lines.slice(0, 18).join('\n');
+    return lines.length > 18 ? clipped + '\n…' : clipped;
+}
+
+async function loadLoadoutForgePanel() {
+    const summaryEl = document.getElementById('sys-loadout-active-summary');
+    if (!summaryEl) return;
+    const runtimeEl = document.getElementById('sys-loadout-runtime-profile');
+    const postureEl = document.getElementById('sys-loadout-archetype-posture');
+    const cacheEl = document.getElementById('sys-loadout-cache-cards');
+    const continuityEl = document.getElementById('sys-loadout-continuity-posture');
+    const guidanceEl = document.getElementById('sys-loadout-mentor-guidance');
+    const previewEl = document.getElementById('sys-loadout-bootstrap-preview');
+
+    [summaryEl, runtimeEl, postureEl, cacheEl, continuityEl, guidanceEl].forEach(el => {
+        if (el) el.innerHTML = '<span class="message-system">Loading…</span>';
+    });
+    if (previewEl) previewEl.textContent = 'Loading…';
+
+    try {
+        const [statusRes, bootstrapRes, loadedRes, installedRes, sentinelRes] = await Promise.all([
+            fetch('/api/status'),
+            fetch('/api/bootstrap'),
+            fetch('/api/caches/loaded'),
+            fetch('/api/caches/installed'),
+            fetch('/api/bootstrap/sentinel'),
+        ]);
+        const statusData = await statusRes.json();
+        const bootstrapData = await bootstrapRes.json();
+        const loadedData = await loadedRes.json();
+        const installedData = await installedRes.json();
+        const sentinelData = sentinelRes.ok ? await sentinelRes.json() : null;
+
+        const rolling = bootstrapData && bootstrapData.rollingBootstrap ? bootstrapData.rollingBootstrap : {};
+        const nodeState = rolling && rolling.node_state && typeof rolling.node_state === 'object'
+            ? rolling.node_state
+            : {};
+        const runtimeProfile = normalizeRuntimeProfile(nodeState.runtime_profile || getActiveRuntimeProfile());
+        const activeArchetype = String(nodeState.active_archetype || '').trim().toLowerCase() || 'ember_prime';
+        const responseDepth = normalizeResponseDepth(nodeState.response_depth || getActiveResponseDepth());
+        const loadoutFocus = getActiveLoadoutFocus();
+        const activeThemes = Array.isArray(rolling.active_themes) ? rolling.active_themes.slice(0, 8) : [];
+        const rollingSummary = String(rolling.summary || '').trim();
+
+        const loadedEntries = Array.isArray(loadedData && loadedData.loaded) ? loadedData.loaded : [];
+        const installedEntries = Array.isArray(installedData && installedData.caches) ? installedData.caches : [];
+        const installedById = new Map(installedEntries.map(cache => [String(cache.id), cache]));
+        const mergedLoadedCaches = loadedEntries.map(entry => {
+            const id = String(entry && entry.id ? entry.id : '');
+            const installed = installedById.get(id);
+            return {
+                id,
+                title: String(entry && entry.title ? entry.title : (installed && installed.title ? installed.title : id)),
+                level: String(entry && entry.level ? entry.level : (installed && installed.level ? installed.level : 'spark')).toLowerCase(),
+                continuity_themes: Array.isArray(installed && installed.continuity_themes) ? installed.continuity_themes : [],
+                signal_density: installed && installed.signal_density ? String(installed.signal_density) : 'low',
+                derived_from: Array.isArray(installed && installed.derived_from) ? installed.derived_from : [],
+            };
+        });
+
+        const loadedCount = Number(statusData && statusData.loadedCacheCount) || mergedLoadedCaches.length;
+        const summaryRows = [
+            ['Active Archetype', FORGE_ARCHETYPE_LABELS[activeArchetype] || 'Ember Prime'],
+            ['Runtime Profile', getRuntimeProfileMeta(runtimeProfile).label],
+            ['Response Depth', humanizeDepth(responseDepth)],
+            ['Loadout Focus', loadoutFocus ? 'ON' : 'OFF'],
+            ['Loaded Cache Count', String(loadedCount)],
+        ];
+        summaryEl.innerHTML = summaryRows.map(([key, value]) =>
+            '<div class="forge-summary-row">' +
+                '<span class="forge-summary-key">' + escapeHtml(key) + '</span>' +
+                '<span class="forge-summary-value">' + escapeHtml(value) + '</span>' +
+            '</div>',
+        ).join('');
+
+        const runtimeMeta = getRuntimeProfileMeta(runtimeProfile);
+        runtimeEl.innerHTML =
+            '<div class="forge-runtime-title">' + escapeHtml(runtimeMeta.label) + '</div>' +
+            runtimeMeta.description.map(line =>
+                '<div class="forge-runtime-desc">' + escapeHtml(line) + '</div>',
+            ).join('');
+
+        const archetypeRows = buildArchetypePostureRows(activeArchetype, activeThemes);
+        postureEl.innerHTML = archetypeRows.map(row =>
+            '<div class="forge-archetype-row">' +
+                '<div class="forge-archetype-main">' +
+                    '<div class="forge-archetype-label">' + escapeHtml(row.label) + '</div>' +
+                    '<div class="forge-archetype-bar"><span class="forge-archetype-bar-fill" style="width:' + String(row.strength) + '%;"></span></div>' +
+                '</div>' +
+                '<div class="forge-archetype-emphasis">' + escapeHtml(row.emphasis) + '</div>' +
+            '</div>',
+        ).join('');
+
+        cacheEl.innerHTML = mergedLoadedCaches.length > 0
+            ? mergedLoadedCaches.slice(0, 8).map(cache => {
+                const themeText = cache.continuity_themes.length > 0
+                    ? cache.continuity_themes.slice(0, 3).join(', ')
+                    : 'none';
+                const derivedCount = Array.isArray(cache.derived_from) ? cache.derived_from.length : 0;
+                const badgeLevel = ['spark', 'ember', 'flame', 'hearth'].includes(cache.level) ? cache.level : 'spark';
+                return (
+                    '<div class="forge-cache-item">' +
+                        '<div class="forge-cache-title-row">' +
+                            '<span class="forge-cache-title">' + escapeHtml(cache.title || cache.id || 'Unnamed cache') + '</span>' +
+                            '<span class="forge-level-badge ' + escapeHtml(badgeLevel) + '">' + escapeHtml(badgeLevel) + '</span>' +
+                        '</div>' +
+                        '<div class="forge-cache-meta">themes: ' + escapeHtml(themeText) + '</div>' +
+                        '<div class="forge-cache-meta">signal: ' + escapeHtml(String(cache.signal_density || 'low')) + '</div>' +
+                        '<div class="forge-cache-meta">derived_from: ' + escapeHtml(String(derivedCount)) + '</div>' +
+                    '</div>'
+                );
+            }).join('')
+            : '<span class="message-system">No caches loaded.</span>';
+
+        const continuityLines = buildContinuityPostureLines({
+            activeArchetype,
+            runtimeProfile,
+            responseDepth,
+            loadoutFocus,
+            loadedCaches: mergedLoadedCaches,
+            activeThemes,
+            rollingSummary,
+        });
+        continuityEl.innerHTML = continuityLines.map(line =>
+            '<div class="forge-continuity-line">' + escapeHtml(line) + '</div>',
+        ).join('');
+
+        const guidanceLines = buildMentorGuidanceLines({
+            archetypeRows,
+            loadedCaches: mergedLoadedCaches,
+            activeThemes,
+        });
+        guidanceEl.innerHTML = guidanceLines.map(line =>
+            '<div class="forge-guidance-line">' + escapeHtml(line) + '</div>',
+        ).join('');
+
+        if (previewEl) {
+            previewEl.textContent = formatForgeBootstrapPreview(sentinelData && sentinelData.markdown ? sentinelData.markdown : '');
+        }
+    } catch {
+        if (summaryEl) summaryEl.innerHTML = '<span class="message-system error">Loadout summary unavailable.</span>';
+        if (runtimeEl) runtimeEl.innerHTML = '<span class="message-system error">Runtime profile unavailable.</span>';
+        if (postureEl) postureEl.innerHTML = '<span class="message-system error">Archetype posture unavailable.</span>';
+        if (cacheEl) cacheEl.innerHTML = '<span class="message-system error">Loaded cache view unavailable.</span>';
+        if (continuityEl) continuityEl.innerHTML = '<span class="message-system error">Continuity posture unavailable.</span>';
+        if (guidanceEl) guidanceEl.innerHTML = '<span class="message-system error">Mentor guidance unavailable.</span>';
+        if (previewEl) previewEl.textContent = 'Bootstrap preview unavailable.';
+    }
+}
+
 /* ================================================================
    Context Memory Status
    ================================================================ */
@@ -6082,6 +6414,7 @@ async function loadMemoryCompressionStatus() {
                 if (res.ok) {
                     showFlashMessage('Rolling Bootstrap refreshed.');
                     loadBootstrapStatus();
+                    loadLoadoutForgePanel();
                 } else {
                     showFlashMessage('Rolling Bootstrap refresh failed.');
                 }
@@ -6157,6 +6490,8 @@ async function loadMemoryCompressionStatus() {
                     throw new Error(data.error || 'Could not ignite Sentinel Loadout.');
                 }
                 showFlashMessage('Sentinel Loadout Bootstrap generated.');
+                loadBootstrapStatus();
+                loadLoadoutForgePanel();
             } catch (error) {
                 showFlashMessage(error.message || 'Could not ignite Sentinel Loadout.');
             } finally {
@@ -6235,6 +6570,101 @@ async function loadMemoryCompressionStatus() {
             } catch (error) {
                 showFlashMessage(error.message || 'Could not download Sentinel Loadout Bootstrap.');
             }
+        }
+    });
+})();
+
+(function initLoadoutForgeActions() {
+    async function withButtonBusy(button, busyLabel, task) {
+        if (!button) return;
+        const prior = button.textContent;
+        button.disabled = true;
+        button.textContent = busyLabel;
+        try {
+            await task();
+        } finally {
+            button.disabled = false;
+            button.textContent = prior;
+        }
+    }
+
+    document.addEventListener('click', async (e) => {
+        if (!e.target) return;
+
+        if (e.target.id === 'sys-forge-refresh-preview-btn') {
+            await withButtonBusy(e.target, 'Refreshing…', async () => {
+                const res = await fetch('/api/bootstrap/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        responseDepth: getActiveResponseDepth(),
+                        runtimeProfile: getActiveRuntimeProfile(),
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.error) {
+                    throw new Error(data.error || 'Could not refresh preview.');
+                }
+                showFlashMessage('Loadout Forge preview refreshed.');
+                loadBootstrapStatus();
+                loadLoadoutForgePanel();
+            }).catch(error => {
+                showFlashMessage(error.message || 'Could not refresh preview.');
+            });
+            return;
+        }
+
+        if (e.target.id === 'sys-forge-ignite-loadout-btn') {
+            await withButtonBusy(e.target, 'Igniting…', async () => {
+                const res = await fetch('/api/bootstrap/sentinel/ignite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        responseDepth: getActiveResponseDepth(),
+                        runtimeProfile: getActiveRuntimeProfile(),
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Could not ignite Sentinel Loadout.');
+                }
+                showFlashMessage('Sentinel Loadout Bootstrap generated.');
+                loadBootstrapStatus();
+                loadLoadoutForgePanel();
+            }).catch(error => {
+                showFlashMessage(error.message || 'Could not ignite Sentinel Loadout.');
+            });
+            return;
+        }
+
+        if (e.target.id === 'sys-forge-copy-bootstrap-btn') {
+            await withButtonBusy(e.target, 'Copying…', async () => {
+                const res = await fetch('/api/bootstrap/sentinel');
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success || !data.markdown) {
+                    throw new Error(data.error || 'Sentinel Loadout Bootstrap not generated yet.');
+                }
+                await navigator.clipboard.writeText(String(data.markdown));
+                showFlashMessage('Sentinel Loadout Bootstrap copied.');
+            }).catch(error => {
+                showFlashMessage(error.message || 'Could not copy Sentinel Loadout Bootstrap.');
+            });
+            return;
+        }
+
+        if (e.target.id === 'sys-forge-download-bootstrap-btn') {
+            await withButtonBusy(e.target, 'Downloading…', async () => {
+                const res = await fetch('/api/bootstrap/sentinel/download');
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Sentinel Loadout Bootstrap not generated yet.');
+                }
+                const markdown = await res.text();
+                downloadPlainText('sentinel-loadout-bootstrap.md', markdown, 'text/markdown');
+                showFlashMessage('Sentinel Loadout Bootstrap downloaded.');
+            }).catch(error => {
+                showFlashMessage(error.message || 'Could not download Sentinel Loadout Bootstrap.');
+            });
         }
     });
 })();
