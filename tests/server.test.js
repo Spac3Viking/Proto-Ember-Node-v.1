@@ -748,6 +748,8 @@ describe('Sentinel loadout bootstrap routes', () => {
         expect(res.body.success).toBe(true);
         expect(res.body.path).toBe('system/bootstrap/sentinel-loadout-bootstrap.md');
         expect(res.body.markdown).toMatch(/# Sentinel Loadout Bootstrap/);
+        expect(res.body.markdown).toMatch(/## Runtime Profile/);
+        expect(res.body.markdown).toMatch(/Balanced Ember/);
         expect(res.body.markdown).toMatch(/## External AI Instructions/);
 
         const absPath = path.join(DATA_ROOT, 'system', 'bootstrap', 'sentinel-loadout-bootstrap.md');
@@ -761,6 +763,7 @@ describe('Sentinel loadout bootstrap routes', () => {
         expect(String(res.headers['content-type'] || '')).toMatch(/text\/markdown/i);
         expect(res.text).toMatch(/title: Sentinel Loadout Bootstrap/);
         expect(res.text).toMatch(/## Response Discipline/);
+        expect(res.text).toMatch(/## Runtime Profile/);
     });
 
     test('chat prompt assembly can include sentinel loadout summary when available', async () => {

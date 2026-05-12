@@ -211,21 +211,26 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
                 query: 'Give a direct focused synthesis.',
                 responseDepth: 'ember',
                 loadoutFocus: true,
+                runtimeProfile: 'field-guide',
             });
 
         expect(focused.status).toBe(200);
         expect(focused.body.signalTrace.runtimeProfile).toBe('Field Guide');
+        expect(focused.body.signalTrace.runtimeProfileId).toBe('field-guide');
         expect(focused.body.signalTrace.loadoutFocus).toBe(true);
         expect(focused.body.signalTrace.compact).toContain('Loadout Focus: ON');
-        expect(focused.body.signalTrace.compact).toContain('Predict: 560');
-        expect(focused.body.signalTrace.runtimeDebug.numPredict).toBe(560);
-        expect(focused.body.signalTrace.runtimeDebug.temperature).toBe(0.68);
+        expect(focused.body.signalTrace.compact).toContain('Predict: 504');
+        expect(focused.body.signalTrace.runtimeDebug.numPredict).toBe(504);
+        expect(focused.body.signalTrace.runtimeDebug.temperature).toBe(0.65);
+        expect(focused.body.signalTrace.runtimeDebug.runtimeProfileId).toBe('field-guide');
 
         const payload = mockedAxios.post.mock.calls[0][1];
         expect(payload.options).toBeDefined();
-        expect(payload.options.num_predict).toBe(560);
-        expect(payload.options.temperature).toBe(0.68);
+        expect(payload.options.num_predict).toBe(504);
+        expect(payload.options.temperature).toBe(0.65);
         const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
         expect(userPrompt).toContain('Loadout Focus: ON');
+        expect(userPrompt).toContain('=== Runtime Profile ===');
+        expect(userPrompt).toContain('Field Guide');
     });
 });

@@ -37,6 +37,11 @@ const {
     loadDocumentSummaries,
     getArchetypeMemoryProfile,
 } = require('../memoryCompression');
+const {
+    resolveCognitionProfile,
+    buildCognitionProfilePromptSummary,
+    applyCognitionProfileInfluence,
+} = require('../runtime/cognitionProfiles');
 
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
@@ -243,14 +248,6 @@ function resolveRetrievalDiscipline(depthId, loadoutFocus = false) {
 function resolveGenerationProfile(depthId) {
     const key = RUNTIME_GENERATION_PROFILES[depthId] ? depthId : 'ember';
     return RUNTIME_GENERATION_PROFILES[key] || RUNTIME_GENERATION_PROFILES.ember;
-}
-
-function buildRuntimeProfileLabel(depthId, loadoutFocus = false) {
-    const key = CONTEXT_BUDGET_PROFILES[depthId] ? depthId : 'ember';
-    if (key === 'spark') return loadoutFocus ? 'Minimal Retrieval' : 'Spark Compression';
-    if (key === 'ember') return loadoutFocus ? 'Field Guide' : 'Balanced Ember';
-    if (key === 'hearth') return loadoutFocus ? 'Field Guide Deep' : 'Scholar Weave';
-    return loadoutFocus ? 'Narrative Forge Focus' : 'Narrative Forge';
 }
 
 function isOllamaRuntime(runtime) {
@@ -802,13 +799,15 @@ function partialContextThresholdForBudget(contextBudget) {
     return Math.max(1, Math.min(PARTIAL_CONTEXT_CHUNK_THRESHOLD, maxRaw - 1));
 }
 
-function computeRawChunkBudgetWithSummaries(archetypeProfile, contextBudget) {
+function computeRawChunkBudgetWithSummaries(archetypeProfile, contextBudget, maxRawChunksOverride = null) {
     const geometry = getArchetypeRetrievalGeometry(archetypeProfile);
     const configured = Number.isFinite(geometry.raw_chunk_target)
         ? Math.floor(geometry.raw_chunk_target)
         : null;
-    const maxRawChunks = Number.isFinite(contextBudget && contextBudget.maxRawChunks)
-        ? Math.max(1, Math.floor(contextBudget.maxRawChunks))
+    const maxRawChunks = Number.isFinite(maxRawChunksOverride)
+        ? Math.max(1, Math.floor(maxRawChunksOverride))
+        : Number.isFinite(contextBudget && contextBudget.maxRawChunks)
+            ? Math.max(1, Math.floor(contextBudget.maxRawChunks))
         : MAX_CHAT_CONTEXT_CHUNKS;
     const minRawWithSummary = Number.isFinite(contextBudget && contextBudget.minRawChunksWithSummary)
         ? Math.max(1, Math.floor(contextBudget.minRawChunksWithSummary))
@@ -880,6 +879,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             depthProfile = null,
             depth = null,
             loadoutFocus = false,
+            runtimeProfile = null,
             requestId = null,
         } = req.body;
         if (!query || typeof query !== 'string') {
@@ -913,14 +913,33 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         const contextBudget = resolveContextBudgetProfile(requestedDepthProfileId);
         // Retrieval keeps the larger budget so archetype/court tuning cannot undercut
         // depth-profile breadth, while still honoring deeper court members when configured.
-        const retrievalTopK = Math.max(
+        const baseRetrievalTopK = Math.max(
             contextBudget.retrievalTopK,
             getRetrievalTopKForCourtMember(selectedCourtMember),
         );
         const loadoutFocusEnabled = normalizeBooleanToggle(loadoutFocus, false);
-        const retrievalDiscipline = resolveRetrievalDiscipline(contextBudget.id, loadoutFocusEnabled);
-        const runtimeGenerationProfile = resolveGenerationProfile(contextBudget.id);
-        const runtimeProfileLabel = buildRuntimeProfileLabel(contextBudget.id, loadoutFocusEnabled);
+        const baseRetrievalDiscipline = resolveRetrievalDiscipline(contextBudget.id, loadoutFocusEnabled);
+        const baseRuntimeGenerationProfile = resolveGenerationProfile(contextBudget.id);
+        const selectedCognitionProfile = resolveCognitionProfile(runtimeProfile);
+        const cognitionInfluence = applyCognitionProfileInfluence({
+            cognitionProfile: selectedCognitionProfile,
+            retrievalTopK: baseRetrievalTopK,
+            targetSources: contextBudget.targetSources,
+            maxRawChunks: contextBudget.maxRawChunks,
+            retrievalDiscipline: baseRetrievalDiscipline,
+            runtimeGenerationProfile: baseRuntimeGenerationProfile,
+        });
+        const retrievalTopK = cognitionInfluence.retrievalTopK;
+        const retrievalDiscipline = cognitionInfluence.retrievalDiscipline;
+        const runtimeGenerationProfile = cognitionInfluence.runtimeGenerationProfile;
+        const runtimeProfileLabel = selectedCognitionProfile.label;
+        const effectiveMaxRawChunks = cognitionInfluence.maxRawChunks;
+        const contextBudgetForRuntime = {
+            ...contextBudget,
+            retrievalTopK,
+            targetSources: cognitionInfluence.targetSources,
+            maxRawChunks: effectiveMaxRawChunks,
+        };
 
         // Determine active room for context pools and system prompt
         const requestedRoom = normalizeRoom(room);
@@ -947,7 +966,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 rooms: retrievalRooms,
                 cacheId,
                 topK: retrievalTopK,
-                targetSources: contextBudget.targetSources,
+                targetSources: contextBudgetForRuntime.targetSources,
                 routeHint: detectedRoute,
                 courtMember: selectedCourtMember,
                 archetypeMemoryProfile,
@@ -977,7 +996,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 retrieved = [...pinned, ...retrieved];
             }
         }
-        retrieved = optimizeRetrievedContext(retrieved, contextBudget, retrievalTopK);
+        retrieved = optimizeRetrievedContext(retrieved, contextBudgetForRuntime, retrievalTopK);
 
         if (retrievalState !== RETRIEVAL_STATES.RETRIEVAL_ERROR) {
             if (retrieved.length === 0) {
@@ -986,7 +1005,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                     : RETRIEVAL_STATES.NO_CONTEXT;
             } else if (
                 missingPinnedSources.length > 0 ||
-                retrieved.length <= partialContextThresholdForBudget(contextBudget)
+                retrieved.length <= partialContextThresholdForBudget(contextBudgetForRuntime)
             ) {
                 retrievalState = RETRIEVAL_STATES.PARTIAL_CONTEXT;
             }
@@ -1019,6 +1038,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             ? loadSentinelLoadoutPromptSummary(contextBudget.sentinelLoadoutChars, {
                 activeArchetype: activeArchetypeForMemory,
                 depth: contextBudget.id,
+                runtimeProfile: selectedCognitionProfile.id,
             })
             : '';
         const summaryFirst = buildSummaryFirstContext({
@@ -1037,8 +1057,12 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             },
         });
         const rawChunksForPrompt = summaryFirst.block
-            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries(archetypeMemoryProfile, contextBudget))
-            : retrieved.slice(0, contextBudget.maxRawChunks);
+            ? retrieved.slice(0, computeRawChunkBudgetWithSummaries(
+                archetypeMemoryProfile,
+                contextBudgetForRuntime,
+                effectiveMaxRawChunks,
+            ))
+            : retrieved.slice(0, effectiveMaxRawChunks);
         const groundedPrompt = buildGroundedPrompt({
             query,
             retrievedChunks: rawChunksForPrompt,
@@ -1103,7 +1127,11 @@ Loadout Focus: ${loadoutFocusEnabled ? 'ON' : 'OFF'}
 ${buildDepthResponseInstruction(contextBudget)}
 
 `;
-        userContent = retrievalStateBlock + depthInstructionBlock + userContent;
+        const runtimeProfileBlock = `=== Runtime Profile ===
+${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
+
+`;
+        userContent = retrievalStateBlock + runtimeProfileBlock + depthInstructionBlock + userContent;
 
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
@@ -1243,7 +1271,7 @@ ${buildDepthResponseInstruction(contextBudget)}
                 'Chunks: ' + rawChunksForPrompt.length,
                 'Summaries: ' + summaryBudgetForContext(contextBudget),
                 'Loadout Focus: ' + (loadoutFocusEnabled ? 'ON' : 'OFF'),
-                'Budget: ' + formatBudgetLabel(contextBudget.maxRawChunks, 'chunk', 'chunks') +
+                'Budget: ' + formatBudgetLabel(effectiveMaxRawChunks, 'chunk', 'chunks') +
                     ' · ' + formatBudgetLabel(summaryBudgetForContext(contextBudget), 'summary', 'summaries'),
                 'Bootstrap: compact',
                 'Caches Loaded: ' + loadedCaches.length,
@@ -1300,6 +1328,7 @@ ${buildDepthResponseInstruction(contextBudget)}
             rollingBootstrapStatus,
             rollingBootstrapThemes,
             runtimeProfile: runtimeProfileLabel,
+            runtimeProfileId: selectedCognitionProfile.id,
             loadoutFocus: loadoutFocusEnabled,
             loadedCacheCount: loadedCaches.length,
             cacheLoadout: cacheLoadoutNames,
@@ -1317,6 +1346,7 @@ ${buildDepthResponseInstruction(contextBudget)}
                 archetypeDeltaActive: Boolean(archetypePart),
                 numPredict: runtimeGenerationProfile.numPredict,
                 temperature: runtimeGenerationProfile.temperature,
+                runtimeProfileId: selectedCognitionProfile.id,
             },
             compact: compactSignalTrace,
         };

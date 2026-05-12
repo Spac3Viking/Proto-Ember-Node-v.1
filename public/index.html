@@ -127,6 +127,19 @@
                   </select>
                   <span class="visually-hidden" id="response-depth-help">Spark is fast with minimal context. Ember is the balanced default. Hearth enables deeper synthesis. Archive is broadest and slowest.</span>
                 </div>
+                <div class="response-depth-control response-depth-control-inline">
+                  <label for="runtime-profile-select" class="response-depth-label">Runtime Profile:</label>
+                  <select id="runtime-profile-select" class="response-depth-select" aria-label="Runtime profile" aria-describedby="runtime-profile-help">
+                    <option value="spark-compression">Spark Compression</option>
+                    <option value="balanced-ember" selected>Balanced Ember</option>
+                    <option value="field-guide">Field Guide</option>
+                    <option value="scholar-weave">Scholar Weave</option>
+                    <option value="narrative-forge">Narrative Forge</option>
+                    <option value="minimal-retrieval">Minimal Retrieval</option>
+                    <option value="deep-hearth">Deep Hearth</option>
+                  </select>
+                  <span class="visually-hidden" id="runtime-profile-help">Runtime cognition profile shapes response posture, retrieval posture, and mentor pacing.</span>
+                </div>
                 <div class="chat-input-row" style="padding: 0.75rem 1rem;">
                   <textarea
                     id="message-input"
@@ -472,6 +485,19 @@
                   <option value="archive">Archive</option>
                 </select>
                 <span class="visually-hidden" id="ws-response-depth-help">Spark is fast with minimal context. Ember is the balanced default. Hearth enables deeper synthesis. Archive is broadest and slowest.</span>
+              </div>
+              <div class="response-depth-control response-depth-control-inline">
+                <label for="ws-runtime-profile-select" class="response-depth-label">Runtime Profile:</label>
+                <select id="ws-runtime-profile-select" class="response-depth-select" aria-label="Council runtime profile" aria-describedby="ws-runtime-profile-help">
+                  <option value="spark-compression">Spark Compression</option>
+                  <option value="balanced-ember" selected>Balanced Ember</option>
+                  <option value="field-guide">Field Guide</option>
+                  <option value="scholar-weave">Scholar Weave</option>
+                  <option value="narrative-forge">Narrative Forge</option>
+                  <option value="minimal-retrieval">Minimal Retrieval</option>
+                  <option value="deep-hearth">Deep Hearth</option>
+                </select>
+                <span class="visually-hidden" id="ws-runtime-profile-help">Runtime cognition profile shapes response posture, retrieval posture, and mentor pacing.</span>
               </div>
             </div>
             <div class="ember-card" style="padding: 1rem; display:flex; flex-direction:column; gap:0.75rem; min-height:420px;">
