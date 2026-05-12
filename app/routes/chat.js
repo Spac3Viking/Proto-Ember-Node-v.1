@@ -233,9 +233,11 @@ function normalizeBooleanToggle(value, fallback = false) {
 
 function resolveRetrievalDiscipline(depthId, loadoutFocus = false) {
     const fallback = RETRIEVAL_DISCIPLINE_PROFILES.ember;
-    const key = RETRIEVAL_DISCIPLINE_PROFILES[depthId] ? depthId : 'ember';
-    if (!loadoutFocus) return RETRIEVAL_DISCIPLINE_PROFILES[key] || fallback;
-    return LOADOUT_FOCUS_DISCIPLINE_PROFILES[key] || LOADOUT_FOCUS_DISCIPLINE_PROFILES.ember || fallback;
+    const profileSet = loadoutFocus
+        ? LOADOUT_FOCUS_DISCIPLINE_PROFILES
+        : RETRIEVAL_DISCIPLINE_PROFILES;
+    const key = profileSet[depthId] ? depthId : 'ember';
+    return profileSet[key] || profileSet.ember || fallback;
 }
 
 function resolveGenerationProfile(depthId) {
@@ -247,8 +249,13 @@ function buildRuntimeProfileLabel(depthId, loadoutFocus = false) {
     const key = CONTEXT_BUDGET_PROFILES[depthId] ? depthId : 'ember';
     if (key === 'spark') return loadoutFocus ? 'Minimal Retrieval' : 'Spark Compression';
     if (key === 'ember') return loadoutFocus ? 'Field Guide' : 'Balanced Ember';
-    if (key === 'hearth') return 'Scholar Weave';
-    return 'Narrative Forge';
+    if (key === 'hearth') return loadoutFocus ? 'Field Guide Deep' : 'Scholar Weave';
+    return loadoutFocus ? 'Narrative Forge Focus' : 'Narrative Forge';
+}
+
+function isOllamaRuntime(runtime) {
+    const runtimeId = String(runtime && runtime.runtimeId || '').trim().toLowerCase();
+    return runtimeId === 'ollama-local' || runtimeId.startsWith('ollama-');
 }
 
 const HEART_SYSTEM_PROMPT = (
@@ -1112,12 +1119,7 @@ ${buildDepthResponseInstruction(contextBudget)}
                 { role: 'user',   content: userContent },
             ],
         };
-        if (
-            heart &&
-            typeof heart.runtimeId === 'string' &&
-            heart.runtimeId.toLowerCase().includes('ollama') &&
-            runtimeGenerationProfile
-        ) {
+        if (isOllamaRuntime(heart) && runtimeGenerationProfile) {
             payload.options = {
                 num_predict: runtimeGenerationProfile.numPredict,
                 temperature: runtimeGenerationProfile.temperature,
