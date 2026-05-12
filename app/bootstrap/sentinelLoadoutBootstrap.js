@@ -232,6 +232,14 @@ function formatDepthPostureLine(depth) {
     return 'Response posture: Archive Weave.';
 }
 
+function formatDepthTargetLine(depth) {
+    const id = normalizeDepth(depth || 'ember');
+    if (id === 'spark') return 'Output target: 1–3 short paragraphs or concise bullets; one clear next step.';
+    if (id === 'ember') return 'Output target: balanced 3–7 paragraph/bullet response without archive sprawl.';
+    if (id === 'hearth') return 'Output target: deeper teaching synthesis with practical structure.';
+    return 'Output target: broad long-form synthesis when fidelity requires it.';
+}
+
 function formatArchetypeLoadoutLine(activeArchetype) {
     const id = String(activeArchetype || '').trim().toLowerCase();
     if (!ARCHETYPE_LABELS[id]) return 'Current Loadout: Ember Prime baseline.';
@@ -264,9 +272,10 @@ function loadSentinelLoadoutPromptSummary(maxChars = 320, runtimeState = null) {
         formatArchetypeLoadoutLine(activeArchetype),
         loadedCaches ? ('Loaded caches: ' + loadedCaches + '.') : 'Loaded caches: none.',
         formatDepthPostureLine(depth),
+        formatDepthTargetLine(depth),
         'Mentor style: concise practical guidance.',
         depth === 'spark'
-            ? 'Avoid broad archive exposition unless requested.'
+            ? 'Favor loaded caches strongly; avoid broad archive expansion unless requested.'
             : 'Avoid repeated philosophy exposition.',
         retrievalPosture ? ('Retrieval posture: ' + retrievalPosture) : '',
         summary ? ('Continuity cue: ' + summary) : '',

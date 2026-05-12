@@ -49,6 +49,9 @@ const ARCHETYPE_MEMORY_DOMAIN_BOOST = 1.05;
 // Keep loaded-cache preference modest so loaded sources are favored
 // without overpowering concept routing, archetype memory, or court lenses.
 const LOADED_CACHE_SOURCE_BOOST = 1.06;
+const NON_LOADED_ARCHIVE_PENALTY = 1;
+const MAX_LOADED_CACHE_BOOST = 1.5;
+const MIN_NON_LOADED_ARCHIVE_PENALTY = 0.7;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -199,6 +202,25 @@ function normalizeArchetypeMemoryProfile(profile) {
     return {
         preferredSources,
         preferredDomains,
+    };
+}
+
+function normalizeRetrievalDiscipline(profile) {
+    if (!profile || typeof profile !== 'object') {
+        return {
+            loadedCacheBoost: LOADED_CACHE_SOURCE_BOOST,
+            nonLoadedArchivePenalty: NON_LOADED_ARCHIVE_PENALTY,
+        };
+    }
+    const loadedCacheBoost = Number.isFinite(profile.loadedCacheBoost)
+        ? Math.max(1, Math.min(MAX_LOADED_CACHE_BOOST, Number(profile.loadedCacheBoost)))
+        : LOADED_CACHE_SOURCE_BOOST;
+    const nonLoadedArchivePenalty = Number.isFinite(profile.nonLoadedArchivePenalty)
+        ? Math.max(MIN_NON_LOADED_ARCHIVE_PENALTY, Math.min(1, Number(profile.nonLoadedArchivePenalty)))
+        : NON_LOADED_ARCHIVE_PENALTY;
+    return {
+        loadedCacheBoost,
+        nonLoadedArchivePenalty,
     };
 }
 
@@ -445,6 +467,7 @@ async function retrieve({
     maxChunksPerSource = DEFAULT_MAX_CHUNKS_PER_SOURCE,
     courtMember = null,
     archetypeMemoryProfile = null,
+    retrievalDiscipline = null,
 }) {
     const allChunks = loadChunks();
     const embeddings = loadEmbeddings();
@@ -474,6 +497,7 @@ async function retrieve({
     const routedAs = routeHint || detectRoute(query);
     const normalizedCourtMember = normalizeCourtMemberConfig(courtMember);
     const normalizedArchetypeMemory = normalizeArchetypeMemoryProfile(archetypeMemoryProfile);
+    const normalizedRetrievalDiscipline = normalizeRetrievalDiscipline(retrievalDiscipline);
     const loadedLookup = getLoadedCacheLookup();
     const loadedIds = new Set(Array.from(loadedLookup.ids || []).map(normalizeCacheKey).filter(Boolean));
     let conceptRouting = {
@@ -546,13 +570,20 @@ async function retrieve({
                 manifest,
                 loadedIds,
             });
-            const loadedCacheBoost = loadedCacheMatch ? LOADED_CACHE_SOURCE_BOOST : 1;
+            const loadedCacheBoost = loadedCacheMatch ? normalizedRetrievalDiscipline.loadedCacheBoost : 1;
+            const nonLoadedArchivePenalty = (
+                !loadedCacheMatch &&
+                sourceClassById[entry.chunk.sourceId] === SOURCE_CLASS_ARCHIVE
+            )
+                ? normalizedRetrievalDiscipline.nonLoadedArchivePenalty
+                : 1;
             const finalScore = postConceptScore *
                 courtSourceBoost *
                 courtDomainBoost *
                 archetypeMemorySourceBoost *
                 archetypeMemoryDomainBoost *
-                loadedCacheBoost;
+                loadedCacheBoost *
+                nonLoadedArchivePenalty;
 
             return {
                 chunk: entry.chunk,
@@ -582,6 +613,7 @@ async function retrieve({
                 archetypeMemoryDomainBoost,
                 loadedCacheMatch,
                 loadedCacheBoost,
+                nonLoadedArchivePenalty,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);
