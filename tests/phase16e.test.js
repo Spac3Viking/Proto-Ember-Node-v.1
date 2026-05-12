@@ -260,4 +260,29 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(invalid.body.signalTrace.loadoutFocus).toBe(false);
         expect(invalid.body.signalTrace.compact).toContain('Loadout Focus: OFF');
     });
+
+    test('distillation guidance mode adds mentor compression instructions and signal trace metadata', async () => {
+        const mockedAxios = require('axios');
+        mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Distillation guidance response.' } } });
+        const { app } = require('../app/server');
+
+        const res = await request(app)
+            .post('/api/chat')
+            .send({
+                query: 'Review overlap and compression opportunities for these caches.',
+                responseDepth: 'ember',
+                distillationGuidance: true,
+            });
+
+        expect(res.status).toBe(200);
+        expect(res.body.signalTrace.distillationGuidance).toBe(true);
+        expect(res.body.signalTrace.compact).toContain('Distillation Guidance: ON');
+
+        const payload = mockedAxios.post.mock.calls[0][1];
+        const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
+        expect(userPrompt).toContain('=== Distillation Guidance Mode ===');
+        expect(userPrompt).toContain('human-guided continuity distillation');
+        expect(userPrompt).toContain('Do not auto-merge');
+        expect(userPrompt).toContain('What continuity appears repeatedly across these caches?');
+    });
 });

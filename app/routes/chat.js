@@ -240,6 +240,22 @@ function normalizeBooleanToggle(value, fallback = false) {
     return fallback;
 }
 
+function buildDistillationGuidanceBlock() {
+    return `=== Distillation Guidance Mode ===
+Mentor stance: practical, reflective, and non-gamey.
+Goal: support human-guided continuity distillation, not automatic cache evolution.
+Do not auto-merge, auto-delete, auto-upgrade tiers, or rewrite continuity.
+Help identify overlap, repeated themes, redundancy, strongest signal, and synthesis opportunities.
+Name compression opportunities explicitly and ask compact guidance questions:
+- What continuity appears repeatedly across these caches?
+- Which ideas remain useful after compression?
+- What perspectives are still missing?
+- Would a Builder or Scholar review strengthen this synthesis?
+When giving distillation guidance, preserve Sentinel choice and frame recommendations as optional.
+
+`;
+}
+
 function resolveRetrievalDiscipline(depthId, loadoutFocus = false) {
     const fallback = RETRIEVAL_DISCIPLINE_PROFILES.ember;
     const profileSet = loadoutFocus
@@ -856,7 +872,7 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history?, responseDepth? }
+ * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history?, responseDepth?, distillationGuidance? }
  * Response: { answer, sources, grounded }
  *
  * room (optional)      — active room for context-bounded chat ('hearth' | 'council' [Ember Council] | 'threshold')
@@ -884,6 +900,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             depth = null,
             loadoutFocus = false,
             runtimeProfile = null,
+            distillationGuidance = false,
             requestId = null,
         } = req.body;
         if (!query || typeof query !== 'string') {
@@ -922,6 +939,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             getRetrievalTopKForCourtMember(selectedCourtMember),
         );
         const loadoutFocusEnabled = normalizeBooleanToggle(loadoutFocus, false);
+        const distillationGuidanceEnabled = normalizeBooleanToggle(distillationGuidance, false);
         const baseRetrievalDiscipline = resolveRetrievalDiscipline(contextBudget.id, loadoutFocusEnabled);
         const baseRuntimeGenerationProfile = resolveGenerationProfile(contextBudget.id);
         const selectedCognitionProfile = resolveCognitionProfile(runtimeProfile);
@@ -1135,7 +1153,10 @@ ${buildDepthResponseInstruction(contextBudget)}
 ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
 
 `;
-        userContent = retrievalStateBlock + runtimeProfileBlock + depthInstructionBlock + userContent;
+        const distillationGuidanceBlock = distillationGuidanceEnabled
+            ? buildDistillationGuidanceBlock()
+            : '';
+        userContent = retrievalStateBlock + runtimeProfileBlock + depthInstructionBlock + distillationGuidanceBlock + userContent;
 
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
@@ -1275,6 +1296,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 'Chunks: ' + rawChunksForPrompt.length,
                 'Summaries: ' + summaryBudgetForContext(contextBudget),
                 'Loadout Focus: ' + (loadoutFocusEnabled ? 'ON' : 'OFF'),
+                'Distillation Guidance: ' + (distillationGuidanceEnabled ? 'ON' : 'OFF'),
                 'Budget: ' + formatBudgetLabel(effectiveMaxRawChunks, 'chunk', 'chunks') +
                     ' · ' + formatBudgetLabel(summaryBudgetForContext(contextBudget), 'summary', 'summaries'),
                 'Bootstrap: compact',
@@ -1295,6 +1317,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 'Chunks: ' + rawChunksForPrompt.length,
                 'Summaries: ' + summaryBudgetForContext(contextBudget),
                 'Loadout Focus: ' + (loadoutFocusEnabled ? 'ON' : 'OFF'),
+                'Distillation Guidance: ' + (distillationGuidanceEnabled ? 'ON' : 'OFF'),
                 'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 2).join(' → ')),
                 'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
@@ -1334,6 +1357,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             runtimeProfile: runtimeProfileLabel,
             runtimeProfileId: selectedCognitionProfile.id,
             loadoutFocus: loadoutFocusEnabled,
+            distillationGuidance: distillationGuidanceEnabled,
             loadedCacheCount: loadedCaches.length,
             cacheLoadout: cacheLoadoutNames,
             memoryFlow: {
