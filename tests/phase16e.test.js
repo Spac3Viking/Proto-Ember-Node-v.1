@@ -233,4 +233,31 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(userPrompt).toContain('=== Runtime Profile ===');
         expect(userPrompt).toContain('Field Guide');
     });
+
+    test('loadout focus parsing defaults to OFF for missing or invalid values', async () => {
+        const mockedAxios = require('axios');
+        mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Parsing response.' } } });
+        const { app } = require('../app/server');
+
+        const missing = await request(app)
+            .post('/api/chat')
+            .send({
+                query: 'Default to safe retrieval.',
+                responseDepth: 'ember',
+            });
+        expect(missing.status).toBe(200);
+        expect(missing.body.signalTrace.loadoutFocus).toBe(false);
+        expect(missing.body.signalTrace.compact).toContain('Loadout Focus: OFF');
+
+        const invalid = await request(app)
+            .post('/api/chat')
+            .send({
+                query: 'Treat invalid loadout focus safely.',
+                responseDepth: 'ember',
+                loadoutFocus: 2,
+            });
+        expect(invalid.status).toBe(200);
+        expect(invalid.body.signalTrace.loadoutFocus).toBe(false);
+        expect(invalid.body.signalTrace.compact).toContain('Loadout Focus: OFF');
+    });
 });

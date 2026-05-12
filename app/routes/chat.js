@@ -227,7 +227,11 @@ function resolveContextBudgetProfile(value) {
 
 function normalizeBooleanToggle(value, fallback = false) {
     if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'number') {
+        if (value === 1) return true;
+        if (value === 0) return false;
+        return fallback;
+    }
     if (typeof value !== 'string') return fallback;
     const normalized = value.trim().toLowerCase();
     if (!normalized) return fallback;

@@ -409,6 +409,70 @@ input:focus, textarea:focus {
   padding: 0.45rem 0 0;
 }
 
+.loadout-focus-control {
+  gap: 0.5rem;
+}
+
+.loadout-focus-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 2.1rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  border: 1px solid hsla(38, 100%, 66%, 0.45);
+  background: hsla(120, 22%, 7%, 0.96);
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.loadout-focus-toggle::before {
+  content: '';
+  position: absolute;
+  top: 0.1rem;
+  left: 0.15rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: hsla(140, 100%, 70%, 0.7);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.loadout-focus-toggle:hover {
+  border-color: hsla(38, 100%, 66%, 0.62);
+}
+
+.loadout-focus-toggle:focus {
+  outline: none;
+  border-color: hsla(38, 100%, 66%, 0.75);
+  box-shadow: 0 0 0 1px hsla(38, 100%, 66%, 0.35);
+}
+
+.loadout-focus-toggle:checked {
+  background: linear-gradient(180deg, hsla(28, 55%, 20%, 0.9), hsla(20, 62%, 13%, 0.92));
+  border-color: hsla(38, 100%, 66%, 0.75);
+}
+
+.loadout-focus-toggle:checked::before {
+  transform: translateX(0.95rem);
+  background: hsla(38, 100%, 66%, 0.95);
+}
+
+.loadout-focus-state {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--gf-wire-green);
+}
+
+.runtime-controls-help {
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--archive-muted);
+  letter-spacing: 0.02em;
+  padding: 0.2rem 1rem 0.1rem;
+}
+
 .response-depth-label {
   font-size: 0.68rem;
   color: var(--archive-muted);
