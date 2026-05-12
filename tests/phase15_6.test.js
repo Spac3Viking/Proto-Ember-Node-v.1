@@ -55,7 +55,7 @@ describe('Phase 15.6 — concept index layer', () => {
         expect(loaded.domains.length).toBeGreaterThan(0);
     });
 
-    function setupRetrievalModule({ chunks, manifests }) {
+    function setupRetrievalModule({ chunks, manifests, loadedLookup = { ids: new Set() } }) {
         jest.doMock('../app/indexStore', () => ({
             loadChunks: () => chunks,
             loadEmbeddings: () => ({ mockChunkId: [0.1, 0.2, 0.3] }),
@@ -80,6 +80,11 @@ describe('Phase 15.6 — concept index layer', () => {
 
         jest.doMock('../app/archiveService', () => ({
             SOURCE_CLASS_ARCHIVE: 'trusted-archive',
+            SOURCE_CLASS_ARCHIVE_CACHE: 'trusted-archive-cache',
+        }));
+
+        jest.doMock('../app/loadedCaches', () => ({
+            getLoadedCacheLookup: () => loadedLookup,
         }));
 
         return require('../app/retrieval');
@@ -170,6 +175,65 @@ describe('Phase 15.6 — concept index layer', () => {
         const expected = boosted.textMatchScore * (1 + boosted.conceptBonus);
         expect(boosted.score).toBeCloseTo(expected, 6);
         expect(results[0].chunk.sourceId).toBe('src-runelore');
+    });
+
+    test('retrieve applies depth retrieval discipline to loaded cache preference', async () => {
+        const chunks = [
+            {
+                id: 'c-loaded',
+                sourceId: 'src-loaded',
+                room: 'hearth',
+                shelf: 'archive',
+                file: 'loaded.md',
+                cacheId: 'green-fire-core',
+                text: 'green fire continuity mapping and practice',
+            },
+            {
+                id: 'c-unloaded',
+                sourceId: 'src-unloaded',
+                room: 'hearth',
+                shelf: 'archive',
+                file: 'unloaded.md',
+                text: 'green fire continuity mapping and practice',
+            },
+        ];
+        const manifests = {
+            'src-loaded': {
+                id: 'src-loaded',
+                sourceClass: 'trusted-archive',
+                title: 'Loaded Source',
+                file: 'loaded.md',
+                cacheId: 'green-fire-core',
+            },
+            'src-unloaded': {
+                id: 'src-unloaded',
+                sourceClass: 'trusted-archive',
+                title: 'Unloaded Source',
+                file: 'unloaded.md',
+            },
+        };
+        const retrieval = setupRetrievalModule({
+            chunks,
+            manifests,
+            loadedLookup: { ids: new Set(['green-fire-core']) },
+        });
+        const results = await retrieval.retrieve({
+            query: 'green fire continuity mapping',
+            rooms: ['hearth'],
+            routeHint: 'general',
+            topK: 2,
+            retrievalDiscipline: {
+                loadedCacheBoost: 1.24,
+                nonLoadedArchivePenalty: 0.86,
+            },
+        });
+
+        expect(results.length).toBe(2);
+        expect(results[0].chunk.sourceId).toBe('src-loaded');
+        expect(results[0].loadedCacheMatch).toBe(true);
+        expect(results[0].loadedCacheBoost).toBeCloseTo(1.24, 6);
+        expect(results[1].loadedCacheMatch).toBe(false);
+        expect(results[1].nonLoadedArchivePenalty).toBeCloseTo(0.86, 6);
     });
 
     test('retrieve enforces minimum distinct priority sources when available', async () => {

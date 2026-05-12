@@ -78,10 +78,10 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         maxChunkChars: 1000,
         maxHistoryChars: 500,
         maxHistoryTurns: 1,
-        maxSummaryChars: 260,
+        maxSummaryChars: 320,
         rollingBootstrapChars: 0,
-        sentinelLoadoutChars: 220,
-        cacheSummaryLimit: 0,
+        sentinelLoadoutChars: 180,
+        cacheSummaryLimit: 1,
         documentSummaryLimit: 0,
         sourceLineLimit: 1,
         includeArchetypeMemory: false,
@@ -101,7 +101,7 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         rollingBootstrapChars: 320,
         sentinelLoadoutChars: 220,
         cacheSummaryLimit: 2,
-        documentSummaryLimit: 3,
+        documentSummaryLimit: 2,
         sourceLineLimit: 3,
         includeArchetypeMemory: true,
     },
@@ -120,7 +120,7 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         rollingBootstrapChars: 400,
         sentinelLoadoutChars: 280,
         cacheSummaryLimit: 3,
-        documentSummaryLimit: 5,
+        documentSummaryLimit: 3,
         sourceLineLimit: 4,
         includeArchetypeMemory: true,
     },
@@ -139,12 +139,30 @@ const CONTEXT_BUDGET_PROFILES = Object.freeze({
         rollingBootstrapChars: 480,
         sentinelLoadoutChars: 320,
         cacheSummaryLimit: 4,
-        documentSummaryLimit: 6,
+        documentSummaryLimit: 4,
         sourceLineLimit: 5,
         includeArchetypeMemory: true,
     },
 });
 const DEFAULT_CONTEXT_BUDGET_PROFILE = CONTEXT_BUDGET_PROFILES.ember;
+const RETRIEVAL_DISCIPLINE_PROFILES = Object.freeze({
+    spark: {
+        loadedCacheBoost: 1.24,
+        nonLoadedArchivePenalty: 0.86,
+    },
+    ember: {
+        loadedCacheBoost: 1.12,
+        nonLoadedArchivePenalty: 0.95,
+    },
+    hearth: {
+        loadedCacheBoost: 1.08,
+        nonLoadedArchivePenalty: 0.98,
+    },
+    archive: {
+        loadedCacheBoost: 1.06,
+        nonLoadedArchivePenalty: 1,
+    },
+});
 
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
@@ -167,6 +185,7 @@ function resolveContextBudgetProfile(value) {
 const HEART_SYSTEM_PROMPT = (
     'You are Ember Prime, a continuity mentor for writing and synthesis inside an Ember Node.\n' +
     'Use compressed identity and context. Do not lecture or repeat philosophy.\n' +
+    'Do not restate Green Fire philosophy unless the user explicitly asks for it.\n' +
     'Answer directly, then add only necessary support, then optional next step.\n' +
     'Use markdown-first structure. Avoid roleplay, boilerplate, and long preambles.\n' +
     'Treat retrieval state markers as hard runtime context for confidence and brevity.\n' +
@@ -184,8 +203,26 @@ const ROOM_SYSTEM_PROMPTS = {
     ),
 };
 
-function optimizeRetrievedContext(retrievedChunks) {
+function optimizeRetrievedContext(retrievedChunks, contextBudget, retrievalTopK) {
     if (!Array.isArray(retrievedChunks) || retrievedChunks.length === 0) return [];
+    const boundedTopK = Number.isFinite(retrievalTopK)
+        ? Math.max(1, Math.floor(retrievalTopK))
+        : Number.POSITIVE_INFINITY;
+    const maxOptimizedChunks = Math.max(
+        1,
+        Math.min(
+            boundedTopK,
+            Number.isFinite(contextBudget && contextBudget.retrievalTopK)
+                ? Math.floor(contextBudget.retrievalTopK)
+                : MAX_CHAT_CONTEXT_CHUNKS,
+        ),
+    );
+    const maxContextChars = Number.isFinite(contextBudget && contextBudget.maxContextChars)
+        ? Math.max(800, Math.floor(contextBudget.maxContextChars))
+        : MAX_CHAT_CONTEXT_CHARS;
+    const maxChunkChars = Number.isFinite(contextBudget && contextBudget.maxChunkChars)
+        ? Math.max(300, Math.floor(contextBudget.maxChunkChars))
+        : MAX_CHAT_CHUNK_CHARS;
     const seenChunkIds = new Set();
     const seenFingerprints = new Set();
     const optimized = [];
@@ -208,14 +245,14 @@ function optimizeRetrievedContext(retrievedChunks) {
         if (!text.trim()) continue;
         const fp = fingerprint(text);
         if (fp && seenFingerprints.has(fp)) continue;
-        if (optimized.length >= MAX_CHAT_CONTEXT_CHUNKS) break;
-        if (totalChars >= MAX_CHAT_CONTEXT_CHARS) break;
+        if (optimized.length >= maxOptimizedChunks) break;
+        if (totalChars >= maxContextChars) break;
 
-        const remaining = MAX_CHAT_CONTEXT_CHARS - totalChars;
+        const remaining = maxContextChars - totalChars;
         if (text.length > remaining && remaining < 400) break;
 
-        const boundedText = text.length > MAX_CHAT_CHUNK_CHARS
-            ? text.slice(0, MAX_CHAT_CHUNK_CHARS)
+        const boundedText = text.length > maxChunkChars
+            ? text.slice(0, maxChunkChars)
             : text;
         const nextEntry = boundedText.length > remaining
             ? { ...entry, chunk: { ...entry.chunk, text: boundedText.slice(0, remaining) } }
@@ -609,43 +646,78 @@ function buildDepthResponseInstruction(contextBudget) {
         return [
             'Response Depth: Spark',
             'Hard rule: brief orientation only.',
-            'Use minimal retrieval and only the strongest context.',
-            'Keep to 1–3 concise paragraphs OR compact bullets.',
-            'Do not write long essays unless explicitly requested.',
-            'Mentor posture: orient, compress, and ask at most one clarifying question.',
-            'If helpful, end with one subtle line: "Load a deeper depth if you want the wider weave."',
+            'Output target: 1–3 short paragraphs OR 3–5 concise bullets.',
+            'Deliver one clear answer and one useful next step.',
+            'Use minimal retrieval and only strongest context from loaded continuity when available.',
+            'Mentor pacing: concise reflection plus one question OR one next step.',
+            'Avoid long essays, broad archive sweeps, and repeated Green Fire philosophy restatement unless asked.',
+            'If deeper context exists, a subtle continuation line is allowed once.',
         ].join('\n');
     }
     if (depthId === 'ember') {
         return [
             'Response Depth: Ember',
             'Balanced synthesis.',
-            'Use moderate retrieval and compact structure.',
-            'Keep mentor tone concise, practical, and non-lecturing.',
-            'If helpful, include one subtle deeper-path line.',
+            'Output target: 3–7 paragraphs or structured bullets with enough context to be useful.',
+            'Use moderate retrieval breadth; stay practical and avoid sprawling archive lecture.',
+            'Mentor pacing: balanced guidance with compact reflective steering.',
+            'Avoid repeated Green Fire philosophy restatement unless user asks for it directly.',
+            'If deeper context exists, one subtle continuation line is optional.',
         ].join('\n');
     }
     if (depthId === 'hearth') {
         return [
             'Response Depth: Hearth',
             'Deeper teaching and layered continuity synthesis allowed.',
-            'Stay grounded and practical; avoid unnecessary repetition.',
+            'Mentor pacing: deeper instruction and reflective questioning are welcome.',
+            'Organize with headings when helpful and stay grounded in retrieved context.',
+            'Avoid redundant philosophy repetition unless it advances the answer.',
         ].join('\n');
     }
     return [
         'Response Depth: Archive',
         'Broad archive weave allowed.',
         'Long-form synthesis is acceptable when it improves fidelity.',
+        'Mentor pacing: continuity mapping across sources and layers.',
     ].join('\n');
 }
 
-function shouldAppendDeeperDepthNudge(depthId, answer) {
+function countSummaryLayers(summaryLayersUsed) {
+    if (!summaryLayersUsed || typeof summaryLayersUsed !== 'object') return 0;
+    return ['cacheSummaries', 'documentSummaries']
+        .map(key => Number.isFinite(summaryLayersUsed[key]) ? summaryLayersUsed[key] : 0)
+        .reduce((total, current) => total + current, 0);
+}
+
+function shouldAppendDeeperDepthNudge({ depthId, answer, retrievedCount, rawChunkCount, summaryLayersUsed }) {
     if (!['spark', 'ember'].includes(depthId)) return false;
     const text = String(answer || '').trim();
     if (!text) return false;
     if (/load a deeper depth if you want the wider weave/i.test(text)) return false;
-    if (depthId === 'spark') return text.length <= 900;
-    return text.length <= 420;
+    const totalRetrieved = Number.isFinite(retrievedCount) ? retrievedCount : 0;
+    const usedRawChunks = Number.isFinite(rawChunkCount) ? rawChunkCount : 0;
+    const summariesUsed = countSummaryLayers(summaryLayersUsed);
+    const hasMoreDepthAvailable = totalRetrieved > usedRawChunks || summariesUsed > 1;
+    if (!hasMoreDepthAvailable) return false;
+    if (depthId === 'spark') return text.length <= 520;
+    return text.length <= 320;
+}
+
+function summaryBudgetForContext(contextBudget) {
+    const cacheLimit = Number.isFinite(contextBudget && contextBudget.cacheSummaryLimit)
+        ? Math.max(0, Math.floor(contextBudget.cacheSummaryLimit))
+        : 0;
+    const documentLimit = Number.isFinite(contextBudget && contextBudget.documentSummaryLimit)
+        ? Math.max(0, Math.floor(contextBudget.documentSummaryLimit))
+        : 0;
+    return cacheLimit + documentLimit;
+}
+
+function partialContextThresholdForBudget(contextBudget) {
+    const maxRaw = Number.isFinite(contextBudget && contextBudget.maxRawChunks)
+        ? Math.max(1, Math.floor(contextBudget.maxRawChunks))
+        : PARTIAL_CONTEXT_CHUNK_THRESHOLD;
+    return Math.max(1, Math.min(PARTIAL_CONTEXT_CHUNK_THRESHOLD, maxRaw - 1));
 }
 
 function computeRawChunkBudgetWithSummaries(archetypeProfile, contextBudget) {
@@ -762,6 +834,8 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             contextBudget.retrievalTopK,
             getRetrievalTopKForCourtMember(selectedCourtMember),
         );
+        const retrievalDiscipline = RETRIEVAL_DISCIPLINE_PROFILES[contextBudget.id] ||
+            RETRIEVAL_DISCIPLINE_PROFILES.ember;
 
         // Determine active room for context pools and system prompt
         const requestedRoom = normalizeRoom(room);
@@ -792,6 +866,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 routeHint: detectedRoute,
                 courtMember: selectedCourtMember,
                 archetypeMemoryProfile,
+                retrievalDiscipline,
             });
         } catch (retrieveErr) {
             console.warn('[/api/chat] retrieval failed:', retrieveErr.message);
@@ -817,7 +892,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                 retrieved = [...pinned, ...retrieved];
             }
         }
-        retrieved = optimizeRetrievedContext(retrieved);
+        retrieved = optimizeRetrievedContext(retrieved, contextBudget, retrievalTopK);
 
         if (retrievalState !== RETRIEVAL_STATES.RETRIEVAL_ERROR) {
             if (retrieved.length === 0) {
@@ -826,7 +901,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
                     : RETRIEVAL_STATES.NO_CONTEXT;
             } else if (
                 missingPinnedSources.length > 0 ||
-                retrieved.length <= PARTIAL_CONTEXT_CHUNK_THRESHOLD
+                retrieved.length <= partialContextThresholdForBudget(contextBudget)
             ) {
                 retrievalState = RETRIEVAL_STATES.PARTIAL_CONTEXT;
             }
@@ -1019,7 +1094,13 @@ ${buildDepthResponseInstruction(contextBudget)}
         const answer   = response.data && response.data.message
             ? response.data.message.content
             : '';
-        const answerWithDepthNudge = shouldAppendDeeperDepthNudge(contextBudget.id, answer)
+        const answerWithDepthNudge = shouldAppendDeeperDepthNudge({
+            depthId: contextBudget.id,
+            answer,
+            retrievedCount: retrieved.length,
+            rawChunkCount: rawChunksForPrompt.length,
+            summaryLayersUsed: summaryFirst.summaryLayersUsed,
+        })
             ? (String(answer || '').trimEnd() + '\n\nLoad a deeper depth if you want the wider weave.')
             : answer;
         const uniqueSourceCount = new Set(
@@ -1065,14 +1146,11 @@ ${buildDepthResponseInstruction(contextBudget)}
         const compactSignalTrace = contextBudget.id === 'spark'
             ? [
                 'Depth: ' + contextBudget.label,
+                'Budget: chunks ' + contextBudget.maxRawChunks + ' · summaries ' + summaryBudgetForContext(contextBudget),
+                'Cache Loadout: ' + loadedCaches.length + ' loaded',
+                'Bootstrap: compact',
                 'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 1).join(' → ')),
-                'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
-                    (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
-                    ' · chunks ' + rawChunksForPrompt.length,
-                'Context: ' + (sourceList.length > 0 ? sourceList.slice(0, 3).join(', ') : 'none'),
-                'Runtime: ~' + Math.ceil(promptAudit.finalPromptLength / CHARS_PER_TOKEN_ESTIMATE) +
-                    ' tok · bootstrap ' + (sentinelIdentityPart ? 'on' : 'off') +
-                    ' · archetype ' + (archetypePart ? 'on' : 'off'),
+                'Context: ' + (sourceList.length > 0 ? sourceList.slice(0, 2).join(', ') : 'none'),
                 'Model: ' + heart.model + ' / Ollama',
             ].join('\n')
             : [

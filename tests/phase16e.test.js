@@ -158,7 +158,7 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(invalid.body.signalTrace.compact).toContain('Depth: Ember');
     });
 
-    test('spark depth injects explicit response instruction and appends subtle deeper-depth nudge', async () => {
+    test('spark depth injects explicit response instruction and compact signal trace budget', async () => {
         const mockedAxios = require('axios');
         mockedAxios.post.mockResolvedValue({ data: { message: { content: 'Quick orientation response.' } } });
         const { app } = require('../app/server');
@@ -167,14 +167,18 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
             .post('/api/chat')
             .send({ query: 'Give me the shortest orientation.', responseDepth: 'spark' });
         expect(spark.status).toBe(200);
-        expect(spark.body.answer).toContain('Load a deeper depth if you want the wider weave.');
+        expect(spark.body.signalTrace.compact).toContain('Depth: Spark');
+        expect(spark.body.signalTrace.compact).toContain('Budget: chunks 2 · summaries 1');
+        expect(spark.body.signalTrace.compact).toContain('Cache Loadout:');
+        expect(spark.body.signalTrace.compact).toContain('Bootstrap: compact');
 
         const payload = mockedAxios.post.mock.calls[0][1];
         const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
         expect(userPrompt).toContain('=== Response Depth Instruction ===');
         expect(userPrompt).toContain('Response Depth: Spark');
         expect(userPrompt).toContain('Hard rule: brief orientation only.');
-        expect(userPrompt).toContain('1–3 concise paragraphs OR compact bullets.');
+        expect(userPrompt).toContain('Output target: 1–3 short paragraphs OR 3–5 concise bullets.');
+        expect(userPrompt).toContain('a subtle continuation line is allowed once.');
     });
 
     test('archive depth injects archive response instruction block', async () => {
