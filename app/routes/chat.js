@@ -254,7 +254,7 @@ function buildRuntimeProfileLabel(depthId, loadoutFocus = false) {
 }
 
 function isOllamaRuntime(runtime) {
-    const runtimeId = String(runtime && runtime.runtimeId || '').trim().toLowerCase();
+    const runtimeId = String((runtime && runtime.runtimeId) || '').trim().toLowerCase();
     return runtimeId === 'ollama-local' || runtimeId.startsWith('ollama-');
 }
 
