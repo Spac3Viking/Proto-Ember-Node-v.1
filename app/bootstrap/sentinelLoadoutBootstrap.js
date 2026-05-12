@@ -154,9 +154,11 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
         '',
         '## Steward Notes',
         ...(stewardNotes.length > 0 ? stewardNotes.slice(0, 1).map(note => '- ' + note) : ['- none']),
+        '',
+        '## Recent Cache Encounters',
         ...(recentCacheEncounters.length > 0
             ? ['- Recent cache encounters: ' + recentCacheEncounters.slice(0, 3).join(', ')]
-            : []),
+            : ['- none recorded']),
         '',
         '## External AI Instructions',
         'Use this bootstrap as a compact continuity profile.',
