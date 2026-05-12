@@ -163,6 +163,42 @@ const RETRIEVAL_DISCIPLINE_PROFILES = Object.freeze({
         nonLoadedArchivePenalty: 1,
     },
 });
+const LOADOUT_FOCUS_DISCIPLINE_PROFILES = Object.freeze({
+    spark: {
+        loadedCacheBoost: 1.42,
+        nonLoadedArchivePenalty: 0.72,
+    },
+    ember: {
+        loadedCacheBoost: 1.3,
+        nonLoadedArchivePenalty: 0.82,
+    },
+    hearth: {
+        loadedCacheBoost: 1.12,
+        nonLoadedArchivePenalty: 0.95,
+    },
+    archive: {
+        loadedCacheBoost: 1.08,
+        nonLoadedArchivePenalty: 0.97,
+    },
+});
+const RUNTIME_GENERATION_PROFILES = Object.freeze({
+    spark: {
+        numPredict: 180,
+        temperature: 0.55,
+    },
+    ember: {
+        numPredict: 560,
+        temperature: 0.68,
+    },
+    hearth: {
+        numPredict: 1200,
+        temperature: 0.72,
+    },
+    archive: {
+        numPredict: 1700,
+        temperature: 0.74,
+    },
+});
 const SPARK_NUDGE_MAX_CHARS = 520;
 const EMBER_NUDGE_MAX_CHARS = 320;
 
@@ -182,6 +218,37 @@ function normalizeContextBudgetProfileId(value) {
 function resolveContextBudgetProfile(value) {
     const id = normalizeContextBudgetProfileId(value);
     return CONTEXT_BUDGET_PROFILES[id] || DEFAULT_CONTEXT_BUDGET_PROFILE;
+}
+
+function normalizeBooleanToggle(value, fallback = false) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value !== 'string') return fallback;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return fallback;
+    if (['true', '1', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
+    return fallback;
+}
+
+function resolveRetrievalDiscipline(depthId, loadoutFocus = false) {
+    const fallback = RETRIEVAL_DISCIPLINE_PROFILES.ember;
+    const key = RETRIEVAL_DISCIPLINE_PROFILES[depthId] ? depthId : 'ember';
+    if (!loadoutFocus) return RETRIEVAL_DISCIPLINE_PROFILES[key] || fallback;
+    return LOADOUT_FOCUS_DISCIPLINE_PROFILES[key] || LOADOUT_FOCUS_DISCIPLINE_PROFILES.ember || fallback;
+}
+
+function resolveGenerationProfile(depthId) {
+    const key = RUNTIME_GENERATION_PROFILES[depthId] ? depthId : 'ember';
+    return RUNTIME_GENERATION_PROFILES[key] || RUNTIME_GENERATION_PROFILES.ember;
+}
+
+function buildRuntimeProfileLabel(depthId, loadoutFocus = false) {
+    const key = CONTEXT_BUDGET_PROFILES[depthId] ? depthId : 'ember';
+    if (key === 'spark') return loadoutFocus ? 'Minimal Retrieval' : 'Spark Compression';
+    if (key === 'ember') return loadoutFocus ? 'Field Guide' : 'Balanced Ember';
+    if (key === 'hearth') return 'Scholar Weave';
+    return 'Narrative Forge';
 }
 
 const HEART_SYSTEM_PROMPT = (
@@ -649,9 +716,11 @@ function buildDepthResponseInstruction(contextBudget) {
             'Response Depth: Spark',
             'Hard rule: brief orientation only.',
             'Output target: 1–3 short paragraphs or 3–5 concise bullets.',
+            'Answer directly first.',
             'Deliver one clear answer and one useful next step.',
             'Use minimal retrieval and only strongest context from loaded continuity when available.',
-            'Mentor pacing: concise reflection plus one question OR one next step.',
+            'Mentor pacing: one reflection/question max and one next-step suggestion max.',
+            'Avoid multi-paragraph reflection setup.',
             'Avoid long essays, broad archive sweeps, and repeated Green Fire philosophy restatement unless asked.',
             'If deeper context exists, one subtle continuation line is allowed in addition to the output target.',
         ].join('\n');
@@ -803,6 +872,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             contextBudgetProfile = null,
             depthProfile = null,
             depth = null,
+            loadoutFocus = false,
             requestId = null,
         } = req.body;
         if (!query || typeof query !== 'string') {
@@ -840,8 +910,10 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             contextBudget.retrievalTopK,
             getRetrievalTopKForCourtMember(selectedCourtMember),
         );
-        const retrievalDiscipline = RETRIEVAL_DISCIPLINE_PROFILES[contextBudget.id] ||
-            RETRIEVAL_DISCIPLINE_PROFILES.ember;
+        const loadoutFocusEnabled = normalizeBooleanToggle(loadoutFocus, false);
+        const retrievalDiscipline = resolveRetrievalDiscipline(contextBudget.id, loadoutFocusEnabled);
+        const runtimeGenerationProfile = resolveGenerationProfile(contextBudget.id);
+        const runtimeProfileLabel = buildRuntimeProfileLabel(contextBudget.id, loadoutFocusEnabled);
 
         // Determine active room for context pools and system prompt
         const requestedRoom = normalizeRoom(room);
@@ -1017,6 +1089,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const retrievalStateBlock = `=== Retrieval State ===
 State: ${retrievalState}
+Loadout Focus: ${loadoutFocusEnabled ? 'ON' : 'OFF'}
 
 `;
         const depthInstructionBlock = `=== Response Depth Instruction ===
@@ -1039,6 +1112,17 @@ ${buildDepthResponseInstruction(contextBudget)}
                 { role: 'user',   content: userContent },
             ],
         };
+        if (
+            heart &&
+            typeof heart.runtimeId === 'string' &&
+            heart.runtimeId.toLowerCase().includes('ollama') &&
+            runtimeGenerationProfile
+        ) {
+            payload.options = {
+                num_predict: runtimeGenerationProfile.numPredict,
+                temperature: runtimeGenerationProfile.temperature,
+            };
+        }
 
         const promptAudit = {
             systemPromptLength: systemPrompt.length,
@@ -1152,10 +1236,15 @@ ${buildDepthResponseInstruction(contextBudget)}
         const compactSignalTrace = contextBudget.id === 'spark'
             ? [
                 'Depth: ' + contextBudget.label,
+                'Runtime Profile: ' + runtimeProfileLabel,
+                'Predict: ' + runtimeGenerationProfile.numPredict,
+                'Chunks: ' + rawChunksForPrompt.length,
+                'Summaries: ' + summaryBudgetForContext(contextBudget),
+                'Loadout Focus: ' + (loadoutFocusEnabled ? 'ON' : 'OFF'),
                 'Budget: ' + formatBudgetLabel(contextBudget.maxRawChunks, 'chunk', 'chunks') +
                     ' · ' + formatBudgetLabel(summaryBudgetForContext(contextBudget), 'summary', 'summaries'),
-                'Cache Loadout: ' + loadedCaches.length + ' loaded',
                 'Bootstrap: compact',
+                'Caches Loaded: ' + loadedCaches.length,
                 'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 1).join(' → ')),
                 'Context: ' + (sourceList.length > 0 ? sourceList.slice(0, 2).join(', ') : 'none'),
                 'Model: ' + heart.model + ' / Ollama',
@@ -1167,11 +1256,17 @@ ${buildDepthResponseInstruction(contextBudget)}
                         : 'Ember Prime'
                 ),
                 'Depth: ' + contextBudget.label,
+                'Runtime Profile: ' + runtimeProfileLabel,
+                'Predict: ' + runtimeGenerationProfile.numPredict,
+                'Chunks: ' + rawChunksForPrompt.length,
+                'Summaries: ' + summaryBudgetForContext(contextBudget),
+                'Loadout Focus: ' + (loadoutFocusEnabled ? 'ON' : 'OFF'),
                 'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 2).join(' → ')),
                 'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
                     ' · chunks ' + rawChunksForPrompt.length,
                 'Cache Loadout: ' + loadedCaches.length + ' loaded',
+                'Bootstrap: compact',
                 'Loaded Caches: ' + (cacheLoadoutNames.length > 0 ? cacheLoadoutNames.join(', ') : 'none'),
                 'Context: ' + (sourceList.length > 0 ? sourceList.join(', ') : 'none'),
                 'Runtime: ~' + Math.ceil(promptAudit.finalPromptLength / CHARS_PER_TOKEN_ESTIMATE) +
@@ -1202,6 +1297,8 @@ ${buildDepthResponseInstruction(contextBudget)}
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
             rollingBootstrapStatus,
             rollingBootstrapThemes,
+            runtimeProfile: runtimeProfileLabel,
+            loadoutFocus: loadoutFocusEnabled,
             loadedCacheCount: loadedCaches.length,
             cacheLoadout: cacheLoadoutNames,
             memoryFlow: {
@@ -1216,6 +1313,10 @@ ${buildDepthResponseInstruction(contextBudget)}
                 retrievalChunksUsed: rawChunksForPrompt.length,
                 bootstrapSummaryActive: Boolean(sentinelIdentityPart),
                 archetypeDeltaActive: Boolean(archetypePart),
+                runtimeProfile: runtimeProfileLabel,
+                loadoutFocus: loadoutFocusEnabled,
+                numPredict: runtimeGenerationProfile.numPredict,
+                temperature: runtimeGenerationProfile.temperature,
             },
             compact: compactSignalTrace,
         };

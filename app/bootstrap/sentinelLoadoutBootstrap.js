@@ -9,10 +9,10 @@ const { getRecentCacheInteractions, getCacheInteractionSummary } = require('../c
 
 const SENTINEL_LOADOUT_FILENAME = 'sentinel-loadout-bootstrap.md';
 const SENTINEL_LOADOUT_PATH = path.join(BOOTSTRAP_DIR, SENTINEL_LOADOUT_FILENAME);
-const MAX_SUMMARY_CHARS = 420;
-const MAX_RETRIEVAL_POSTURE_CHARS = 220;
-const MAX_STEWARD_NOTE_CHARS = 220;
-const MAX_PROMPT_SUMMARY_LINES = 12;
+const MAX_SUMMARY_CHARS = 300;
+const MAX_RETRIEVAL_POSTURE_CHARS = 160;
+const MAX_STEWARD_NOTE_CHARS = 160;
+const MAX_PROMPT_SUMMARY_LINES = 10;
 const MAX_RUNTIME_CACHE_LINES = 3;
 
 const ARCHETYPE_ORDER = ['builder', 'warrior', 'scholar', 'scribe', 'mystic'];
@@ -31,10 +31,10 @@ const ARCHETYPE_LABELS = {
     mystic: 'Mystic',
 };
 const RESPONSE_DISCIPLINE = {
-    spark: 'Brief orientation only.',
-    ember: 'Balanced synthesis.',
-    hearth: 'Deeper continuity teaching.',
-    archive: 'Broad continuity weave.',
+    spark: 'Direct, concise, one-step guidance.',
+    ember: 'Balanced practical synthesis.',
+    hearth: 'Deeper teaching with structure.',
+    archive: 'Broad weave only when useful.',
 };
 
 function compactText(value, maxChars) {
@@ -112,7 +112,7 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
         : [];
     const retrievalPosture = compactText(
         rollingBootstrap?.cache_memory?.summary ||
-            'Balanced retrieval with preference for loaded caches and recent continuity interactions.',
+            'Favor loaded caches first; expand archive only when relevance supports it.',
         MAX_RETRIEVAL_POSTURE_CHARS,
     );
     const stewardNotes = getStewardNotes(rollingBootstrap);
@@ -136,7 +136,7 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
         '',
         '## Cache Loadout',
         ...(loadedCaches.length > 0
-            ? loadedCaches.map(extractCacheLine).filter(Boolean).slice(0, 8)
+            ? loadedCaches.map(extractCacheLine).filter(Boolean).slice(0, 6)
             : ['- none loaded']),
         '',
         '## Response Discipline',
@@ -152,14 +152,11 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
         '## Active Themes',
         ...(activeThemes.length > 0 ? activeThemes.slice(0, 5).map(theme => '- ' + theme) : ['- none']),
         '',
-        '## Continuity Posture',
-        '- Rolling summary: ' + summary,
-        ...(recentCacheEncounters.length > 0
-            ? ['- Recent cache encounters: ' + recentCacheEncounters.join(', ')]
-            : ['- Recent cache encounters: none recorded']),
-        '',
         '## Steward Notes',
-        ...(stewardNotes.length > 0 ? stewardNotes.map(note => '- ' + note) : ['- none']),
+        ...(stewardNotes.length > 0 ? stewardNotes.slice(0, 1).map(note => '- ' + note) : ['- none']),
+        ...(recentCacheEncounters.length > 0
+            ? ['- Recent cache encounters: ' + recentCacheEncounters.slice(0, 3).join(', ')]
+            : []),
         '',
         '## External AI Instructions',
         'Use this bootstrap as a compact continuity profile.',
@@ -168,7 +165,7 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
         '',
         '## Avoid',
         '- unnecessary exposition',
-        '- broad archive sweeps at Spark depth',
+        '- broad archive sweeps at Spark depth unless requested',
         '- overloading runtime context',
         '',
     ].join('\n');
