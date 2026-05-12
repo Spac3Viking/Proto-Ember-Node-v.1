@@ -12,6 +12,7 @@ const SENTINEL_LOADOUT_PATH = path.join(BOOTSTRAP_DIR, SENTINEL_LOADOUT_FILENAME
 const MAX_SUMMARY_CHARS = 420;
 const MAX_RETRIEVAL_POSTURE_CHARS = 220;
 const MAX_STEWARD_NOTE_CHARS = 220;
+const MAX_PROMPT_SUMMARY_LINES = 12;
 
 const ARCHETYPE_ORDER = ['builder', 'warrior', 'scholar', 'scribe', 'mystic'];
 const ARCHETYPE_RUNES = {
@@ -39,7 +40,8 @@ function compactText(value, maxChars) {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
     if (!text) return '';
     if (text.length <= maxChars) return text;
-    return text.slice(0, Math.max(0, maxChars - 1)).trimEnd() + '…';
+    if (maxChars <= 3) return text.slice(0, Math.max(0, maxChars));
+    return text.slice(0, Math.max(0, maxChars - 3)).trimEnd() + '...';
 }
 
 function normalizeDepth(value) {
@@ -93,7 +95,8 @@ function buildSentinelLoadoutBootstrapMarkdown(opts = {}) {
         : listLoadedCaches().slice(0, 8);
     const summary = compactText(rollingBootstrap.summary || '', MAX_SUMMARY_CHARS)
         || 'Continuity profile is standing by. Ignite loadout after refresh for fuller posture.';
-    const activeArchetype = String(rollingBootstrap?.node_state?.active_archetype || 'ember_prime').toLowerCase();
+    const activeArchetypeRaw = String(rollingBootstrap?.node_state?.active_archetype || '').toLowerCase();
+    const activeArchetype = ARCHETYPE_ORDER.includes(activeArchetypeRaw) ? activeArchetypeRaw : '';
     const responseDepth = normalizeDepth(rollingBootstrap?.node_state?.response_depth || 'ember');
     const recentCacheEncounters = Array.isArray(rollingBootstrap.recent_cache_encounters) &&
         rollingBootstrap.recent_cache_encounters.length > 0
@@ -206,7 +209,7 @@ function loadSentinelLoadoutPromptSummary(maxChars = 320) {
         .split('\n')
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('#'))
-        .slice(0, 12)
+        .slice(0, MAX_PROMPT_SUMMARY_LINES)
         .join(' ');
     return compactText(focusLines, Math.max(80, Math.floor(maxChars)));
 }

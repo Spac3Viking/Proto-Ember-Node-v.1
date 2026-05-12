@@ -4305,6 +4305,9 @@ async function useThresholdBootstrap(file) {
 
 async function discussThresholdBootstrap(file) {
     if (!file || !file.path) return;
+    const MAX_BOOTSTRAP_DISCUSSION_CHARS = 1200;
+    const GENERIC_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX = 'Review this bootstrap and discuss how to apply it as active continuity posture:';
+    const SENTINEL_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX = 'Review this Sentinel Loadout Bootstrap and discuss how to apply it as active continuity posture:';
     try {
         const res = await fetch('/api/threshold/files/content?path=' + encodeURIComponent(file.path));
         const data = await res.json();
@@ -4318,8 +4321,11 @@ async function discussThresholdBootstrap(file) {
         const excerpt = String(data.content || '')
             .replace(/\s+/g, ' ')
             .trim()
-            .slice(0, 1200);
-        messageInput.value = 'Review this Sentinel Loadout Bootstrap and discuss how to apply it as active continuity posture:\n\n' + excerpt;
+            .slice(0, MAX_BOOTSTRAP_DISCUSSION_CHARS);
+        const promptPrefix = file.sentinelLoadoutDetected
+            ? SENTINEL_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX
+            : GENERIC_BOOTSTRAP_DISCUSSION_PROMPT_PREFIX;
+        messageInput.value = promptPrefix + '\n\n' + excerpt;
         messageInput.focus();
         showFlashMessage('Bootstrap loaded into Hearth input for discussion.');
     } catch (error) {
