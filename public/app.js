@@ -2290,17 +2290,17 @@ function renderSignalTrace(sources, signalTrace = null) {
     const rows = compactTraceText
         ? [
             {
-                key: 'Signal Trace',
+                key: '⌁ Trace',
                 value: compactTraceText,
             },
         ]
         : [
             {
-                key: 'Memory',
+                key: '◌ Memory',
                 value: formatMemoryFlow(memoryFlow),
             },
             {
-                key: 'Rolling Bootstrap',
+                key: '⟲ Bootstrap',
                 value: rollingBootstrapStatus
                     ? (
                         rollingBootstrapThemes.length > 0
@@ -2310,7 +2310,7 @@ function renderSignalTrace(sources, signalTrace = null) {
                     : null,
             },
             {
-                key: 'Cache Loadout',
+                key: '◆ Loadout',
                 value: loadedCacheCount !== null
                     ? (
                         cacheLoadout.length > 0
@@ -2319,13 +2319,13 @@ function renderSignalTrace(sources, signalTrace = null) {
                     )
                     : null,
             },
-            { key: 'Active archetype', value: courtLens || 'Ember Prime' },
-            { key: 'Depth', value: depth },
-            { key: 'Runtime Profile', value: runtimeProfile },
-            { key: 'Loadout Focus', value: loadoutFocus === null ? null : (loadoutFocus ? 'ON' : 'OFF') },
-            { key: 'Distillation Guidance', value: distillationGuidance === null ? null : (distillationGuidance ? 'ON' : 'OFF') },
-            { key: 'Route', value: compactRoute },
-            { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
+            { key: 'ᚹ Lens', value: courtLens || 'Ember Prime' },
+            { key: '◎ Depth', value: depth },
+            { key: '⚑ Profile', value: runtimeProfile },
+            { key: '◆ Carry', value: loadoutFocus === null ? null : (loadoutFocus ? 'ON' : 'OFF') },
+            { key: '🜃 Distill', value: distillationGuidance ? 'review active' : null },
+            { key: '⛓ Bridge', value: compactRoute },
+            { key: 'ᚲ Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
             { key: 'Model', value: model },
             { key: 'Provider', value: provider },
         ];
@@ -2335,7 +2335,7 @@ function renderSignalTrace(sources, signalTrace = null) {
         const item = document.createElement('div');
         item.className = 'signal-trace-item';
         item.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">' +
+            '<span class="trace-badge" title="' + escapeHtml(row.key + ': ' + row.value) + '"><span class="trace-key">' +
             escapeHtml(row.key) + '</span> ' +
             escapeHtml(row.value) + '</span>';
         traceSources.appendChild(item);
@@ -2345,7 +2345,7 @@ function renderSignalTrace(sources, signalTrace = null) {
         const note = document.createElement('div');
         note.className = 'signal-trace-item';
         note.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">retrieval</span> ' +
+            '<span class="trace-badge"><span class="trace-key">↯ retrieval</span> ' +
             escapeHtml(retrievalNote) + '</span>';
         traceSources.appendChild(note);
     }
@@ -2360,16 +2360,6 @@ function renderSignalTrace(sources, signalTrace = null) {
         setTraceStatus(count + ' source' + (count === 1 ? '' : 's'));
     }
 
-    // Auto-expand when there is compact trace content.
-    const panel  = document.getElementById('signal-trace-panel');
-    const toggle = document.getElementById('signal-trace-toggle');
-    if (panel && traceSources.children.length > 0) {
-        panel.classList.remove('collapsed');
-        if (toggle) {
-            toggle.textContent = '▾';
-            toggle.setAttribute('aria-expanded', 'true');
-        }
-    }
 }
 
 /* Signal Trace collapse / expand toggle */
@@ -3894,6 +3884,24 @@ async function setCacheLoadedState(cacheId, shouldLoad) {
     }
 }
 
+function syncCacheInspectorSections() {
+    const sections = [
+        ['inspector-meta-section', 'inspector-meta'],
+        ['inspector-perms-section', 'inspector-perms'],
+        ['inspector-content-section', 'inspector-content'],
+    ];
+    sections.forEach(([sectionId, contentId]) => {
+        const sectionEl = document.getElementById(sectionId);
+        const contentEl = document.getElementById(contentId);
+        if (!sectionEl || !contentEl) return;
+        const hasText = String(contentEl.textContent || '').trim().length > 0;
+        const hasChildren = contentEl.children && contentEl.children.length > 0;
+        const shouldShow = hasText || hasChildren;
+        sectionEl.style.display = shouldShow ? '' : 'none';
+        if (!shouldShow) sectionEl.open = false;
+    });
+}
+
 function inspectInstalledCache(cache, itemEl) {
     document.querySelectorAll('.cache-item').forEach(el => {
         el.classList.toggle('active', el === itemEl);
@@ -3926,6 +3934,7 @@ function inspectInstalledCache(cache, itemEl) {
         permsEl.innerHTML = '';
         permsEl.appendChild(buildInstalledCacheDistillationActions(cache, disciplineHints));
     }
+    syncCacheInspectorSections();
 }
 
 async function openInstalledCacheInReader(cache) {
@@ -4120,6 +4129,7 @@ function inspectUserCache(c) {
     if (metaEl) metaEl.innerHTML = '<span class="meta-badge"><strong>user</strong>&nbsp;cache</span>';
     if (permsEl) permsEl.innerHTML = '';
     if (contentEl) contentEl.textContent = c.notes || '(no notes)';
+    syncCacheInspectorSections();
 }
 
 async function inspectCache(id, itemEl) {
@@ -4148,6 +4158,7 @@ async function inspectCache(id, itemEl) {
         loading.textContent = 'Loading';
         contentEl.appendChild(loading);
     }
+    syncCacheInspectorSections();
 
     try {
         const res  = await fetch('/caches/' + encodeURIComponent(id));
@@ -4194,8 +4205,10 @@ async function inspectCache(id, itemEl) {
             m.version ? ('Version: ' + m.version) : '',
             compactTextSnippet(data.content || '', 900),
         ].filter(Boolean).join('\n');
+        syncCacheInspectorSections();
     } catch {
         if (contentEl) contentEl.textContent = 'Error loading cache content.';
+        syncCacheInspectorSections();
     }
 }
 
@@ -4491,6 +4504,8 @@ function getGreenFireReader() {
             if (meta && !state.rawView) {
                 metadataEl.style.display = '';
                 metadataEl.innerHTML =
+                    '<details class="gf-reader-meta-details">' +
+                    '<summary>ᚲ Reader Metadata</summary>' +
                     '<div class="gf-reader-meta-grid">' +
                     '<div class="gf-reader-meta-row"><span class="trace-key">Type</span><span>' + escapeHtml(meta.type || '—') + '</span></div>' +
                     '<div class="gf-reader-meta-row"><span class="trace-key">Status</span><span>' + escapeHtml(meta.status || '—') + '</span></div>' +
@@ -4498,7 +4513,8 @@ function getGreenFireReader() {
                     '<div class="gf-reader-meta-row"><span class="trace-key">Archetypes</span><span>' + escapeHtml(formatLabelValue(meta.archetypes)) + '</span></div>' +
                     '<div class="gf-reader-meta-row"><span class="trace-key">Tags</span><span>' + escapeHtml(formatLabelValue(meta.tags)) + '</span></div>' +
                     '<div class="gf-reader-meta-row"><span class="trace-key">License</span><span>' + escapeHtml(meta.license || '—') + '</span></div>' +
-                    '</div>';
+                    '</div>' +
+                    '</details>';
             } else {
                 metadataEl.style.display = 'none';
                 metadataEl.innerHTML = '';
@@ -6954,11 +6970,11 @@ async function loadLoadoutForgePanel() {
 
         const loadedCount = Number(statusData && statusData.loadedCacheCount) || mergedLoadedCaches.length;
         const summaryRows = [
-            ['Active Archetype', FORGE_ARCHETYPE_LABELS[activeArchetype] || 'Ember Prime'],
-            ['Runtime Profile', getRuntimeProfileMeta(runtimeProfile).label],
-            ['Response Depth', humanizeDepth(responseDepth)],
-            ['Loadout Focus', loadoutFocus ? 'ON' : 'OFF'],
-            ['Loaded Cache Count', String(loadedCount)],
+            ['ᚹ Lens', FORGE_ARCHETYPE_LABELS[activeArchetype] || 'Ember Prime'],
+            ['⚑ Profile', getRuntimeProfileMeta(runtimeProfile).label],
+            ['◎ Depth', humanizeDepth(responseDepth)],
+            ['◆ Carry', loadoutFocus ? 'ON' : 'OFF'],
+            ['◆ Loaded', String(loadedCount)],
         ];
         summaryEl.innerHTML = summaryRows.map(([key, value]) =>
             '<div class="forge-summary-row">' +
@@ -6977,7 +6993,7 @@ async function loadLoadoutForgePanel() {
         if (hintEl) {
             const hint = buildOnboardingHint({
                 key: 'first-forge-visit',
-                text: 'The Forge visualizes the active cognition posture. Runtime Profiles adjust the posture of synthesis.',
+                text: 'The Forge visualizes active posture; open details only when deeper alignment is needed.',
             });
             if (hint) hintEl.appendChild(hint);
         }
