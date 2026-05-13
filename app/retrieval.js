@@ -676,7 +676,7 @@ async function retrieve({
 
     const priorityMatchedSourceIds = [];
     const seenPriorityMatchedSourceIds = new Set();
-    for (const entry of scored.slice().sort((a, b) => {
+    for (const entry of scored.sort((a, b) => {
         const aScore = Number.isFinite(a.rankingScore) ? a.rankingScore : a.score;
         const bScore = Number.isFinite(b.rankingScore) ? b.rankingScore : b.score;
         return bScore - aScore;

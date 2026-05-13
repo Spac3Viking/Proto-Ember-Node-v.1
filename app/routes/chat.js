@@ -216,6 +216,7 @@ const CONTINUITY_SUMMARY_DENSITY_DIVISOR = 3;
 const CONTINUITY_SUMMARY_WEIGHT = 0.45;
 const CONTINUITY_SOURCE_SPREAD_WEIGHT = 0.2;
 const CONTINUITY_CACHE_OVERLAP_WEIGHT = 0.35;
+const RESPONSE_SELF_CHECK_COMPACT_PROFILES = new Set(['spark-compression', 'minimal-retrieval', 'field-guide']);
 
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
@@ -821,8 +822,7 @@ function buildResponseSelfCheckInstruction({
 }) {
     const depthId = contextBudget && contextBudget.id ? contextBudget.id : 'ember';
     const runtimeId = String(runtimeProfileId || '').trim().toLowerCase();
-    const compactProfiles = new Set(['spark-compression', 'minimal-retrieval', 'field-guide']);
-    const shouldApply = depthId === 'spark' || loadoutFocusEnabled || compactProfiles.has(runtimeId);
+    const shouldApply = depthId === 'spark' || loadoutFocusEnabled || RESPONSE_SELF_CHECK_COMPACT_PROFILES.has(runtimeId);
     if (!shouldApply) return '';
     return [
         '=== Response Self-Check ===',
