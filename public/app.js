@@ -99,6 +99,16 @@ const FORGE_MAX_ROLLING_SUMMARY_TRUNCATE = 142;
 const FORGE_MAX_BOOTSTRAP_PREVIEW_LINES = 18;
 const FORGE_MAX_CACHE_CARDS = 8;
 const MAX_DISTILLATION_THEME_DISPLAY = 8;
+const MIN_SIGNAL_KEYWORD_LENGTH = 4;
+const MAX_SIGNAL_KEYWORDS = 20;
+const SIGNAL_OVERLAP_THEME_WEIGHT = 3;
+const SIGNAL_OVERLAP_TAG_WEIGHT = 2;
+const SIGNAL_OVERLAP_ARCHETYPE_WEIGHT = 2;
+const SIGNAL_OVERLAP_KEYWORD_WEIGHT = 1;
+const SIGNAL_OVERLAP_DOCUMENT_WEIGHT = 1;
+const SIGNAL_OVERLAP_LEVEL_WEIGHT = 1;
+const MODERATE_SIGNAL_OVERLAP_THRESHOLD = 4;
+const HIGH_SIGNAL_OVERLAP_THRESHOLD = 8;
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
 let _activeRuntimeProfile = null;
@@ -1037,8 +1047,8 @@ function normalizeSignalDocuments(value) {
 
 function collectTitleKeywords(text) {
     const normalized = String(text || '').toLowerCase();
-    const words = normalized.match(/[a-z0-9]{4,}/g) || [];
-    return Array.from(new Set(words.slice(0, 20)));
+    const words = normalized.match(new RegExp('[a-z0-9]{' + MIN_SIGNAL_KEYWORD_LENGTH + ',}', 'g')) || [];
+    return Array.from(new Set(words.slice(0, MAX_SIGNAL_KEYWORDS)));
 }
 
 function countSharedSignals(left, right) {
@@ -1088,11 +1098,16 @@ function scoreSignalOverlap(baseProfile, otherProfile) {
         normalizeSignalList(baseProfile.documents),
         normalizeSignalList(otherProfile.documents),
     );
-    const sameLevel = baseProfile.level === otherProfile.level ? 1 : 0;
-    const score = (sharedThemes * 3) + (sharedTags * 2) + (sharedArchetypes * 2) + sharedKeywords + sharedDocuments + sameLevel;
+    const sameLevel = baseProfile.level === otherProfile.level ? SIGNAL_OVERLAP_LEVEL_WEIGHT : 0;
+    const score = (sharedThemes * SIGNAL_OVERLAP_THEME_WEIGHT) +
+        (sharedTags * SIGNAL_OVERLAP_TAG_WEIGHT) +
+        (sharedArchetypes * SIGNAL_OVERLAP_ARCHETYPE_WEIGHT) +
+        (sharedKeywords * SIGNAL_OVERLAP_KEYWORD_WEIGHT) +
+        (sharedDocuments * SIGNAL_OVERLAP_DOCUMENT_WEIGHT) +
+        sameLevel;
     let level = 'low';
-    if (score >= 8) level = 'high';
-    else if (score >= 4) level = 'moderate';
+    if (score >= HIGH_SIGNAL_OVERLAP_THRESHOLD) level = 'high';
+    else if (score >= MODERATE_SIGNAL_OVERLAP_THRESHOLD) level = 'moderate';
     const focus = [];
     const addFocus = (items) => {
         (items || []).forEach(item => {
