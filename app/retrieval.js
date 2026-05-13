@@ -56,7 +56,15 @@ const PRIORITY_WEIGHT_LOADED_CACHE = 5.2;
 const PRIORITY_WEIGHT_RUNTIME_PROFILE = 2.6;
 const PRIORITY_WEIGHT_ARCHETYPE = 1.6;
 const PRIORITY_WEIGHT_CONTINUITY = 0.9;
+// Alignment normalization keeps discipline deltas in a 0..1 range for compact ranking math.
 const LOADED_CACHE_RUNTIME_ALIGNMENT_WEIGHT = 0.35;
+const LOADED_CACHE_ALIGNMENT_DIVISOR = 0.5;
+const ARCHIVE_PENALTY_ALIGNMENT_DIVISOR = 0.3;
+// Archetype alignment weights keep court-source matches strongest, then domain and memory affinities.
+const ARCHETYPE_ALIGNMENT_WEIGHT_COURT_SOURCE = 0.45;
+const ARCHETYPE_ALIGNMENT_WEIGHT_COURT_DOMAIN = 0.25;
+const ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_SOURCE = 0.2;
+const ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_DOMAIN = 0.1;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -589,15 +597,15 @@ async function retrieve({
                 ? normalizedRetrievalDiscipline.nonLoadedArchivePenalty
                 : 1;
             const runtimeProfileAlignment = loadedCacheMatch
-                ? Math.min(1, Math.max(0, (normalizedRetrievalDiscipline.loadedCacheBoost - 1) / 0.5))
-                : Math.min(1, Math.max(0, (1 - normalizedRetrievalDiscipline.nonLoadedArchivePenalty) / 0.3));
+                ? Math.min(1, Math.max(0, (normalizedRetrievalDiscipline.loadedCacheBoost - 1) / LOADED_CACHE_ALIGNMENT_DIVISOR))
+                : Math.min(1, Math.max(0, (1 - normalizedRetrievalDiscipline.nonLoadedArchivePenalty) / ARCHIVE_PENALTY_ALIGNMENT_DIVISOR));
             const archetypeAlignment = Math.min(
                 1,
                 (
-                    (courtPrioritySourceMatch ? 0.45 : 0) +
-                    (courtPriorityDomainMatch ? 0.25 : 0) +
-                    (archetypeMemorySourceMatch ? 0.2 : 0) +
-                    (archetypeMemoryDomainMatch ? 0.1 : 0)
+                    (courtPrioritySourceMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_COURT_SOURCE : 0) +
+                    (courtPriorityDomainMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_COURT_DOMAIN : 0) +
+                    (archetypeMemorySourceMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_SOURCE : 0) +
+                    (archetypeMemoryDomainMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_DOMAIN : 0)
                 ),
             );
             const continuityThemeOverlap = Math.min(

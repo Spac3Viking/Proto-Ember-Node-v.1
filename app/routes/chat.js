@@ -206,6 +206,10 @@ const RUNTIME_GENERATION_PROFILES = Object.freeze({
 });
 const SPARK_NUDGE_MAX_CHARS = 520;
 const EMBER_NUDGE_MAX_CHARS = 320;
+// Compact confidence hint weighting:
+// - state baseline remains primary signal for trust posture
+// - raw score contribution adds local retrieval sharpness
+// - continuity density favors summary/cached overlap over broad source spread
 const CONFIDENCE_STATE_BASELINE_WEIGHT = 0.72;
 const CONFIDENCE_RAW_SCORE_WEIGHT = 0.28;
 const CONTINUITY_SUMMARY_DENSITY_DIVISOR = 3;
@@ -914,7 +918,7 @@ function computeRuntimeConfidenceHints({
         .filter(Boolean)).size;
     // Keep confidence hints compact and stable:
     // - summaryCount divisor caps value quickly to avoid inflating dense prompts
-    // - uniqueSourceCount floor prevents sparse retrieval from collapsing to zero
+    // - bounded inverse source spread (max 1, min 0.2) avoids sparse-result collapse
     // - weights prioritize summary/cached continuity signals over raw source spread
     const continuityDensity = Math.max(0, Math.min(1, (
         (summaryCount > 0 ? Math.min(1, summaryCount / CONTINUITY_SUMMARY_DENSITY_DIVISOR) : 0) * CONTINUITY_SUMMARY_WEIGHT +
