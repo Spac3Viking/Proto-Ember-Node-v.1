@@ -81,7 +81,7 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
             version: '2.0.0',
             type: 'core-archive',
         })));
-        coreZip.addFile('archive/core/codices/forge.md', Buffer.from('# Forge Core'));
+        coreZip.addFile('archive/core/codices/forge.md', Buffer.from('# Loadout Forge Core'));
         const coreZipBuffer = coreZip.toBuffer();
 
         axios.get.mockImplementation((url, options) => {

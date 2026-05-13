@@ -1,5 +1,5 @@
 /**
- * Ember Node v.ᚠ — Phase 15.9E app shell
+ * Ember Node v.ᚠ — app shell
  *
  * Covers all three rooms (Hearth / Ember Council / Threshold) with sub-tab navigation,
  * file lifecycle (Waiting/Indexed/Remembered), intake discipline (Threshold airlock),
@@ -1127,10 +1127,10 @@ function buildMissingPerspectiveHints(profile) {
     const lenses = new Set((profile.archetypes || []).map(normalizeSignalToken));
     const hints = [];
     if (!lenses.has('builder')) hints.push('Builder review may add practical steps.');
-    if (!lenses.has('scholar')) hints.push('Scholar review may add comparison and source grounding.');
-    if (!lenses.has('scribe')) hints.push('Scribe review may improve transmission and readability.');
+    if (!lenses.has('scholar')) hints.push('Scholar review may add source comparison.');
+    if (!lenses.has('scribe')) hints.push('Scribe review may tighten clarity.');
     if (!lenses.has('warrior')) hints.push('Warrior review may pressure-test risk.');
-    if (!lenses.has('mystic')) hints.push('Mystic review may clarify symbolic pattern without drifting from reality.');
+    if (!lenses.has('mystic')) hints.push('Mystic review may surface symbolic patterns.');
     return hints.slice(0, 3);
 }
 
@@ -1180,8 +1180,8 @@ function buildSignalDisciplineHints(target, peers = []) {
         signalDensityHint = 'Moderate continuity density; tighten repeated phrasing as themes recur.';
     }
     const qualityGuidance = [
-        'Useful cache signs: clear purpose, human-readable notes, specific sources, compact summary, practical or symbolic relevance, low redundancy.',
-        'Noisy cache signs: unclear purpose, broad scope drift, repeated cache content, missing source notes, unreviewed AI output only.',
+        'Useful signs: clear purpose, specific sources, compact summary, low redundancy.',
+        'Noise signs: scope drift, repeated content, missing source notes.',
     ];
     const stewardship = 'The Sentinel decides what to keep, refine, distill, load, or transmit. The Node recommends, not commands.';
     return {
@@ -1264,8 +1264,7 @@ function buildCacheCompressionPrompt(options = {}) {
     if (scope) lines.push('- Scope: ' + scope);
     lines.push(
         '',
-        'Focus on overlap, redundancy, strongest signal, and mentor-guided compression options.',
-        'Use continuity compression language: signal over accumulation, compression over hoarding, clarity over volume.',
+        'Focus on overlap, redundancy, strongest signal, and compact mentor guidance.',
         'Surface missing perspectives, missing archetype reviews, missing continuity domains, practical grounding gaps, and narrative cohesion gaps.',
         'If one lens dominates, name what comparison lens is missing (for example Builder-heavy lacking Scholar comparison).',
         'Keep Sentinel agency central: no automatic merge or deletion.',
@@ -1290,8 +1289,8 @@ function buildCacheThemeComparisonPrompt(options = {}) {
         '- Continuity themes: ' + themes,
         '',
         'Identify shared continuity threads, repeated concepts, strongest signal, and weak continuity domains.',
-        'Highlight missing perspectives (archetype comparison, practical grounding, narrative cohesion) before distillation.',
-        'Keep guidance concise and mentor-like. The Sentinel decides what to distill.',
+        'Highlight missing perspectives before distillation.',
+        'Keep guidance concise. The Sentinel decides what to distill.',
     ].join('\n');
 }
 
@@ -1335,7 +1334,7 @@ function buildDistillationRecommendationPrompt(options = {}) {
         '',
         'Tone: mentor-guided, practical, reflective, concise, and non-gamey.',
         'When relevant, name missing archetype comparison, continuity domains, practical grounding, or narrative cohesion.',
-        'Keep the Sentinel central: no auto-merge, no auto-delete, no automatic tier upgrades.',
+        'Keep the Sentinel central: no auto-merge, no auto-delete, no automatic tier distillation.',
     );
     return promptLines.filter(Boolean).join('\n');
 }
@@ -3568,12 +3567,7 @@ function inspectInstalledCache(cache, itemEl) {
             'Reader entries: ' + String(Array.isArray(cache.readerEntries) ? cache.readerEntries.length : 0),
             'Signal Density: ' + disciplineHints.signalDensityHint,
             'Redundancy Risk: ' + disciplineHints.redundancyRisk,
-            'Missing Perspectives: ' + (disciplineHints.missingPerspectives.length > 0 ? disciplineHints.missingPerspectives.join(' | ') : 'none flagged'),
-            'Compression Opportunity: ' + disciplineHints.compressionOpportunity,
             'Cache Overlap Hint: ' + (disciplineHints.overlapHint || 'No strong overlap detected.'),
-            disciplineHints.qualityGuidance[0],
-            disciplineHints.qualityGuidance[1],
-            disciplineHints.stewardship,
         ].concat(compactCacheRelationshipText(cache)).join('\n');
     }
     if (permsEl) {
@@ -6515,10 +6509,9 @@ async function loadLoadoutForgePanel() {
     const postureEl = document.getElementById('sys-loadout-archetype-posture');
     const cacheEl = document.getElementById('sys-loadout-cache-cards');
     const continuityEl = document.getElementById('sys-loadout-continuity-posture');
-    const guidanceEl = document.getElementById('sys-loadout-mentor-guidance');
     const previewEl = document.getElementById('sys-loadout-bootstrap-preview');
 
-    [summaryEl, runtimeEl, postureEl, cacheEl, continuityEl, guidanceEl].forEach(el => {
+    [summaryEl, runtimeEl, postureEl, cacheEl, continuityEl].forEach(el => {
         if (el) el.innerHTML = '<span class="message-system">Loading…</span>';
     });
     if (previewEl) previewEl.textContent = 'Loading…';
@@ -6631,15 +6624,6 @@ async function loadLoadoutForgePanel() {
             '<div class="forge-continuity-line">' + escapeHtml(line) + '</div>',
         ).join('');
 
-        const guidanceLines = buildMentorGuidanceLines({
-            archetypeRows,
-            loadedCaches: mergedLoadedCaches,
-            activeThemes,
-        });
-        guidanceEl.innerHTML = guidanceLines.map(line =>
-            '<div class="forge-guidance-line">' + escapeHtml(line) + '</div>',
-        ).join('');
-
         if (previewEl) {
             previewEl.textContent = formatForgeBootstrapPreview(sentinelData && sentinelData.markdown ? sentinelData.markdown : '');
         }
@@ -6649,7 +6633,6 @@ async function loadLoadoutForgePanel() {
         if (postureEl) postureEl.innerHTML = '<span class="message-system error">Archetype posture unavailable.</span>';
         if (cacheEl) cacheEl.innerHTML = '<span class="message-system error">Loaded cache view unavailable.</span>';
         if (continuityEl) continuityEl.innerHTML = '<span class="message-system error">Continuity posture unavailable.</span>';
-        if (guidanceEl) guidanceEl.innerHTML = '<span class="message-system error">Mentor guidance unavailable.</span>';
         if (previewEl) previewEl.textContent = 'Bootstrap preview unavailable.';
     }
 }
@@ -6685,7 +6668,7 @@ async function loadContextMemoryStatus() {
 }
 
 /* ================================================================
-   Rolling Bootstrap Status (Phase 16D)
+   Rolling Bootstrap Status
    ================================================================ */
 
 async function loadBootstrapStatus() {

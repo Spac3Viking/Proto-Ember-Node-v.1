@@ -1,23 +1,23 @@
 /**
- * Ember Node v.ᚠ — Phase 16D Rolling Bootstrap + Forge Integration
+ * Ember Node v.ᚠ — Rolling Bootstrap + Loadout Forge Integration
  *
- * The Forge defines how the node thinks.
+ * The Loadout Forge defines how the node thinks.
  * The Rolling Bootstrap defines what it is thinking with right now.
  *
  * Responsibilities:
- *   - Seed forge-core.json and archetype files on first run
+ *   - Seed runtime profile JSON (forge-core.json compatibility path) and archetype files on first run
  *   - Seed ember-node-forge-v1.3.md as the canonical identity document
  *   - Build / load / refresh rolling continuity memory
  *
  * Continuity composition:
- *   1. Identity — from forge-core.json (role, method, covenant, epistemic rules)
+ *   1. Identity — from runtime profile JSON (role, method, covenant, epistemic rules)
  *   2. Context Memory — Rolling Bootstrap + Fractal Memory Compression layers
  *   3. Thread Memory — top summarized remembered threads (distilled only)
  *   4. Node State — active focus, active archetype, last refresh timestamp
  *
  * Storage:
  *   DATA_ROOT/system/forge/ember-node-forge-v1.3.md
- *   DATA_ROOT/system/forge/forge-core.json
+ *   DATA_ROOT/system/forge/forge-core.json (legacy filename retained for compatibility)
  *   DATA_ROOT/system/forge/archetypes/<archetype>.json
  *   DATA_ROOT/system/bootstrap/active-bootstrap.json (legacy compatibility)
  *   DATA_ROOT/system/memory/rolling-bootstrap.json
@@ -128,7 +128,7 @@ The fire refines. It does not consume.
 End of Ember Node Forge v1.3.
 `;
 
-// ── Default forge-core content ────────────────────────────────────────────────
+// ── Default runtime profile content (forge-core compatibility payload) ───────
 
 const DEFAULT_FORGE_CORE = {
     version: '1.3',
@@ -246,10 +246,10 @@ function seedForgeFiles() {
         console.log('[forge] Seeded ember-node-forge-v1.3.md');
     }
 
-    // Forge core JSON
+    // Runtime profile JSON (legacy forge-core filename)
     if (!fs.existsSync(FORGE_CORE_PATH)) {
         fs.writeFileSync(FORGE_CORE_PATH, JSON.stringify(DEFAULT_FORGE_CORE, null, 2), 'utf8');
-        console.log('[forge] Seeded forge-core.json');
+        console.log('[forge] Seeded runtime profile (forge-core.json compatibility filename).');
     }
 
     // Archetype files
@@ -262,10 +262,10 @@ function seedForgeFiles() {
     }
 }
 
-// ── Forge core loader ─────────────────────────────────────────────────────────
+// ── Runtime profile loader (forge-core compatibility path) ───────────────────
 
 /**
- * Load forge-core.json from disk.
+ * Load runtime profile JSON from disk.
  * Falls back to the default in-memory constant if the file is missing or unreadable.
  *
  * @returns {object}
@@ -313,7 +313,7 @@ function listArchetypes() {
  * Build the Active Bootstrap from current runtime state.
  *
  * Composition:
- *   1. Identity block — from forge-core.json
+ *   1. Identity block — from runtime profile JSON
  *   2. Context memory placeholders sourced from continuity modules
  *   3. Thread Memory — top 5 remembered thread summaries (distilled)
  *   4. Node State — active archetype, last refresh timestamp
@@ -408,7 +408,7 @@ function summarizeThresholdMap(map) {
 /**
  * Build the Rolling Bootstrap continuity summary.
  *
- * This is intentionally compact and deterministic for Phase 16D:
+ * This is intentionally compact and deterministic:
  * it consolidates continuity memory + thread memory into a
  * single continuity layer without replacing archive/caches.
  *
