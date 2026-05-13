@@ -1047,7 +1047,7 @@ function normalizeSignalDocuments(value) {
 
 function collectTitleKeywords(text) {
     const normalized = String(text || '').toLowerCase();
-    const keywordPattern = new RegExp(`[a-z0-9]{${MIN_SIGNAL_KEYWORD_LENGTH},}`, 'g');
+    const keywordPattern = new RegExp(`[a-z0-9][a-z0-9_-]{${Math.max(0, MIN_SIGNAL_KEYWORD_LENGTH - 1)},}`, 'g');
     const words = normalized.match(keywordPattern) || [];
     return Array.from(new Set(words.slice(0, MAX_SIGNAL_KEYWORDS)));
 }
@@ -1109,18 +1109,18 @@ function scoreSignalOverlap(baseProfile, otherProfile) {
     let level = 'low';
     if (score >= HIGH_SIGNAL_OVERLAP_THRESHOLD) level = 'high';
     else if (score >= MODERATE_SIGNAL_OVERLAP_THRESHOLD) level = 'moderate';
-    const focus = [];
+    const focusSet = new Set();
     const addFocus = (items) => {
         (items || []).forEach(item => {
             const label = String(item || '').trim();
             if (!label) return;
-            if (!focus.includes(label)) focus.push(label);
+            focusSet.add(label);
         });
     };
     addFocus(baseProfile.continuityThemes.filter(item => otherProfile.continuityThemes.includes(item)).slice(0, 2));
     addFocus(baseProfile.tags.filter(item => otherProfile.tags.includes(item)).slice(0, 2));
     addFocus(baseProfile.titleKeywords.filter(item => otherProfile.titleKeywords.includes(item)).slice(0, 2));
-    return { score, level, focus: focus.slice(0, 3) };
+    return { score, level, focus: Array.from(focusSet).slice(0, 3) };
 }
 
 function buildMissingPerspectiveHints(profile) {
@@ -1200,27 +1200,39 @@ function buildSignalDisciplineHints(target, peers = []) {
 }
 
 function buildSignalDisciplineNoteMarkdown(hints) {
-    const signal = hints && hints.strongestSignal ? hints.strongestSignal : 'No dominant continuity signal identified yet.';
-    const risk = hints && hints.redundancyRisk ? hints.redundancyRisk : 'Redundancy risk not assessed.';
-    const missing = hints && Array.isArray(hints.missingPerspectives) && hints.missingPerspectives.length > 0
-        ? hints.missingPerspectives.join('\n')
+    const safeHints = hints && typeof hints === 'object' ? hints : {};
+    const {
+        strongestSignal,
+        signalDensityHint,
+        redundancyRisk,
+        overlapHint,
+        missingPerspectives,
+        compressionOpportunity,
+        suggestedStewardAction,
+        qualityGuidance,
+        stewardship,
+    } = safeHints;
+    const signal = strongestSignal || 'No dominant continuity signal identified yet.';
+    const risk = redundancyRisk || 'Redundancy risk not assessed.';
+    const missing = Array.isArray(missingPerspectives) && missingPerspectives.length > 0
+        ? missingPerspectives.join('\n')
         : 'No major missing perspective flagged yet.';
-    const compression = hints && hints.compressionOpportunity
-        ? hints.compressionOpportunity
+    const compression = compressionOpportunity
+        ? compressionOpportunity
         : 'Compression opportunity not assessed.';
-    const action = hints && hints.suggestedStewardAction
-        ? hints.suggestedStewardAction
+    const action = suggestedStewardAction
+        ? suggestedStewardAction
         : 'Sentinel stewardship review recommended.';
     return [
         '# Signal Discipline Note',
         '',
         '## Strongest Signal',
         signal,
-        'Signal Density: ' + (hints && hints.signalDensityHint ? hints.signalDensityHint : 'Not assessed.'),
+        'Signal Density: ' + (signalDensityHint || 'Not assessed.'),
         '',
         '## Redundancy Risk',
         risk,
-        hints && hints.overlapHint ? hints.overlapHint : '',
+        overlapHint || '',
         '',
         '## Missing Perspectives',
         missing,
@@ -1230,9 +1242,9 @@ function buildSignalDisciplineNoteMarkdown(hints) {
         '',
         '## Suggested Steward Action',
         action,
-        hints && Array.isArray(hints.qualityGuidance) ? hints.qualityGuidance.join('\n') : '',
+        Array.isArray(qualityGuidance) ? qualityGuidance.join('\n') : '',
         '',
-        hints && hints.stewardship ? hints.stewardship : '',
+        stewardship || '',
         '',
     ].filter(Boolean).join('\n');
 }
