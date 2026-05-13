@@ -755,7 +755,7 @@ function buildDepthResponseInstruction(contextBudget) {
     if (depthId === 'spark') {
         return [
             'Response Depth: Spark',
-            'Hard rule: fast orientation only.',
+            'Hard rule: concise orientation only.',
             'Output target: direct answer in 1–2 short paragraphs or up to 4 concise bullets.',
             'Answer directly first.',
             'Deliver one clear answer, one useful next step max, and one reflection/question max.',
@@ -910,21 +910,31 @@ function computeRuntimeConfidenceHints({
     const cacheOverlapStrength = rawChunksForPrompt.length > 0
         ? loadedCount / rawChunksForPrompt.length
         : 0;
-    const summaryCount = summaryFirst && summaryFirst.summaryLayersUsed
-        ? Number(summaryFirst.summaryLayersUsed.cacheSummaries || 0) + Number(summaryFirst.summaryLayersUsed.documentSummaries || 0)
+    const cacheSummariesCount = summaryFirst && summaryFirst.summaryLayersUsed
+        ? Number(summaryFirst.summaryLayersUsed.cacheSummaries || 0)
         : 0;
+    const documentSummariesCount = summaryFirst && summaryFirst.summaryLayersUsed
+        ? Number(summaryFirst.summaryLayersUsed.documentSummaries || 0)
+        : 0;
+    const summaryCount = cacheSummariesCount + documentSummariesCount;
     const uniqueSourceCount = new Set((retrieved || [])
         .map(entry => entry && entry.chunk && entry.chunk.sourceId)
         .filter(Boolean)).size;
+    const summaryContribution = (summaryCount > 0
+        ? Math.min(1, summaryCount / CONTINUITY_SUMMARY_DENSITY_DIVISOR)
+        : 0) * CONTINUITY_SUMMARY_WEIGHT;
+    const sourceSpreadContribution = (uniqueSourceCount > 0
+        ? Math.min(1, Math.max(0.2, 1 / uniqueSourceCount))
+        : 0) * CONTINUITY_SOURCE_SPREAD_WEIGHT;
+    const cacheOverlapContribution = cacheOverlapStrength * CONTINUITY_CACHE_OVERLAP_WEIGHT;
     // Keep confidence hints compact and stable:
     // - summaryCount divisor caps value quickly to avoid inflating dense prompts
     // - bounded inverse source spread (max 1, min 0.2) avoids sparse-result collapse
     // - weights prioritize summary/cached continuity signals over raw source spread
-    const continuityDensity = Math.max(0, Math.min(1, (
-        (summaryCount > 0 ? Math.min(1, summaryCount / CONTINUITY_SUMMARY_DENSITY_DIVISOR) : 0) * CONTINUITY_SUMMARY_WEIGHT +
-        (uniqueSourceCount > 0 ? Math.min(1, Math.max(0.2, 1 / uniqueSourceCount)) : 0) * CONTINUITY_SOURCE_SPREAD_WEIGHT +
-        (cacheOverlapStrength * CONTINUITY_CACHE_OVERLAP_WEIGHT)
-    )));
+    const continuityDensity = Math.max(
+        0,
+        Math.min(1, summaryContribution + sourceSpreadContribution + cacheOverlapContribution),
+    );
     return {
         retrievalConfidence: Math.round(retrievalConfidence * 100) / 100,
         cacheOverlapStrength: Math.round(cacheOverlapStrength * 100) / 100,

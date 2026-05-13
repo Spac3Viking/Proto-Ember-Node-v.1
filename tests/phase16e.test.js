@@ -181,7 +181,7 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
         expect(userPrompt).toContain('=== Response Depth Instruction ===');
         expect(userPrompt).toContain('Response Depth: Spark');
-        expect(userPrompt).toContain('Hard rule: fast orientation only.');
+        expect(userPrompt).toContain('Hard rule: concise orientation only.');
         expect(userPrompt).toContain('Output target: direct answer in 1–2 short paragraphs or up to 4 concise bullets.');
         expect(userPrompt).toContain('one situational continuation line is allowed.');
         expect(userPrompt).toContain('=== Response Self-Check ===');

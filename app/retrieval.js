@@ -320,6 +320,10 @@ function effectiveEntryScore(entry) {
     return 0;
 }
 
+function normalizeToUnitRange(value) {
+    return Math.min(1, Math.max(0, Number(value) || 0));
+}
+
 function buildSourceBuckets(scoredEntries) {
     const bySource = {};
     for (const entry of scoredEntries) {
@@ -597,8 +601,8 @@ async function retrieve({
                 ? normalizedRetrievalDiscipline.nonLoadedArchivePenalty
                 : 1;
             const runtimeProfileAlignment = loadedCacheMatch
-                ? Math.min(1, Math.max(0, (normalizedRetrievalDiscipline.loadedCacheBoost - 1) / LOADED_CACHE_ALIGNMENT_DIVISOR))
-                : Math.min(1, Math.max(0, (1 - normalizedRetrievalDiscipline.nonLoadedArchivePenalty) / ARCHIVE_PENALTY_ALIGNMENT_DIVISOR));
+                ? normalizeToUnitRange((normalizedRetrievalDiscipline.loadedCacheBoost - 1) / LOADED_CACHE_ALIGNMENT_DIVISOR)
+                : normalizeToUnitRange((1 - normalizedRetrievalDiscipline.nonLoadedArchivePenalty) / ARCHIVE_PENALTY_ALIGNMENT_DIVISOR);
             const archetypeAlignment = Math.min(
                 1,
                 (
