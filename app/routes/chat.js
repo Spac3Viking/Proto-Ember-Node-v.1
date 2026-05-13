@@ -206,6 +206,12 @@ const RUNTIME_GENERATION_PROFILES = Object.freeze({
 });
 const SPARK_NUDGE_MAX_CHARS = 520;
 const EMBER_NUDGE_MAX_CHARS = 320;
+const CONFIDENCE_STATE_BASELINE_WEIGHT = 0.72;
+const CONFIDENCE_RAW_SCORE_WEIGHT = 0.28;
+const CONTINUITY_SUMMARY_DENSITY_DIVISOR = 3;
+const CONTINUITY_SUMMARY_WEIGHT = 0.45;
+const CONTINUITY_SOURCE_SPREAD_WEIGHT = 0.2;
+const CONTINUITY_CACHE_OVERLAP_WEIGHT = 0.35;
 
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
@@ -847,11 +853,8 @@ function buildRetrievalRestraintInstruction({
 }
 
 function formatContinuationNudge({
-    depthId,
     selectedCourtMember,
     retrievalState,
-    loadoutFocusEnabled,
-    summaryLayersUsed,
 }) {
     if ([RETRIEVAL_STATES.PARTIAL_CONTEXT, RETRIEVAL_STATES.MISSING_SOURCE, RETRIEVAL_STATES.NO_CONTEXT, RETRIEVAL_STATES.RETRIEVAL_ERROR].includes(retrievalState)) {
         return 'A Scholar comparison may reveal missing continuity.';
@@ -862,12 +865,6 @@ function formatContinuationNudge({
     if (memberId === 'scribe') return 'A Scribe pass may tighten continuity flow.';
     if (memberId === 'warrior') return 'A Warrior synthesis can sharpen the decision path.';
     if (memberId === 'mystic') return 'A Mystic lens may clarify the symbolic thread.';
-    const summaryCount = summaryLayersUsed
-        ? Number(summaryLayersUsed.cacheSummaries || 0) + Number(summaryLayersUsed.documentSummaries || 0)
-        : 0;
-    if (loadoutFocusEnabled && depthId === 'spark' && summaryCount > 0) {
-        return 'Load Hearth depth for the wider weave.';
-    }
     return 'Load Hearth depth for the wider weave.';
 }
 
@@ -895,7 +892,14 @@ function computeRuntimeConfidenceHints({
     const avgRawScore = rawScores.length > 0
         ? rawScores.reduce((sum, value) => sum + value, 0) / rawScores.length
         : 0;
-    const retrievalConfidence = Math.max(0, Math.min(1, (stateBaseline * 0.72) + (Math.min(1, avgRawScore) * 0.28)));
+    const retrievalConfidence = Math.max(
+        0,
+        Math.min(
+            1,
+            (stateBaseline * CONFIDENCE_STATE_BASELINE_WEIGHT) +
+            (Math.min(1, avgRawScore) * CONFIDENCE_RAW_SCORE_WEIGHT),
+        ),
+    );
     const loadedCount = Array.isArray(rawChunksForPrompt)
         ? rawChunksForPrompt.filter(entry => Boolean(entry && entry.loadedCacheMatch)).length
         : 0;
@@ -909,13 +913,13 @@ function computeRuntimeConfidenceHints({
         .map(entry => entry && entry.chunk && entry.chunk.sourceId)
         .filter(Boolean)).size;
     // Keep confidence hints compact and stable:
-    // - summaryCount/3 caps value quickly to avoid inflating dense prompts
+    // - summaryCount divisor caps value quickly to avoid inflating dense prompts
     // - uniqueSourceCount floor prevents sparse retrieval from collapsing to zero
     // - weights prioritize summary/cached continuity signals over raw source spread
     const continuityDensity = Math.max(0, Math.min(1, (
-        (summaryCount > 0 ? Math.min(1, summaryCount / 3) : 0) * 0.45 +
-        (uniqueSourceCount > 0 ? Math.min(1, Math.max(0.2, 1 / uniqueSourceCount)) : 0) * 0.2 +
-        (cacheOverlapStrength * 0.35)
+        (summaryCount > 0 ? Math.min(1, summaryCount / CONTINUITY_SUMMARY_DENSITY_DIVISOR) : 0) * CONTINUITY_SUMMARY_WEIGHT +
+        (uniqueSourceCount > 0 ? Math.min(1, Math.max(0.2, 1 / uniqueSourceCount)) : 0) * CONTINUITY_SOURCE_SPREAD_WEIGHT +
+        (cacheOverlapStrength * CONTINUITY_CACHE_OVERLAP_WEIGHT)
     )));
     return {
         retrievalConfidence: Math.round(retrievalConfidence * 100) / 100,
@@ -1383,11 +1387,8 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             ? response.data.message.content
             : '';
         const continuationNudge = formatContinuationNudge({
-            depthId: contextBudget.id,
             selectedCourtMember,
             retrievalState,
-            loadoutFocusEnabled,
-            summaryLayersUsed: summaryFirst.summaryLayersUsed,
         });
         const answerWithDepthNudge = shouldAppendDeeperDepthNudge({
             depthId: contextBudget.id,

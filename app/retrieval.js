@@ -56,6 +56,7 @@ const PRIORITY_WEIGHT_LOADED_CACHE = 5.2;
 const PRIORITY_WEIGHT_RUNTIME_PROFILE = 2.6;
 const PRIORITY_WEIGHT_ARCHETYPE = 1.6;
 const PRIORITY_WEIGHT_CONTINUITY = 0.9;
+const LOADED_CACHE_RUNTIME_ALIGNMENT_WEIGHT = 0.35;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -615,7 +616,9 @@ async function retrieve({
                 loadedCacheBoost *
                 nonLoadedArchivePenalty;
             const rankingScore = finalScore +
-                (loadedCacheMatch ? (PRIORITY_WEIGHT_LOADED_CACHE * (1 + (runtimeProfileAlignment * 0.35))) : 0) +
+                (loadedCacheMatch
+                    ? (PRIORITY_WEIGHT_LOADED_CACHE * (1 + (runtimeProfileAlignment * LOADED_CACHE_RUNTIME_ALIGNMENT_WEIGHT)))
+                    : 0) +
                 (PRIORITY_WEIGHT_RUNTIME_PROFILE * runtimeProfileAlignment) +
                 (PRIORITY_WEIGHT_ARCHETYPE * archetypeAlignment) +
                 (PRIORITY_WEIGHT_CONTINUITY * continuityThemeOverlap);
