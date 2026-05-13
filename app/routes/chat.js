@@ -859,6 +859,9 @@ function formatContinuationNudge({
     const memberId = selectedCourtMember && selectedCourtMember.id ? String(selectedCourtMember.id) : '';
     if (memberId === 'builder') return 'These caches suggest a deeper Builder synthesis may help.';
     if (memberId === 'scholar') return 'A Scholar comparison may reveal missing continuity.';
+    if (memberId === 'scribe') return 'A Scribe pass may tighten continuity flow.';
+    if (memberId === 'warrior') return 'A Warrior synthesis can sharpen the decision path.';
+    if (memberId === 'mystic') return 'A Mystic lens may clarify the symbolic thread.';
     const summaryCount = summaryLayersUsed
         ? Number(summaryLayersUsed.cacheSummaries || 0) + Number(summaryLayersUsed.documentSummaries || 0)
         : 0;
@@ -905,6 +908,10 @@ function computeRuntimeConfidenceHints({
     const uniqueSourceCount = new Set((retrieved || [])
         .map(entry => entry && entry.chunk && entry.chunk.sourceId)
         .filter(Boolean)).size;
+    // Keep confidence hints compact and stable:
+    // - summaryCount/3 caps value quickly to avoid inflating dense prompts
+    // - uniqueSourceCount floor prevents sparse retrieval from collapsing to zero
+    // - weights prioritize summary/cached continuity signals over raw source spread
     const continuityDensity = Math.max(0, Math.min(1, (
         (summaryCount > 0 ? Math.min(1, summaryCount / 3) : 0) * 0.45 +
         (uniqueSourceCount > 0 ? Math.min(1, Math.max(0.2, 1 / uniqueSourceCount)) : 0) * 0.2 +

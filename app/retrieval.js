@@ -305,18 +305,18 @@ function scoreChunks({ chunks, queryVector, queryText, embeddings }) {
         .filter(({ score }) => score >= MIN_SCORE);
 }
 
+function effectiveEntryScore(entry) {
+    if (entry && Number.isFinite(entry.rankingScore)) return Number(entry.rankingScore);
+    if (entry && Number.isFinite(entry.score)) return Number(entry.score);
+    return 0;
+}
+
 function buildSourceBuckets(scoredEntries) {
     const bySource = {};
     for (const entry of scoredEntries) {
         const sid = entry.chunk.sourceId;
         if (!bySource[sid]) bySource[sid] = [];
         bySource[sid].push(entry);
-    }
-
-    function effectiveEntryScore(entry) {
-        if (entry && Number.isFinite(entry.rankingScore)) return Number(entry.rankingScore);
-        if (entry && Number.isFinite(entry.score)) return Number(entry.score);
-        return 0;
     }
 
     for (const sid of Object.keys(bySource)) {
@@ -337,11 +337,6 @@ function selectBalancedEntries({
     if (!scoredEntries || scoredEntries.length === 0) return [];
 
     const bySource = buildSourceBuckets(scoredEntries);
-    function effectiveEntryScore(entry) {
-        if (entry && Number.isFinite(entry.rankingScore)) return Number(entry.rankingScore);
-        if (entry && Number.isFinite(entry.score)) return Number(entry.score);
-        return 0;
-    }
     const sourceOrder = Object.keys(bySource)
         .map(sourceId => ({
             sourceId,
