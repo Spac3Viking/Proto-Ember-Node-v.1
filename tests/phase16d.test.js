@@ -62,33 +62,6 @@ describe('Rolling Bootstrap + Context Memory', () => {
         expect(Array.isArray(loaded.loaded)).toBe(true);
     });
 
-    test('migrates legacy equipped-caches.json into loaded-caches.json non-destructively', () => {
-        const sc = require('../app/storageConfig');
-        sc.ensureDataRoot();
-        const legacyPayload = {
-            version: '0.1.0',
-            updated_at: new Date().toISOString(),
-            equipped: [{
-                id: 'green-fire-core',
-                title: 'Green Fire Core',
-                level: 'spark',
-                source: 'archive/core',
-                equipped_at: new Date().toISOString(),
-            }],
-        };
-        try { fs.rmSync(sc.LOADED_CACHES_PATH, { force: true }); } catch { /* ignore */ }
-        fs.writeFileSync(sc.LEGACY_EQUIPPED_CACHES_PATH, JSON.stringify(legacyPayload, null, 2), 'utf8');
-
-        sc.ensureCanonicalDataFiles();
-
-        expect(fs.existsSync(sc.LOADED_CACHES_PATH)).toBe(true);
-        expect(fs.existsSync(sc.LEGACY_EQUIPPED_CACHES_PATH)).toBe(true);
-        const loadedCaches = require('../app/loadedCaches');
-        const state = loadedCaches.readLoadedCachesState();
-        expect(Array.isArray(state.loaded)).toBe(true);
-        expect(state.loaded.some(entry => entry.id === 'green-fire-core')).toBe(true);
-    });
-
     test('refreshRollingBootstrap writes continuity summary and status', () => {
         const bootstrap = require('../app/bootstrap');
         const rb = bootstrap.refreshRollingBootstrap({

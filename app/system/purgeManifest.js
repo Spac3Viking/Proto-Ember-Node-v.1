@@ -30,8 +30,6 @@ const PURGE_PROFILES = Object.freeze({
         'tmp',
         'legacy',
         'indexes/tmp',
-        'archive/legacy-caches',
-        'caches-legacy',
     ]),
     [PURGE_MODES.FULL]: Object.freeze([
         'chats',
@@ -47,9 +45,7 @@ const PURGE_PROFILES = Object.freeze({
         'logs',
         'tmp',
         'legacy',
-        'archive/legacy-caches',
         'caches',
-        'caches-legacy',
     ]),
 });
 

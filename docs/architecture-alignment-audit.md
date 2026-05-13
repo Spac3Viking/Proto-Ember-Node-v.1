@@ -39,7 +39,6 @@
 ## Migration Aliases Kept
 
 - `workshop` → `council` compatibility normalization remains active in routing/storage migration paths.
-- `equipped`/`equip`/`unequip` compatibility endpoints and aliases remain active but marked deprecated.
 - `docs/` → `documents/` compatibility remains active for legacy draft payloads/imports.
 - `handoff.md` → `documents/handoff.md` compatibility remains active for legacy draft payloads/imports.
 
@@ -55,7 +54,7 @@ These aliases are intentional compatibility layers and should not be used as pri
 | Tools (room/registry context) | `README.md`, `docs/ember-node-structure.md` legacy statement; `intakeState.js` legacy key fallback | migration alias / compatibility shim | Legacy text normalized; runtime fallback kept for backward compatibility. |
 | Projects | `docs/architecture.md` (“project states”), CSS `.project-*` selectors, cache content examples | harmless CSS/internal naming or generic prose | Not architecture room naming; low-risk to defer. |
 | Cartridges | `README.md`, `docs/ember-node-structure.md` legacy statement | migration alias | Included only in migration context. |
-| Equipped / Equip / Unequip | `app/routes/caches.js`, `app/equippedCaches.js`, `app/loadedCaches.js` | compatibility shim / migration alias | Endpoints and aliases explicitly deprecated and retained intentionally. |
+| Equipped / Equip / Unequip | removed in Phase 16Q-C | removed | Canonical cache language is now loaded/load/unload only. |
 | Heart Chat | One roadmap line in `public/index.html` (“Hearth Chat references”) | harmless wording | Already aligned as **Hearth**, not **Heart**. |
 | Current intelligence | none found | no active issue | No cleanup needed. |
 | `docs/` | Threshold normalization comments/routes; tests for legacy payload migration; cache package `docs/` folders | compatibility shim + active cache-package convention | Draft-layer `docs/` is deprecated and normalized to `documents/`; cache package `docs/` remains valid. |

@@ -15,7 +15,7 @@ Ember Node is now a **markdown-first continuity terminal**: active continuity ex
 - **Rolling Bootstrap** — unfolding continuity summary.
 - **Fractal Memory Compression** — cache/document/archetype summary geometry.
 
-> Migration aliases (compatibility-only): workshop → council, equipped → loaded, docs/ → documents/, handoff.md → documents/handoff.md.
+> Migration aliases (compatibility-only): workshop → council, docs/ → documents/, handoff.md → documents/handoff.md.
 
 ## Terminology Alignment
 

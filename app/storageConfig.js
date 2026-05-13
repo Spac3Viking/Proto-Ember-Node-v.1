@@ -42,7 +42,6 @@
  *         sagas/               — Green Fire Sagas
  *         reference/           — Reference materials
  *       caches/                — Future downloadable archive expansions
- *       legacy-caches/         — deprecated legacy cache modules (cleanup target)
  *       literature/            — curated literary sources (legacy shelf)
  *       history/               — curated historical sources (legacy shelf)
  *       science/               — curated scientific sources (legacy shelf)
@@ -168,8 +167,6 @@ const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries
 const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
 const CACHE_INTERACTIONS_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-interactions.json');
 const LOADED_CACHES_PATH = path.join(SYSTEM_MEMORY_DIR, 'loaded-caches.json');
-const LEGACY_EQUIPPED_CACHES_PATH = path.join(SYSTEM_MEMORY_DIR, 'equipped-caches.json');
-const EQUIPPED_CACHES_PATH = LOADED_CACHES_PATH;
 const IMPORTED_BOOTSTRAPS_DIR = path.join(SYSTEM_MEMORY_DIR, 'imported-bootstraps');
 
 /** System config and prompts directories */
@@ -204,13 +201,7 @@ const ARCHIVE_CACHES_DIR      = path.join(ARCHIVE_DIR, 'caches');
  * Distinct from caches — may contain documents, prompts, assets, or
  * specialized node modules.
  */
-const ARCHIVE_LEGACY_CACHES_DIR  = path.join(ARCHIVE_DIR, 'legacy-caches');
-
-/**
- * Subdirectories within the Trusted Archive (legacy flat shelf layout).
- * Kept for backward compatibility with Phase 11 routes and ingestion.
- * Core Green Fire content now lives under ARCHIVE_CORE_DIRS.
- */
+/** Subdirectories within the Trusted Archive. */
 const ARCHIVE_DIRS = {
     codices:      ARCHIVE_CORE_DIRS.codices,
     grimoires:    ARCHIVE_CORE_DIRS.grimoires,
@@ -385,7 +376,6 @@ function ensureDataRoot() {
         // Phase 11.7: Core Archive + Cache Structure
         ARCHIVE_CORE_DIR,
         ARCHIVE_CACHES_DIR,
-        ARCHIVE_LEGACY_CACHES_DIR,
         SYSTEM_CONFIG_DIR,
         SYSTEM_PROMPTS_DIR,
         THREADS_ROOM_DIRS.hearth,
@@ -432,10 +422,6 @@ function ensureCanonicalDataFiles() {
     writeJsonIfMissing(DOCUMENT_SUMMARIES_PATH, DEFAULT_DOCUMENT_SUMMARIES);
     writeJsonIfMissing(ARCHETYPE_MEMORY_PATH, DEFAULT_ARCHETYPE_MEMORY);
     writeJsonIfMissing(CACHE_INTERACTIONS_PATH, DEFAULT_CACHE_INTERACTIONS);
-    if (fs.existsSync(LEGACY_EQUIPPED_CACHES_PATH) && !fs.existsSync(LOADED_CACHES_PATH)) {
-        fs.mkdirSync(path.dirname(LOADED_CACHES_PATH), { recursive: true });
-        fs.copyFileSync(LEGACY_EQUIPPED_CACHES_PATH, LOADED_CACHES_PATH);
-    }
     writeJsonIfMissing(LOADED_CACHES_PATH, DEFAULT_LOADED_CACHES);
 }
 
@@ -694,14 +680,11 @@ module.exports = {
     ARCHETYPE_MEMORY_PATH,
     CACHE_INTERACTIONS_PATH,
     LOADED_CACHES_PATH,
-    LEGACY_EQUIPPED_CACHES_PATH,
-    EQUIPPED_CACHES_PATH,
     IMPORTED_BOOTSTRAPS_DIR,
     // Phase 11.7: Core Archive + Cache Structure
     ARCHIVE_CORE_DIR,
     ARCHIVE_CORE_DIRS,
     ARCHIVE_CACHES_DIR,
-    ARCHIVE_LEGACY_CACHES_DIR,
     SYSTEM_CONFIG_DIR,
     SYSTEM_PROMPTS_DIR,
     THREADS_ROOM_DIRS,

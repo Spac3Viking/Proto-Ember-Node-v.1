@@ -27,7 +27,6 @@ const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.pdf', '.docx']);
 const SOURCE_CLASSES = {
     TRUSTED_ARCHIVE:    'trusted-archive',
     ARCHIVE_CACHE:      'archive-cache',
-    ARCHIVE_LEGACY_CACHE: 'archive-legacy-cache',
     COUNCIL_DRAFT:      'council-draft',
     HEARTH_REMEMBERED:  'hearth-remembered',
     THRESHOLD_INTAKE:   'threshold-intake',
