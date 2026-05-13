@@ -173,96 +173,22 @@ describe('storageConfig — migrateLegacyData', () => {
         expect(typeof storageConfig.migrateLegacyData).toBe('function');
     });
 
-    test('returns detected=false when legacy dir has no real content', () => {
-        // Write only a .gitkeep (placeholder) — should be ignored
-        fs.writeFileSync(path.join(legacyDir, '.gitkeep'), '');
-
+    test('returns retired no-op metadata', () => {
+        fs.mkdirSync(path.join(legacyDir, 'council'), { recursive: true });
+        fs.writeFileSync(path.join(legacyDir, 'council', 'note.md'), '# Legacy note\n');
         const result = storageConfig.migrateLegacyData(legacyDir);
-        expect(result.detected).toBe(false);
-        expect(result.performed).toBe(false);
-        expect(result.mode).toBe('skipped');
+        expect(result).toEqual({
+            detected: false,
+            performed: false,
+            mode: 'retired',
+            errors: [],
+        });
     });
 
-    test('copies legacy files into data root when data root is empty', () => {
-        // Set up a fake legacy directory with real files
-        const workshopDir = path.join(legacyDir, 'workshop');
-        fs.mkdirSync(workshopDir, { recursive: true });
-        fs.writeFileSync(path.join(workshopDir, 'note.md'), '# Legacy note\n');
-
-        const result = storageConfig.migrateLegacyData(legacyDir);
-        expect(result.detected).toBe(true);
-        expect(result.performed).toBe(true);
-        expect(result.mode).toBe('copy');
-        expect(result.errors).toHaveLength(0);
-
-        // Verify the file was copied
-        const destFile = path.join(tmpRoot, 'council', 'note.md');
-        expect(fs.existsSync(destFile)).toBe(true);
-        expect(fs.readFileSync(destFile, 'utf8')).toContain('Legacy note');
-    });
-
-    test('skips migration when data root already has content', () => {
-        // Set up legacy dir with content
-        const workshopDir = path.join(legacyDir, 'workshop');
-        fs.mkdirSync(workshopDir, { recursive: true });
-        fs.writeFileSync(path.join(workshopDir, 'note.md'), '# Legacy note\n');
-
-        // Put existing content in the data root
-        const existingFile = path.join(tmpRoot, 'hearth', 'existing.md');
-        fs.mkdirSync(path.dirname(existingFile), { recursive: true });
-        fs.writeFileSync(existingFile, '# Already here\n');
-
-        const result = storageConfig.migrateLegacyData(legacyDir);
-        expect(result.detected).toBe(true);
-        expect(result.performed).toBe(false);
-        expect(result.mode).toBe('skipped');
-    });
-
-    test('does not overwrite existing files in the data root (non-destructive)', () => {
-        // Existing file in data root
-        const destFile = path.join(tmpRoot, 'council', 'note.md');
-        fs.mkdirSync(path.dirname(destFile), { recursive: true });
-        fs.writeFileSync(destFile, '# Already here\n');
-
-        // Legacy file with same path but different content
-        const workshopDir = path.join(legacyDir, 'workshop');
-        fs.mkdirSync(workshopDir, { recursive: true });
-        fs.writeFileSync(path.join(workshopDir, 'note.md'), '# Legacy version\n');
-
-        // Add a second file so both dirs have content; data root has content so
-        // migration will be skipped (non-destructive by design)
-        const result = storageConfig.migrateLegacyData(legacyDir);
-        expect(result.performed).toBe(false);
-
-        // Original content preserved
-        expect(fs.readFileSync(destFile, 'utf8')).toBe('# Already here\n');
-    });
-
-    test('when data root is empty, does not overwrite individual files that already exist', () => {
-        // Put ONE file directly in the data root (but in a different subdir)
-        // so the root itself is non-empty — migration will be skipped
-        const hearthDir = path.join(tmpRoot, 'hearth');
-        fs.mkdirSync(hearthDir, { recursive: true });
-        fs.writeFileSync(path.join(hearthDir, 'pre-existing.md'), '# Pre-existing\n');
-
-        // Add the same filename under legacy workshop
-        const workshopDir = path.join(legacyDir, 'workshop');
-        fs.mkdirSync(workshopDir, { recursive: true });
-        fs.writeFileSync(path.join(workshopDir, 'note.md'), '# Legacy note\n');
-
-        // Data root already has content — migration skipped
-        const result = storageConfig.migrateLegacyData(legacyDir);
-        expect(result.performed).toBe(false);
-    });
-
-    test('migration is idempotent — calling twice does not throw', () => {
-        const workshopDir = path.join(legacyDir, 'workshop');
-        fs.mkdirSync(workshopDir, { recursive: true });
-        fs.writeFileSync(path.join(workshopDir, 'note.md'), '# Legacy note\n');
-
+    test('retired migration is idempotent', () => {
         expect(() => {
             storageConfig.migrateLegacyData(legacyDir);
-            storageConfig.migrateLegacyData(legacyDir); // second call should be a no-op
+            storageConfig.migrateLegacyData(legacyDir);
         }).not.toThrow();
     });
 });
@@ -274,12 +200,6 @@ describe('cacheLoader — bundled cache ownership', () => {
         jest.resetModules();
         const loader = require('../app/cacheLoader');
         expect(typeof loader.BUNDLED_CACHES_DIR).toBe('string');
-    });
-
-    test('CACHES_DIR is still exported as a backward-compatible alias', () => {
-        jest.resetModules();
-        const loader = require('../app/cacheLoader');
-        expect(loader.CACHES_DIR).toBe(loader.BUNDLED_CACHES_DIR);
     });
 
     test('listCaches() returns entries with ownership: "bundled"', () => {

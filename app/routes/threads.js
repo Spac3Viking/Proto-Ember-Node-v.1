@@ -27,8 +27,7 @@ const { rememberThread, deleteThreadSummary } = require('../threadMemory');
 const router = express.Router();
 
 function normalizeRoom(room) {
-    // Legacy migration alias. Remove after user data migration stabilizes.
-    return room === 'workshop' ? 'council' : room;
+    return room;
 }
 
 // ── Thread persistence helpers ────────────────────────────────────────────────

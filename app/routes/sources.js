@@ -46,7 +46,7 @@ const VALID_ROOMS = ['hearth', 'council', 'threshold'];
 
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
-    return room === 'workshop' ? 'council' : room;
+    return room;
 }
 
 function isSafeManifestKey(value) {

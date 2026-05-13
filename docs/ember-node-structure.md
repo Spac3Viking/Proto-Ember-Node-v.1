@@ -8,7 +8,7 @@
 - **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/` and natural cache draft continuity bundles in `threshold/cache-drafts/`.
 - **🜔 Signal Threads** → reserved for future saved conversations/research paths (not implemented yet).
 
-Migration aliases (compatibility-only): workshop → council, docs/ → documents/, handoff.md → documents/handoff.md.
+Canonical naming is enforced across runtime and drafts: `council`, `documents/`, and manifest `documents[]`.
 
 ## Continuity Memory Layers
 

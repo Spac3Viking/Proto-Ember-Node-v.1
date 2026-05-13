@@ -47,10 +47,10 @@ describe('cacheLoader', () => {
         });
 
         test('only returns directories, not loose files', () => {
-            const { listCaches, CACHES_DIR } = require('../app/cacheLoader');
+            const { listCaches, BUNDLED_CACHES_DIR } = require('../app/cacheLoader');
             const caches = listCaches();
             caches.forEach(c => {
-                const full = path.join(CACHES_DIR, c.id);
+                const full = path.join(BUNDLED_CACHES_DIR, c.id);
                 expect(fs.statSync(full).isDirectory()).toBe(true);
             });
         });

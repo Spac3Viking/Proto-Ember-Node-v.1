@@ -121,7 +121,7 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
             version: '1.5.0',
             type: 'archive-cache',
         })));
-        cacheZip.addFile('green-fire-codices-cache/docs/codex.md', Buffer.from('# Codex Cache'));
+        cacheZip.addFile('green-fire-codices-cache/documents/codex.md', Buffer.from('# Codex Cache'));
         const cacheZipBuffer = cacheZip.toBuffer();
 
         axios.get.mockImplementation((url, options) => {
@@ -153,7 +153,7 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
         expect(installRes.body.installed.packageId).toBe('green-fire-codices-cache');
         expect(installRes.body.installed.manifest.version).toBe('1.5.0');
 
-        const cacheFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'docs', 'codex.md');
+        const cacheFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'documents', 'codex.md');
         expect(fs.existsSync(cacheFile)).toBe(true);
 
         const listRes = await request(app).get('/api/archive/caches/installed');
@@ -222,7 +222,7 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
             version: '3.1.0',
             type: 'archive-cache',
         })));
-        cacheZip.addFile('green-fire-gallery-cache/docs/gallery.md', Buffer.from('# Gallery Cache'));
+        cacheZip.addFile('green-fire-gallery-cache/documents/gallery.md', Buffer.from('# Gallery Cache'));
         const cacheZipBuffer = cacheZip.toBuffer();
 
         axios.get.mockImplementation((url) => {
