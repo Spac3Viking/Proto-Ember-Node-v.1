@@ -439,6 +439,89 @@
                     <pre id="sys-loadout-bootstrap-preview" class="forge-bootstrap-preview">Loading…</pre>
                   </div>
                 </div>
+                <details class="gf-collapsible-panel runtime-tuning-bench-panel" id="sys-runtime-tuning-bench">
+                  <summary>Runtime Tuning Bench</summary>
+                  <div class="gf-collapsible-panel-body runtime-tuning-bench-body">
+                    <div class="runtime-tuning-row">
+                      <label for="sys-tuning-preset-select" class="response-depth-label">Prompt Preset</label>
+                      <select id="sys-tuning-preset-select" class="response-depth-select" aria-label="Runtime tuning preset prompt">
+                        <option value="green-fire">What is Green Fire?</option>
+                        <option value="cache-plain-language">Explain this cache in plain language.</option>
+                        <option value="next-step">What should I do next?</option>
+                        <option value="summarize-loadout">Summarize the current Cache Loadout.</option>
+                        <option value="cache-weaknesses">What is weak or missing in this cache?</option>
+                        <option value="spark-answer-only">Give me a Spark answer only.</option>
+                        <option value="through-builder">Explain this through Builder.</option>
+                        <option value="through-scholar">Explain this through Scholar.</option>
+                      </select>
+                      <button class="secondary" id="sys-tuning-apply-preset-btn" style="font-size:0.68rem; padding:0.2rem 0.45rem;">Apply</button>
+                    </div>
+                    <textarea id="sys-tuning-prompt-input" class="runtime-tuning-prompt-input" rows="3" placeholder="Enter tuning prompt..."></textarea>
+                    <div class="runtime-tuning-matrix-grid">
+                      <div class="response-depth-control">
+                        <label for="sys-tuning-depth-select" class="response-depth-label"><span aria-hidden="true">◎ </span>Depth</label>
+                        <select id="sys-tuning-depth-select" class="response-depth-select">
+                          <option value="spark">Spark</option>
+                          <option value="ember" selected>Ember</option>
+                          <option value="hearth">Hearth</option>
+                          <option value="archive">Archive</option>
+                        </select>
+                      </div>
+                      <div class="response-depth-control">
+                        <label for="sys-tuning-profile-select" class="response-depth-label"><span aria-hidden="true">⚑ </span>Profile</label>
+                        <select id="sys-tuning-profile-select" class="response-depth-select">
+                          <option value="spark-compression">Spark Compression</option>
+                          <option value="balanced-ember" selected>Balanced Ember</option>
+                          <option value="field-guide">Field Guide</option>
+                          <option value="scholar-weave">Scholar Weave</option>
+                          <option value="narrative-forge">Narrative Forge</option>
+                          <option value="minimal-retrieval">Minimal Retrieval</option>
+                          <option value="deep-hearth">Deep Hearth</option>
+                        </select>
+                      </div>
+                      <div class="response-depth-control">
+                        <label for="sys-tuning-loadout-focus-select" class="response-depth-label"><span aria-hidden="true">◆ </span>Carry</label>
+                        <select id="sys-tuning-loadout-focus-select" class="response-depth-select">
+                          <option value="off" selected>OFF</option>
+                          <option value="on">ON</option>
+                        </select>
+                      </div>
+                      <div class="response-depth-control">
+                        <label for="sys-tuning-archetype-select" class="response-depth-label"><span aria-hidden="true">ᚹ </span>Archetype</label>
+                        <select id="sys-tuning-archetype-select" class="response-depth-select">
+                          <option value="ember-prime" selected>Ember Prime</option>
+                          <option value="builder">Builder</option>
+                          <option value="warrior">Warrior</option>
+                          <option value="scholar">Scholar</option>
+                          <option value="scribe">Scribe</option>
+                          <option value="mystic">Mystic</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="runtime-tuning-row runtime-tuning-actions">
+                      <button class="secondary" id="sys-tuning-run-btn">Run Tuning Test</button>
+                      <button class="secondary" id="sys-tuning-save-md-btn">Save Tuning Run .md</button>
+                      <span class="message-system runtime-tuning-status" id="sys-tuning-status">Idle.</span>
+                    </div>
+                    <div class="runtime-tuning-metrics" id="sys-tuning-metrics">
+                      <span class="message-system">Run a tuning test to view compact metrics.</span>
+                    </div>
+                    <details class="gf-collapsible-panel runtime-tuning-history-panel">
+                      <summary>Recent Tuning Runs</summary>
+                      <div class="gf-collapsible-panel-body runtime-tuning-history-list" id="sys-tuning-history-list">
+                        <span class="message-system">No tuning runs recorded yet.</span>
+                      </div>
+                    </details>
+                    <details class="gf-collapsible-panel runtime-tuning-response-panel">
+                      <summary>Last Test Response</summary>
+                      <div class="gf-collapsible-panel-body">
+                        <pre class="forge-bootstrap-preview runtime-tuning-response" id="sys-tuning-response">No response captured yet.</pre>
+                        <textarea id="sys-tuning-notes-input" class="runtime-tuning-notes-input" rows="2" placeholder="Notes (optional)"></textarea>
+                        <input id="sys-tuning-adjustment-input" class="runtime-tuning-adjustment-input" type="text" placeholder="Suggested adjustment (optional)">
+                      </div>
+                    </details>
+                  </div>
+                </details>
               </div>
 
               <!-- Rolling Bootstrap Status -->

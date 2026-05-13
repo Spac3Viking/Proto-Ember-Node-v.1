@@ -157,6 +157,8 @@ const ARCHETYPES_DIR          = path.join(FORGE_DIR, 'archetypes');
 const BOOTSTRAP_DIR           = path.join(SYSTEM_DIR, 'bootstrap');
 /** System continuity memory directory */
 const SYSTEM_MEMORY_DIR       = path.join(SYSTEM_DIR, 'memory');
+/** Runtime tuning history directory */
+const SYSTEM_TUNING_DIR       = path.join(SYSTEM_DIR, 'tuning');
 /** Rolling Bootstrap storage path */
 const ROLLING_BOOTSTRAP_PATH  = path.join(SYSTEM_MEMORY_DIR, 'rolling-bootstrap.json');
 /** Fractal Context Compression memory paths */
@@ -165,6 +167,7 @@ const DOCUMENT_SUMMARIES_PATH = path.join(SYSTEM_MEMORY_DIR, 'document-summaries
 const ARCHETYPE_MEMORY_PATH = path.join(SYSTEM_MEMORY_DIR, 'archetype-memory.json');
 const CACHE_INTERACTIONS_PATH = path.join(SYSTEM_MEMORY_DIR, 'cache-interactions.json');
 const LOADED_CACHES_PATH = path.join(SYSTEM_MEMORY_DIR, 'loaded-caches.json');
+const RUNTIME_TUNING_RUNS_PATH = path.join(SYSTEM_TUNING_DIR, 'runtime-tuning-runs.json');
 const IMPORTED_BOOTSTRAPS_DIR = path.join(SYSTEM_MEMORY_DIR, 'imported-bootstraps');
 
 /** System config and prompts directories */
@@ -339,6 +342,11 @@ const DEFAULT_CACHE_INTERACTIONS = {
     updated_at: null,
     interactions: [],
 };
+const DEFAULT_RUNTIME_TUNING_RUNS = {
+    version: '0.1.0',
+    updated_at: null,
+    runs: [],
+};
 
 // ── First-run initialisation ──────────────────────────────────────────────────
 
@@ -369,6 +377,7 @@ function ensureDataRoot() {
         ARCHETYPES_DIR,
         BOOTSTRAP_DIR,
         SYSTEM_MEMORY_DIR,
+        SYSTEM_TUNING_DIR,
         IMPORTED_BOOTSTRAPS_DIR,
         // Phase 11.7: Core Archive + Cache Structure
         ARCHIVE_CORE_DIR,
@@ -420,6 +429,7 @@ function ensureCanonicalDataFiles() {
     writeJsonIfMissing(ARCHETYPE_MEMORY_PATH, DEFAULT_ARCHETYPE_MEMORY);
     writeJsonIfMissing(CACHE_INTERACTIONS_PATH, DEFAULT_CACHE_INTERACTIONS);
     writeJsonIfMissing(LOADED_CACHES_PATH, DEFAULT_LOADED_CACHES);
+    writeJsonIfMissing(RUNTIME_TUNING_RUNS_PATH, DEFAULT_RUNTIME_TUNING_RUNS);
 }
 
 // ── Legacy migration ──────────────────────────────────────────────────────────
@@ -569,12 +579,14 @@ module.exports = {
     ARCHETYPES_DIR,
     BOOTSTRAP_DIR,
     SYSTEM_MEMORY_DIR,
+    SYSTEM_TUNING_DIR,
     ROLLING_BOOTSTRAP_PATH,
     CACHE_SUMMARIES_PATH,
     DOCUMENT_SUMMARIES_PATH,
     ARCHETYPE_MEMORY_PATH,
     CACHE_INTERACTIONS_PATH,
     LOADED_CACHES_PATH,
+    RUNTIME_TUNING_RUNS_PATH,
     IMPORTED_BOOTSTRAPS_DIR,
     // Phase 11.7: Core Archive + Cache Structure
     ARCHIVE_CORE_DIR,

@@ -119,6 +119,7 @@ let _activeResponseDepth = null;
 let _activeRuntimeProfile = null;
 let _activeLoadoutFocus = null;
 let _pendingCouncilDistillationGuidance = false;
+let _runtimeTuningLastRun = null;
 
 function normalizeCourtMemberId(value) {
     if (!value || typeof value !== 'string') return null;
@@ -421,6 +422,35 @@ const EXTERNAL_PROMPT_SOURCE_IDS = Object.freeze([
     'cache-loadout',
     'active-archetype',
 ]);
+const RUNTIME_TUNING_PROMPT_PRESETS = Object.freeze({
+    'green-fire': 'What is Green Fire?',
+    'cache-plain-language': 'Explain this cache in plain language.',
+    'next-step': 'What should I do next?',
+    'summarize-loadout': 'Summarize the current Cache Loadout.',
+    'cache-weaknesses': 'What is weak or missing in this cache?',
+    'spark-answer-only': 'Give me a Spark answer only.',
+    'through-builder': 'Explain this through Builder.',
+    'through-scholar': 'Explain this through Scholar.',
+});
+const RUNTIME_TUNING_ARCHETYPE_IDS = new Set([
+    'ember-prime',
+    'builder',
+    'warrior',
+    'scholar',
+    'scribe',
+    'mystic',
+]);
+const RUNTIME_TUNING_ARCHETYPE_LABELS = Object.freeze({
+    'ember-prime': 'Ember Prime',
+    builder: 'Builder',
+    warrior: 'Warrior',
+    scholar: 'Scholar',
+    scribe: 'Scribe',
+    mystic: 'Mystic',
+});
+const RUNTIME_TUNING_ROOM = 'hearth';
+const RUNTIME_TUNING_MAX_PROMPT_LENGTH = 280;
+const RUNTIME_TUNING_MAX_RESPONSE_PREVIEW_LENGTH = 320;
 
 /* ================================================================
    Utility
@@ -702,6 +732,23 @@ function toPortableSlug(value, fallback = 'handoff') {
     return slug || fallback;
 }
 
+function normalizeRuntimeTuningArchetype(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return RUNTIME_TUNING_ARCHETYPE_IDS.has(normalized) ? normalized : 'ember-prime';
+}
+
+function runtimeTuningArchetypeToApiMember(archetype) {
+    const normalized = normalizeRuntimeTuningArchetype(archetype);
+    return normalized === 'ember-prime' ? undefined : normalized;
+}
+
+function formatRuntimeTuningMetric(value, suffix = '') {
+    if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) return '—';
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '—';
+    return String(Math.round(numeric * 100) / 100) + suffix;
+}
+
 function buildConversationFragmentMarkdown(options = {}) {
     const title = String(options.title || 'Conversation Fragment').trim() || 'Conversation Fragment';
     const source = String(options.source || 'ember-node').trim() || 'ember-node';
@@ -935,6 +982,8 @@ let _activeRoomId = 'hearth';
                     loadBootstrapStatus();
                     loadLoadoutForgePanel();
                     loadMemoryCompressionStatus();
+                    syncRuntimeTuningControls();
+                    loadRuntimeTuningHistory();
                 }
                 if (panelId === 'th-ai') {
                     loadThresholdRuntimes();
@@ -6531,6 +6580,317 @@ async function refreshSystemStatus() {
     loadNodeStatusUpdates();
 }
 
+function setRuntimeTuningStatus(message, isError = false) {
+    const statusEl = document.getElementById('sys-tuning-status');
+    if (!statusEl) return;
+    statusEl.textContent = message || '';
+    statusEl.className = isError
+        ? 'message-system runtime-tuning-status error'
+        : 'message-system runtime-tuning-status';
+}
+
+function getRuntimeTuningSettings() {
+    const depthEl = document.getElementById('sys-tuning-depth-select');
+    const profileEl = document.getElementById('sys-tuning-profile-select');
+    const focusEl = document.getElementById('sys-tuning-loadout-focus-select');
+    const archetypeEl = document.getElementById('sys-tuning-archetype-select');
+    return {
+        responseDepth: normalizeResponseDepth(depthEl ? depthEl.value : getActiveResponseDepth()),
+        runtimeProfile: normalizeRuntimeProfile(profileEl ? profileEl.value : getActiveRuntimeProfile()),
+        loadoutFocus: normalizeLoadoutFocus(focusEl ? focusEl.value === 'on' : getActiveLoadoutFocus()),
+        archetype: normalizeRuntimeTuningArchetype(archetypeEl ? archetypeEl.value : 'ember-prime'),
+    };
+}
+
+function syncRuntimeTuningControls() {
+    const depthEl = document.getElementById('sys-tuning-depth-select');
+    const profileEl = document.getElementById('sys-tuning-profile-select');
+    const focusEl = document.getElementById('sys-tuning-loadout-focus-select');
+    const archetypeEl = document.getElementById('sys-tuning-archetype-select');
+    if (depthEl) depthEl.value = getActiveResponseDepth();
+    if (profileEl) profileEl.value = getActiveRuntimeProfile();
+    if (focusEl) focusEl.value = getActiveLoadoutFocus() ? 'on' : 'off';
+    if (archetypeEl && !RUNTIME_TUNING_ARCHETYPE_IDS.has(archetypeEl.value)) {
+        archetypeEl.value = 'ember-prime';
+    }
+}
+
+function renderRuntimeTuningMetrics(run) {
+    const host = document.getElementById('sys-tuning-metrics');
+    if (!host) return;
+    if (!run || !run.metrics) {
+        host.innerHTML = '<span class="message-system">Run a tuning test to view compact metrics.</span>';
+        return;
+    }
+    const metrics = run.metrics;
+    const rows = [
+        ['time', formatRuntimeTuningMetric(metrics.responseTimeMs, ' ms')],
+        ['length', formatRuntimeTuningMetric(metrics.responseLength, ' chars')],
+        ['depth', metrics.depthUsed || '—'],
+        ['profile', metrics.runtimeProfileUsed || '—'],
+        ['carry', metrics.loadoutFocusUsed ? 'ON' : 'OFF'],
+        ['archetype', metrics.archetypeUsed || '—'],
+        ['raw chunks', formatRuntimeTuningMetric(metrics.rawChunksUsed)],
+        ['summaries', formatRuntimeTuningMetric(metrics.summariesUsed)],
+        ['loaded caches', formatRuntimeTuningMetric(metrics.loadedCacheCount)],
+        ['prompt est.', formatRuntimeTuningMetric(metrics.promptEstimate)],
+        ['num_predict', formatRuntimeTuningMetric(metrics.numPredict)],
+        ['retrieval conf.', formatRuntimeTuningMetric(metrics.retrievalConfidence)],
+        ['cache overlap', formatRuntimeTuningMetric(metrics.cacheOverlap)],
+        ['continuity density', formatRuntimeTuningMetric(metrics.continuityDensity)],
+    ];
+    host.innerHTML = rows.map(([key, value]) =>
+        '<div class="runtime-tuning-metric-row">' +
+            '<span class="runtime-tuning-metric-key">' + escapeHtml(key) + '</span>' +
+            '<span class="runtime-tuning-metric-value">' + escapeHtml(String(value || '—')) + '</span>' +
+        '</div>',
+    ).join('');
+}
+
+function buildRuntimeTuningHistoryEntry(run) {
+    return {
+        id: run.id,
+        created: run.created,
+        prompt: compactTextSnippet(run.prompt || '', RUNTIME_TUNING_MAX_PROMPT_LENGTH),
+        promptPresetId: run.promptPresetId || '',
+        settings: run.settings || {},
+        metrics: run.metrics || {},
+        responsePreview: compactTextSnippet(run.response || '', RUNTIME_TUNING_MAX_RESPONSE_PREVIEW_LENGTH),
+    };
+}
+
+function renderRuntimeTuningHistory(runs) {
+    const listEl = document.getElementById('sys-tuning-history-list');
+    if (!listEl) return;
+    const list = Array.isArray(runs) ? runs : [];
+    if (list.length === 0) {
+        listEl.innerHTML = '<span class="message-system">No tuning runs recorded yet.</span>';
+        return;
+    }
+    listEl.innerHTML = list.slice(0, 20).map(run => {
+        const created = run && run.created ? new Date(run.created).toLocaleString() : 'unknown';
+        const settings = run && run.settings ? run.settings : {};
+        const metrics = run && run.metrics ? run.metrics : {};
+        const profileLabel = getRuntimeProfileMeta(settings.runtimeProfile || DEFAULT_RUNTIME_PROFILE).label;
+        const archetypeLabel = RUNTIME_TUNING_ARCHETYPE_LABELS[normalizeRuntimeTuningArchetype(settings.archetype)] || 'Ember Prime';
+        return (
+            '<div class="runtime-tuning-history-row">' +
+                '<div class="runtime-tuning-history-title">' + escapeHtml(created) + ' · ' + escapeHtml(humanizeDepth(settings.responseDepth || 'ember')) + ' · ' + escapeHtml(profileLabel) + '</div>' +
+                '<div>' + escapeHtml(compactTextSnippet(run.prompt || '', 95) || '(prompt unavailable)') + '</div>' +
+                '<div>Carry: ' + escapeHtml(settings.loadoutFocus ? 'ON' : 'OFF') + ' · Archetype: ' + escapeHtml(archetypeLabel) + '</div>' +
+                '<div>Time: ' + escapeHtml(formatRuntimeTuningMetric(metrics.responseTimeMs, ' ms')) +
+                ' · Chunks: ' + escapeHtml(formatRuntimeTuningMetric(metrics.rawChunksUsed)) +
+                ' · Summaries: ' + escapeHtml(formatRuntimeTuningMetric(metrics.summariesUsed)) + '</div>' +
+            '</div>'
+        );
+    }).join('');
+}
+
+async function loadRuntimeTuningHistory() {
+    const listEl = document.getElementById('sys-tuning-history-list');
+    if (listEl) listEl.innerHTML = '<span class="message-system">Loading tuning history…</span>';
+    try {
+        const res = await fetch('/api/system/tuning/runtime-runs');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+            throw new Error(data.error || 'Could not load runtime tuning history.');
+        }
+        renderRuntimeTuningHistory(data.runs || []);
+    } catch (error) {
+        if (listEl) listEl.innerHTML = '<span class="message-system error">' + escapeHtml(error.message || 'Could not load tuning history.') + '</span>';
+    }
+}
+
+function collectRuntimeTuningRunMetrics(data, elapsedMs, settings) {
+    const signalTrace = data && data.signalTrace && typeof data.signalTrace === 'object' ? data.signalTrace : {};
+    const runtimeDebug = signalTrace.runtimeDebug && typeof signalTrace.runtimeDebug === 'object' ? signalTrace.runtimeDebug : {};
+    const memoryFlow = signalTrace.memoryFlow && typeof signalTrace.memoryFlow === 'object' ? signalTrace.memoryFlow : {};
+    const cacheSummaryCount = Number(memoryFlow.cacheSummaries) || 0;
+    const documentSummaryCount = Number(memoryFlow.documentSummaries) || 0;
+    return {
+        responseTimeMs: Number(signalTrace.modelResponseMs) || elapsedMs,
+        responseLength: String(data && data.answer ? data.answer : '').length,
+        depthUsed: signalTrace.depth || humanizeDepth(settings.responseDepth),
+        runtimeProfileUsed: signalTrace.runtimeProfile || getRuntimeProfileMeta(settings.runtimeProfile).label,
+        loadoutFocusUsed: signalTrace.loadoutFocus === true || (signalTrace.loadoutFocus !== false && settings.loadoutFocus === true),
+        archetypeUsed: RUNTIME_TUNING_ARCHETYPE_LABELS[settings.archetype] || 'Ember Prime',
+        rawChunksUsed: Number(runtimeDebug.retrievalChunksUsed) || Number(memoryFlow.rawChunks) || 0,
+        summariesUsed: cacheSummaryCount + documentSummaryCount,
+        loadedCacheCount: Number(signalTrace.loadedCacheCount) || 0,
+        promptEstimate: Number(runtimeDebug.promptTokensEstimate) || null,
+        numPredict: Number(runtimeDebug.numPredict) || null,
+        retrievalConfidence: Number(runtimeDebug.retrievalConfidence) || null,
+        cacheOverlap: Number(runtimeDebug.cacheOverlapStrength) || null,
+        continuityDensity: Number(runtimeDebug.continuityDensity) || null,
+    };
+}
+
+async function runRuntimeTuningTest() {
+    const runBtn = document.getElementById('sys-tuning-run-btn');
+    const promptEl = document.getElementById('sys-tuning-prompt-input');
+    const presetEl = document.getElementById('sys-tuning-preset-select');
+    const responseEl = document.getElementById('sys-tuning-response');
+    if (!promptEl || !runBtn) return;
+    const prompt = String(promptEl.value || '').trim();
+    if (!prompt) {
+        setRuntimeTuningStatus('Prompt is required.', true);
+        return;
+    }
+
+    const settings = getRuntimeTuningSettings();
+    runBtn.disabled = true;
+    setRuntimeTuningStatus('Running tuning test…');
+    try {
+        const startedAt = Date.now();
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: prompt,
+                room: RUNTIME_TUNING_ROOM,
+                responseDepth: settings.responseDepth,
+                runtimeProfile: settings.runtimeProfile,
+                loadoutFocus: settings.loadoutFocus,
+                courtMember: runtimeTuningArchetypeToApiMember(settings.archetype),
+                distillationGuidance: false,
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || typeof data.answer !== 'string') {
+            throw new Error((data && data.error) || 'Could not run tuning test.');
+        }
+        const elapsedMs = Date.now() - startedAt;
+        const metrics = collectRuntimeTuningRunMetrics(data, elapsedMs, settings);
+        const runIdSuffix = Math.random().toString(36).slice(2, 8);
+        _runtimeTuningLastRun = {
+            id: 'runtime-tuning-' + Date.now() + '-' + runIdSuffix,
+            created: new Date().toISOString(),
+            prompt,
+            promptPresetId: presetEl ? String(presetEl.value || '').trim() : '',
+            settings,
+            metrics,
+            response: data.answer,
+        };
+        if (responseEl) responseEl.textContent = data.answer;
+        renderRuntimeTuningMetrics(_runtimeTuningLastRun);
+        setRuntimeTuningStatus('Tuning test complete.');
+
+        const historyRes = await fetch('/api/system/tuning/runtime-runs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ run: buildRuntimeTuningHistoryEntry(_runtimeTuningLastRun) }),
+        });
+        const historyData = await historyRes.json().catch(() => ({}));
+        if (historyRes.ok && historyData && historyData.success) {
+            renderRuntimeTuningHistory(historyData.runs || []);
+        } else {
+            await loadRuntimeTuningHistory();
+        }
+    } catch (error) {
+        setRuntimeTuningStatus(error.message || 'Tuning test failed.', true);
+    } finally {
+        runBtn.disabled = false;
+    }
+}
+
+function buildRuntimeTuningMarkdown(run, options = {}) {
+    const safeRun = run && typeof run === 'object' ? run : {};
+    const settings = safeRun.settings && typeof safeRun.settings === 'object' ? safeRun.settings : {};
+    const metrics = safeRun.metrics && typeof safeRun.metrics === 'object' ? safeRun.metrics : {};
+    const notes = String(options.notes || '').trim();
+    const suggestedAdjustment = String(options.suggestedAdjustment || '').trim();
+    const archetypeLabel = RUNTIME_TUNING_ARCHETYPE_LABELS[normalizeRuntimeTuningArchetype(settings.archetype)] || 'Ember Prime';
+    return [
+        '---',
+        'title: Runtime Tuning Run',
+        'type: tuning-report',
+        'source: ember-node',
+        'created: ' + safeIsoTimestamp(safeRun.created),
+        '---',
+        '# Runtime Tuning Run',
+        '## Test Prompt',
+        String(safeRun.prompt || '').trim() || '-',
+        '',
+        '## Settings',
+        '- Response Depth: ' + humanizeDepth(settings.responseDepth || 'ember'),
+        '- Runtime Profile: ' + getRuntimeProfileMeta(settings.runtimeProfile || DEFAULT_RUNTIME_PROFILE).label,
+        '- Loadout Focus: ' + (settings.loadoutFocus ? 'ON' : 'OFF'),
+        '- Archetype: ' + archetypeLabel,
+        '',
+        '## Metrics',
+        '- response time: ' + formatRuntimeTuningMetric(metrics.responseTimeMs, ' ms'),
+        '- response length: ' + formatRuntimeTuningMetric(metrics.responseLength) + ' chars',
+        '- depth used: ' + String(metrics.depthUsed || humanizeDepth(settings.responseDepth || 'ember')),
+        '- runtime profile: ' + String(metrics.runtimeProfileUsed || getRuntimeProfileMeta(settings.runtimeProfile || DEFAULT_RUNTIME_PROFILE).label),
+        '- loadout focus: ' + (metrics.loadoutFocusUsed ? 'ON' : 'OFF'),
+        '- archetype: ' + String(metrics.archetypeUsed || archetypeLabel),
+        '- raw chunks used: ' + formatRuntimeTuningMetric(metrics.rawChunksUsed),
+        '- summaries used: ' + formatRuntimeTuningMetric(metrics.summariesUsed),
+        '- loaded cache count: ' + formatRuntimeTuningMetric(metrics.loadedCacheCount),
+        '- prompt estimate: ' + formatRuntimeTuningMetric(metrics.promptEstimate),
+        '- num_predict: ' + formatRuntimeTuningMetric(metrics.numPredict),
+        '- retrieval confidence: ' + formatRuntimeTuningMetric(metrics.retrievalConfidence),
+        '- cache overlap: ' + formatRuntimeTuningMetric(metrics.cacheOverlap),
+        '- continuity density: ' + formatRuntimeTuningMetric(metrics.continuityDensity),
+        '',
+        '## Response',
+        String(safeRun.response || '').trim() || '-',
+        '',
+        '## Notes',
+        notes || '-',
+        '',
+        '## Suggested Adjustment',
+        suggestedAdjustment || '-',
+        '',
+    ].join('\n');
+}
+
+async function saveRuntimeTuningRunMarkdown() {
+    if (!_runtimeTuningLastRun) {
+        setRuntimeTuningStatus('Run a tuning test before saving markdown.', true);
+        return;
+    }
+    const saveBtn = document.getElementById('sys-tuning-save-md-btn');
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+        const notesEl = document.getElementById('sys-tuning-notes-input');
+        const adjustmentEl = document.getElementById('sys-tuning-adjustment-input');
+        const markdown = buildRuntimeTuningMarkdown(_runtimeTuningLastRun, {
+            notes: notesEl ? notesEl.value : '',
+            suggestedAdjustment: adjustmentEl ? adjustmentEl.value : '',
+        });
+        const timestamp = safeIsoTimestamp(_runtimeTuningLastRun.created).replace(/[:.]/g, '-');
+        await saveMarkdownToThresholdInbox(markdown, 'runtime-tuning-run-' + timestamp + '.md', 'Tuning run saved to Threshold inbox.');
+        setRuntimeTuningStatus('Saved tuning run markdown.');
+    } catch (error) {
+        setRuntimeTuningStatus(error.message || 'Could not save tuning run markdown.', true);
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+function initRuntimeTuningBench() {
+    const applyPresetBtn = document.getElementById('sys-tuning-apply-preset-btn');
+    const runBtn = document.getElementById('sys-tuning-run-btn');
+    const saveBtn = document.getElementById('sys-tuning-save-md-btn');
+    const promptEl = document.getElementById('sys-tuning-prompt-input');
+    const presetEl = document.getElementById('sys-tuning-preset-select');
+    if (promptEl && !promptEl.value.trim()) {
+        promptEl.value = RUNTIME_TUNING_PROMPT_PRESETS['green-fire'];
+    }
+    if (applyPresetBtn && presetEl && promptEl) {
+        applyPresetBtn.addEventListener('click', () => {
+            const presetText = RUNTIME_TUNING_PROMPT_PRESETS[String(presetEl.value || '').trim()] || '';
+            if (presetText) promptEl.value = presetText;
+        });
+    }
+    if (runBtn) runBtn.addEventListener('click', runRuntimeTuningTest);
+    if (saveBtn) saveBtn.addEventListener('click', saveRuntimeTuningRunMarkdown);
+    syncRuntimeTuningControls();
+    renderRuntimeTuningMetrics(null);
+    loadRuntimeTuningHistory();
+}
+
 (function initModelSelectionButton() {
     document.addEventListener('click', async (e) => {
         if (!e.target || e.target.id !== 'sys-model-save-btn') return;
@@ -8767,5 +9127,6 @@ async function launchOllama(runtimeId) {
     if (wsFirstEmberBtn) {
         wsFirstEmberBtn.addEventListener('click', openFirstEmberOverlay);
     }
+    initRuntimeTuningBench();
     initFirstEmberHintsDismissal();
 })();
