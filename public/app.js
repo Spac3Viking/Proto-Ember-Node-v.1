@@ -109,6 +109,8 @@ const SIGNAL_OVERLAP_DOCUMENT_WEIGHT = 1;
 const SIGNAL_OVERLAP_LEVEL_WEIGHT = 1;
 const MODERATE_SIGNAL_OVERLAP_THRESHOLD = 4;
 const HIGH_SIGNAL_OVERLAP_THRESHOLD = 8;
+const TAB_SWITCH_DELAY_MS = 50;
+const ONBOARDING_DISMISS_PREFIX = 'first-ember-dismissed:';
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
 let _activeRuntimeProfile = null;
@@ -429,6 +431,89 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function buildOnboardingStorageKey(key) {
+    return ONBOARDING_DISMISS_PREFIX + String(key || '').trim().toLowerCase();
+}
+
+function isOnboardingDismissed(key) {
+    try {
+        return window.localStorage.getItem(buildOnboardingStorageKey(key)) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function dismissOnboardingHint(key) {
+    try {
+        window.localStorage.setItem(buildOnboardingStorageKey(key), '1');
+    } catch { /* ignore storage failures */ }
+}
+
+function openRoomAndSubtab(roomId, subtabId) {
+    const roomTab = document.querySelector('.room-tab[data-room="' + String(roomId || '') + '"]');
+    if (roomTab) roomTab.click();
+    if (!subtabId) return;
+    setTimeout(() => {
+        const subtab = document.querySelector('.sub-tab[data-subtab="' + String(subtabId) + '"]');
+        if (subtab) subtab.click();
+    }, TAB_SWITCH_DELAY_MS);
+}
+
+function openFirstEmberOverlay() {
+    const overlay = document.getElementById('first-ember-overlay');
+    if (overlay) overlay.style.display = 'flex';
+}
+
+function closeFirstEmberOverlay() {
+    const overlay = document.getElementById('first-ember-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * Build a dismissible onboarding hint element.
+ * Returns null when key is missing or the hint was already dismissed.
+ */
+function buildOnboardingHint(options = {}) {
+    const key = String(options.key || '').trim();
+    if (!key || isOnboardingDismissed(key)) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'onboarding-hint';
+
+    const body = document.createElement('div');
+    const copy = document.createElement('p');
+    copy.className = 'onboarding-hint-copy';
+    copy.textContent = String(options.text || '').trim();
+    body.appendChild(copy);
+
+    if (Array.isArray(options.actions) && options.actions.length > 0) {
+        const actions = document.createElement('div');
+        actions.className = 'onboarding-hint-actions';
+        options.actions.forEach(action => {
+            if (!action || typeof action.onClick !== 'function') return;
+            const btn = document.createElement('button');
+            btn.className = 'secondary threshold-action-btn';
+            btn.textContent = String(action.label || 'Open');
+            btn.addEventListener('click', action.onClick);
+            actions.appendChild(btn);
+        });
+        if (actions.childNodes.length > 0) body.appendChild(actions);
+    }
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'onboarding-hint-dismiss';
+    dismissBtn.type = 'button';
+    dismissBtn.textContent = '✕';
+    dismissBtn.setAttribute('aria-label', 'Dismiss hint');
+    dismissBtn.addEventListener('click', () => {
+        dismissOnboardingHint(key);
+        wrap.remove();
+    });
+
+    wrap.appendChild(body);
+    wrap.appendChild(dismissBtn);
+    return wrap;
 }
 
 function toArrayList(value) {
@@ -3258,7 +3343,23 @@ async function loadCacheShelf() {
         if (loadingEl) loadingEl.remove();
 
         if (caches.length === 0) {
-            listEl.innerHTML = '<div class="message-system">No caches found.</div>';
+            listEl.innerHTML =
+                '<div class="message-system">No caches found.</div>' +
+                '<div class="message-system" style="margin-top:0.35rem;">Caches contain continuity artifacts: markdown, documents, summaries, research, field notes, and handoffs.</div>' +
+                '<div class="onboarding-hint-actions" style="justify-content:center; margin-top:0.45rem;">' +
+                '<button class="secondary threshold-action-btn" id="cache-empty-open-threshold-btn">Load First Cache via Threshold</button>' +
+                '<button class="secondary threshold-action-btn" id="cache-empty-first-ember-btn">Start Here · First Ember</button>' +
+                '</div>';
+            const openThresholdBtn = document.getElementById('cache-empty-open-threshold-btn');
+            if (openThresholdBtn) {
+                openThresholdBtn.addEventListener('click', () => {
+                    openRoomAndSubtab('threshold', 'th-imports');
+                });
+            }
+            const firstEmberBtn = document.getElementById('cache-empty-first-ember-btn');
+            if (firstEmberBtn) {
+                firstEmberBtn.addEventListener('click', openFirstEmberOverlay);
+            }
             updateSystemCacheCount(0);
             return;
         }
@@ -3360,7 +3461,24 @@ async function loadCacheShelf() {
             empty.className = 'message-system';
             empty.textContent = 'None loaded.';
             listEl.appendChild(empty);
+            const hint = buildOnboardingHint({
+                key: 'empty-loadout',
+                text: 'No caches are currently loaded. Load a cache through Threshold to shape continuity.',
+                actions: [
+                    { label: 'Open Threshold', onClick: () => openRoomAndSubtab('threshold', 'th-imports') },
+                    {
+                        label: 'First Ember',
+                        onClick: openFirstEmberOverlay,
+                    },
+                ],
+            });
+            if (hint) listEl.appendChild(hint);
         } else {
+            const distillationHint = buildOnboardingHint({
+                key: 'distillation-view',
+                text: 'Distillation preserves signal while reducing redundancy.',
+            });
+            if (distillationHint) listEl.appendChild(distillationHint);
             loaded.forEach(cache => {
                 const row = document.createElement('div');
                 row.className = 'cache-item';
@@ -4446,7 +4564,21 @@ async function loadArchiveReaderCatalog() {
             coreFiles.length === 0 &&
             (cacheGroups.length === 0 || cacheGroups.every(group => !group.files || group.files.length === 0))
         ) {
-            listEl.innerHTML = '<span class="message-system">No markdown files found in archive/core or archive/caches.</span>';
+            listEl.innerHTML =
+                '<span class="message-system">No markdown files found in archive/core or archive/caches.</span>' +
+                '<span class="message-system">Reader becomes more useful once continuity is loaded.</span>' +
+                '<div class="onboarding-hint-actions" style="justify-content:center; margin-top:0.45rem;">' +
+                '<button class="secondary threshold-action-btn" id="archive-reader-load-first-cache-btn">Load First Cache</button>' +
+                '<button class="secondary threshold-action-btn" id="archive-reader-first-ember-btn">Guided Orientation</button>' +
+                '</div>';
+            const firstCacheBtn = document.getElementById('archive-reader-load-first-cache-btn');
+            if (firstCacheBtn) {
+                firstCacheBtn.addEventListener('click', () => openRoomAndSubtab('threshold', 'th-imports'));
+            }
+            const firstEmberBtn = document.getElementById('archive-reader-first-ember-btn');
+            if (firstEmberBtn) {
+                firstEmberBtn.addEventListener('click', openFirstEmberOverlay);
+            }
             return;
         }
 
@@ -5214,6 +5346,17 @@ async function loadThresholdList() {
 
         if (files.length === 0) {
             listEl.innerHTML = '<span class="message-system">No files have crossed the Threshold yet.</span>';
+            const hint = buildOnboardingHint({
+                key: 'first-cache-threshold',
+                text: 'First Cache guidance: import markdown, documents, summaries, research, field notes, or handoffs to begin continuity.',
+                actions: [
+                    {
+                        label: 'Start Here · First Ember',
+                        onClick: openFirstEmberOverlay,
+                    },
+                ],
+            });
+            if (hint) listEl.appendChild(hint);
             return;
         }
 
@@ -6505,6 +6648,7 @@ function formatForgeBootstrapPreview(markdown) {
 async function loadLoadoutForgePanel() {
     const summaryEl = document.getElementById('sys-loadout-active-summary');
     if (!summaryEl) return;
+    const hintEl = document.getElementById('sys-loadout-onboarding-hint');
     const runtimeEl = document.getElementById('sys-loadout-runtime-profile');
     const postureEl = document.getElementById('sys-loadout-archetype-posture');
     const cacheEl = document.getElementById('sys-loadout-cache-cards');
@@ -6515,6 +6659,7 @@ async function loadLoadoutForgePanel() {
         if (el) el.innerHTML = '<span class="message-system">Loading…</span>';
     });
     if (previewEl) previewEl.textContent = 'Loading…';
+    if (hintEl) hintEl.innerHTML = '';
 
     try {
         const [statusRes, bootstrapRes, loadedRes, installedRes, sentinelRes] = await Promise.all([
@@ -6579,6 +6724,14 @@ async function loadLoadoutForgePanel() {
                 '<div class="forge-runtime-desc">' + escapeHtml(line) + '</div>',
             ).join('');
 
+        if (hintEl) {
+            const hint = buildOnboardingHint({
+                key: 'first-forge-visit',
+                text: 'The Forge visualizes the active cognition posture. Runtime Profiles adjust the posture of synthesis.',
+            });
+            if (hint) hintEl.appendChild(hint);
+        }
+
         const archetypeRows = buildArchetypePostureRows(activeArchetype, activeThemes);
         postureEl.innerHTML = archetypeRows.map(row =>
             '<div class="forge-archetype-row">' +
@@ -6628,6 +6781,7 @@ async function loadLoadoutForgePanel() {
             previewEl.textContent = formatForgeBootstrapPreview(sentinelData && sentinelData.markdown ? sentinelData.markdown : '');
         }
     } catch {
+        if (hintEl) hintEl.innerHTML = '';
         if (summaryEl) summaryEl.innerHTML = '<span class="message-system error">Loadout summary unavailable.</span>';
         if (runtimeEl) runtimeEl.innerHTML = '<span class="message-system error">Runtime profile unavailable.</span>';
         if (postureEl) postureEl.innerHTML = '<span class="message-system error">Archetype posture unavailable.</span>';
@@ -8148,8 +8302,9 @@ function renderSystemStartupSummary(data) {
         const dismiss  = document.getElementById('startup-banner-dismiss');
 
         const reviewThresholdBtn = document.getElementById('sb-review-threshold');
-        const reviewRuntimesBtn     = document.getElementById('sb-review-runtimes');
-        const openSystemBtn      = document.getElementById('sb-open-system');
+        const reviewRuntimesBtn = document.getElementById('sb-review-runtimes');
+        const openSystemBtn = document.getElementById('sb-open-system');
+        const firstEmberBtn = document.getElementById('sb-first-ember');
 
         if (toggle && body) {
             toggle.addEventListener('click', () => {
@@ -8167,33 +8322,28 @@ function renderSystemStartupSummary(data) {
 
         if (reviewThresholdBtn) {
             reviewThresholdBtn.addEventListener('click', () => {
-                const tab = document.querySelector('.room-tab[data-room="threshold"]');
-                if (tab) tab.click();
+                openRoomAndSubtab('threshold', 'th-imports');
                 if (banner) banner.style.display = 'none';
             });
         }
 
         if (reviewRuntimesBtn) {
             reviewRuntimesBtn.addEventListener('click', () => {
-                const thTab = document.querySelector('.room-tab[data-room="threshold"]');
-                if (thTab) thTab.click();
-                setTimeout(() => {
-                    const aiTab = document.querySelector('.sub-tab[data-subtab="th-ai"]');
-                    if (aiTab) aiTab.click();
-                }, 50);
+                openRoomAndSubtab('threshold', 'th-ai');
                 if (banner) banner.style.display = 'none';
             });
         }
 
         if (openSystemBtn) {
             openSystemBtn.addEventListener('click', () => {
-                const hearthTab = document.querySelector('.room-tab[data-room="hearth"]');
-                if (hearthTab) hearthTab.click();
-                setTimeout(() => {
-                    const sysTab = document.querySelector('.sub-tab[data-subtab="hearth-system"]');
-                    if (sysTab) sysTab.click();
-                }, 50);
+                openRoomAndSubtab('hearth', 'hearth-system');
                 if (banner) banner.style.display = 'none';
+            });
+        }
+
+        if (firstEmberBtn) {
+            firstEmberBtn.addEventListener('click', () => {
+                openFirstEmberOverlay();
             });
         }
 
@@ -8214,6 +8364,46 @@ function renderSystemStartupSummary(data) {
         if (setupOverlay) {
             setupOverlay.addEventListener('click', e => {
                 if (e.target === setupOverlay) setupOverlay.style.display = 'none';
+            });
+        }
+
+        const firstEmberOverlay = document.getElementById('first-ember-overlay');
+        const firstEmberClose = document.getElementById('first-ember-close');
+        const firstEmberGoThreshold = document.getElementById('first-ember-go-threshold');
+        const firstEmberGoCaches = document.getElementById('first-ember-go-caches');
+        const firstEmberGoForge = document.getElementById('first-ember-go-forge');
+        const firstEmberGoChat = document.getElementById('first-ember-go-chat');
+
+        if (firstEmberClose) {
+            firstEmberClose.addEventListener('click', closeFirstEmberOverlay);
+        }
+        if (firstEmberOverlay) {
+            firstEmberOverlay.addEventListener('click', e => {
+                if (e.target === firstEmberOverlay) closeFirstEmberOverlay();
+            });
+        }
+        if (firstEmberGoThreshold) {
+            firstEmberGoThreshold.addEventListener('click', () => {
+                closeFirstEmberOverlay();
+                openRoomAndSubtab('threshold', 'th-imports');
+            });
+        }
+        if (firstEmberGoCaches) {
+            firstEmberGoCaches.addEventListener('click', () => {
+                closeFirstEmberOverlay();
+                openRoomAndSubtab('council', 'ws-caches');
+            });
+        }
+        if (firstEmberGoForge) {
+            firstEmberGoForge.addEventListener('click', () => {
+                closeFirstEmberOverlay();
+                openRoomAndSubtab('hearth', 'hearth-system');
+            });
+        }
+        if (firstEmberGoChat) {
+            firstEmberGoChat.addEventListener('click', () => {
+                closeFirstEmberOverlay();
+                openRoomAndSubtab('council', 'ws-council-chat');
             });
         }
     });
@@ -8305,5 +8495,10 @@ async function launchOllama(runtimeId) {
             _chatRefs = [];
             updateChatRefsBar();
         });
+    }
+
+    const wsFirstEmberBtn = document.getElementById('ws-first-ember-btn');
+    if (wsFirstEmberBtn) {
+        wsFirstEmberBtn.addEventListener('click', openFirstEmberOverlay);
     }
 })();

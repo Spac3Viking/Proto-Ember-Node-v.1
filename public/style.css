@@ -2228,6 +2228,50 @@ button.secondary:disabled {
   flex: 1;
 }
 
+.first-ember-panel {
+  max-width: 620px;
+}
+
+.first-ember-body {
+  gap: 0.85rem;
+}
+
+.first-ember-intro {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--archive-muted);
+}
+
+.first-ember-steps {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--archive-text);
+}
+
+.first-ember-steps li {
+  line-height: 1.45;
+}
+
+.first-ember-mentor-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--archive-muted);
+  border-left: 2px solid hsla(38, 100%, 70%, 0.22);
+  padding-left: 0.55rem;
+}
+
+.first-ember-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .gf-reader-panel {
   width: min(1020px, 95vw);
 }
@@ -2949,6 +2993,96 @@ button.secondary:disabled {
 .startup-banner-link {
   font-size: 0.72rem;
   padding: 0.2rem 0.6rem;
+}
+
+.orientation-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+}
+
+.orientation-entry-btn {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.orientation-entry-copy {
+  margin: 0;
+  text-align: left;
+  font-size: 0.72rem;
+}
+
+.first-ember-map-card {
+  border: 1px solid hsla(140, 100%, 70%, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.7rem;
+  background: hsla(120, 16%, 6%, 0.5);
+}
+
+.first-ember-map-card > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--archive-muted);
+}
+
+.first-ember-map-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.first-ember-map-list {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  font-size: 0.74rem;
+  color: var(--archive-muted);
+}
+
+.onboarding-hint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.45rem;
+  border-left: 2px solid hsla(38, 100%, 70%, 0.32);
+  background: hsla(120, 16%, 6%, 0.55);
+  border-radius: 0 6px 6px 0;
+  padding: 0.45rem 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-hint-copy {
+  margin: 0;
+  text-align: left;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--archive-muted);
+}
+
+.onboarding-hint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+}
+
+.onboarding-hint-dismiss {
+  background: none;
+  border: none;
+  color: var(--archive-muted);
+  cursor: pointer;
+  padding: 0.05rem 0.2rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.onboarding-hint-dismiss:hover {
+  opacity: 1;
+  color: var(--archive-text);
 }
 
 /* Threshold file section headers */

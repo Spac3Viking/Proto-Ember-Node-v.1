@@ -46,6 +46,7 @@
           <button class="secondary startup-banner-link" id="sb-review-threshold">ᚦ Review Threshold</button>
           <button class="secondary startup-banner-link" id="sb-review-runtimes">ᚹ Review Runtime Stewardship</button>
           <button class="secondary startup-banner-link" id="sb-open-system">ᚺ System</button>
+          <button class="secondary startup-banner-link" id="sb-first-ember">Start Here · First Ember</button>
           <button class="secondary startup-banner-link" id="sb-setup-guide" style="display:none;">⬡ View Setup Guide</button>
         </div>
       </div>
@@ -406,6 +407,7 @@
                     <button class="secondary" id="sys-forge-ignite-loadout-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Ignite Loadout</button>
                   </div>
                 </div>
+                <div id="sys-loadout-onboarding-hint"></div>
                 <div class="forge-grid">
                   <div class="forge-card">
                     <div class="forge-card-title">Active Loadout</div>
@@ -591,6 +593,21 @@
             <div class="cache-layout">
               <!-- Shelf list -->
               <div class="ember-card cache-shelf" style="padding: 1rem;">
+                <div class="orientation-entry-row">
+                  <button class="secondary orientation-entry-btn" id="ws-first-ember-btn">First Ember</button>
+                  <span class="message-system orientation-entry-copy">Guided orientation is optional and mentor-led.</span>
+                </div>
+                <details class="first-ember-map-card">
+                  <summary>Guided Orientation Map</summary>
+                  <div class="first-ember-map-list">
+                    <div><strong>Threshold</strong> → acquire continuity</div>
+                    <div><strong>Reader</strong> → inspect continuity</div>
+                    <div><strong>Loadout Forge</strong> → shape cognition</div>
+                    <div><strong>Council</strong> → discuss through archetypes</div>
+                    <div><strong>Distillation</strong> → refine continuity</div>
+                    <div><strong>Conversation Bridge</strong> → transmit continuity</div>
+                  </div>
+                </details>
                 <div class="cache-shelf-title">Installed Caches</div>
                 <div class="cache-list" id="cache-list" aria-label="Cache list">
                   <div class="message-system loading-rune" id="cache-loading">Loading</div>
@@ -978,6 +995,39 @@
         <p style="margin:0; font-size:0.78rem; opacity:0.5;">
           Ember Node will never auto-install AI runtimes or fetch installers. All setup is manual and under your control.
         </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="source-inspector-overlay" id="first-ember-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="First Ember Guided Orientation">
+    <div class="source-inspector-panel first-ember-panel">
+      <div class="source-inspector-header">
+        <span class="source-inspector-title">ᛒ First Ember · Guided Orientation</span>
+        <button class="startup-banner-dismiss" id="first-ember-close" aria-label="Close First Ember" title="Close">✕</button>
+      </div>
+      <div class="source-inspector-body first-ember-body">
+        <p class="first-ember-intro">
+          Learn through participation. Keep the steps small, contextual, and practical.
+        </p>
+        <ol class="first-ember-steps">
+          <li><strong>Welcome</strong> — “The Node reflects through what it carries.”</li>
+          <li><strong>What the Node is</strong> — Reader, Threshold, Forge, and Council shape continuity together.</li>
+          <li><strong>Load a cache</strong> — start in Threshold, then load what should stay active.</li>
+          <li><strong>Ask a question</strong> — begin in Hearth or Council and observe response posture.</li>
+          <li><strong>Explore the Forge</strong> — Runtime Profiles and Loadout shape synthesis behavior.</li>
+          <li><strong>Reflect / distill</strong> — reduce repetition, preserve signal, and carry forward intent.</li>
+        </ol>
+        <div class="first-ember-mentor-lines">
+          <div>“Loaded Caches shape the continuity available to the Forge.”</div>
+          <div>“Runtime Profiles adjust the posture of synthesis.”</div>
+          <div>“Distillation strengthens signal by reducing repetition.”</div>
+        </div>
+        <div class="first-ember-actions">
+          <button class="secondary" id="first-ember-go-threshold">Open Threshold</button>
+          <button class="secondary" id="first-ember-go-caches">Open Caches</button>
+          <button class="secondary" id="first-ember-go-forge">Open Loadout Forge</button>
+          <button class="secondary" id="first-ember-go-chat">Open Council Chat</button>
+        </div>
       </div>
     </div>
   </div>
