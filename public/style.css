@@ -776,6 +776,13 @@ input:focus, textarea:focus {
   text-transform: uppercase;
 }
 
+.cache-item-carry {
+  margin-top: 0.28rem;
+  font-size: 0.69rem;
+  line-height: 1.35;
+  color: var(--archive-muted);
+}
+
 .archive-reader-group-title {
   font-size: 0.65rem;
   color: var(--archive-muted);
@@ -3053,6 +3060,10 @@ button.secondary:disabled {
   border-radius: 0 6px 6px 0;
   padding: 0.45rem 0.55rem;
   margin-bottom: 0.5rem;
+}
+
+#threshold-gateway-guidance .onboarding-hint {
+  margin-bottom: 0.65rem;
 }
 
 .onboarding-hint-copy {

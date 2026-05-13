@@ -98,6 +98,9 @@ const FORGE_MAX_ROLLING_SUMMARY_LINE = 145;
 const FORGE_MAX_ROLLING_SUMMARY_TRUNCATE = 142;
 const FORGE_MAX_BOOTSTRAP_PREVIEW_LINES = 18;
 const FORGE_MAX_CACHE_CARDS = 8;
+const CACHE_CARRY_SUMMARY_MAX_CHARS = 220;
+const DEFAULT_CACHE_LEVEL = 'spark';
+const DEFAULT_CACHE_SOURCE = 'archive';
 const MAX_DISTILLATION_THEME_DISPLAY = 8;
 const MIN_SIGNAL_KEYWORD_LENGTH = 4;
 const MAX_SIGNAL_KEYWORDS = 20;
@@ -516,6 +519,54 @@ function buildOnboardingHint(options = {}) {
     return wrap;
 }
 
+function renderThresholdGatewayGuidance() {
+    const host = document.getElementById('threshold-gateway-guidance');
+    if (!host) return;
+    const fallbackNotice = document.querySelector('#th-imports .threshold-notice');
+    host.innerHTML = '';
+    const hint = buildOnboardingHint({
+        key: 'threshold-gateway-guidance',
+        text: 'Threshold allows Sentinels to acquire and inspect continuity artifacts before carrying them into the Forge.',
+        actions: [
+            { label: 'Load into Cache Loadout', onClick: () => openRoomAndSubtab('council', 'ws-caches') },
+            { label: 'Review First Ember', onClick: openFirstEmberOverlay },
+        ],
+    });
+    if (hint) {
+        host.appendChild(hint);
+        if (fallbackNotice) fallbackNotice.style.display = 'none';
+    } else if (fallbackNotice) {
+        fallbackNotice.style.display = '';
+    }
+}
+
+function initFirstEmberHintsDismissal() {
+    const row = document.querySelector('.orientation-entry-row');
+    const mapCard = document.querySelector('.first-ember-map-card');
+    if (!row || !mapCard) return;
+    const helperCopy = row.querySelector('.orientation-entry-copy');
+    const key = 'first-ember-hints';
+
+    if (isOnboardingDismissed(key)) {
+        mapCard.style.display = 'none';
+        if (helperCopy) helperCopy.style.display = 'none';
+        return;
+    }
+
+    if (row.querySelector('#first-ember-hints-dismiss-btn')) return;
+    const dismissBtn = document.createElement('button');
+    dismissBtn.id = 'first-ember-hints-dismiss-btn';
+    dismissBtn.className = 'secondary threshold-action-btn';
+    dismissBtn.textContent = 'Dismiss Hints';
+    dismissBtn.addEventListener('click', () => {
+        dismissOnboardingHint(key);
+        mapCard.style.display = 'none';
+        if (helperCopy) helperCopy.style.display = 'none';
+        dismissBtn.remove();
+    });
+    row.appendChild(dismissBtn);
+}
+
 function toArrayList(value) {
     if (Array.isArray(value)) return value.filter(Boolean).map(v => String(v).trim()).filter(Boolean);
     if (!value && value !== 0) return [];
@@ -525,6 +576,81 @@ function toArrayList(value) {
 function formatLabelValue(value) {
     const list = toArrayList(value);
     return list.length ? list.join(', ') : '—';
+}
+
+function uniqueCompactList(values, max = 4) {
+    const seen = new Set();
+    const out = [];
+    toArrayList(values).forEach(item => {
+        const key = String(item || '').trim().toLowerCase();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        out.push(String(item).trim());
+    });
+    return out.slice(0, max);
+}
+
+function deriveCacheThemes(cache) {
+    const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
+        ? cache.manifest
+        : {};
+    return uniqueCompactList([
+        ...(Array.isArray(cache && cache.continuity_themes) ? cache.continuity_themes : []),
+        ...(Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : []),
+    ], 6);
+}
+
+function deriveCacheRecommendedArchetypes(cache) {
+    const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
+        ? cache.manifest
+        : {};
+    return uniqueCompactList([
+        ...(Array.isArray(manifest.recommended_archetypes) ? manifest.recommended_archetypes : []),
+        ...(Array.isArray(manifest.preferred_archetypes) ? manifest.preferred_archetypes : []),
+        ...(Array.isArray(manifest.archetypes) ? manifest.archetypes : []),
+    ], 4);
+}
+
+function describeCacheCarrySummary(cache) {
+    const safeCache = cache && typeof cache === 'object' ? cache : {};
+    const manifest = safeCache.manifest && typeof safeCache.manifest === 'object'
+        ? safeCache.manifest
+        : {};
+    const description = String(
+        (manifest.summary || manifest.description || safeCache.description || '').replace(/\s+/g, ' ').trim(),
+    );
+    if (description) {
+        return compactTextSnippet(description, CACHE_CARRY_SUMMARY_MAX_CHARS);
+    }
+    const themes = deriveCacheThemes(safeCache);
+    if (themes.length > 0) {
+        return 'This cache focuses on ' + themes.slice(0, 3).join(', ') + '.';
+    }
+    return 'This cache carries practical continuity for the current loadout.';
+}
+
+function buildCompactCacheInspectionLines(cache) {
+    const manifest = cache && cache.manifest && typeof cache.manifest === 'object'
+        ? cache.manifest
+        : {};
+    const title = cache && (cache.title || cache.id) ? (cache.title || cache.id) : 'Unnamed Cache';
+    const themes = deriveCacheThemes(cache);
+    const recommendedArchetypes = deriveCacheRecommendedArchetypes(cache);
+    const derivedFrom = uniqueCompactList(
+        Array.isArray(manifest.derived_from) ? manifest.derived_from : (cache && cache.derived_from),
+        4,
+    );
+    return [
+        'Title: ' + title,
+        'Level: ' + describeCacheLevel(cache && cache.level ? cache.level : DEFAULT_CACHE_LEVEL),
+        'Summary: ' + describeCacheCarrySummary(cache),
+        'Continuity Themes: ' + (themes.length ? themes.join(', ') : '—'),
+        'Signal Density: ' + String(cache && cache.signal_density ? cache.signal_density : 'low'),
+        'Document Count: ' + String(cache && Number.isFinite(cache.documentCount) ? cache.documentCount : 0),
+        'Source: ' + String(cache && cache.source ? cache.source : DEFAULT_CACHE_SOURCE),
+    ]
+        .concat(derivedFrom.length ? ['Derived From: ' + derivedFrom.join(', ')] : [])
+        .concat(recommendedArchetypes.length ? ['Recommended Archetypes: ' + recommendedArchetypes.join(', ')] : []);
 }
 
 function titleFromDocumentPath(relPath) {
@@ -3343,23 +3469,16 @@ async function loadCacheShelf() {
         if (loadingEl) loadingEl.remove();
 
         if (caches.length === 0) {
-            listEl.innerHTML =
-                '<div class="message-system">No caches found.</div>' +
-                '<div class="message-system" style="margin-top:0.35rem;">Caches contain continuity artifacts: markdown, documents, summaries, research, field notes, and handoffs.</div>' +
-                '<div class="onboarding-hint-actions" style="justify-content:center; margin-top:0.45rem;">' +
-                '<button class="secondary threshold-action-btn" id="cache-empty-open-threshold-btn">Load First Cache via Threshold</button>' +
-                '<button class="secondary threshold-action-btn" id="cache-empty-first-ember-btn">Start Here · First Ember</button>' +
-                '</div>';
-            const openThresholdBtn = document.getElementById('cache-empty-open-threshold-btn');
-            if (openThresholdBtn) {
-                openThresholdBtn.addEventListener('click', () => {
-                    openRoomAndSubtab('threshold', 'th-imports');
-                });
-            }
-            const firstEmberBtn = document.getElementById('cache-empty-first-ember-btn');
-            if (firstEmberBtn) {
-                firstEmberBtn.addEventListener('click', openFirstEmberOverlay);
-            }
+            listEl.innerHTML = '<div class="message-system">No continuity caches are currently loaded.</div>';
+            const hint = buildOnboardingHint({
+                key: 'cache-shelf-empty',
+                text: 'Threshold allows Sentinels to acquire and inspect continuity artifacts before carrying them into the Forge.',
+                actions: [
+                    { label: 'Load into Cache Loadout', onClick: () => openRoomAndSubtab('threshold', 'th-imports') },
+                    { label: 'Start Here · First Ember', onClick: openFirstEmberOverlay },
+                ],
+            });
+            if (hint) listEl.appendChild(hint);
             updateSystemCacheCount(0);
             return;
         }
@@ -3375,7 +3494,7 @@ async function loadCacheShelf() {
         const loadoutHeader = document.createElement('div');
         loadoutHeader.className = 'message-system';
         loadoutHeader.style.marginTop = '0.6rem';
-        loadoutHeader.textContent = 'Cache Loadout — Loaded Caches (' + loaded.length + ')';
+        loadoutHeader.textContent = 'Cache Loadout — Continuity carried into Forge (' + loaded.length + ')';
         listEl.appendChild(loadoutHeader);
         if (loaded.length > 0) {
             const loadoutActions = document.createElement('div');
@@ -3459,13 +3578,15 @@ async function loadCacheShelf() {
         if (loaded.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'message-system';
-            empty.textContent = 'None loaded.';
+            empty.textContent = 'No continuity caches are currently loaded.';
             listEl.appendChild(empty);
             const hint = buildOnboardingHint({
                 key: 'empty-loadout',
-                text: 'No caches are currently loaded. Load a cache through Threshold to shape continuity.',
+                text: 'Loaded Caches shape the continuity available to the Node. Inspect a cache, then carry it into the Forge.',
                 actions: [
-                    { label: 'Open Threshold', onClick: () => openRoomAndSubtab('threshold', 'th-imports') },
+                    { label: 'Inspect Installed', onClick: () => openRoomAndSubtab('council', 'ws-caches') },
+                    { label: 'Load into Cache Loadout', onClick: () => openRoomAndSubtab('threshold', 'th-imports') },
+                    { label: 'Explore Forge', onClick: () => openRoomAndSubtab('hearth', 'hearth-system') },
                     {
                         label: 'First Ember',
                         onClick: openFirstEmberOverlay,
@@ -3473,6 +3594,62 @@ async function loadCacheShelf() {
                 ],
             });
             if (hint) listEl.appendChild(hint);
+            if (!isOnboardingDismissed('suggested-first-caches')) {
+                const suggestions = [
+                    { label: 'Core Cache', match: 'core' },
+                    { label: 'Grimoire', match: 'grimoire' },
+                    { label: 'First Spark', match: 'spark' },
+                    { label: 'Living Sagas', match: 'saga' },
+                ];
+                const suggestedWrap = document.createElement('div');
+                suggestedWrap.className = 'onboarding-hint';
+
+                const body = document.createElement('div');
+                const copy = document.createElement('p');
+                copy.className = 'onboarding-hint-copy';
+                copy.textContent = 'Suggested First Caches: inspect one before loading. No auto-load is applied.';
+                body.appendChild(copy);
+
+                const actions = document.createElement('div');
+                actions.className = 'onboarding-hint-actions';
+                suggestions.forEach(suggestion => {
+                    const btn = document.createElement('button');
+                    btn.className = 'secondary threshold-action-btn';
+                    btn.textContent = suggestion.label;
+                    btn.addEventListener('click', () => {
+                        const token = String(suggestion.match || '').trim().toLowerCase();
+                        const match = caches.find(cache => {
+                            const haystack = (cache.title || cache.id || '').toLowerCase();
+                            if (!token) return false;
+                            const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            return new RegExp('(^|[^a-z0-9])' + escaped + '([^a-z0-9]|$)', 'i').test(haystack);
+                        });
+                        if (match) {
+                            const item = Array.from(listEl.querySelectorAll('.cache-item'))
+                                .find(entry => entry && entry.dataset && entry.dataset.cacheId === match.id);
+                            if (item) item.click();
+                        } else {
+                            openRoomAndSubtab('threshold', 'th-imports');
+                        }
+                    });
+                    actions.appendChild(btn);
+                });
+                body.appendChild(actions);
+
+                const dismissBtn = document.createElement('button');
+                dismissBtn.className = 'onboarding-hint-dismiss';
+                dismissBtn.type = 'button';
+                dismissBtn.textContent = '✕';
+                dismissBtn.setAttribute('aria-label', 'Dismiss suggested first caches');
+                dismissBtn.addEventListener('click', () => {
+                    dismissOnboardingHint('suggested-first-caches');
+                    suggestedWrap.remove();
+                });
+
+                suggestedWrap.appendChild(body);
+                suggestedWrap.appendChild(dismissBtn);
+                listEl.appendChild(suggestedWrap);
+            }
         } else {
             const distillationHint = buildOnboardingHint({
                 key: 'distillation-view',
@@ -3668,25 +3845,14 @@ function inspectInstalledCache(cache, itemEl) {
     if (contentArea) contentArea.style.display = 'flex';
     if (nameEl) nameEl.textContent = cache.title || cache.id;
     if (descEl) {
-        const description = cache.manifest && cache.manifest.description
-            ? cache.manifest.description
-            : ('Source: ' + (cache.source || 'archive'));
-        descEl.textContent = description;
+        descEl.textContent = describeCacheCarrySummary(cache);
     }
     if (metaEl) {
         metaEl.innerHTML = installedCacheMetaBadges(cache);
     }
     if (permsEl) permsEl.innerHTML = '';
     if (contentEl) {
-        contentEl.textContent = [
-            'Source: ' + (cache.source || 'archive'),
-            'Level Meaning: ' + describeCacheLevel(cache.level),
-            'Document count: ' + String(cache.documentCount || 0),
-            'Reader entries: ' + String(Array.isArray(cache.readerEntries) ? cache.readerEntries.length : 0),
-            'Signal Density: ' + disciplineHints.signalDensityHint,
-            'Redundancy Risk: ' + disciplineHints.redundancyRisk,
-            'Cache Overlap Hint: ' + (disciplineHints.overlapHint || 'No strong overlap detected.'),
-        ].concat(compactCacheRelationshipText(cache)).join('\n');
+        contentEl.textContent = buildCompactCacheInspectionLines(cache).join('\n');
     }
     if (permsEl) {
         permsEl.innerHTML = '';
@@ -3730,7 +3896,8 @@ function buildInstalledCacheItem(cache) {
         escapeHtml(describeCacheLevel(cache.level)) + ' · ' +
         escapeHtml(String(cache.status || 'unverified')) + ' · ' +
         escapeHtml(String(cache.documentCount || 0)) + ' docs' +
-        '</div>';
+        '</div>' +
+        '<div class="cache-item-carry">' + escapeHtml(describeCacheCarrySummary(cache)) + '</div>';
     item.addEventListener('click', () => inspectInstalledCache(cache, item));
 
     const actions = document.createElement('div');
@@ -3738,14 +3905,15 @@ function buildInstalledCacheItem(cache) {
 
     const loadBtn = document.createElement('button');
     loadBtn.className = 'secondary source-action-btn';
-    loadBtn.textContent = cache.loaded ? 'Unload Cache' : 'Load Cache';
+    loadBtn.textContent = cache.loaded ? 'Unload from Loadout' : 'Carry into Forge';
     loadBtn.addEventListener('click', async (event) => {
         event.stopPropagation();
         loadBtn.disabled = true;
         try {
             await setCacheLoadedState(cache.id, !cache.loaded);
             await loadCacheShelf();
-            showFlashMessage((!cache.loaded ? 'Loaded' : 'Unloaded') + ': ' + (cache.title || cache.id));
+            const nextStateLabel = cache.loaded ? 'Removed from Loadout' : 'Carried into Forge';
+            showFlashMessage(nextStateLabel + ': ' + (cache.title || cache.id));
         } catch (error) {
             showFlashMessage(error.message || 'Could not update loadout.');
         } finally {
@@ -3755,7 +3923,7 @@ function buildInstalledCacheItem(cache) {
 
     const openBtn = document.createElement('button');
     openBtn.className = 'secondary source-action-btn';
-    openBtn.textContent = 'Open';
+    openBtn.textContent = 'Inspect';
     openBtn.addEventListener('click', (event) => {
         event.stopPropagation();
         inspectInstalledCache(cache, item);
@@ -4564,21 +4732,16 @@ async function loadArchiveReaderCatalog() {
             coreFiles.length === 0 &&
             (cacheGroups.length === 0 || cacheGroups.every(group => !group.files || group.files.length === 0))
         ) {
-            listEl.innerHTML =
-                '<span class="message-system">No markdown files found in archive/core or archive/caches.</span>' +
-                '<span class="message-system">Reader becomes more useful once continuity is loaded.</span>' +
-                '<div class="onboarding-hint-actions" style="justify-content:center; margin-top:0.45rem;">' +
-                '<button class="secondary threshold-action-btn" id="archive-reader-load-first-cache-btn">Load First Cache</button>' +
-                '<button class="secondary threshold-action-btn" id="archive-reader-first-ember-btn">Guided Orientation</button>' +
-                '</div>';
-            const firstCacheBtn = document.getElementById('archive-reader-load-first-cache-btn');
-            if (firstCacheBtn) {
-                firstCacheBtn.addEventListener('click', () => openRoomAndSubtab('threshold', 'th-imports'));
-            }
-            const firstEmberBtn = document.getElementById('archive-reader-first-ember-btn');
-            if (firstEmberBtn) {
-                firstEmberBtn.addEventListener('click', openFirstEmberOverlay);
-            }
+            listEl.innerHTML = '<span class="message-system">No archive markdown is ready in Reader yet.</span>';
+            const hint = buildOnboardingHint({
+                key: 'archive-reader-empty',
+                text: 'Loaded Caches shape the continuity available to the Node. Inspect, load, then explore in Reader.',
+                actions: [
+                    { label: 'Load into Cache Loadout', onClick: () => openRoomAndSubtab('threshold', 'th-imports') },
+                    { label: 'Guided Orientation', onClick: openFirstEmberOverlay },
+                ],
+            });
+            if (hint) listEl.appendChild(hint);
             return;
         }
 
@@ -5293,6 +5456,7 @@ async function generateThresholdExternalPrompt() {
     }
 
     renderThresholdPromptGuides();
+    renderThresholdGatewayGuidance();
     generateThresholdExternalPrompt();
     loadThresholdCacheDrafts();
 })();
@@ -5345,15 +5509,16 @@ async function loadThresholdList() {
         refreshThresholdSelectionActions(files);
 
         if (files.length === 0) {
-            listEl.innerHTML = '<span class="message-system">No files have crossed the Threshold yet.</span>';
+            listEl.innerHTML = '<span class="message-system">No continuity artifacts have crossed Threshold yet.</span>';
             const hint = buildOnboardingHint({
                 key: 'first-cache-threshold',
-                text: 'First Cache guidance: import markdown, documents, summaries, research, field notes, or handoffs to begin continuity.',
+                text: 'Threshold allows Sentinels to acquire and inspect continuity artifacts before carrying them into the Forge.',
                 actions: [
                     {
-                        label: 'Start Here · First Ember',
-                        onClick: openFirstEmberOverlay,
+                        label: 'Load into Cache Loadout',
+                        onClick: () => openRoomAndSubtab('council', 'ws-caches'),
                     },
+                    { label: 'Start Here · First Ember', onClick: openFirstEmberOverlay },
                 ],
             });
             if (hint) listEl.appendChild(hint);
@@ -5610,7 +5775,7 @@ function buildThresholdImportedRow(file) {
 
     const openBtn = document.createElement('button');
     openBtn.className = 'secondary threshold-action-btn';
-    openBtn.textContent = file.type === 'pdf' ? 'Reveal File' : 'Open in Reader';
+    openBtn.textContent = file.type === 'pdf' ? 'Reveal File' : 'Inspect in Reader';
     openBtn.addEventListener('click', () => openThresholdImportedFile(file));
 
     const copyBtn = document.createElement('button');
@@ -5731,6 +5896,9 @@ function buildThresholdCacheDraftRow(draft) {
     const manifest = draft && draft.manifest ? draft.manifest : {};
     const documents = Array.isArray(manifest.documents) ? manifest.documents : [];
     const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
+    const sourceLabel = manifest.source || 'threshold';
+    const recommendedArchetypes = deriveCacheRecommendedArchetypes({ manifest });
+    const carrySummary = describeCacheCarrySummary({ manifest, continuity_themes: continuityThemes });
     const disciplineHints = buildSignalDisciplineHints(
         {
             id: draft.id,
@@ -5752,6 +5920,9 @@ function buildThresholdCacheDraftRow(draft) {
         '<div class="threshold-file-title-row"><span class="threshold-file-icon">ᚠ</span><span class="threshold-file-title">' +
         escapeHtml(manifest.title || draft.id || 'Cache Draft') + '</span></div>' +
         '<div class="threshold-file-detail">Level: ' + escapeHtml(describeCacheLevel(manifest.level || 'spark')) + '</div>' +
+        '<div class="threshold-file-detail">Carries: ' + escapeHtml(carrySummary) + '</div>' +
+        '<div class="threshold-file-detail">Source: ' + escapeHtml(sourceLabel) + '</div>' +
+        '<div class="threshold-file-detail">Recommended Archetypes: ' + escapeHtml(recommendedArchetypes.length ? recommendedArchetypes.join(', ') : '—') + '</div>' +
         '<div class="threshold-file-detail">Documents: ' + escapeHtml(String(documents.length)) + '</div>' +
         '<div class="threshold-file-detail">Status: ' + escapeHtml(manifest.status || 'draft') + '</div>' +
         '<div class="threshold-file-detail">Themes: ' + escapeHtml(summarizeDistillationThemes(continuityThemes)) + '</div>' +
@@ -5772,7 +5943,7 @@ function buildThresholdCacheDraftRow(draft) {
 
     const openBtn = document.createElement('button');
     openBtn.className = 'secondary threshold-action-btn';
-    openBtn.textContent = 'Open';
+    openBtn.textContent = 'Inspect';
     openBtn.addEventListener('click', () => openThresholdCacheDraft(draft.id));
 
     const openReaderBtn = document.createElement('button');
@@ -5787,7 +5958,7 @@ function buildThresholdCacheDraftRow(draft) {
 
     const installBtn = document.createElement('button');
     installBtn.className = 'secondary threshold-action-btn';
-    installBtn.textContent = 'Install Local Cache';
+    installBtn.textContent = 'Carry into Cache Loadout';
     installBtn.addEventListener('click', () => installThresholdCacheDraft(draft.id));
 
     const deleteBtn = document.createElement('button');
@@ -8501,4 +8672,5 @@ async function launchOllama(runtimeId) {
     if (wsFirstEmberBtn) {
         wsFirstEmberBtn.addEventListener('click', openFirstEmberOverlay);
     }
+    initFirstEmberHintsDismissal();
 })();
