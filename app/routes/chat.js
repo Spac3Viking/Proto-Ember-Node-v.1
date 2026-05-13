@@ -206,6 +206,17 @@ const RUNTIME_GENERATION_PROFILES = Object.freeze({
 });
 const SPARK_NUDGE_MAX_CHARS = 520;
 const EMBER_NUDGE_MAX_CHARS = 320;
+// Compact confidence hint weighting:
+// - state baseline remains primary signal for trust posture
+// - raw score contribution adds local retrieval sharpness
+// - continuity density favors summary/cached overlap over broad source spread
+const CONFIDENCE_STATE_BASELINE_WEIGHT = 0.72;
+const CONFIDENCE_RAW_SCORE_WEIGHT = 0.28;
+const CONTINUITY_SUMMARY_DENSITY_DIVISOR = 3;
+const CONTINUITY_SUMMARY_WEIGHT = 0.45;
+const CONTINUITY_SOURCE_SPREAD_WEIGHT = 0.2;
+const CONTINUITY_CACHE_OVERLAP_WEIGHT = 0.35;
+const RESPONSE_SELF_CHECK_COMPACT_PROFILES = new Set(['spark-compression', 'minimal-retrieval', 'field-guide']);
 
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
@@ -467,11 +478,11 @@ const COURT_PROMPT_PROFILES = {
     },
 };
 const COMPACT_ARCHETYPE_DELTAS = Object.freeze({
-    builder: 'Grounded, practical, concise. Favor implementation and survivability.',
-    scholar: 'Comparative and reflective. Cross-reference claims and distinctions.',
-    scribe: 'Narrative continuity with elegant compression and readability.',
-    warrior: 'Operational clarity, decisive framing, and pressure-tested options.',
-    mystic: 'Symbolic pattern recognition with layered meaning and restraint.',
+    builder: 'Practical compression first. Keep steps buildable and concise.',
+    scholar: 'Use brief comparison and references when uncertainty matters.',
+    scribe: 'Prioritize clarity and continuity flow with compact structure.',
+    warrior: 'Keep synthesis decisive, bounded, and operationally clear.',
+    mystic: 'Use symbolic interpretation sparingly, grounded to concrete context.',
 });
 
 function extractCourtLensLabel(member) {
@@ -745,15 +756,14 @@ function buildDepthResponseInstruction(contextBudget) {
     if (depthId === 'spark') {
         return [
             'Response Depth: Spark',
-            'Hard rule: brief orientation only.',
-            'Output target: 1–3 short paragraphs or 3–5 concise bullets.',
+            'Hard rule: concise orientation only.',
+            'Output target: direct answer in 1–2 short paragraphs or up to 4 concise bullets.',
             'Answer directly first.',
-            'Deliver one clear answer and one useful next step.',
-            'Use minimal retrieval and only strongest context from loaded continuity when available.',
-            'Mentor pacing: one reflection/question max and one next-step suggestion max.',
-            'Avoid multi-paragraph reflection setup.',
-            'Avoid long essays, broad archive sweeps, and repeated Green Fire philosophy restatement unless asked.',
-            'If deeper context exists, one subtle continuation line is allowed in addition to the output target.',
+            'Deliver one clear answer, one useful next step max, and one reflection/question max.',
+            'Use minimal retrieval and strongest loaded continuity signal before broader archive sweep.',
+            'Mentor pacing: concise orientation, no lecture framing.',
+            'Avoid essays, layered tangents, or repeated philosophy restatement unless asked.',
+            'If deeper context exists, one situational continuation line is allowed.',
         ].join('\n');
     }
     if (depthId === 'ember') {
@@ -803,6 +813,135 @@ function shouldAppendDeeperDepthNudge({ depthId, answer, retrievedCount, rawChun
     if (!hasMoreDepthAvailable) return false;
     if (depthId === 'spark') return text.length <= SPARK_NUDGE_MAX_CHARS;
     return text.length <= EMBER_NUDGE_MAX_CHARS;
+}
+
+function buildResponseSelfCheckInstruction({
+    contextBudget,
+    runtimeProfileId,
+    loadoutFocusEnabled,
+}) {
+    const depthId = contextBudget && contextBudget.id ? contextBudget.id : 'ember';
+    const runtimeId = String(runtimeProfileId || '').trim().toLowerCase();
+    const shouldApply = depthId === 'spark' || loadoutFocusEnabled || RESPONSE_SELF_CHECK_COMPACT_PROFILES.has(runtimeId);
+    if (!shouldApply) return '';
+    return [
+        '=== Response Self-Check ===',
+        'Answer only what was asked.',
+        'Prefer the strongest continuity signal.',
+        'Avoid unnecessary exposition.',
+        '',
+    ].join('\n');
+}
+
+function buildRetrievalRestraintInstruction({
+    retrievalState,
+    contextBudget,
+}) {
+    const depthId = contextBudget && contextBudget.id ? contextBudget.id : 'ember';
+    if (![RETRIEVAL_STATES.PARTIAL_CONTEXT, RETRIEVAL_STATES.MISSING_SOURCE, RETRIEVAL_STATES.NO_CONTEXT, RETRIEVAL_STATES.RETRIEVAL_ERROR].includes(retrievalState)) {
+        return '';
+    }
+    const guidance = [
+        '=== Retrieval Restraint ===',
+        'Carry only grounded continuity.',
+        'If confidence is weak, state uncertainty concisely.',
+        'Ask one clarifying question when needed.',
+        'Use limited synthesis; do not invent broad continuity essays.',
+        'Mentor posture example: “I only carry partial continuity on this thread. A Scholar review or broader archive depth may strengthen the synthesis.”',
+    ];
+    if (depthId === 'spark') {
+        guidance.push('Spark constraint: keep this to one compact uncertainty line max.');
+    }
+    guidance.push('');
+    return guidance.join('\n');
+}
+
+function formatContinuationNudge({
+    selectedCourtMember,
+    retrievalState,
+}) {
+    if ([RETRIEVAL_STATES.PARTIAL_CONTEXT, RETRIEVAL_STATES.MISSING_SOURCE, RETRIEVAL_STATES.NO_CONTEXT, RETRIEVAL_STATES.RETRIEVAL_ERROR].includes(retrievalState)) {
+        return 'A Scholar comparison may reveal missing continuity.';
+    }
+    const memberId = selectedCourtMember && selectedCourtMember.id ? String(selectedCourtMember.id) : '';
+    if (memberId === 'builder') return 'These caches suggest a deeper Builder synthesis may help.';
+    if (memberId === 'scholar') return 'A Scholar comparison may reveal missing continuity.';
+    if (memberId === 'scribe') return 'A Scribe pass may tighten continuity flow.';
+    if (memberId === 'warrior') return 'A Warrior synthesis can sharpen the decision path.';
+    if (memberId === 'mystic') return 'A Mystic lens may clarify the symbolic thread.';
+    return 'Load Hearth depth for the wider weave.';
+}
+
+function computeRuntimeConfidenceHints({
+    retrievalState,
+    retrieved,
+    rawChunksForPrompt,
+    summaryFirst,
+    loadedCaches,
+}) {
+    const stateBaseline = retrievalState === RETRIEVAL_STATES.CONTEXT_AVAILABLE
+        ? 0.88
+        : retrievalState === RETRIEVAL_STATES.PARTIAL_CONTEXT
+            ? 0.58
+            : retrievalState === RETRIEVAL_STATES.MISSING_SOURCE
+                ? 0.42
+                : retrievalState === RETRIEVAL_STATES.NO_CONTEXT
+                    ? 0.3
+                    : 0.26;
+    const rawScores = Array.isArray(rawChunksForPrompt)
+        ? rawChunksForPrompt
+            .map(entry => Number(entry && entry.score))
+            .filter(Number.isFinite)
+        : [];
+    const avgRawScore = rawScores.length > 0
+        ? rawScores.reduce((sum, value) => sum + value, 0) / rawScores.length
+        : 0;
+    const retrievalConfidence = Math.max(
+        0,
+        Math.min(
+            1,
+            (stateBaseline * CONFIDENCE_STATE_BASELINE_WEIGHT) +
+            (Math.min(1, avgRawScore) * CONFIDENCE_RAW_SCORE_WEIGHT),
+        ),
+    );
+    const loadedCount = Array.isArray(rawChunksForPrompt)
+        ? rawChunksForPrompt.filter(entry => Boolean(entry && entry.loadedCacheMatch)).length
+        : 0;
+    const cacheOverlapStrength = rawChunksForPrompt.length > 0
+        ? loadedCount / rawChunksForPrompt.length
+        : 0;
+    const cacheSummariesCount = summaryFirst && summaryFirst.summaryLayersUsed
+        ? Number(summaryFirst.summaryLayersUsed.cacheSummaries || 0)
+        : 0;
+    const documentSummariesCount = summaryFirst && summaryFirst.summaryLayersUsed
+        ? Number(summaryFirst.summaryLayersUsed.documentSummaries || 0)
+        : 0;
+    const summaryCount = cacheSummariesCount + documentSummariesCount;
+    const uniqueSourceCount = new Set((retrieved || [])
+        .map(entry => entry && entry.chunk && entry.chunk.sourceId)
+        .filter(Boolean)).size;
+    const summaryContribution = (summaryCount > 0
+        ? Math.min(1, summaryCount / CONTINUITY_SUMMARY_DENSITY_DIVISOR)
+        : 0) * CONTINUITY_SUMMARY_WEIGHT;
+    const sourceSpreadContribution = (uniqueSourceCount > 0
+        ? Math.min(1, Math.max(0.2, 1 / uniqueSourceCount))
+        : 0) * CONTINUITY_SOURCE_SPREAD_WEIGHT;
+    const cacheOverlapContribution = cacheOverlapStrength * CONTINUITY_CACHE_OVERLAP_WEIGHT;
+    // Keep confidence hints compact and stable:
+    // - summaryCount divisor caps value quickly to avoid inflating dense prompts
+    // - bounded inverse source spread (max 1, min 0.2) avoids sparse-result collapse
+    // - weights prioritize summary/cached continuity signals over raw source spread
+    const continuityDensity = Math.max(
+        0,
+        Math.min(1, summaryContribution + sourceSpreadContribution + cacheOverlapContribution),
+    );
+    return {
+        retrievalConfidence: Math.round(retrievalConfidence * 100) / 100,
+        cacheOverlapStrength: Math.round(cacheOverlapStrength * 100) / 100,
+        continuityDensity: Math.round(continuityDensity * 100) / 100,
+        loadedCacheHits: loadedCount,
+        loadedCacheCount: Array.isArray(loadedCaches) ? loadedCaches.length : 0,
+    };
 }
 
 function summaryBudgetForContext(contextBudget) {
@@ -1160,10 +1299,25 @@ ${buildDepthResponseInstruction(contextBudget)}
 ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
 
 `;
+        const responseSelfCheckBlock = buildResponseSelfCheckInstruction({
+            contextBudget,
+            runtimeProfileId: selectedCognitionProfile.id,
+            loadoutFocusEnabled,
+        });
+        const retrievalRestraintBlock = buildRetrievalRestraintInstruction({
+            retrievalState,
+            contextBudget,
+        });
         const distillationGuidanceBlock = distillationGuidanceEnabled
             ? buildDistillationGuidanceBlock()
             : '';
-        userContent = retrievalStateBlock + runtimeProfileBlock + depthInstructionBlock + distillationGuidanceBlock + userContent;
+        userContent = retrievalStateBlock +
+            runtimeProfileBlock +
+            depthInstructionBlock +
+            responseSelfCheckBlock +
+            retrievalRestraintBlock +
+            distillationGuidanceBlock +
+            userContent;
 
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
@@ -1246,6 +1400,10 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
         const answer   = response.data && response.data.message
             ? response.data.message.content
             : '';
+        const continuationNudge = formatContinuationNudge({
+            selectedCourtMember,
+            retrievalState,
+        });
         const answerWithDepthNudge = shouldAppendDeeperDepthNudge({
             depthId: contextBudget.id,
             answer,
@@ -1253,7 +1411,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             rawChunkCount: rawChunksForPrompt.length,
             summaryLayersUsed: summaryFirst.summaryLayersUsed,
         })
-            ? (String(answer || '').trimEnd() + '\n\nLoad a deeper depth if you want the wider weave.')
+            ? (String(answer || '').trimEnd() + '\n\n' + continuationNudge)
             : answer;
         const uniqueSourceCount = new Set(
             (sources || []).map(s => [s.room, s.file, s.cacheId || '', s.shelf || ''].join('|')),
@@ -1288,6 +1446,13 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             .map(cache => cache && cache.title ? String(cache.title) : (cache && cache.id ? String(cache.id) : ''))
             .filter(Boolean)
             .slice(0, 5);
+        const runtimeConfidenceHints = computeRuntimeConfidenceHints({
+            retrievalState,
+            retrieved,
+            rawChunksForPrompt,
+            summaryFirst,
+            loadedCaches,
+        });
         const lensName = selectedCourtMember ? extractCourtLensLabel(selectedCourtMember) : 'Ember Prime';
         const lensGlyph = selectedCourtMember ? (COURT_MEMBER_GLYPHS[selectedCourtMember.id] || '') : '';
         const courtSourcesConsidered = courtPrioritySourcesConsidered.length > 0
@@ -1304,6 +1469,8 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 'Summaries: ' + summaryBudgetForContext(contextBudget),
                 'Loadout Focus: ' + (loadoutFocusEnabled ? 'ON' : 'OFF'),
                 'Distillation Guidance: ' + (distillationGuidanceEnabled ? 'ON' : 'OFF'),
+                'Confidence: ' + runtimeConfidenceHints.retrievalConfidence +
+                    ' · overlap ' + runtimeConfidenceHints.cacheOverlapStrength,
                 'Budget: ' + formatBudgetLabel(effectiveMaxRawChunks, 'chunk', 'chunks') +
                     ' · ' + formatBudgetLabel(summaryBudgetForContext(contextBudget), 'summary', 'summaries'),
                 'Bootstrap: compact',
@@ -1325,6 +1492,9 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 'Summaries: ' + summaryBudgetForContext(contextBudget),
                 'Loadout Focus: ' + (loadoutFocusEnabled ? 'ON' : 'OFF'),
                 'Distillation Guidance: ' + (distillationGuidanceEnabled ? 'ON' : 'OFF'),
+                'Confidence: ' + runtimeConfidenceHints.retrievalConfidence +
+                    ' · overlap ' + runtimeConfidenceHints.cacheOverlapStrength +
+                    ' · continuity ' + runtimeConfidenceHints.continuityDensity,
                 'Route: ' + ([detectedRoute || 'general'].concat(relatedDomains).slice(0, 2).join(' → ')),
                 'Memory: bootstrap ' + rollingBootstrapStatus + ' · summaries ' +
                     (summaryFirst.summaryLayersUsed.cacheSummaries + summaryFirst.summaryLayersUsed.documentSummaries) +
@@ -1382,6 +1552,10 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 numPredict: runtimeGenerationProfile.numPredict,
                 temperature: runtimeGenerationProfile.temperature,
                 runtimeProfileId: selectedCognitionProfile.id,
+                retrievalConfidence: runtimeConfidenceHints.retrievalConfidence,
+                cacheOverlapStrength: runtimeConfidenceHints.cacheOverlapStrength,
+                continuityDensity: runtimeConfidenceHints.continuityDensity,
+                loadedCacheHits: runtimeConfidenceHints.loadedCacheHits,
             },
             compact: compactSignalTrace,
         };

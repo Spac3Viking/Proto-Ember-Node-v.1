@@ -52,6 +52,19 @@ const LOADED_CACHE_SOURCE_BOOST = 1.06;
 const NON_LOADED_ARCHIVE_PENALTY = 1;
 const MAX_LOADED_CACHE_BOOST = 1.5;
 const MIN_NON_LOADED_ARCHIVE_PENALTY = 0.7;
+const PRIORITY_WEIGHT_LOADED_CACHE = 5.2;
+const PRIORITY_WEIGHT_RUNTIME_PROFILE = 2.6;
+const PRIORITY_WEIGHT_ARCHETYPE = 1.6;
+const PRIORITY_WEIGHT_CONTINUITY = 0.9;
+// Alignment normalization keeps discipline deltas in a 0..1 range for compact ranking math.
+const LOADED_CACHE_RUNTIME_ALIGNMENT_WEIGHT = 0.35;
+const LOADED_CACHE_ALIGNMENT_DIVISOR = 0.5;
+const ARCHIVE_PENALTY_ALIGNMENT_DIVISOR = 0.3;
+// Archetype alignment weights keep court-source matches strongest, then domain and memory affinities.
+const ARCHETYPE_ALIGNMENT_WEIGHT_COURT_SOURCE = 0.45;
+const ARCHETYPE_ALIGNMENT_WEIGHT_COURT_DOMAIN = 0.25;
+const ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_SOURCE = 0.2;
+const ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_DOMAIN = 0.1;
 
 const ROUTE_DEFINITIONS = [
     {
@@ -301,6 +314,16 @@ function scoreChunks({ chunks, queryVector, queryText, embeddings }) {
         .filter(({ score }) => score >= MIN_SCORE);
 }
 
+function effectiveEntryScore(entry) {
+    if (entry && Number.isFinite(entry.rankingScore)) return Number(entry.rankingScore);
+    if (entry && Number.isFinite(entry.score)) return Number(entry.score);
+    return 0;
+}
+
+function normalizeToUnitRange(value) {
+    return Math.min(1, Math.max(0, Number(value) || 0));
+}
+
 function buildSourceBuckets(scoredEntries) {
     const bySource = {};
     for (const entry of scoredEntries) {
@@ -310,7 +333,7 @@ function buildSourceBuckets(scoredEntries) {
     }
 
     for (const sid of Object.keys(bySource)) {
-        bySource[sid].sort((a, b) => b.score - a.score);
+        bySource[sid].sort((a, b) => effectiveEntryScore(b) - effectiveEntryScore(a));
     }
 
     return bySource;
@@ -330,7 +353,7 @@ function selectBalancedEntries({
     const sourceOrder = Object.keys(bySource)
         .map(sourceId => ({
             sourceId,
-            bestScore: bySource[sourceId][0] ? bySource[sourceId][0].score : 0,
+            bestScore: bySource[sourceId][0] ? effectiveEntryScore(bySource[sourceId][0]) : 0,
             roomPriority: roomPriorityIndex(bySource[sourceId][0] ? bySource[sourceId][0].chunk.room : ''),
         }))
         .sort((a, b) => {
@@ -350,7 +373,7 @@ function selectBalancedEntries({
     for (const sid of sourceOrder) {
         pointers[sid] = 0;
         usageBySource[sid] = 0;
-        bestBySource[sid] = bySource[sid][0] ? bySource[sid][0].score : 0;
+        bestBySource[sid] = bySource[sid][0] ? effectiveEntryScore(bySource[sid][0]) : 0;
     }
 
     const prioritySourceSet = new Set(prioritySourceIds || []);
@@ -386,7 +409,7 @@ function selectBalancedEntries({
                 HIGH_RELEVANCE_MIN_SCORE,
                 (bestBySource[sourceId] || 0) * HIGH_RELEVANCE_THRESHOLD_RATIO,
             );
-            if (entry.score < threshold) return false;
+            if (effectiveEntryScore(entry) < threshold) return false;
         }
 
         selected.push(entry);
@@ -577,6 +600,26 @@ async function retrieve({
             )
                 ? normalizedRetrievalDiscipline.nonLoadedArchivePenalty
                 : 1;
+            const runtimeProfileAlignment = loadedCacheMatch
+                ? normalizeToUnitRange((normalizedRetrievalDiscipline.loadedCacheBoost - 1) / LOADED_CACHE_ALIGNMENT_DIVISOR)
+                : normalizeToUnitRange((1 - normalizedRetrievalDiscipline.nonLoadedArchivePenalty) / ARCHIVE_PENALTY_ALIGNMENT_DIVISOR);
+            const archetypeAlignment = Math.min(
+                1,
+                (
+                    (courtPrioritySourceMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_COURT_SOURCE : 0) +
+                    (courtPriorityDomainMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_COURT_DOMAIN : 0) +
+                    (archetypeMemorySourceMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_SOURCE : 0) +
+                    (archetypeMemoryDomainMatch ? ARCHETYPE_ALIGNMENT_WEIGHT_MEMORY_DOMAIN : 0)
+                ),
+            );
+            const continuityThemeOverlap = Math.min(
+                1,
+                (
+                    Math.max(0, conceptBonus) +
+                    Math.max(0, routeBonus) +
+                    Math.max(0, titleBonus)
+                ),
+            );
             const finalScore = postConceptScore *
                 courtSourceBoost *
                 courtDomainBoost *
@@ -584,10 +627,18 @@ async function retrieve({
                 archetypeMemoryDomainBoost *
                 loadedCacheBoost *
                 nonLoadedArchivePenalty;
+            const rankingScore = finalScore +
+                (loadedCacheMatch
+                    ? (PRIORITY_WEIGHT_LOADED_CACHE * (1 + (runtimeProfileAlignment * LOADED_CACHE_RUNTIME_ALIGNMENT_WEIGHT)))
+                    : 0) +
+                (PRIORITY_WEIGHT_RUNTIME_PROFILE * runtimeProfileAlignment) +
+                (PRIORITY_WEIGHT_ARCHETYPE * archetypeAlignment) +
+                (PRIORITY_WEIGHT_CONTINUITY * continuityThemeOverlap);
 
             return {
                 chunk: entry.chunk,
                 score: finalScore,
+                rankingScore,
                 textMatchScore: entry.score,
                 routeBonus,
                 titleBonus,
@@ -614,6 +665,9 @@ async function retrieve({
                 loadedCacheMatch,
                 loadedCacheBoost,
                 nonLoadedArchivePenalty,
+                runtimeProfileAlignment,
+                archetypeAlignment,
+                continuityThemeOverlap,
             };
         })
         .filter(entry => entry.score >= MIN_SCORE);
@@ -622,7 +676,11 @@ async function retrieve({
 
     const priorityMatchedSourceIds = [];
     const seenPriorityMatchedSourceIds = new Set();
-    for (const entry of scored.slice().sort((a, b) => b.score - a.score)) {
+    for (const entry of scored.sort((a, b) => {
+        const aScore = Number.isFinite(a.rankingScore) ? a.rankingScore : a.score;
+        const bScore = Number.isFinite(b.rankingScore) ? b.rankingScore : b.score;
+        return bScore - aScore;
+    })) {
         if (!entry || !entry.chunk) continue;
         const hasConceptPriorityMatch = Array.isArray(entry.matchedPrioritySources) && entry.matchedPrioritySources.length > 0;
         const hasCourtPriorityMatch = Array.isArray(entry.matchedCourtPrioritySources) && entry.matchedCourtPrioritySources.length > 0;
