@@ -48,8 +48,6 @@ function _deleteEmptyDirIfExists(absPath) {
 function runLegacyCleanupPass() {
     const removed = [];
     const checks = [
-        'archive/legacy-caches',
-        'caches-legacy',
         'indexes/tmp',
         'tmp',
         'legacy',

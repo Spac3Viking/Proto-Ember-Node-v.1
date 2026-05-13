@@ -73,7 +73,6 @@ router.get('/caches/:name', (req, res) => {
         ...(cache.manifest || {}),
         ...metadata,
         loaded,
-        equipped: loaded,
     };
     res.json(cache);
 });
@@ -88,17 +87,6 @@ router.get('/api/caches/loaded', readLimiter, (req, res) => {
         version: state.version,
         updated_at: state.updated_at,
         loaded: state.loaded,
-    });
-});
-
-router.get('/api/caches/equipped', readLimiter, (req, res) => {
-    const state = readLoadedCachesState();
-    res.json({
-        version: state.version,
-        updated_at: state.updated_at,
-        loaded: state.loaded,
-        equipped: state.loaded,
-        deprecated: true,
     });
 });
 
@@ -128,35 +116,6 @@ router.post('/api/caches/load', writeLimiter, (req, res) => {
     }
 });
 
-router.post('/api/caches/equip', writeLimiter, (req, res) => {
-    const cacheId = String(req.body && req.body.cacheId ? req.body.cacheId : '').trim();
-    req.body = { ...(req.body || {}), cacheId };
-    if (!cacheId) return res.status(400).json({ error: 'cacheId is required' });
-    const installed = getInstalledCacheById(cacheId);
-    if (!installed) return res.status(404).json({ error: 'Cache "' + cacheId + '" not found.' });
-    try {
-        const result = loadCache(installed);
-        if (result.changed) {
-            try {
-                recordCacheInteraction({
-                    kind: 'cache_loaded',
-                    cacheId: installed.id,
-                    sourcePaths: [installed.source],
-                });
-            } catch { /* non-blocking memory update */ }
-        }
-        return res.json({
-            success: true,
-            changed: result.changed,
-            loaded: result.state.loaded,
-            equipped: result.state.loaded,
-            deprecated: true,
-        });
-    } catch (err) {
-        return res.status(err.status || 500).json({ error: err.message || 'Could not load cache.' });
-    }
-});
-
 router.post('/api/caches/unload', writeLimiter, (req, res) => {
     const cacheId = String(req.body && req.body.cacheId ? req.body.cacheId : '').trim();
     if (!cacheId) return res.status(400).json({ error: 'cacheId is required' });
@@ -174,31 +133,6 @@ router.post('/api/caches/unload', writeLimiter, (req, res) => {
             success: true,
             changed: result.changed,
             loaded: result.state.loaded,
-        });
-    } catch (err) {
-        return res.status(err.status || 500).json({ error: err.message || 'Could not unload cache.' });
-    }
-});
-
-router.post('/api/caches/unequip', writeLimiter, (req, res) => {
-    const cacheId = String(req.body && req.body.cacheId ? req.body.cacheId : '').trim();
-    if (!cacheId) return res.status(400).json({ error: 'cacheId is required' });
-    try {
-        const result = unloadCache(cacheId);
-        if (result.changed) {
-            try {
-                recordCacheInteraction({
-                    kind: 'cache_unloaded',
-                    cacheId,
-                });
-            } catch { /* non-blocking memory update */ }
-        }
-        return res.json({
-            success: true,
-            changed: result.changed,
-            loaded: result.state.loaded,
-            equipped: result.state.loaded,
-            deprecated: true,
         });
     } catch (err) {
         return res.status(err.status || 500).json({ error: err.message || 'Could not unload cache.' });

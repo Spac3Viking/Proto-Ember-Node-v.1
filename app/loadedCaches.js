@@ -6,7 +6,6 @@ const {
     ARCHIVE_CORE_DIR,
     ARCHIVE_CACHES_DIR,
     LOADED_CACHES_PATH,
-    LEGACY_EQUIPPED_CACHES_PATH,
 } = require('./storageConfig');
 
 const CACHE_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
@@ -63,9 +62,7 @@ function normalizeSignalDensity(value) {
 
 function normalizeCacheManifestMetadata(manifest) {
     const data = manifest && typeof manifest === 'object' ? manifest : {};
-    const loaded = Object.prototype.hasOwnProperty.call(data, 'loaded')
-        ? Boolean(data.loaded)
-        : Boolean(data.equipped);
+    const loaded = Boolean(data.loaded);
     return {
         level: normalizeLevel(data.level),
         status: normalizeStatus(data.status),
@@ -95,19 +92,17 @@ function normalizeLoadedEntry(entry) {
         title: String(entry.title || id).trim() || id,
         level: normalizeLevel(entry.level),
         source: String(entry.source || '').trim() || null,
-        loaded_at: String(entry.loaded_at || entry.equipped_at || '').trim() || null,
+        loaded_at: String(entry.loaded_at || '').trim() || null,
     };
 }
 
 function readLoadedCachesState() {
-    const parsed = fs.existsSync(LOADED_CACHES_PATH)
-        ? safeReadJson(LOADED_CACHES_PATH, defaultLoadedState())
-        : safeReadJson(LEGACY_EQUIPPED_CACHES_PATH, defaultLoadedState());
+    const parsed = safeReadJson(LOADED_CACHES_PATH, defaultLoadedState());
     const base = defaultLoadedState();
     const seen = new Set();
     const rawEntries = Array.isArray(parsed && parsed.loaded)
         ? parsed.loaded
-        : (Array.isArray(parsed && parsed.equipped) ? parsed.equipped : []);
+        : [];
     const loaded = rawEntries
             .map(normalizeLoadedEntry)
             .filter(Boolean)
@@ -337,11 +332,4 @@ module.exports = {
     loadCache,
     unloadCache,
     getLoadedCacheLookup,
-    // Deprecated aliases
-    readEquippedCachesState: readLoadedCachesState,
-    writeEquippedCachesState: writeLoadedCachesState,
-    listEquippedCaches: listLoadedCaches,
-    equipCache: loadCache,
-    unequipCache: unloadCache,
-    getEquippedCacheLookup: getLoadedCacheLookup,
 };
