@@ -17,9 +17,6 @@ const KNOWN_KINDS = new Set([
     'threshold_handoff_viewed',
     'cache_loaded',
     'cache_unloaded',
-    // Legacy aliases retained for historical records
-    'cache_equipped',
-    'cache_unequipped',
     'bootstrap_exported',
     'bootstrap_imported',
 ]);
@@ -102,10 +99,10 @@ function summarizeInteraction(interaction) {
         const type = interaction.handoffType || 'handoff';
         return 'Viewed threshold handoff (`' + type + '`).';
     }
-    if (interaction.kind === 'cache_loaded' || interaction.kind === 'cache_equipped') {
+    if (interaction.kind === 'cache_loaded') {
         return 'Loaded cache `' + (interaction.cacheId || 'unknown') + '`.';
     }
-    if (interaction.kind === 'cache_unloaded' || interaction.kind === 'cache_unequipped') {
+    if (interaction.kind === 'cache_unloaded') {
         return 'Unloaded cache `' + (interaction.cacheId || 'unknown') + '`.';
     }
     if (interaction.kind === 'bootstrap_exported') {

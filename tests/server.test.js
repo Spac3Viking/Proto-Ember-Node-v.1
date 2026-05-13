@@ -673,12 +673,7 @@ describe('Threshold cache draft workflow', () => {
     });
 
     test('exports cache draft as zip containing only normalized draft files', async () => {
-        const legacyHandoff = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId, 'handoff.md');
-        const legacyDocsDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId, 'docs');
         const hiddenFile = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId, '.DS_Store');
-        await fs.promises.writeFile(legacyHandoff, '# Legacy handoff\n', 'utf8');
-        await fs.promises.mkdir(legacyDocsDir, { recursive: true });
-        await fs.promises.writeFile(path.join(legacyDocsDir, 'legacy.md'), '# Legacy docs\n', 'utf8');
         await fs.promises.writeFile(hiddenFile, 'junk', 'utf8');
 
         const res = await request(app)
@@ -695,8 +690,6 @@ describe('Threshold cache draft workflow', () => {
         expect(names).toContain(draftId + '/manifest.json');
         expect(names).toContain(draftId + '/README.md');
         expect(names).toContain(draftId + '/documents/cache-draft-source.md');
-        expect(names).not.toContain(draftId + '/handoff.md');
-        expect(names.some(name => name.startsWith(draftId + '/docs/'))).toBe(false);
         expect(names).not.toContain(draftId + '/.DS_Store');
     });
 

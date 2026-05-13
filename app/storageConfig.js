@@ -55,10 +55,8 @@
  *
  * Legacy migration
  * ----------------
- * Older Ember Node versions stored data in a data/ subdirectory inside the app
- * folder.  On startup, migrateLegacyData() detects that layout and copies the
- * contents into the external data root so users do not lose their archive when
- * updating.  Migration is copy-based, non-destructive, and idempotent.
+ * Legacy data migration behavior has been retired.
+ * migrateLegacyData() now returns a no-op result.
  */
 
 'use strict';
@@ -233,7 +231,6 @@ const IGNORE_FILES = new Set(['.gitkeep', '.DS_Store', SEED_TEMPLATE_MARKER]);
  * architecture deliberately separates.
  */
 const LEGACY_DATA_DIR = path.join(__dirname, '..', 'data');
-const LEGACY_CORE_MANIFEST_REL_PATH = path.join('archive', 'core', 'manifest.json').replace(/\\/g, '/');
 const CORE_ARCHIVE_MANIFEST_PATH = path.join(ARCHIVE_CORE_DIR, 'manifest.json');
 const INTAKE_STATE_PATH          = path.join(SYSTEM_DIR, 'intake.json');
 
@@ -481,112 +478,14 @@ function dirHasContent(dir) {
 }
 
 /**
- * Return true when the source directory is the bundled app scaffold and
- * contains no real legacy user content beyond canonical seed files.
- *
- * @param {string} srcDir
- * @returns {boolean}
- */
-function isBundledSeedScaffoldOnly(srcDir) {
-    if (path.resolve(srcDir) !== path.resolve(LEGACY_DATA_DIR)) return false;
-    if (!fs.existsSync(srcDir)) return false;
-
-    const ALLOWED_FILES = new Set([
-        SEED_TEMPLATE_MARKER,
-        LEGACY_CORE_MANIFEST_REL_PATH,
-    ]);
-
-    const stack = [srcDir];
-    while (stack.length > 0) {
-        const current = stack.pop();
-        let entries = [];
-        try {
-            entries = fs.readdirSync(current, { withFileTypes: true });
-        } catch {
-            return false;
-        }
-
-        for (const entry of entries) {
-            if (IGNORE_FILES.has(entry.name)) continue;
-            const abs = path.join(current, entry.name);
-            if (entry.isDirectory()) {
-                stack.push(abs);
-                continue;
-            }
-            const rel = path.relative(srcDir, abs).replace(/\\/g, '/');
-            if (!ALLOWED_FILES.has(rel)) return false;
-        }
-    }
-
-    return true;
-}
-
-/**
- * Safe, idempotent, copy-based migration from the legacy in-project data/
- * folder to the current external storage root.
- *
- * Migration is skipped when:
- *   - The legacy data/ directory does not exist
- *   - The legacy directory contains only placeholder files (.gitkeep)
- *   - The data root already has real content (avoids destructive overwrites)
+ * Legacy migration handler (retired).
  *
  * @param {string} [legacyDir]  Override the legacy source directory (for tests)
  * @returns {{ detected: boolean, performed: boolean, mode: string, errors: string[] }}
  */
 function migrateLegacyData(legacyDir) {
-    const srcDir = legacyDir || LEGACY_DATA_DIR;
-    const result = { detected: false, performed: false, mode: 'skipped', errors: [] };
-
-    // Step 1: Does the legacy data/ folder exist with real content?
-    if (!dirHasContent(srcDir)) return result;
-
-    // If this is just the bundled scaffold template, do not treat it as legacy user data.
-    if (isBundledSeedScaffoldOnly(srcDir)) {
-        return result;
-    }
-
-    result.detected = true;
-    console.log('[migration] Legacy data folder detected at: ' + srcDir);
-
-    // Step 2: Does the data root already have content? If so, skip to avoid overwrites.
-    if (dirHasContent(DATA_ROOT)) {
-        console.log('[migration] Data root already has content — skipping legacy migration.');
-        return result;
-    }
-
-    // Step 3: Copy legacy data into the data root (non-destructive).
-    result.mode = 'copy';
-    console.log('[migration] Legacy data/ detected. Copying to ' + DATA_ROOT + ' ...');
-
-    try {
-        copyDirSafe(srcDir, DATA_ROOT);
-        migrateLegacyWorkshopToCouncil();
-        result.performed = true;
-        console.log('[migration] Legacy data migration complete.');
-    } catch (e) {
-        result.errors.push('Migration failed: ' + e.message);
-        console.error('[migration] Error during migration:', e.message);
-    }
-
-    return result;
-}
-
-function migrateLegacyWorkshopToCouncil() {
-    const legacyWorkshopDir = path.join(DATA_ROOT, 'workshop');
-    const councilDir = path.join(DATA_ROOT, 'council');
-    if (!fs.existsSync(legacyWorkshopDir)) return;
-
-    try {
-        if (!fs.existsSync(councilDir)) {
-            fs.renameSync(legacyWorkshopDir, councilDir);
-            return;
-        }
-
-        copyDirSafe(legacyWorkshopDir, councilDir);
-        fs.rmSync(legacyWorkshopDir, { recursive: true, force: true });
-    } catch (err) {
-        throw new Error('Failed to migrate legacy workshop room to council: ' + err.message);
-    }
+    void legacyDir;
+    return { detected: false, performed: false, mode: 'retired', errors: [] };
 }
 
 // ── First-run seed copy (Phase 11.8) ─────────────────────────────────────────
@@ -633,22 +532,18 @@ function seedDataRoot(seedDir) {
 /**
  * Resolve a stored source path to an absolute filesystem path.
  *
- * Handles two formats:
- *   New (storage-root-relative): 'council/file.md'  → <DATA_ROOT>/council/file.md
- *   Legacy (app-root-relative):  'data/workshop/file.md' → <DATA_ROOT>/council/file.md
- *
- * The legacy format was used by older Ember Node versions that stored data
- * inside the app folder.  The data/ prefix is stripped so both formats
- * resolve correctly against the external data root after migration.
+ * Expects storage-root-relative paths like:
+ *   'council/file.md' → <DATA_ROOT>/council/file.md
  *
  * @param {string} storedPath
  * @returns {string|null}
  */
 function resolveSourcePath(storedPath) {
     if (!storedPath) return null;
-    const normalized = storedPath
-        .replace(/^data[\\/]/, '')
-        .replace(/^workshop([\\/])/, 'council$1');
+    const normalized = String(storedPath)
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '');
+    if (!normalized || normalized.includes('..')) return null;
     return path.join(DATA_ROOT, normalized);
 }
 

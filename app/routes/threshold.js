@@ -492,14 +492,6 @@ function titleFromDocumentPath(relPath) {
 function normalizeDraftDocumentPath(inputPath) {
     let normalized = String(inputPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
     if (!normalized) return null;
-    // Backward compatibility for pre-normalization draft zips/manifests:
-    // older payloads used top-level handoff.md and docs/ instead of documents/.
-    if (normalized === 'handoff.md') {
-        normalized = 'documents/handoff.md';
-    }
-    if (normalized.startsWith('docs/')) {
-        normalized = 'documents/' + normalized.slice('docs/'.length);
-    }
     if (!normalized.startsWith('documents/')) return null;
     if (normalized.includes('..')) return null;
     return normalized;
@@ -1211,12 +1203,6 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
         }
         if (!rel || rel === '.' || rel.includes('..')) continue;
         let normalizedRel = rel;
-        if (normalizedRel === 'handoff.md') {
-            normalizedRel = 'documents/handoff.md';
-        }
-        if (normalizedRel.startsWith('docs/')) {
-            normalizedRel = 'documents/' + normalizedRel.slice('docs/'.length);
-        }
         if (!isAllowedDraftPayloadPath(normalizedRel)) {
             continue;
         }

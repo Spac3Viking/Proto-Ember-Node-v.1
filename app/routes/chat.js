@@ -214,7 +214,7 @@ const RESPONSE_SELF_CHECK_COMPACT_PROFILES = new Set(['spark-compression', 'mini
 
 function normalizeRoom(room) {
     // Legacy migration alias. Remove after user data migration stabilizes.
-    return room === 'workshop' ? 'council' : room;
+    return room;
 }
 
 function normalizeContextBudgetProfileId(value) {

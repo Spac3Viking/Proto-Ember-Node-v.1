@@ -15,10 +15,6 @@ const CACHE_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
  */
 const BUNDLED_CACHES_DIR = path.join(__dirname, '..', 'caches');
 
-// Backward-compatible alias kept for existing call sites.
-// TODO(phase-15-9c): remove deprecated CACHES_DIR alias after downstream migrations.
-const CACHES_DIR = BUNDLED_CACHES_DIR;
-
 function isPathInside(baseDir, targetPath) {
     const normalize = (value) => {
         const resolved = path.resolve(value);
@@ -116,7 +112,7 @@ function listCaches() {
 
 /**
  * Loads all readable text files (.md, .txt) inside a named cache
- * directory — including any files found inside a docs/ subdirectory —
+ * directory — including any files found inside a documents/ subdirectory —
  * and returns their combined content together with the cache name
  * and optional manifest metadata.  Returns null when the cache does
  * not exist.
@@ -143,18 +139,18 @@ function loadCache(name) {
         .map(f => safeJoinInside(cacheDir, f))
         .filter(Boolean);
 
-    // Collect files from docs/ subdirectory if present
-    const docsDir   = safeJoinInside(cacheDir, 'docs');
-    const docsFiles = docsDir && fs.existsSync(docsDir) && fs.statSync(docsDir).isDirectory()
-        ? fs.readdirSync(docsDir)
+    // Collect files from documents/ subdirectory if present
+    const documentsDir   = safeJoinInside(cacheDir, 'documents');
+    const documentsFiles = documentsDir && fs.existsSync(documentsDir) && fs.statSync(documentsDir).isDirectory()
+        ? fs.readdirSync(documentsDir)
               .filter(f => (f.endsWith('.md') || f.endsWith('.txt')) &&
                   CACHE_ID_PATTERN.test(f.replace(/\.(md|txt)$/i, '')))
               .sort()
-              .map(f => safeJoinInside(docsDir, f))
+              .map(f => safeJoinInside(documentsDir, f))
               .filter(Boolean)
         : [];
 
-    const content = [...topFiles, ...docsFiles]
+    const content = [...topFiles, ...documentsFiles]
         .map(filePath => {
             if (!isPathInside(cacheDir, filePath)) return '';
             return fs.readFileSync(filePath, 'utf8');
@@ -168,6 +164,5 @@ module.exports = {
     listCaches,
     loadCache,
     BUNDLED_CACHES_DIR,
-    CACHES_DIR,
     resolveBundledCacheDir,
 };

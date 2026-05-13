@@ -396,20 +396,20 @@ describe('signalTrace — formatSignalTraceSummary', () => {
     });
 });
 
-// ── cacheLoader docs/ support ─────────────────────────────────────────────
+// ── cacheLoader documents/ support ────────────────────────────────────────
 
-describe('cacheLoader — docs/ subdirectory support', () => {
+describe('cacheLoader — documents/ subdirectory support', () => {
     const { loadCache } = require('../app/cacheLoader');
 
-    test('green_fire content includes docs/ content', () => {
+    test('green_fire content includes documents/ content', () => {
         const result = loadCache('green_fire');
         expect(result).not.toBeNull();
         expect(result.content).toContain('Green Fire');
     });
 
-    test('content length is greater when docs/ files are present', () => {
+    test('content length is greater when documents/ files are present', () => {
         const result = loadCache('green_fire');
-        // We added docs/ — content should be substantially longer than README alone
+        // documents/ content should be substantially longer than README alone
         expect(result.content.length).toBeGreaterThan(500);
     });
 });
