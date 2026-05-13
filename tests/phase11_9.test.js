@@ -20,12 +20,12 @@ describe('Phase 11.9 — canonical data root finalization', () => {
         try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* ignore */ }
     });
 
-    test('migrateLegacyData skips bundled scaffold-only data template', () => {
+    test('migrateLegacyData returns retired no-op result', () => {
         const sc = require('../app/storageConfig');
         const result = sc.migrateLegacyData();
         expect(result.detected).toBe(false);
         expect(result.performed).toBe(false);
-        expect(result.mode).toBe('skipped');
+        expect(result.mode).toBe('retired');
     });
 
     test('seedDataRoot populates core archive scaffold on empty first run', () => {
