@@ -146,7 +146,7 @@
                   <span class="loadout-focus-state" id="loadout-focus-state">OFF</span>
                   <span class="visually-hidden" id="loadout-focus-help">Focus answers through the current Cache Loadout.</span>
                 </div>
-                <div class="runtime-controls-help">Runtime Profile shapes response posture. Response Depth controls answer breadth. Loadout Focus controls cache priority.</div>
+                <div class="runtime-controls-help">Runtime Profile sets style. Response Depth sets breadth. Loadout Focus prioritizes loaded caches.</div>
                 <div class="chat-input-row" style="padding: 0.75rem 1rem;">
                   <textarea
                     id="message-input"
@@ -427,10 +427,6 @@
                     <div class="forge-card-title">Continuity Posture</div>
                     <div id="sys-loadout-continuity-posture"><span class="message-system">Loading…</span></div>
                   </div>
-                  <div class="forge-card">
-                    <div class="forge-card-title">Mentor Guidance</div>
-                    <div id="sys-loadout-mentor-guidance"><span class="message-system">Loading…</span></div>
-                  </div>
                   <div class="forge-card forge-card-wide">
                     <div class="forge-card-title">Sentinel Loadout Bootstrap Preview</div>
                     <pre id="sys-loadout-bootstrap-preview" class="forge-bootstrap-preview">Loading…</pre>
@@ -438,7 +434,7 @@
                 </div>
               </div>
 
-              <!-- Phase 16D: Rolling Bootstrap Status -->
+              <!-- Rolling Bootstrap Status -->
               <div class="ember-card system-block">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
                   <div class="system-block-title" style="margin:0;">Rolling Bootstrap</div>
@@ -554,7 +550,7 @@
                 <span class="loadout-focus-state" id="ws-loadout-focus-state">OFF</span>
                 <span class="visually-hidden" id="ws-loadout-focus-help">Focus answers through the current Cache Loadout.</span>
               </div>
-              <div class="runtime-controls-help">Runtime Profile shapes response posture. Response Depth controls answer breadth. Loadout Focus controls cache priority.</div>
+              <div class="runtime-controls-help">Runtime Profile sets style. Response Depth sets breadth. Loadout Focus prioritizes loaded caches.</div>
             </div>
             <div class="ember-card" style="padding: 1rem; display:flex; flex-direction:column; gap:0.75rem; min-height:420px;">
               <div id="ws-council-messages" class="messages-container">
@@ -653,9 +649,8 @@
           <div class="sub-panel active" id="th-imports">
             <div class="ember-card" style="padding: 1rem 1.25rem;">
               <p class="threshold-notice">
-                The Threshold is the intake room for markdown-first continuity exchange. Active continuity moves through
-                <strong>.md</strong>, <strong>.txt</strong>, copy/paste dialogue, bootstrap files, cache manifests, and README files.
-                Other file types can be stored as references, but continuity work remains portable and text-first.
+                Threshold is the intake room for markdown-first continuity exchange.
+                Prioritize <strong>.md</strong>/<strong>.txt</strong> for active continuity; other file types can be stored as references.
               </p>
             </div>
 
@@ -705,12 +700,12 @@
                 <summary class="threshold-collapsible-summary">Prompt Bridges</summary>
                 <div class="threshold-collapsible-body">
                   <div class="message-system" style="font-size:0.78rem;">
-                    Generate copyable prompts for external AI tools to produce Green Fire Markdown Handoffs and cache-ready continuity drafts.
+                    Generate prompt bridges for external AI handoffs and cache drafts.
                   </div>
                   <div id="th-handoff-prompt-guides" class="threshold-file-list" style="max-height:none;"></div>
                   <div class="council-section-title" style="margin:0;">Create External AI Prompt</div>
                   <div class="message-system" style="font-size:0.78rem;">
-                    Generate a portable prompt bridge from discussion, reader document, selected cache, cache loadout, or active archetype.
+                    Choose a source and generate a portable prompt bridge.
                   </div>
                   <div style="display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center;">
                     <label for="th-external-prompt-source" class="response-depth-label" style="margin:0;">Source</label>
@@ -936,7 +931,7 @@
           <div class="insp-meta-row"><span class="trace-key">Interface</span><span id="runtime-insp-interface"></span></div>
           <div class="insp-meta-row"><span class="trace-key">Endpoint</span><span id="runtime-insp-endpoint" class="source-card-filename"></span></div>
           <div class="insp-meta-row"><span class="trace-key">Role</span><span id="runtime-insp-role"></span></div>
-          <div class="insp-meta-row"><span class="trace-key">Trust</span><span id="runtime-insp-trust"></span></div>
+          <div class="insp-meta-row"><span class="trace-key">Trust (debug)</span><span id="runtime-insp-trust"></span></div>
           <div class="insp-meta-row"><span class="trace-key">Last Seen</span><span id="runtime-insp-lastseen" class="source-card-filename"></span></div>
         </div>
         <div class="insp-actions" id="runtime-insp-actions"></div>

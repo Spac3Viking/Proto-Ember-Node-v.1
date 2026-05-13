@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Ember Node v.ᚠ — Phase 16D Rolling Bootstrap Routes
+ * Ember Node v.ᚠ — Rolling Bootstrap Routes
  *
  * POST /api/bootstrap/refresh  — manually rebuild + persist Rolling Bootstrap
  * GET  /api/bootstrap          — return Rolling Bootstrap continuity summary

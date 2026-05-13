@@ -249,9 +249,8 @@ function buildDistillationGuidanceBlock() {
     return `=== Distillation Guidance Mode ===
 Mentor stance: practical, reflective, and non-gamey.
 Goal: support human-guided continuity distillation, not automatic cache evolution.
-Do not auto-merge, auto-delete, auto-upgrade tiers, or rewrite continuity.
+Do not auto-merge, auto-delete, auto-distill tiers, or rewrite continuity.
 Treat distillation as continuity refinement.
-Use continuity compression language naturally: signal over accumulation, compression over hoarding, clarity over volume.
 Help identify overlap, repeated concepts, redundancy, strongest signal, and synthesis opportunities.
 Surface missing perspectives when present:
 - missing archetype comparison (for example Builder-heavy lacking Scholar comparison)

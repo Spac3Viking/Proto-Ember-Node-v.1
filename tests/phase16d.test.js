@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-describe('Phase 16D — Rolling Bootstrap + Context Memory', () => {
+describe('Rolling Bootstrap + Context Memory', () => {
     const DATA_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-p16d-'));
 
     beforeAll(() => {

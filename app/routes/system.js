@@ -204,7 +204,7 @@ function createSystemRouter({ migrationResult }) {
             ? fs.readdirSync(USER_CACHES_DIR).filter(f => f.endsWith('.json')).length
             : 0;
 
-        // Phase 16D: Forge + Rolling Bootstrap status
+        // Loadout Forge + Rolling Bootstrap status
         const forgeLoaded   = fs.existsSync(FORGE_CORE_PATH);
         const bootstrap = loadBootstrap();
         const bootstrapStatus = bootstrap ? 'ready' : 'not generated';
