@@ -1047,7 +1047,8 @@ function normalizeSignalDocuments(value) {
 
 function collectTitleKeywords(text) {
     const normalized = String(text || '').toLowerCase();
-    const words = normalized.match(new RegExp('[a-z0-9]{' + MIN_SIGNAL_KEYWORD_LENGTH + ',}', 'g')) || [];
+    const keywordPattern = new RegExp(`[a-z0-9]{${MIN_SIGNAL_KEYWORD_LENGTH},}`, 'g');
+    const words = normalized.match(keywordPattern) || [];
     return Array.from(new Set(words.slice(0, MAX_SIGNAL_KEYWORDS)));
 }
 
@@ -1172,11 +1173,12 @@ function buildSignalDisciplineHints(target, peers = []) {
     const strongestSignal = profile.continuityThemes.length > 0
         ? profile.continuityThemes.slice(0, 3).join(', ')
         : (profile.tags.length > 0 ? profile.tags.slice(0, 3).join(', ') : profile.title);
-    const signalDensityHint = profile.signalDensity === 'high'
-        ? 'Dense continuity signal; maintain compact framing to keep it legible.'
-        : profile.signalDensity === 'moderate'
-            ? 'Moderate continuity density; tighten repeated phrasing as themes recur.'
-            : 'Low continuity density; identify one core throughline to strengthen carry weight.';
+    let signalDensityHint = 'Low continuity density; identify one core throughline to strengthen carry weight.';
+    if (profile.signalDensity === 'high') {
+        signalDensityHint = 'Dense continuity signal; maintain compact framing to keep it legible.';
+    } else if (profile.signalDensity === 'moderate') {
+        signalDensityHint = 'Moderate continuity density; tighten repeated phrasing as themes recur.';
+    }
     const qualityGuidance = [
         'Useful cache signs: clear purpose, human-readable notes, specific sources, compact summary, practical or symbolic relevance, low redundancy.',
         'Noisy cache signs: unclear purpose, broad scope drift, repeated cache content, missing source notes, unreviewed AI output only.',
