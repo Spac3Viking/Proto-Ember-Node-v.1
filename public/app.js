@@ -99,6 +99,16 @@ const FORGE_MAX_ROLLING_SUMMARY_TRUNCATE = 142;
 const FORGE_MAX_BOOTSTRAP_PREVIEW_LINES = 18;
 const FORGE_MAX_CACHE_CARDS = 8;
 const MAX_DISTILLATION_THEME_DISPLAY = 8;
+const MIN_SIGNAL_KEYWORD_LENGTH = 4;
+const MAX_SIGNAL_KEYWORDS = 20;
+const SIGNAL_OVERLAP_THEME_WEIGHT = 3;
+const SIGNAL_OVERLAP_TAG_WEIGHT = 2;
+const SIGNAL_OVERLAP_ARCHETYPE_WEIGHT = 2;
+const SIGNAL_OVERLAP_KEYWORD_WEIGHT = 1;
+const SIGNAL_OVERLAP_DOCUMENT_WEIGHT = 1;
+const SIGNAL_OVERLAP_LEVEL_WEIGHT = 1;
+const MODERATE_SIGNAL_OVERLAP_THRESHOLD = 4;
+const HIGH_SIGNAL_OVERLAP_THRESHOLD = 8;
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
 let _activeRuntimeProfile = null;
@@ -1007,6 +1017,238 @@ function summarizeDistillationThemes(list) {
     return themes.slice(0, MAX_DISTILLATION_THEME_DISPLAY).join(', ');
 }
 
+function normalizeSignalToken(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function normalizeSignalList(value) {
+    const input = Array.isArray(value) ? value : (value ? [value] : []);
+    return Array.from(new Set(
+        input
+            .map(normalizeSignalToken)
+            .filter(Boolean),
+    ));
+}
+
+function normalizeSignalDocuments(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            if (!item) return '';
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object') {
+                return item.title || item.path || item.relativePath || '';
+            }
+            return '';
+        })
+        .map(text => String(text || '').trim())
+        .filter(Boolean);
+}
+
+function collectTitleKeywords(text) {
+    const normalized = String(text || '').toLowerCase();
+    const keywordPattern = new RegExp(`[a-z0-9][a-z0-9_-]{${Math.max(0, MIN_SIGNAL_KEYWORD_LENGTH - 1)},}`, 'g');
+    const words = normalized.match(keywordPattern) || [];
+    return Array.from(new Set(words.slice(0, MAX_SIGNAL_KEYWORDS)));
+}
+
+function countSharedSignals(left, right) {
+    const rightSet = new Set(right || []);
+    return (left || []).filter(item => rightSet.has(item)).length;
+}
+
+function collectSignalProfile(input) {
+    const source = input && typeof input === 'object' ? input : {};
+    const manifest = source && source.manifest && typeof source.manifest === 'object'
+        ? source.manifest
+        : source;
+    const title = String(
+        source.title || manifest.title || manifest.name || source.id || manifest.id || 'cache',
+    ).trim() || 'cache';
+    const documents = normalizeSignalDocuments(
+        manifest.documents || source.documents || source.readerEntries || [],
+    );
+    const tags = normalizeSignalList(manifest.tags || source.tags || []);
+    const archetypes = normalizeSignalList(
+        manifest.archetypes || manifest.preferred_archetypes || source.archetypes || [],
+    );
+    const continuityThemes = normalizeSignalList(
+        manifest.continuity_themes || source.continuity_themes || [],
+    );
+    const level = normalizeSignalToken(manifest.level || source.level || 'spark') || 'spark';
+    const titleKeywords = collectTitleKeywords([title].concat(documents).join(' '));
+    return {
+        id: String(source.id || manifest.id || title).trim(),
+        title,
+        level,
+        tags,
+        archetypes,
+        continuityThemes,
+        documents,
+        titleKeywords,
+        signalDensity: normalizeSignalToken(manifest.signal_density || source.signal_density || 'low') || 'low',
+    };
+}
+
+function scoreSignalOverlap(baseProfile, otherProfile) {
+    const sharedThemes = countSharedSignals(baseProfile.continuityThemes, otherProfile.continuityThemes);
+    const sharedTags = countSharedSignals(baseProfile.tags, otherProfile.tags);
+    const sharedArchetypes = countSharedSignals(baseProfile.archetypes, otherProfile.archetypes);
+    const sharedKeywords = countSharedSignals(baseProfile.titleKeywords, otherProfile.titleKeywords);
+    const sharedDocuments = countSharedSignals(
+        normalizeSignalList(baseProfile.documents),
+        normalizeSignalList(otherProfile.documents),
+    );
+    const sameLevel = baseProfile.level === otherProfile.level ? SIGNAL_OVERLAP_LEVEL_WEIGHT : 0;
+    const score = (sharedThemes * SIGNAL_OVERLAP_THEME_WEIGHT) +
+        (sharedTags * SIGNAL_OVERLAP_TAG_WEIGHT) +
+        (sharedArchetypes * SIGNAL_OVERLAP_ARCHETYPE_WEIGHT) +
+        (sharedKeywords * SIGNAL_OVERLAP_KEYWORD_WEIGHT) +
+        (sharedDocuments * SIGNAL_OVERLAP_DOCUMENT_WEIGHT) +
+        sameLevel;
+    let level = 'low';
+    if (score >= HIGH_SIGNAL_OVERLAP_THRESHOLD) level = 'high';
+    else if (score >= MODERATE_SIGNAL_OVERLAP_THRESHOLD) level = 'moderate';
+    const focusSet = new Set();
+    const addFocus = (items) => {
+        (items || []).forEach(item => {
+            const label = String(item || '').trim();
+            if (!label) return;
+            focusSet.add(label);
+        });
+    };
+    addFocus(baseProfile.continuityThemes.filter(item => otherProfile.continuityThemes.includes(item)).slice(0, 2));
+    addFocus(baseProfile.tags.filter(item => otherProfile.tags.includes(item)).slice(0, 2));
+    addFocus(baseProfile.titleKeywords.filter(item => otherProfile.titleKeywords.includes(item)).slice(0, 2));
+    return { score, level, focus: Array.from(focusSet).slice(0, 3) };
+}
+
+function buildMissingPerspectiveHints(profile) {
+    const lenses = new Set((profile.archetypes || []).map(normalizeSignalToken));
+    const hints = [];
+    if (!lenses.has('builder')) hints.push('Builder review may add practical steps.');
+    if (!lenses.has('scholar')) hints.push('Scholar review may add comparison and source grounding.');
+    if (!lenses.has('scribe')) hints.push('Scribe review may improve transmission and readability.');
+    if (!lenses.has('warrior')) hints.push('Warrior review may pressure-test risk.');
+    if (!lenses.has('mystic')) hints.push('Mystic review may clarify symbolic pattern without drifting from reality.');
+    return hints.slice(0, 3);
+}
+
+function buildSignalDisciplineHints(target, peers = []) {
+    const profile = collectSignalProfile(target);
+    const peerProfiles = Array.isArray(peers)
+        ? peers
+            .filter(entry => entry && String(entry.id || '').trim() !== String(profile.id || '').trim())
+            .map(collectSignalProfile)
+        : [];
+    const overlaps = peerProfiles
+        .map(peer => ({ peer, overlap: scoreSignalOverlap(profile, peer) }))
+        .sort((a, b) => b.overlap.score - a.overlap.score);
+    const strongestOverlap = overlaps[0] || null;
+    const overlapHint = strongestOverlap && strongestOverlap.overlap.level !== 'low'
+        ? ('This cache overlaps with ' +
+            strongestOverlap.peer.title +
+            ' around ' +
+            (strongestOverlap.overlap.focus.length > 0
+                ? strongestOverlap.overlap.focus.join(', ')
+                : 'shared continuity signals') +
+            '.')
+        : null;
+    const missingPerspectives = buildMissingPerspectiveHints(profile);
+    const highOverlap = Boolean(strongestOverlap && strongestOverlap.overlap.level === 'high');
+    const moderateOverlap = Boolean(strongestOverlap && strongestOverlap.overlap.level === 'moderate');
+    const redundancyRisk = highOverlap
+        ? 'High overlap signal; review before adding more cache volume.'
+        : moderateOverlap
+            ? 'Moderate overlap signal; selective distillation may reduce repetition.'
+            : 'Low overlap signal; continue with focused additions.';
+    const compressionOpportunity = highOverlap || moderateOverlap
+        ? 'These Spark caches may carry related signal. Distillation could preserve the strongest continuity while reducing repetition.'
+        : 'Compression opportunity is optional; refine clarity before expanding breadth.';
+    const suggestedStewardAction = highOverlap
+        ? 'Review for Distillation · Generate Distillation Recommendation · Create an Ember-level synthesis.'
+        : moderateOverlap
+            ? 'Review for Distillation and consider an Ember-level synthesis if repetition grows.'
+            : 'Keep this cache compact, source-grounded, and stewarded by Sentinel judgment.';
+    const strongestSignal = profile.continuityThemes.length > 0
+        ? profile.continuityThemes.slice(0, 3).join(', ')
+        : (profile.tags.length > 0 ? profile.tags.slice(0, 3).join(', ') : profile.title);
+    let signalDensityHint = 'Low continuity density; identify one core throughline to strengthen carry weight.';
+    if (profile.signalDensity === 'high') {
+        signalDensityHint = 'Dense continuity signal; maintain compact framing to keep it legible.';
+    } else if (profile.signalDensity === 'moderate') {
+        signalDensityHint = 'Moderate continuity density; tighten repeated phrasing as themes recur.';
+    }
+    const qualityGuidance = [
+        'Useful cache signs: clear purpose, human-readable notes, specific sources, compact summary, practical or symbolic relevance, low redundancy.',
+        'Noisy cache signs: unclear purpose, broad scope drift, repeated cache content, missing source notes, unreviewed AI output only.',
+    ];
+    const stewardship = 'The Sentinel decides what to keep, refine, distill, load, or transmit. The Node recommends, not commands.';
+    return {
+        profile,
+        strongestSignal,
+        overlapHint,
+        signalDensityHint,
+        redundancyRisk,
+        missingPerspectives,
+        compressionOpportunity,
+        suggestedStewardAction,
+        qualityGuidance,
+        stewardship,
+        highOverlap,
+    };
+}
+
+function buildSignalDisciplineNoteMarkdown(hints) {
+    const safeHints = hints && typeof hints === 'object' ? hints : {};
+    const {
+        strongestSignal,
+        signalDensityHint,
+        redundancyRisk,
+        overlapHint,
+        missingPerspectives,
+        compressionOpportunity,
+        suggestedStewardAction,
+        qualityGuidance,
+        stewardship,
+    } = safeHints;
+    const signal = strongestSignal || 'No dominant continuity signal identified yet.';
+    const risk = redundancyRisk || 'Redundancy risk not assessed.';
+    const missing = Array.isArray(missingPerspectives) && missingPerspectives.length > 0
+        ? missingPerspectives.join('\n')
+        : 'No major missing perspective flagged yet.';
+    const compression = compressionOpportunity
+        ? compressionOpportunity
+        : 'Compression opportunity not assessed.';
+    const action = suggestedStewardAction
+        ? suggestedStewardAction
+        : 'Sentinel stewardship review recommended.';
+    return [
+        '# Signal Discipline Note',
+        '',
+        '## Strongest Signal',
+        signal,
+        'Signal Density: ' + (signalDensityHint || 'Not assessed.'),
+        '',
+        '## Redundancy Risk',
+        risk,
+        overlapHint || '',
+        '',
+        '## Missing Perspectives',
+        missing,
+        '',
+        '## Compression Opportunity',
+        compression,
+        '',
+        '## Suggested Steward Action',
+        action,
+        Array.isArray(qualityGuidance) ? qualityGuidance.join('\n') : '',
+        '',
+        stewardship || '',
+        '',
+    ].filter(Boolean).join('\n');
+}
+
 function buildCacheCompressionPrompt(options = {}) {
     const title = String(options.title || options.id || 'Cache').trim() || 'Cache';
     const source = String(options.source || 'archive').trim() || 'archive';
@@ -1092,7 +1334,6 @@ function buildDistillationRecommendationPrompt(options = {}) {
         'Repeated Concepts = specific ideas or terms that keep repeating.',
         '',
         'Tone: mentor-guided, practical, reflective, concise, and non-gamey.',
-        'Use continuity compression language naturally: signal over accumulation, compression over hoarding, clarity over volume.',
         'When relevant, name missing archetype comparison, continuity domains, practical grounding, or narrative cohesion.',
         'Keep the Sentinel central: no auto-merge, no auto-delete, no automatic tier upgrades.',
     );
@@ -1102,7 +1343,19 @@ function buildDistillationRecommendationPrompt(options = {}) {
 function buildDistillationRecommendationMarkdown(answer, options = {}) {
     const content = String(answer || '').trim();
     if (!content) return '# Distillation Recommendation\n\n_No recommendation generated._\n';
-    if (/^#\s+Distillation Recommendation\b/im.test(content)) return content + '\n';
+    const disciplineHints = buildSignalDisciplineHints({
+        title: options.title || 'Distillation Recommendation',
+        level: options.level || 'spark',
+        continuity_themes: options.continuityThemes || [],
+        tags: options.tags || [],
+        archetypes: options.archetypes || [],
+        signal_density: options.signalDensity || 'moderate',
+        documents: options.documents || [],
+    }, options.peerCaches || []);
+    const disciplineNote = buildSignalDisciplineNoteMarkdown(disciplineHints);
+    if (/^#\s+Distillation Recommendation\b/im.test(content)) {
+        return content + '\n\n' + disciplineNote + '\n';
+    }
     const title = String(options.title || 'Distillation Recommendation').trim();
     return [
         '# Distillation Recommendation',
@@ -1130,6 +1383,8 @@ function buildDistillationRecommendationMarkdown(answer, options = {}) {
         '',
         '## Suggested Next Step',
         '- _to be refined_',
+        '',
+        disciplineNote,
         '',
     ].join('\n');
 }
@@ -2999,6 +3254,7 @@ async function loadCacheShelf() {
         const res = await fetch('/api/caches/installed');
         const data = await res.json();
         const caches = Array.isArray(data.caches) ? data.caches : [];
+        _installedCachesSnapshot = caches.slice();
 
         if (loadingEl) loadingEl.remove();
 
@@ -3042,6 +3298,7 @@ async function loadCacheShelf() {
                         sourceHint: 'loaded cache loadout',
                         candidateCaches: loaded.map(cache => cache.title || cache.id).filter(Boolean),
                         continuityThemes: Array.from(new Set(themes.map(item => String(item || '').trim()).filter(Boolean))),
+                        peerCaches: loaded,
                     });
                 } catch (error) {
                     showFlashMessage(error.message || 'Could not generate distillation recommendation.');
@@ -3170,10 +3427,14 @@ function compactCacheRelationshipText(cache) {
     ];
 }
 
-function buildInstalledCacheDistillationActions(cache) {
+function buildInstalledCacheDistillationActions(cache, disciplineHints = null) {
     const wrapper = document.createElement('div');
     wrapper.className = 'threshold-file-actions';
     const lineage = extractCacheLineageMetadata(cache);
+    const hints = disciplineHints || buildSignalDisciplineHints(
+        cache,
+        _installedCachesSnapshot.filter(entry => entry && entry.id !== cache.id),
+    );
 
     const reviewBtn = document.createElement('button');
     reviewBtn.className = 'secondary threshold-action-btn';
@@ -3185,6 +3446,12 @@ function buildInstalledCacheDistillationActions(cache) {
                 sourceHint: cache.source || 'archive/cache',
                 candidateCaches: [cache.title || cache.id],
                 continuityThemes: lineage.continuityThemes,
+                peerCaches: _installedCachesSnapshot.filter(entry => entry && entry.id !== cache.id),
+                level: cache.level,
+                signalDensity: hints.profile.signalDensity,
+                tags: hints.profile.tags,
+                archetypes: hints.profile.archetypes,
+                documents: hints.profile.documents,
             });
         } catch (error) {
             showFlashMessage(error.message || 'Could not generate distillation recommendation.');
@@ -3226,9 +3493,29 @@ function buildInstalledCacheDistillationActions(cache) {
         showFlashMessage('Theme comparison opened in Council Chat.');
     });
 
+    const noteBtn = document.createElement('button');
+    noteBtn.className = 'secondary threshold-action-btn';
+    noteBtn.textContent = 'Signal Discipline Note';
+    noteBtn.addEventListener('click', () => {
+        const markdown = buildSignalDisciplineNoteMarkdown(hints);
+        getGreenFireReader().open({
+            title: (cache.title || cache.id || 'Cache') + ' · Signal Discipline',
+            sourcePath: cache.source || 'cache/signal-discipline',
+            sourceLabel: 'Signal Discipline Note',
+            content: markdown,
+            contentType: 'text/markdown',
+            entryId: 'signal-discipline-note:' + (cache.id || Date.now()),
+            stripFrontmatter: false,
+            rawOnly: false,
+            initialRawView: false,
+        });
+        showFlashMessage('Signal Discipline Note opened in Reader.');
+    });
+
     wrapper.appendChild(reviewBtn);
     wrapper.appendChild(discussBtn);
     wrapper.appendChild(compareBtn);
+    wrapper.appendChild(noteBtn);
     return wrapper;
 }
 
@@ -3256,6 +3543,10 @@ function inspectInstalledCache(cache, itemEl) {
     const metaEl = document.getElementById('inspector-meta');
     const permsEl = document.getElementById('inspector-perms');
     const contentEl = document.getElementById('inspector-content');
+    const disciplineHints = buildSignalDisciplineHints(
+        cache,
+        _installedCachesSnapshot.filter(entry => entry && entry.id !== cache.id),
+    );
     if (emptyEl) emptyEl.style.display = 'none';
     if (contentArea) contentArea.style.display = 'flex';
     if (nameEl) nameEl.textContent = cache.title || cache.id;
@@ -3275,11 +3566,19 @@ function inspectInstalledCache(cache, itemEl) {
             'Level Meaning: ' + describeCacheLevel(cache.level),
             'Document count: ' + String(cache.documentCount || 0),
             'Reader entries: ' + String(Array.isArray(cache.readerEntries) ? cache.readerEntries.length : 0),
+            'Signal Density: ' + disciplineHints.signalDensityHint,
+            'Redundancy Risk: ' + disciplineHints.redundancyRisk,
+            'Missing Perspectives: ' + (disciplineHints.missingPerspectives.length > 0 ? disciplineHints.missingPerspectives.join(' | ') : 'none flagged'),
+            'Compression Opportunity: ' + disciplineHints.compressionOpportunity,
+            'Cache Overlap Hint: ' + (disciplineHints.overlapHint || 'No strong overlap detected.'),
+            disciplineHints.qualityGuidance[0],
+            disciplineHints.qualityGuidance[1],
+            disciplineHints.stewardship,
         ].concat(compactCacheRelationshipText(cache)).join('\n');
     }
     if (permsEl) {
         permsEl.innerHTML = '';
-        permsEl.appendChild(buildInstalledCacheDistillationActions(cache));
+        permsEl.appendChild(buildInstalledCacheDistillationActions(cache, disciplineHints));
     }
 }
 
@@ -3368,6 +3667,12 @@ function buildInstalledCacheItem(cache) {
                 sourceHint: cache.source || 'archive/cache',
                 candidateCaches: [cache.title || cache.id],
                 continuityThemes: lineage.continuityThemes,
+                peerCaches: _installedCachesSnapshot.filter(entry => entry && entry.id !== cache.id),
+                level: cache.level,
+                signalDensity: lineage.signalDensity,
+                tags: (cache.manifest && cache.manifest.tags) || [],
+                archetypes: (cache.manifest && (cache.manifest.archetypes || cache.manifest.preferred_archetypes)) || [],
+                documents: Array.isArray(cache.readerEntries) ? cache.readerEntries : [],
             });
         } catch (error) {
             showFlashMessage(error.message || 'Could not generate distillation recommendation.');
@@ -4005,6 +4310,7 @@ function getGreenFireReader() {
                     sourceHint: state.sourceLabel || state.sourcePath || 'Green Fire Reader',
                     candidateCaches: [state.title || 'Reader Context'],
                     continuityThemes: [],
+                    documents: [state.title || 'Reader Context'],
                 });
             } catch (error) {
                 showFlashMessage(error.message || 'Could not generate distillation recommendation.');
@@ -4869,6 +5175,7 @@ let _thresholdImportedFiles = [];
 let _selectedThresholdPaths = new Set();
 let _thresholdCacheDrafts = [];
 let _activeThresholdDraftId = null;
+let _installedCachesSnapshot = [];
 const THRESHOLD_DRAFT_ALLOWED_LABEL = '.md/.txt/.json';
 
 function isThresholdDraftSelectableFile(file) {
@@ -5287,6 +5594,20 @@ function buildThresholdCacheDraftRow(draft) {
     const manifest = draft && draft.manifest ? draft.manifest : {};
     const documents = Array.isArray(manifest.documents) ? manifest.documents : [];
     const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
+    const disciplineHints = buildSignalDisciplineHints(
+        {
+            id: draft.id,
+            title: manifest.title || draft.id || 'Cache Draft',
+            level: manifest.level || 'spark',
+            signal_density: manifest.signal_density || 'low',
+            continuity_themes: continuityThemes,
+            tags: manifest.tags || [],
+            archetypes: manifest.archetypes || [],
+            documents,
+            manifest,
+        },
+        (_thresholdCacheDrafts || []).filter(entry => entry && entry.id !== draft.id),
+    );
 
     const metaEl = document.createElement('div');
     metaEl.className = 'threshold-file-meta';
@@ -5297,6 +5618,12 @@ function buildThresholdCacheDraftRow(draft) {
         '<div class="threshold-file-detail">Documents: ' + escapeHtml(String(documents.length)) + '</div>' +
         '<div class="threshold-file-detail">Status: ' + escapeHtml(manifest.status || 'draft') + '</div>' +
         '<div class="threshold-file-detail">Themes: ' + escapeHtml(summarizeDistillationThemes(continuityThemes)) + '</div>' +
+        '<div class="threshold-file-detail">Signal Density: ' + escapeHtml(disciplineHints.signalDensityHint) + '</div>' +
+        '<div class="threshold-file-detail">Redundancy Risk: ' + escapeHtml(disciplineHints.redundancyRisk) + '</div>' +
+        '<div class="threshold-file-detail">Missing Perspectives: ' +
+            escapeHtml(disciplineHints.missingPerspectives.length > 0 ? disciplineHints.missingPerspectives.join(' | ') : 'none flagged') +
+            '</div>' +
+        '<div class="threshold-file-detail">Compression Opportunity: ' + escapeHtml(disciplineHints.compressionOpportunity) + '</div>' +
         '<div class="threshold-file-detail">Updated: ' + escapeHtml(draftUpdatedLabel(draft)) + '</div>';
 
     const statusEl = document.createElement('span');
@@ -5341,6 +5668,12 @@ function buildThresholdCacheDraftRow(draft) {
                 sourceHint: draft.path || ('threshold/cache-drafts/' + draft.id),
                 candidateCaches: [manifest.title || draft.id || 'Cache Draft'],
                 continuityThemes,
+                peerCaches: (_thresholdCacheDrafts || []).filter(entry => entry && entry.id !== draft.id),
+                level: manifest.level || 'spark',
+                signalDensity: manifest.signal_density || 'low',
+                tags: manifest.tags || [],
+                archetypes: manifest.archetypes || [],
+                documents,
             });
         } catch (error) {
             showFlashMessage(error.message || 'Could not generate distillation recommendation.');
@@ -5382,11 +5715,30 @@ function buildThresholdCacheDraftRow(draft) {
         showFlashMessage('Theme comparison opened in Council Chat.');
     });
 
+    const noteBtn = document.createElement('button');
+    noteBtn.className = 'secondary threshold-action-btn';
+    noteBtn.textContent = 'Signal Discipline Note';
+    noteBtn.addEventListener('click', () => {
+        getGreenFireReader().open({
+            title: (manifest.title || draft.id || 'Cache Draft') + ' · Signal Discipline',
+            sourcePath: draft.path || ('threshold/cache-drafts/' + draft.id),
+            sourceLabel: 'Signal Discipline Note',
+            content: buildSignalDisciplineNoteMarkdown(disciplineHints),
+            contentType: 'text/markdown',
+            entryId: 'threshold-signal-discipline:' + draft.id,
+            stripFrontmatter: false,
+            rawOnly: false,
+            initialRawView: false,
+        });
+        showFlashMessage('Signal Discipline Note opened in Reader.');
+    });
+
     actions.appendChild(openBtn);
     actions.appendChild(openReaderBtn);
     actions.appendChild(reviewBtn);
     actions.appendChild(discussBtn);
     actions.appendChild(compareBtn);
+    actions.appendChild(noteBtn);
     actions.appendChild(exportBtn);
     actions.appendChild(installBtn);
     actions.appendChild(deleteBtn);
@@ -5415,6 +5767,20 @@ function renderThresholdCacheDraftDetail(draft) {
     const distilledInto = Array.isArray(manifest.distilled_into) ? manifest.distilled_into : [];
     const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
     const signalDensity = manifest.signal_density ? String(manifest.signal_density) : 'low';
+    const disciplineHints = buildSignalDisciplineHints(
+        {
+            id: draft.id,
+            title: manifest.title || draft.id || 'Cache Draft',
+            level: manifest.level || 'spark',
+            signal_density: signalDensity,
+            continuity_themes: continuityThemes,
+            tags: manifest.tags || [],
+            archetypes: manifest.archetypes || [],
+            documents: docs,
+            manifest,
+        },
+        (_thresholdCacheDrafts || []).filter(entry => entry && entry.id !== draft.id),
+    );
     titleEl.textContent = 'Draft: ' + (manifest.title || draft.id || 'Cache Draft');
     metaEl.textContent = [
         'Level: ' + describeCacheLevel(manifest.level || 'spark'),
@@ -5425,6 +5791,14 @@ function renderThresholdCacheDraftDetail(draft) {
         'Distilled Into: ' + (distilledInto.length > 0 ? distilledInto.join(', ') : '—'),
         'Related Themes: ' + (continuityThemes.length > 0 ? continuityThemes.join(', ') : '—'),
         'Signal Density: ' + signalDensity,
+        'Signal Density Hint: ' + disciplineHints.signalDensityHint,
+        'Redundancy Risk: ' + disciplineHints.redundancyRisk,
+        'Missing Perspectives: ' + (disciplineHints.missingPerspectives.length > 0 ? disciplineHints.missingPerspectives.join(' | ') : 'none flagged'),
+        'Compression Opportunity: ' + disciplineHints.compressionOpportunity,
+        'Cache Overlap Hint: ' + (disciplineHints.overlapHint || 'No strong overlap detected.'),
+        disciplineHints.qualityGuidance[0],
+        disciplineHints.qualityGuidance[1],
+        disciplineHints.stewardship,
     ].join(' · ');
     if (docs.length === 0) {
         docsEl.innerHTML = '<span class="message-system">No draft documents yet.</span>';

@@ -1,18 +1,15 @@
 'use strict';
 
 /**
- * Ember Node v.ᚠ — Chat Routes (Phase 16D: Rolling Bootstrap continuity layer)
+ * Ember Node v.ᚠ — Chat Routes
  *
  * POST /chat          (legacy Phase 2 direct-Ollama endpoint)
  * POST /api/chat      (grounded Ember Prime chat with retrieval)
  *
- * Phase 11:   Chat context is room-bounded with continuity memory overlays.
- * Phase 11.5: Chat assembly includes identity (Forge) + continuity + retrieval +
- *             optional archetype overlay.
- * Phase 16D assembly order:
- *   [1] Forge Core identity
+ * Assembly order:
+ *   [1] Runtime system identity
  *   [2] Rolling Bootstrap continuity summary
- *   [3] Ember Prime continuity layer (legacy active bootstrap)
+ *   [3] Active continuity layer
  *   [4] Optional archetype modifier
  *   [5] Retrieval context + user message
  */
@@ -206,10 +203,7 @@ const RUNTIME_GENERATION_PROFILES = Object.freeze({
 });
 const SPARK_NUDGE_MAX_CHARS = 520;
 const EMBER_NUDGE_MAX_CHARS = 320;
-// Compact confidence hint weighting:
-// - state baseline remains primary signal for trust posture
-// - raw score contribution adds local retrieval sharpness
-// - continuity density favors summary/cached overlap over broad source spread
+// Trace/debug confidence hints: compact baseline + retrieval sharpness + continuity density.
 const CONFIDENCE_STATE_BASELINE_WEIGHT = 0.72;
 const CONFIDENCE_RAW_SCORE_WEIGHT = 0.28;
 const CONTINUITY_SUMMARY_DENSITY_DIVISOR = 3;
