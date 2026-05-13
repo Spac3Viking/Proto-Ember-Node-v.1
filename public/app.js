@@ -676,6 +676,16 @@ function compactTextSnippet(value, maxLength = 500) {
     return text.slice(0, limit).trimEnd() + '…';
 }
 
+function formatPurposeSummary(value, maxLength = CACHE_CARRY_SUMMARY_MAX_CHARS) {
+    const lines = String(value || '')
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .slice(0, 5);
+    const fallback = 'Purpose summary not set yet. Add a 1–5 line continuity purpose before expanding this cache.';
+    return compactTextSnippet(lines.length > 0 ? lines.join(' ') : fallback, maxLength);
+}
+
 function safeIsoTimestamp(value) {
     if (!value) return new Date().toISOString();
     const date = new Date(value);
@@ -1286,12 +1296,16 @@ function collectSignalProfile(input) {
     const continuityThemes = normalizeSignalList(
         manifest.continuity_themes || source.continuity_themes || [],
     );
+    const purposeSummary = String(
+        manifest.purpose_summary || manifest.purposeSummary || source.purpose_summary || source.purposeSummary || source.description || '',
+    ).trim();
     const level = normalizeSignalToken(manifest.level || source.level || 'spark') || 'spark';
     const titleKeywords = collectTitleKeywords([title].concat(documents).join(' '));
     return {
         id: String(source.id || manifest.id || title).trim(),
         title,
         level,
+        purposeSummary,
         tags,
         archetypes,
         continuityThemes,
@@ -1376,6 +1390,30 @@ function buildSignalDisciplineHints(target, peers = []) {
     const compressionOpportunity = highOverlap || moderateOverlap
         ? 'These Spark caches may carry related signal. Distillation could preserve the strongest continuity while reducing repetition.'
         : 'Compression opportunity is optional; refine clarity before expanding breadth.';
+    const distillationReadiness = highOverlap || moderateOverlap
+        ? 'These caches preserve overlapping continuity. Distillation may strengthen clarity while reducing repetition.'
+        : 'Distillation readiness is moderate; tighten purpose and source grounding before compressing further.';
+    const hasPurposeSummary = Boolean(String(profile.purposeSummary || '').trim());
+    const hasThemes = profile.continuityThemes.length > 0;
+    const hasSources = profile.documents.length > 0;
+    const weakSignalNotes = [];
+    if (!hasPurposeSummary) weakSignalNotes.push('Purpose summary is unclear or missing.');
+    if (!hasThemes) weakSignalNotes.push('Continuity themes are broad or under-defined.');
+    if (!hasSources) weakSignalNotes.push('Source grounding is thin; add reviewed material.');
+    if (profile.signalDensity === 'low') weakSignalNotes.push('Synthesis is still sparse; compress less and clarify more.');
+    const weakSignalGuidance = weakSignalNotes.length > 0
+        ? weakSignalNotes.slice(0, 2).join(' ')
+        : 'No major weak signal patterns detected at this time.';
+    const highSignalNotes = [];
+    if (hasPurposeSummary) highSignalNotes.push('clear purpose summary');
+    if (hasThemes) highSignalNotes.push('distinct continuity themes');
+    if (hasSources) highSignalNotes.push('source-grounded synthesis');
+    if (profile.signalDensity === 'high' || profile.signalDensity === 'moderate') {
+        highSignalNotes.push('compact signal density');
+    }
+    const highSignalReinforcement = highSignalNotes.length > 0
+        ? 'This cache carries strong signal through ' + highSignalNotes.slice(0, 3).join(', ') + '.'
+        : 'Build stronger signal with compact summaries, practical grounding, and clearer purpose.';
     const suggestedStewardAction = highOverlap
         ? 'Review for Distillation · Generate Distillation Recommendation · Create an Ember-level synthesis.'
         : moderateOverlap
@@ -1394,6 +1432,9 @@ function buildSignalDisciplineHints(target, peers = []) {
         'Useful signs: clear purpose, specific sources, compact summary, low redundancy.',
         'Noise signs: scope drift, repeated content, missing source notes.',
     ];
+    const suggestedNextSteps = highOverlap
+        ? ['Distill overlapping Sparks', 'Compress repeated summaries', 'Review through Scholar']
+        : ['Load into Forge', 'Add practical field notes', 'Review through Scholar'];
     const stewardship = 'The Sentinel decides what to keep, refine, distill, load, or transmit. The Node recommends, not commands.';
     return {
         profile,
@@ -1401,9 +1442,13 @@ function buildSignalDisciplineHints(target, peers = []) {
         overlapHint,
         signalDensityHint,
         redundancyRisk,
+        distillationReadiness,
+        weakSignalGuidance,
+        highSignalReinforcement,
         missingPerspectives,
         compressionOpportunity,
         suggestedStewardAction,
+        suggestedNextSteps,
         qualityGuidance,
         stewardship,
         highOverlap,
@@ -1445,6 +1490,15 @@ function buildSignalDisciplineNoteMarkdown(hints) {
         risk,
         overlapHint || '',
         '',
+        '## Distillation Readiness',
+        safeHints.distillationReadiness || 'Not assessed.',
+        '',
+        '## Weak Signal Guidance',
+        safeHints.weakSignalGuidance || 'Not assessed.',
+        '',
+        '## High Signal Reinforcement',
+        safeHints.highSignalReinforcement || 'Not assessed.',
+        '',
         '## Missing Perspectives',
         missing,
         '',
@@ -1453,6 +1507,7 @@ function buildSignalDisciplineNoteMarkdown(hints) {
         '',
         '## Suggested Steward Action',
         action,
+        Array.isArray(safeHints.suggestedNextSteps) ? ('Suggested Next Steps: ' + safeHints.suggestedNextSteps.join(' · ')) : '',
         Array.isArray(qualityGuidance) ? qualityGuidance.join('\n') : '',
         '',
         stewardship || '',
@@ -1476,7 +1531,12 @@ function buildCacheCompressionPrompt(options = {}) {
     lines.push(
         '',
         'Focus on overlap, redundancy, strongest signal, and compact mentor guidance.',
+        'Evaluate distillation readiness across overlap, clarity, redundancy, signal density, and missing perspectives.',
         'Surface missing perspectives, missing archetype reviews, missing continuity domains, practical grounding gaps, and narrative cohesion gaps.',
+        'Mentor weak-signal patterns constructively and reinforce high-signal patterns when present.',
+        'Treat cache creation as distilled continuity: gather → review → summarize → distill → structure → package.',
+        'Clarify lifecycle continuity: conversation → markdown → cache → distillation.',
+        'End with concise Suggested Next Steps (for example: Load into Forge, Review through Scholar, Distill overlapping Sparks).',
         'If one lens dominates, name what comparison lens is missing (for example Builder-heavy lacking Scholar comparison).',
         'Keep Sentinel agency central: no automatic merge or deletion.',
     );
@@ -1500,6 +1560,10 @@ function buildCacheThemeComparisonPrompt(options = {}) {
         '- Continuity themes: ' + themes,
         '',
         'Identify shared continuity threads, repeated concepts, strongest signal, and weak continuity domains.',
+        'Assess distillation readiness: overlap, clarity, redundancy, signal density, and missing perspectives.',
+        'Reinforce high-signal continuity and name weak-signal patterns constructively.',
+        'Keep continuity lifecycle explicit: conversation → markdown → cache → distillation.',
+        'Close with concise Suggested Next Steps.',
         'Highlight missing perspectives before distillation.',
         'Keep guidance concise. The Sentinel decides what to distill.',
     ].join('\n');
@@ -1535,6 +1599,9 @@ function buildDistillationRecommendationPrompt(options = {}) {
         '## Shared Continuity Themes',
         '## Repeated Concepts',
         '## Strongest Signal',
+        '## Distillation Readiness',
+        '## Weak Signal Guidance',
+        '## High Signal Reinforcement',
         '## Missing Perspectives',
         '## Suggested Compression Direction',
         '## Recommended Archetype Review',
@@ -1545,6 +1612,7 @@ function buildDistillationRecommendationPrompt(options = {}) {
         '',
         'Tone: mentor-guided, practical, reflective, concise, and non-gamey.',
         'When relevant, name missing archetype comparison, continuity domains, practical grounding, or narrative cohesion.',
+        'Mention cache purpose and markdown handoff continuity where useful (conversation → markdown → cache → distillation).',
         'Keep the Sentinel central: no auto-merge, no auto-delete, no automatic tier distillation.',
     );
     return promptLines.filter(Boolean).join('\n');
@@ -5899,6 +5967,7 @@ function buildThresholdCacheDraftRow(draft) {
     const sourceLabel = manifest.source || 'threshold';
     const recommendedArchetypes = deriveCacheRecommendedArchetypes({ manifest });
     const carrySummary = describeCacheCarrySummary({ manifest, continuity_themes: continuityThemes });
+    const purposeSummary = formatPurposeSummary(manifest.purpose_summary || manifest.description || '');
     const disciplineHints = buildSignalDisciplineHints(
         {
             id: draft.id,
@@ -5920,12 +5989,16 @@ function buildThresholdCacheDraftRow(draft) {
         '<div class="threshold-file-title-row"><span class="threshold-file-icon">ᚠ</span><span class="threshold-file-title">' +
         escapeHtml(manifest.title || draft.id || 'Cache Draft') + '</span></div>' +
         '<div class="threshold-file-detail">Level: ' + escapeHtml(describeCacheLevel(manifest.level || 'spark')) + '</div>' +
+        '<div class="threshold-file-detail">Purpose: ' + escapeHtml(purposeSummary) + '</div>' +
         '<div class="threshold-file-detail">Carries: ' + escapeHtml(carrySummary) + '</div>' +
         '<div class="threshold-file-detail">Source: ' + escapeHtml(sourceLabel) + '</div>' +
         '<div class="threshold-file-detail">Recommended Archetypes: ' + escapeHtml(recommendedArchetypes.length ? recommendedArchetypes.join(', ') : '—') + '</div>' +
         '<div class="threshold-file-detail">Documents: ' + escapeHtml(String(documents.length)) + '</div>' +
         '<div class="threshold-file-detail">Status: ' + escapeHtml(manifest.status || 'draft') + '</div>' +
         '<div class="threshold-file-detail">Themes: ' + escapeHtml(summarizeDistillationThemes(continuityThemes)) + '</div>' +
+        '<div class="threshold-file-detail">Distillation Readiness: ' + escapeHtml(disciplineHints.distillationReadiness) + '</div>' +
+        '<div class="threshold-file-detail">Weak Signal Guidance: ' + escapeHtml(disciplineHints.weakSignalGuidance) + '</div>' +
+        '<div class="threshold-file-detail">High Signal Reinforcement: ' + escapeHtml(disciplineHints.highSignalReinforcement) + '</div>' +
         '<div class="threshold-file-detail">Signal Density: ' + escapeHtml(disciplineHints.signalDensityHint) + '</div>' +
         '<div class="threshold-file-detail">Redundancy Risk: ' + escapeHtml(disciplineHints.redundancyRisk) + '</div>' +
         '<div class="threshold-file-detail">Missing Perspectives: ' +
@@ -6075,6 +6148,7 @@ function renderThresholdCacheDraftDetail(draft) {
     const distilledInto = Array.isArray(manifest.distilled_into) ? manifest.distilled_into : [];
     const continuityThemes = Array.isArray(manifest.continuity_themes) ? manifest.continuity_themes : [];
     const signalDensity = manifest.signal_density ? String(manifest.signal_density) : 'low';
+    const purposeSummary = formatPurposeSummary(manifest.purpose_summary || manifest.description || '');
     const disciplineHints = buildSignalDisciplineHints(
         {
             id: draft.id,
@@ -6093,17 +6167,22 @@ function renderThresholdCacheDraftDetail(draft) {
     metaEl.textContent = [
         'Level: ' + describeCacheLevel(manifest.level || 'spark'),
         'Status: ' + (manifest.status || 'draft'),
+        'Purpose Summary: ' + purposeSummary,
         'Documents: ' + docs.length,
         'Updated: ' + draftUpdatedLabel(draft),
         'Derived From: ' + (derivedFrom.length > 0 ? derivedFrom.join(', ') : '—'),
         'Distilled Into: ' + (distilledInto.length > 0 ? distilledInto.join(', ') : '—'),
         'Related Themes: ' + (continuityThemes.length > 0 ? continuityThemes.join(', ') : '—'),
+        'Distillation Readiness: ' + disciplineHints.distillationReadiness,
+        'Weak Signal Guidance: ' + disciplineHints.weakSignalGuidance,
+        'High Signal Reinforcement: ' + disciplineHints.highSignalReinforcement,
         'Signal Density: ' + signalDensity,
         'Signal Density Hint: ' + disciplineHints.signalDensityHint,
         'Redundancy Risk: ' + disciplineHints.redundancyRisk,
         'Missing Perspectives: ' + (disciplineHints.missingPerspectives.length > 0 ? disciplineHints.missingPerspectives.join(' | ') : 'none flagged'),
         'Compression Opportunity: ' + disciplineHints.compressionOpportunity,
         'Cache Overlap Hint: ' + (disciplineHints.overlapHint || 'No strong overlap detected.'),
+        'Suggested Next Steps: ' + (Array.isArray(disciplineHints.suggestedNextSteps) ? disciplineHints.suggestedNextSteps.join(' | ') : '—'),
         disciplineHints.qualityGuidance[0],
         disciplineHints.qualityGuidance[1],
         disciplineHints.stewardship,

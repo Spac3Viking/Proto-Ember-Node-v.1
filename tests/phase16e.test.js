@@ -289,6 +289,13 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(userPrompt).toContain('=== Distillation Guidance Mode ===');
         expect(userPrompt).toContain('human-guided continuity distillation');
         expect(userPrompt).toContain('Do not auto-merge');
+        expect(userPrompt).toContain('conversation → markdown → cache → distillation');
+        expect(userPrompt).toContain('gather → review → summarize → distill → structure → package');
+        expect(userPrompt).toContain('Evaluate distillation readiness lightly');
+        expect(userPrompt).toContain('When weak signal appears, guide constructively');
+        expect(userPrompt).toContain('When high signal appears, reinforce it naturally');
+        expect(userPrompt).toContain('What continuity should this cache preserve?');
+        expect(userPrompt).toContain('Suggested Next Steps');
         expect(userPrompt).toContain('What continuity appears repeatedly across these caches?');
     });
 });
