@@ -2290,17 +2290,17 @@ function renderSignalTrace(sources, signalTrace = null) {
     const rows = compactTraceText
         ? [
             {
-                key: '⌁ Trace',
+                key: 'Trace',
                 value: compactTraceText,
             },
         ]
         : [
             {
-                key: '◌ Memory',
+                key: 'Memory',
                 value: formatMemoryFlow(memoryFlow),
             },
             {
-                key: '⟲ Bootstrap',
+                key: 'Bootstrap',
                 value: rollingBootstrapStatus
                     ? (
                         rollingBootstrapThemes.length > 0
@@ -2310,7 +2310,7 @@ function renderSignalTrace(sources, signalTrace = null) {
                     : null,
             },
             {
-                key: '◆ Loadout',
+                key: 'Loadout',
                 value: loadedCacheCount !== null
                     ? (
                         cacheLoadout.length > 0
@@ -2319,13 +2319,13 @@ function renderSignalTrace(sources, signalTrace = null) {
                     )
                     : null,
             },
-            { key: 'ᚹ Lens', value: courtLens || 'Ember Prime' },
-            { key: '◎ Depth', value: depth },
-            { key: '⚑ Profile', value: runtimeProfile },
-            { key: '◆ Carry', value: loadoutFocus === null ? null : (loadoutFocus ? 'ON' : 'OFF') },
-            { key: '🜃 Distill', value: distillationGuidance ? 'review active' : null },
-            { key: '⛓ Bridge', value: compactRoute },
-            { key: 'ᚲ Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
+            { key: 'Lens', value: courtLens || 'Ember Prime' },
+            { key: 'Depth', value: depth },
+            { key: 'Profile', value: runtimeProfile },
+            { key: 'Carry', value: loadoutFocus === null ? null : (loadoutFocus ? 'ON' : 'OFF') },
+            { key: 'Distill', value: distillationGuidance === null ? null : (distillationGuidance ? 'ON' : 'OFF') },
+            { key: 'Bridge', value: compactRoute },
+            { key: 'Context', value: dedupedContextSummary.length > 0 ? boundedListText(dedupedContextSummary) : null },
             { key: 'Model', value: model },
             { key: 'Provider', value: provider },
         ];
@@ -2345,7 +2345,7 @@ function renderSignalTrace(sources, signalTrace = null) {
         const note = document.createElement('div');
         note.className = 'signal-trace-item';
         note.innerHTML =
-            '<span class="trace-badge"><span class="trace-key">↯ retrieval</span> ' +
+            '<span class="trace-badge"><span class="trace-key">retrieval</span> ' +
             escapeHtml(retrievalNote) + '</span>';
         traceSources.appendChild(note);
     }
@@ -4505,7 +4505,7 @@ function getGreenFireReader() {
                 metadataEl.style.display = '';
                 metadataEl.innerHTML =
                     '<details class="gf-reader-meta-details">' +
-                    '<summary>ᚲ Reader Metadata</summary>' +
+                    '<summary>Reader Metadata</summary>' +
                     '<div class="gf-reader-meta-grid">' +
                     '<div class="gf-reader-meta-row"><span class="trace-key">Type</span><span>' + escapeHtml(meta.type || '—') + '</span></div>' +
                     '<div class="gf-reader-meta-row"><span class="trace-key">Status</span><span>' + escapeHtml(meta.status || '—') + '</span></div>' +
@@ -6970,11 +6970,11 @@ async function loadLoadoutForgePanel() {
 
         const loadedCount = Number(statusData && statusData.loadedCacheCount) || mergedLoadedCaches.length;
         const summaryRows = [
-            ['ᚹ Lens', FORGE_ARCHETYPE_LABELS[activeArchetype] || 'Ember Prime'],
-            ['⚑ Profile', getRuntimeProfileMeta(runtimeProfile).label],
-            ['◎ Depth', humanizeDepth(responseDepth)],
-            ['◆ Carry', loadoutFocus ? 'ON' : 'OFF'],
-            ['◆ Loaded', String(loadedCount)],
+            ['Lens', FORGE_ARCHETYPE_LABELS[activeArchetype] || 'Ember Prime'],
+            ['Profile', getRuntimeProfileMeta(runtimeProfile).label],
+            ['Depth', humanizeDepth(responseDepth)],
+            ['Carry', loadoutFocus ? 'ON' : 'OFF'],
+            ['Loaded Caches', String(loadedCount)],
         ];
         summaryEl.innerHTML = summaryRows.map(([key, value]) =>
             '<div class="forge-summary-row">' +

@@ -102,7 +102,7 @@
                 <!-- Signal Trace Panel -->
                 <div class="signal-trace-panel collapsed" id="signal-trace-panel">
                   <div class="signal-trace-header">
-                    <span class="signal-trace-label" title="Signal Trace">⌁ Trace</span>
+                    <span class="signal-trace-label" title="Signal Trace"><span aria-hidden="true">⌁ </span>Trace</span>
                     <span class="signal-trace-status" id="signal-trace-status">awaiting exchange</span>
                     <button class="signal-trace-toggle" id="signal-trace-toggle" aria-label="Toggle signal trace" aria-expanded="false" title="Expand signal trace">▸</button>
                   </div>
@@ -119,10 +119,10 @@
                 </div>
 
                 <details class="runtime-controls-panel">
-                  <summary class="runtime-controls-summary" title="Runtime controls">⚑ Runtime Stance</summary>
+                  <summary class="runtime-controls-summary" title="Runtime controls"><span aria-hidden="true">⚑ </span>Runtime Stance</summary>
                   <div class="runtime-controls-body">
                     <div class="response-depth-control">
-                      <label for="response-depth-select" class="response-depth-label" title="Response Depth">◎ Depth:</label>
+                      <label for="response-depth-select" class="response-depth-label" title="Response Depth"><span aria-hidden="true">◎ </span>Depth:</label>
                       <select id="response-depth-select" class="response-depth-select" aria-label="Response depth" aria-describedby="response-depth-help">
                         <option value="spark">Spark</option>
                         <option value="ember" selected>Ember</option>
@@ -132,7 +132,7 @@
                       <span class="visually-hidden" id="response-depth-help">Spark is fast with minimal context. Ember is the balanced default. Hearth enables deeper synthesis. Archive is broadest and slowest.</span>
                     </div>
                     <div class="response-depth-control response-depth-control-inline">
-                      <label for="runtime-profile-select" class="response-depth-label" title="Runtime Profile">⚑ Profile:</label>
+                      <label for="runtime-profile-select" class="response-depth-label" title="Runtime Profile"><span aria-hidden="true">⚑ </span>Profile:</label>
                       <select id="runtime-profile-select" class="response-depth-select" aria-label="Runtime profile" aria-describedby="runtime-profile-help">
                         <option value="spark-compression">Spark Compression</option>
                         <option value="balanced-ember" selected>Balanced Ember</option>
@@ -145,7 +145,7 @@
                       <span class="visually-hidden" id="runtime-profile-help">Runtime cognition profile shapes response posture, retrieval posture, and mentor pacing.</span>
                     </div>
                     <div class="response-depth-control response-depth-control-inline loadout-focus-control">
-                      <label for="loadout-focus-toggle" class="response-depth-label" title="Loadout Focus">◆ Carry:</label>
+                      <label for="loadout-focus-toggle" class="response-depth-label" title="Loadout Focus"><span aria-hidden="true">◆ </span>Carry:</label>
                       <input type="checkbox" id="loadout-focus-toggle" class="loadout-focus-toggle" aria-describedby="loadout-focus-help">
                       <span class="loadout-focus-state" id="loadout-focus-state">OFF</span>
                       <span class="visually-hidden" id="loadout-focus-help">Focus answers through the current Cache Loadout.</span>
@@ -529,10 +529,10 @@
               <div class="council-section-title" style="margin:0 0 0.5rem 0;">Council Chat</div>
               <div class="message-system" id="ws-council-active-archetype">Active archetype: Ember Prime</div>
               <details class="runtime-controls-panel">
-                <summary class="runtime-controls-summary" title="Runtime controls">⚑ Runtime Stance</summary>
+                <summary class="runtime-controls-summary" title="Runtime controls"><span aria-hidden="true">⚑ </span>Runtime Stance</summary>
                 <div class="runtime-controls-body">
                   <div class="response-depth-control response-depth-control-inline">
-                    <label for="ws-response-depth-select" class="response-depth-label" title="Response Depth">◎ Depth:</label>
+                    <label for="ws-response-depth-select" class="response-depth-label" title="Response Depth"><span aria-hidden="true">◎ </span>Depth:</label>
                     <select id="ws-response-depth-select" class="response-depth-select" aria-label="Council response depth" aria-describedby="ws-response-depth-help">
                       <option value="spark">Spark</option>
                       <option value="ember" selected>Ember</option>
@@ -542,7 +542,7 @@
                     <span class="visually-hidden" id="ws-response-depth-help">Spark is fast with minimal context. Ember is the balanced default. Hearth enables deeper synthesis. Archive is broadest and slowest.</span>
                   </div>
                   <div class="response-depth-control response-depth-control-inline">
-                    <label for="ws-runtime-profile-select" class="response-depth-label" title="Runtime Profile">⚑ Profile:</label>
+                    <label for="ws-runtime-profile-select" class="response-depth-label" title="Runtime Profile"><span aria-hidden="true">⚑ </span>Profile:</label>
                     <select id="ws-runtime-profile-select" class="response-depth-select" aria-label="Council runtime profile" aria-describedby="ws-runtime-profile-help">
                       <option value="spark-compression">Spark Compression</option>
                       <option value="balanced-ember" selected>Balanced Ember</option>
@@ -555,7 +555,7 @@
                     <span class="visually-hidden" id="ws-runtime-profile-help">Runtime cognition profile shapes response posture, retrieval posture, and mentor pacing.</span>
                   </div>
                   <div class="response-depth-control response-depth-control-inline loadout-focus-control">
-                    <label for="ws-loadout-focus-toggle" class="response-depth-label" title="Loadout Focus">◆ Carry:</label>
+                    <label for="ws-loadout-focus-toggle" class="response-depth-label" title="Loadout Focus"><span aria-hidden="true">◆ </span>Carry:</label>
                     <input type="checkbox" id="ws-loadout-focus-toggle" class="loadout-focus-toggle" aria-describedby="ws-loadout-focus-help">
                     <span class="loadout-focus-state" id="ws-loadout-focus-state">OFF</span>
                     <span class="visually-hidden" id="ws-loadout-focus-help">Focus answers through the current Cache Loadout.</span>
@@ -610,12 +610,12 @@
                 <details class="first-ember-map-card">
                   <summary>Guided Orientation Map</summary>
                   <div class="first-ember-map-list">
-                    <div><strong>ᚦ Threshold</strong> → acquire continuity</div>
-                    <div><strong>ᚲ Reader</strong> → inspect continuity</div>
-                    <div><strong>🜂 Loadout Forge</strong> → shape cognition</div>
+                    <div><strong><span aria-hidden="true">ᚦ </span>Threshold</strong> → acquire continuity</div>
+                    <div><strong><span aria-hidden="true">ᚲ </span>Reader</strong> → inspect continuity</div>
+                    <div><strong><span aria-hidden="true">🜂 </span>Loadout Forge</strong> → shape cognition</div>
                     <div><strong>Council</strong> → discuss through archetypes</div>
-                    <div><strong>🜃 Distillation</strong> → refine continuity</div>
-                    <div><strong>⛓ Conversation Bridge</strong> → transmit continuity</div>
+                    <div><strong><span aria-hidden="true">🜃 </span>Distillation</strong> → refine continuity</div>
+                    <div><strong><span aria-hidden="true">⛓ </span>Conversation Bridge</strong> → transmit continuity</div>
                   </div>
                 </details>
                 <div class="cache-shelf-title">Installed Caches</div>
@@ -646,15 +646,15 @@
                   <div class="inspector-name"        id="inspector-name"></div>
                   <div class="inspector-description" id="inspector-description"></div>
                   <details class="inspector-section" id="inspector-meta-section">
-                    <summary>◆ Cache Metadata</summary>
+                    <summary><span aria-hidden="true">◆ </span>Cache Metadata</summary>
                     <div class="inspector-meta" id="inspector-meta"></div>
                   </details>
                   <details class="inspector-section" id="inspector-perms-section">
-                    <summary>🜃 Signal Discipline</summary>
+                    <summary><span aria-hidden="true">🜃 </span>Signal Discipline</summary>
                     <div class="inspector-perms" id="inspector-perms"></div>
                   </details>
                   <details class="inspector-section" id="inspector-content-section">
-                    <summary>ᚲ Continuity Notes</summary>
+                    <summary><span aria-hidden="true">ᚲ </span>Continuity Notes</summary>
                     <div class="inspector-content" id="inspector-content"></div>
                   </details>
                 </div>
