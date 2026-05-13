@@ -409,6 +409,43 @@ input:focus, textarea:focus {
   padding: 0.45rem 0 0;
 }
 
+.runtime-controls-panel {
+  margin: 0.4rem 1rem 0.2rem;
+  border: 1px solid hsla(140, 100%, 70%, 0.12);
+  border-radius: var(--radius-sm);
+  background: hsla(120, 16%, 5%, 0.45);
+}
+
+.runtime-controls-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.38rem 0.6rem;
+  color: var(--archive-muted);
+  font-size: 0.67rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.runtime-controls-summary::-webkit-details-marker {
+  display: none;
+}
+
+.runtime-controls-summary::before {
+  content: '▸';
+  margin-right: 0.38rem;
+  color: hsla(38, 100%, 70%, 0.82);
+}
+
+.runtime-controls-panel[open] .runtime-controls-summary::before {
+  content: '▾';
+}
+
+.runtime-controls-body {
+  border-top: 1px solid hsla(140, 100%, 70%, 0.08);
+  padding: 0.08rem 0 0.3rem;
+}
+
 .loadout-focus-control {
   gap: 0.5rem;
 }
@@ -466,11 +503,11 @@ input:focus, textarea:focus {
 }
 
 .runtime-controls-help {
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   line-height: 1.35;
-  color: var(--archive-muted);
+  color: hsla(120, 25%, 56%, 0.84);
   letter-spacing: 0.02em;
-  padding: 0.2rem 1rem 0.1rem;
+  padding: 0.25rem 1rem 0.25rem;
 }
 
 .response-depth-label {
@@ -714,10 +751,11 @@ input:focus, textarea:focus {
   gap: 1rem;
   flex: 1;
   min-height: 0;
+  align-items: stretch;
 }
 
 .cache-shelf {
-  width: 280px;
+  width: 250px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -871,7 +909,7 @@ input:focus, textarea:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.875rem 1rem;
+  padding: 0.55rem 0.2rem 0.35rem;
 }
 
 .meta-badge {
@@ -909,21 +947,53 @@ input:focus, textarea:focus {
 .inspector-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0.875rem 1rem;
+  padding: 0.6rem 0.2rem 0.3rem;
   font-size: 0.82rem;
   line-height: 1.7;
   color: var(--archive-text);
   white-space: pre-wrap;
   word-break: break-word;
-  border-top: 1px solid hsla(140, 100%, 70%, 0.08);
+  border-top: none;
   max-height: 420px;
 }
 
 .inspector-perms {
   display: flex;
   gap: 0.5rem;
-  padding: 0.5rem 1rem 0.875rem;
+  padding: 0.55rem 0.2rem 0.35rem;
   flex-wrap: wrap;
+}
+
+.inspector-section {
+  margin: 0.3rem 1rem 0;
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: var(--radius-sm);
+  background: hsla(120, 16%, 5%, 0.36);
+  overflow: hidden;
+}
+
+.inspector-section > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.68rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--archive-muted);
+  padding: 0.34rem 0.62rem;
+}
+
+.inspector-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.inspector-section > summary::before {
+  content: '▸';
+  margin-right: 0.36rem;
+  color: hsla(38, 100%, 70%, 0.78);
+}
+
+.inspector-section[open] > summary::before {
+  content: '▾';
 }
 
 .perm-badge {
@@ -1245,9 +1315,9 @@ input:focus, textarea:focus {
 /* ── Phase 3 — Signal Trace Panel ───────────────────────────────────────────── */
 
 .signal-trace-panel {
-  border-top: 1px solid hsla(140, 100%, 70%, 0.08);
+  border-top: 1px solid hsla(140, 100%, 70%, 0.06);
   padding: 0.5rem 0.875rem;
-  background: hsla(120, 20%, 4%, 0.4);
+  background: hsla(120, 18%, 4%, 0.3);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -1287,14 +1357,14 @@ input:focus, textarea:focus {
   font-size: 0.62rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: hsla(140, 100%, 70%, 0.45);
+  color: hsla(140, 100%, 70%, 0.38);
 }
 
 .signal-trace-status {
   font-size: 0.68rem;
   color: var(--archive-muted);
-  letter-spacing: 0.05em;
-  opacity: 0.75;
+  letter-spacing: 0.04em;
+  opacity: 0.68;
 }
 
 .signal-trace-sources {
@@ -1316,15 +1386,15 @@ input:focus, textarea:focus {
   gap: 0.25rem;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
-  border: 1px solid hsla(140, 100%, 70%, 0.13);
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
   font-size: 0.62rem;
   color: var(--archive-muted);
-  background: hsla(120, 15%, 5%, 0.6);
+  background: hsla(120, 15%, 5%, 0.45);
   letter-spacing: 0.04em;
 }
 
 .trace-key {
-  color: hsla(140, 100%, 70%, 0.5);
+  color: hsla(140, 100%, 70%, 0.42);
   font-family: 'Cinzel', serif;
   font-size: 0.58rem;
   text-transform: uppercase;
@@ -2381,10 +2451,42 @@ button.secondary:disabled {
   background: hsla(120, 16%, 4%, 0.86);
 }
 
+.gf-reader-meta-details {
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: var(--radius-sm);
+  background: hsla(120, 15%, 5%, 0.45);
+  overflow: hidden;
+}
+
+.gf-reader-meta-details > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--archive-muted);
+  padding: 0.32rem 0.58rem;
+}
+
+.gf-reader-meta-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.gf-reader-meta-details > summary::before {
+  content: '▸';
+  margin-right: 0.36rem;
+  color: hsla(38, 100%, 70%, 0.78);
+}
+
+.gf-reader-meta-details[open] > summary::before {
+  content: '▾';
+}
+
 .gf-reader-meta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 0.35rem 0.75rem;
+  padding: 0.4rem 0.58rem 0.55rem;
 }
 
 .gf-reader-meta-row {
