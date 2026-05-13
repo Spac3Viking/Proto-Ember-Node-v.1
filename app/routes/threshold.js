@@ -60,6 +60,7 @@ const GREEN_FIRE_HANDOFF_TYPES = new Set([
 const GREEN_FIRE_HANDOFF_STATUS = new Set(['unverified', 'reviewed', 'trusted', 'local']);
 const MAX_IMPORTED_BOOTSTRAP_SUMMARY_LENGTH = 4000;
 const SIGNAL_DENSITIES = new Set(['low', 'moderate', 'high']);
+const CACHE_CREATION_FLOW_STEPS = Object.freeze(['gather', 'review', 'summarize', 'distill', 'structure', 'package']);
 
 function isPathInside(baseDir, targetPath) {
     const normalize = (value) => {
@@ -453,6 +454,17 @@ function normalizeSignalDensity(value) {
     return SIGNAL_DENSITIES.has(density) ? density : 'low';
 }
 
+function normalizePurposeSummary(value) {
+    const input = String(value || '').replace(/\r\n/g, '\n').trim();
+    if (!input) return '';
+    const lines = input
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .slice(0, 5);
+    return lines.join('\n');
+}
+
 function stripFrontmatter(content) {
     return String(content || '').replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(\r?\n)?/, '');
 }
@@ -554,6 +566,8 @@ function normalizeDraftManifest(manifest, draftId, updatedAtFallback) {
         created_at: createdAt,
         updated_at: updatedAt,
         description: String(raw.description || '').trim(),
+        purpose_summary: normalizePurposeSummary(raw.purpose_summary || raw.purposeSummary || raw.description),
+        cache_creation_flow: CACHE_CREATION_FLOW_STEPS,
         source: 'threshold',
         recommended_destination: String(raw.recommended_destination || ('archive/caches/' + normalizedId)).trim() || ('archive/caches/' + normalizedId),
         derived_from: normalizeStringList(raw.derived_from),
@@ -712,17 +726,42 @@ function collectCacheDraftSources({ relPath, relPaths, markdown, markdownBlocks,
     return sources;
 }
 
-function writeCacheDraftReadme({ draftId, title, description, updatedAt, documents }) {
+function writeCacheDraftReadme({ draftId, title, description, purposeSummary, updatedAt, documents }) {
+    const summaryLines = normalizePurposeSummary(purposeSummary)
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+    const purposeSummaryBlock = summaryLines.length > 0
+        ? summaryLines.join('\n')
+        : 'Preserves distilled continuity from selected Threshold materials for mentor-guided review and refinement.';
     const readme = [
         '# ' + title,
         '',
         description || 'Cache draft generated from Threshold.',
+        '',
+        '## Purpose Summary (1–5 lines)',
+        '',
+        purposeSummaryBlock,
         '',
         '## Cache Draft',
         '',
         '- id: `' + draftId + '`',
         '- source: threshold',
         '- updated: ' + updatedAt,
+        '',
+        '## Cache Creation Flow',
+        '',
+        'gather → review → summarize → distill → structure → package',
+        '',
+        'Caches are distilled continuity artifacts, not random file bundles.',
+        '',
+        '## Create Cache Guidance',
+        '',
+        '- What continuity should this cache preserve?',
+        '- What scope should remain in-bounds?',
+        '- Which continuity themes deserve carry weight?',
+        '- What source materials shaped this synthesis?',
+        '- What signal should remain after compression?',
         '',
         '## Files',
         '',
@@ -731,6 +770,51 @@ function writeCacheDraftReadme({ draftId, title, description, updatedAt, documen
         '- `documents/`',
         '',
         ...documents.map(entry => '- `' + entry.path + '`'),
+        '',
+        'Preferred document types:',
+        '- markdown summaries',
+        '- research handoffs',
+        '- field notes',
+        '- distillation notes',
+        '- continuity reflections',
+        '- prompt bridges',
+        '',
+        'Avoid huge unstructured dumps, random exports, and massive AI transcripts.',
+        '',
+        '## Distillation Readiness',
+        '',
+        'Review overlap, clarity, redundancy, signal density, and missing perspectives before recommending distillation.',
+        'Do not automate merging; keep Sentinel stewardship central.',
+        '',
+        '## Signal Quality Guidance',
+        '',
+        'Weak signal patterns:',
+        '- unclear purpose',
+        '- repeated summaries',
+        '- scope too broad',
+        '- weak source grounding',
+        '- minimal synthesis',
+        '- AI output without review',
+        '',
+        'High signal patterns:',
+        '- clear purpose',
+        '- compact summaries',
+        '- distinct themes',
+        '- cross-domain synthesis',
+        '- practical grounding',
+        '- strong distillation',
+        '',
+        '## Markdown Handoff Lifecycle',
+        '',
+        'conversation → markdown → cache → distillation',
+        '',
+        '## Suggested Next Steps',
+        '',
+        '- Load into Forge',
+        '- Review through Scholar',
+        '- Distill overlapping Sparks',
+        '- Add practical field notes',
+        '- Compress repeated summaries',
         '',
         '## Note',
         '',
@@ -749,11 +833,20 @@ function buildCacheDraftState({ resolvedDraft, title, description }) {
     const manifestPath = path.join(resolvedDraft.path, 'manifest.json');
     const existingManifest = parseDraftManifestAtPath(manifestPath, resolvedDraft.id, new Date().toISOString());
     const now = new Date().toISOString();
+    const normalizedDescription = String(description || '').trim() ||
+        existingManifest.description ||
+        'Cache draft generated from Threshold.';
     const normalized = {
         ...existingManifest,
         id: resolvedDraft.id,
         title: String(title || '').trim() || existingManifest.title || resolvedDraft.id,
-        description: String(description || '').trim() || existingManifest.description || 'Cache draft generated from Threshold.',
+        description: normalizedDescription,
+        purpose_summary: normalizePurposeSummary(
+            existingManifest.purpose_summary ||
+            existingManifest.purposeSummary ||
+            normalizedDescription,
+        ),
+        cache_creation_flow: CACHE_CREATION_FLOW_STEPS,
         created_at: normalizeIsoTimestamp(existingManifest.created_at, now),
         updated_at: now,
         recommended_destination: 'archive/caches/' + resolvedDraft.id,
@@ -827,6 +920,7 @@ function appendSourcesToCacheDraft({ draftId, sources, title, description }) {
             draftId: resolvedDraft.id,
             title: nextManifest.title,
             description: nextManifest.description,
+            purposeSummary: nextManifest.purpose_summary,
             updatedAt: nextManifest.updated_at,
             documents: nextManifest.documents,
         }),
@@ -976,6 +1070,7 @@ function removeDocumentFromCacheDraft({ draftId, documentPath }) {
             draftId: resolvedDoc.draft.id,
             title: nextManifest.title,
             description: nextManifest.description,
+            purposeSummary: nextManifest.purpose_summary,
             updatedAt: nextManifest.updated_at,
             documents: nextManifest.documents,
         }),

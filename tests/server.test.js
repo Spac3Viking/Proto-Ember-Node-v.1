@@ -529,9 +529,29 @@ describe('Threshold cache draft workflow', () => {
         expect(createRes.body.draft.manifest.status).toBe('draft');
         expect(createRes.body.draft.manifest.source).toBe('threshold');
         expect(createRes.body.draft.manifest.recommended_destination).toBe('archive/caches/' + draftId);
+        expect(createRes.body.draft.manifest.purpose_summary).toBe('Portable local cache draft from Threshold.');
+        expect(createRes.body.draft.manifest.cache_creation_flow).toEqual([
+            'gather',
+            'review',
+            'summarize',
+            'distill',
+            'structure',
+            'package',
+        ]);
         expect(Array.isArray(createRes.body.draft.manifest.documents)).toBe(true);
         expect(createRes.body.draft.manifest.documents[0].path).toBe('documents/cache-draft-source.md');
         expect(createRes.body.draft.manifest.documents[0].status).toBe('unverified');
+
+        const readmePath = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId, 'README.md');
+        const readme = fs.readFileSync(readmePath, 'utf8');
+        expect(readme).toMatch(/## Purpose Summary \(1–5 lines\)/);
+        expect(readme).toMatch(/## Cache Creation Flow/);
+        expect(readme).toMatch(/gather → review → summarize → distill → structure → package/);
+        expect(readme).toMatch(/## Distillation Readiness/);
+        expect(readme).toMatch(/## Signal Quality Guidance/);
+        expect(readme).toMatch(/## Markdown Handoff Lifecycle/);
+        expect(readme).toMatch(/conversation → markdown → cache → distillation/);
+        expect(readme).toMatch(/## Suggested Next Steps/);
 
         const listRes = await request(app).get('/api/threshold/cache-drafts');
         expect(listRes.status).toBe(200);
