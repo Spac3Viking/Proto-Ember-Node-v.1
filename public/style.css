@@ -1285,6 +1285,121 @@ input:focus, textarea:focus {
   line-height: 1.4;
 }
 
+.runtime-tuning-bench-panel {
+  margin-top: 0.75rem;
+}
+
+.runtime-tuning-bench-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.runtime-tuning-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.runtime-tuning-prompt-input,
+.runtime-tuning-notes-input,
+.runtime-tuning-adjustment-input {
+  width: 100%;
+  background: hsla(120, 15%, 4%, 0.75);
+  border: 1px solid hsla(140, 100%, 70%, 0.12);
+  border-radius: var(--radius-sm);
+  color: var(--archive-text);
+  font-size: 0.74rem;
+  padding: 0.45rem 0.55rem;
+  box-sizing: border-box;
+}
+
+.runtime-tuning-prompt-input,
+.runtime-tuning-notes-input {
+  resize: vertical;
+}
+
+.runtime-tuning-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 0.45rem 0.6rem;
+}
+
+.runtime-tuning-actions {
+  justify-content: space-between;
+}
+
+.runtime-tuning-status {
+  margin-left: auto;
+  text-align: right;
+}
+
+.runtime-tuning-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.3rem 0.55rem;
+  font-size: 0.7rem;
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: var(--radius-sm);
+  background: hsla(120, 15%, 4%, 0.5);
+  padding: 0.45rem 0.55rem;
+}
+
+.runtime-tuning-metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.runtime-tuning-metric-key {
+  color: hsla(140, 100%, 70%, 0.42);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.58rem;
+}
+
+.runtime-tuning-metric-value {
+  color: var(--archive-text);
+  text-align: right;
+}
+
+.runtime-tuning-history-panel,
+.runtime-tuning-response-panel {
+  margin-top: 0.2rem;
+}
+
+.runtime-tuning-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.runtime-tuning-history-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding: 0.38rem 0.48rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid hsla(140, 100%, 70%, 0.08);
+  background: hsla(120, 15%, 4%, 0.42);
+  font-size: 0.68rem;
+  color: var(--archive-muted);
+}
+
+.runtime-tuning-history-title {
+  color: var(--archive-text);
+  font-size: 0.71rem;
+}
+
+.runtime-tuning-response {
+  max-height: 200px;
+  margin-bottom: 0.45rem;
+}
+
 /* ── Loading / Spinner ─────────────────────────────────────── */
 
 .loading-dots::after {

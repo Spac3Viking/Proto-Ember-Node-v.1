@@ -14,6 +14,8 @@
  * POST /api/system/refresh-node
  * POST /api/system/incinerate
  * POST /api/system/shutdown
+ * GET /api/system/tuning/runtime-runs
+ * POST /api/system/tuning/runtime-runs
  */
 
 const express = require('express');
@@ -25,7 +27,8 @@ const {
     DATA_ROOT, ROOM_DIRS,
     INDEXES_DIR, THREADS_DIR,
     USER_CACHES_DIR, SYSTEM_DIR, EXPORTS_DIR,
-    FORGE_DIR, ensureDataRoot, ensureCanonicalDataFiles,
+    FORGE_DIR, RUNTIME_TUNING_RUNS_PATH,
+    ensureDataRoot, ensureCanonicalDataFiles,
 } = require('../storageConfig');
 const { OLLAMA_BASE_URL } = require('../runtimeStewardship');
 const { getSelectedModel, setSelectedModel } = require('../aiConfig');
@@ -68,6 +71,7 @@ const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-complete-cache', label: 'Complete Cache' },
 ];
 const SHUTDOWN_DELAY_MS = 250;
+const MAX_RUNTIME_TUNING_RUNS = 20;
 let shutdownScheduled = false;
 
 function _loadPackageConfig() {
@@ -119,6 +123,71 @@ function _isLocalRequest(req) {
     return remoteAddress === '127.0.0.1' ||
         remoteAddress === '::1' ||
         remoteAddress === '::ffff:127.0.0.1';
+}
+
+function _loadRuntimeTuningRunsState() {
+    try {
+        const raw = fs.readFileSync(RUNTIME_TUNING_RUNS_PATH, 'utf8');
+        const parsed = JSON.parse(raw);
+        const runs = Array.isArray(parsed && parsed.runs) ? parsed.runs : [];
+        return {
+            version: '0.1.0',
+            updated_at: parsed && parsed.updated_at ? String(parsed.updated_at) : null,
+            runs: runs.slice(0, MAX_RUNTIME_TUNING_RUNS),
+        };
+    } catch {
+        return { version: '0.1.0', updated_at: null, runs: [] };
+    }
+}
+
+function _saveRuntimeTuningRunsState(state) {
+    const payload = {
+        version: '0.1.0',
+        updated_at: new Date().toISOString(),
+        runs: Array.isArray(state && state.runs) ? state.runs.slice(0, MAX_RUNTIME_TUNING_RUNS) : [],
+    };
+    fs.mkdirSync(path.dirname(RUNTIME_TUNING_RUNS_PATH), { recursive: true });
+    fs.writeFileSync(RUNTIME_TUNING_RUNS_PATH, JSON.stringify(payload, null, 2), 'utf8');
+    return payload;
+}
+
+function _sanitizeRuntimeTuningRun(payload) {
+    const run = payload && typeof payload === 'object' ? payload : {};
+    const settings = run.settings && typeof run.settings === 'object' ? run.settings : {};
+    const metrics = run.metrics && typeof run.metrics === 'object' ? run.metrics : {};
+    const toFinite = (value) => {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : null;
+    };
+    const normalizeIso = (value) => {
+        const date = value ? new Date(value) : new Date();
+        return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+    };
+    return {
+        id: String(run.id || 'run-' + Date.now()).trim().slice(0, 80),
+        created: normalizeIso(run.created),
+        prompt: String(run.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 280),
+        promptPresetId: String(run.promptPresetId || '').trim().slice(0, 64),
+        settings: {
+            responseDepth: String(settings.responseDepth || '').trim().slice(0, 32),
+            runtimeProfile: String(settings.runtimeProfile || '').trim().slice(0, 64),
+            loadoutFocus: Boolean(settings.loadoutFocus),
+            archetype: String(settings.archetype || '').trim().slice(0, 32),
+        },
+        metrics: {
+            responseTimeMs: toFinite(metrics.responseTimeMs),
+            responseLength: toFinite(metrics.responseLength),
+            rawChunksUsed: toFinite(metrics.rawChunksUsed),
+            summariesUsed: toFinite(metrics.summariesUsed),
+            loadedCacheCount: toFinite(metrics.loadedCacheCount),
+            promptEstimate: toFinite(metrics.promptEstimate),
+            numPredict: toFinite(metrics.numPredict),
+            retrievalConfidence: toFinite(metrics.retrievalConfidence),
+            cacheOverlap: toFinite(metrics.cacheOverlap),
+            continuityDensity: toFinite(metrics.continuityDensity),
+        },
+        responsePreview: String(run.responsePreview || '').replace(/\s+/g, ' ').trim().slice(0, 320),
+    };
 }
 
 async function _buildNodeStatusPayload() {
@@ -576,6 +645,41 @@ function createSystemRouter({ migrationResult }) {
             console.log('[system] Shutdown requested from local UI. Exiting process.');
             process.exit(0);
         }, SHUTDOWN_DELAY_MS);
+    });
+
+    router.get('/api/system/tuning/runtime-runs', readLimiter, (req, res) => {
+        const state = _loadRuntimeTuningRunsState();
+        return res.json({
+            success: true,
+            updated_at: state.updated_at,
+            runs: state.runs,
+            maxRuns: MAX_RUNTIME_TUNING_RUNS,
+        });
+    });
+
+    router.post('/api/system/tuning/runtime-runs', writeLimiter, (req, res) => {
+        const incomingRun = req.body && req.body.run ? req.body.run : null;
+        if (!incomingRun || typeof incomingRun !== 'object') {
+            return res.status(400).json({ success: false, error: 'run payload is required' });
+        }
+        try {
+            const run = _sanitizeRuntimeTuningRun(incomingRun);
+            const prior = _loadRuntimeTuningRunsState();
+            const nextRuns = [run].concat(prior.runs || []).slice(0, MAX_RUNTIME_TUNING_RUNS);
+            const saved = _saveRuntimeTuningRunsState({ runs: nextRuns });
+            return res.json({
+                success: true,
+                run,
+                runs: saved.runs,
+                updated_at: saved.updated_at,
+                maxRuns: MAX_RUNTIME_TUNING_RUNS,
+            });
+        } catch (err) {
+            return res.status(500).json({
+                success: false,
+                error: 'Could not save runtime tuning run: ' + err.message,
+            });
+        }
     });
 
     return router;
