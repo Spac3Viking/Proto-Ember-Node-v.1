@@ -72,6 +72,8 @@ const CACHE_STATUS_ORDER = [
 ];
 const SHUTDOWN_DELAY_MS = 250;
 const MAX_RUNTIME_TUNING_RUNS = 20;
+const MAX_RUNTIME_TUNING_PROMPT_LENGTH = 280;
+const MAX_RUNTIME_TUNING_RESPONSE_PREVIEW_LENGTH = 320;
 let shutdownScheduled = false;
 
 function _loadPackageConfig() {
@@ -163,10 +165,17 @@ function _sanitizeRuntimeTuningRun(payload) {
         const date = value ? new Date(value) : new Date();
         return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
     };
+    const normalizeMultilineText = (value) => String(value || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+/g, ' ')
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n')
+        .trim();
     return {
         id: String(run.id || 'run-' + Date.now()).trim().slice(0, 80),
         created: normalizeIso(run.created),
-        prompt: String(run.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 280),
+        prompt: normalizeMultilineText(run.prompt).slice(0, MAX_RUNTIME_TUNING_PROMPT_LENGTH),
         promptPresetId: String(run.promptPresetId || '').trim().slice(0, 64),
         settings: {
             responseDepth: String(settings.responseDepth || '').trim().slice(0, 32),
@@ -186,7 +195,7 @@ function _sanitizeRuntimeTuningRun(payload) {
             cacheOverlap: toFinite(metrics.cacheOverlap),
             continuityDensity: toFinite(metrics.continuityDensity),
         },
-        responsePreview: String(run.responsePreview || '').replace(/\s+/g, ' ').trim().slice(0, 320),
+        responsePreview: normalizeMultilineText(run.responsePreview).slice(0, MAX_RUNTIME_TUNING_RESPONSE_PREVIEW_LENGTH),
     };
 }
 

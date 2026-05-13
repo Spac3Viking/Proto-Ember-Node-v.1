@@ -448,6 +448,9 @@ const RUNTIME_TUNING_ARCHETYPE_LABELS = Object.freeze({
     scribe: 'Scribe',
     mystic: 'Mystic',
 });
+const RUNTIME_TUNING_ROOM = 'hearth';
+const RUNTIME_TUNING_MAX_PROMPT_LENGTH = 280;
+const RUNTIME_TUNING_MAX_RESPONSE_PREVIEW_LENGTH = 320;
 
 /* ================================================================
    Utility
@@ -6622,7 +6625,7 @@ function renderRuntimeTuningMetrics(run) {
     const metrics = run.metrics;
     const rows = [
         ['time', formatRuntimeTuningMetric(metrics.responseTimeMs, ' ms')],
-        ['length', formatRuntimeTuningMetric(metrics.responseLength) + ' chars'],
+        ['length', formatRuntimeTuningMetric(metrics.responseLength, ' chars')],
         ['depth', metrics.depthUsed || '—'],
         ['profile', metrics.runtimeProfileUsed || '—'],
         ['carry', metrics.loadoutFocusUsed ? 'ON' : 'OFF'],
@@ -6648,11 +6651,11 @@ function buildRuntimeTuningHistoryEntry(run) {
     return {
         id: run.id,
         created: run.created,
-        prompt: compactTextSnippet(run.prompt || '', 280),
+        prompt: compactTextSnippet(run.prompt || '', RUNTIME_TUNING_MAX_PROMPT_LENGTH),
         promptPresetId: run.promptPresetId || '',
         settings: run.settings || {},
         metrics: run.metrics || {},
-        responsePreview: compactTextSnippet(run.response || '', 320),
+        responsePreview: compactTextSnippet(run.response || '', RUNTIME_TUNING_MAX_RESPONSE_PREVIEW_LENGTH),
     };
 }
 
@@ -6744,7 +6747,7 @@ async function runRuntimeTuningTest() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 query: prompt,
-                room: 'hearth',
+                room: RUNTIME_TUNING_ROOM,
                 responseDepth: settings.responseDepth,
                 runtimeProfile: settings.runtimeProfile,
                 loadoutFocus: settings.loadoutFocus,
@@ -6758,8 +6761,9 @@ async function runRuntimeTuningTest() {
         }
         const elapsedMs = Date.now() - startedAt;
         const metrics = collectRuntimeTuningRunMetrics(data, elapsedMs, settings);
+        const runIdSuffix = Math.random().toString(36).slice(2, 8);
         _runtimeTuningLastRun = {
-            id: 'runtime-tuning-' + Date.now(),
+            id: 'runtime-tuning-' + Date.now() + '-' + runIdSuffix,
             created: new Date().toISOString(),
             prompt,
             promptPresetId: presetEl ? String(presetEl.value || '').trim() : '',
