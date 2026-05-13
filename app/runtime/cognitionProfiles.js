@@ -15,16 +15,16 @@ const COGNITION_PROFILES = Object.freeze({
         symbolicDensity: 'minimal',
         cachePriority: 'loaded caches first',
         promptSummary: [
-            'Favor direct concise responses.',
-            'Keep retrieval narrow and practical.',
-            'Offer at most one clear next step.',
+            'Answer directly with tight orientation pacing.',
+            'Keep retrieval narrow with loaded-cache continuity first.',
+            'Offer at most one next step and one reflection question.',
         ],
         retrievalInfluence: Object.freeze({
-            topKMultiplier: 0.78,
-            targetSourcesMultiplier: 0.8,
-            maxRawChunksMultiplier: 0.8,
-            loadedCacheBoostDelta: 0.08,
-            nonLoadedArchivePenaltyDelta: -0.08,
+            topKMultiplier: 0.72,
+            targetSourcesMultiplier: 0.72,
+            maxRawChunksMultiplier: 0.72,
+            loadedCacheBoostDelta: 0.12,
+            nonLoadedArchivePenaltyDelta: -0.12,
         }),
         generationInfluence: Object.freeze({
             numPredictMultiplier: 0.7,
@@ -72,8 +72,8 @@ const COGNITION_PROFILES = Object.freeze({
         cachePriority: 'high loaded cache preference',
         promptSummary: [
             'Favor practical implementation guidance.',
-            'Stay grounded and avoid symbolic drift.',
-            'Use concise steps or actionable bullets.',
+            'Stay grounded and avoid symbolic drift or broad archive expansion.',
+            'Use concise actionable output with one next-step max.',
         ],
         retrievalInfluence: Object.freeze({
             topKMultiplier: 0.9,
@@ -156,7 +156,7 @@ const COGNITION_PROFILES = Object.freeze({
         cachePriority: 'loaded cache only bias',
         promptSummary: [
             'Prefer bootstrap-first response posture.',
-            'Keep retrieval ceilings small and focused.',
+            'Keep retrieval ceilings small and loaded-cache-first.',
             'Minimize philosophical drift and stay practical.',
         ],
         retrievalInfluence: Object.freeze({

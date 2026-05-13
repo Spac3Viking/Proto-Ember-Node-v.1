@@ -113,6 +113,9 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(typeof res.body.signalTrace.runtimeDebug.retrievalChunksUsed).toBe('number');
         expect(typeof res.body.signalTrace.runtimeDebug.bootstrapSummaryActive).toBe('boolean');
         expect(typeof res.body.signalTrace.runtimeDebug.archetypeDeltaActive).toBe('boolean');
+        expect(typeof res.body.signalTrace.runtimeDebug.retrievalConfidence).toBe('number');
+        expect(typeof res.body.signalTrace.runtimeDebug.cacheOverlapStrength).toBe('number');
+        expect(typeof res.body.signalTrace.runtimeDebug.continuityDensity).toBe('number');
         expect(res.body.signalTrace.depth).toBe('Ember');
         expect(typeof res.body.signalTrace.compact).toBe('string');
         expect(res.body.signalTrace.compact).toContain('Depth: Ember');
@@ -178,9 +181,11 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         const userPrompt = payload && payload.messages && payload.messages[1] ? payload.messages[1].content : '';
         expect(userPrompt).toContain('=== Response Depth Instruction ===');
         expect(userPrompt).toContain('Response Depth: Spark');
-        expect(userPrompt).toContain('Hard rule: brief orientation only.');
-        expect(userPrompt).toContain('Output target: 1–3 short paragraphs or 3–5 concise bullets.');
-        expect(userPrompt).toContain('one subtle continuation line is allowed in addition to the output target.');
+        expect(userPrompt).toContain('Hard rule: fast orientation only.');
+        expect(userPrompt).toContain('Output target: direct answer in 1–2 short paragraphs or up to 4 concise bullets.');
+        expect(userPrompt).toContain('one situational continuation line is allowed.');
+        expect(userPrompt).toContain('=== Response Self-Check ===');
+        expect(userPrompt).toContain('=== Retrieval Restraint ===');
     });
 
     test('archive depth injects archive response instruction block', async () => {
@@ -232,6 +237,7 @@ describe('Phase 16E — Fractal Context Compression + Archetype Memory Geometry'
         expect(userPrompt).toContain('Loadout Focus: ON');
         expect(userPrompt).toContain('=== Runtime Profile ===');
         expect(userPrompt).toContain('Field Guide');
+        expect(userPrompt).toContain('=== Response Self-Check ===');
     });
 
     test('loadout focus parsing defaults to OFF for missing or invalid values', async () => {

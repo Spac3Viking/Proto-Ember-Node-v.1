@@ -232,8 +232,11 @@ describe('Phase 15.6 — concept index layer', () => {
         expect(results[0].chunk.sourceId).toBe('src-loaded');
         expect(results[0].loadedCacheMatch).toBe(true);
         expect(results[0].loadedCacheBoost).toBeCloseTo(1.24, 6);
+        expect(results[0].runtimeProfileAlignment).toBeGreaterThan(0);
+        expect(results[0].rankingScore).toBeGreaterThan(results[0].score);
         expect(results[1].loadedCacheMatch).toBe(false);
         expect(results[1].nonLoadedArchivePenalty).toBeCloseTo(0.86, 6);
+        expect(results[0].rankingScore).toBeGreaterThan(results[1].rankingScore);
     });
 
     test('retrieve enforces minimum distinct priority sources when available', async () => {
