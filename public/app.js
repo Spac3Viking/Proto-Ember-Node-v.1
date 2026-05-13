@@ -109,6 +109,7 @@ const SIGNAL_OVERLAP_DOCUMENT_WEIGHT = 1;
 const SIGNAL_OVERLAP_LEVEL_WEIGHT = 1;
 const MODERATE_SIGNAL_OVERLAP_THRESHOLD = 4;
 const HIGH_SIGNAL_OVERLAP_THRESHOLD = 8;
+const TAB_SWITCH_DELAY_MS = 50;
 const ONBOARDING_DISMISS_PREFIX = 'first-ember-dismissed:';
 let _activeCourtMemberId = null;
 let _activeResponseDepth = null;
@@ -432,13 +433,13 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-function onboardingDismissKey(key) {
+function buildOnboardingStorageKey(key) {
     return ONBOARDING_DISMISS_PREFIX + String(key || '').trim().toLowerCase();
 }
 
 function isOnboardingDismissed(key) {
     try {
-        return window.localStorage.getItem(onboardingDismissKey(key)) === '1';
+        return window.localStorage.getItem(buildOnboardingStorageKey(key)) === '1';
     } catch {
         return false;
     }
@@ -446,7 +447,7 @@ function isOnboardingDismissed(key) {
 
 function dismissOnboardingHint(key) {
     try {
-        window.localStorage.setItem(onboardingDismissKey(key), '1');
+        window.localStorage.setItem(buildOnboardingStorageKey(key), '1');
     } catch { /* ignore storage failures */ }
 }
 
@@ -457,7 +458,7 @@ function openRoomAndSubtab(roomId, subtabId) {
     setTimeout(() => {
         const subtab = document.querySelector('.sub-tab[data-subtab="' + String(subtabId) + '"]');
         if (subtab) subtab.click();
-    }, 50);
+    }, TAB_SWITCH_DELAY_MS);
 }
 
 function openFirstEmberOverlay() {
@@ -470,6 +471,10 @@ function closeFirstEmberOverlay() {
     if (overlay) overlay.style.display = 'none';
 }
 
+/**
+ * Build a dismissible onboarding hint element.
+ * Returns null when key is missing or the hint was already dismissed.
+ */
 function buildOnboardingHint(options = {}) {
     const key = String(options.key || '').trim();
     if (!key || isOnboardingDismissed(key)) return null;
