@@ -1138,7 +1138,7 @@ function exportCacheDraftZip(draftId) {
     }
     const documentsDir = path.join(resolved.path, 'documents');
     if (!fs.existsSync(documentsDir) || !fs.statSync(documentsDir).isDirectory()) {
-        const error = new Error('Cache draft is incomplete (documents/ required).');
+        const error = new Error('Cache draft is incomplete (documents folder required).');
         error.status = 400;
         throw error;
     }
@@ -1219,7 +1219,7 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
         if (normalizedRel === 'manifest.json') hasManifest = true;
         if (normalizedRel.startsWith('documents/')) hasDocuments = true;
         if (normalizedRel.startsWith('continuity/')) {
-            const error = new Error('Invalid cache package: continuity/ is not supported. Use documents/.');
+            const error = new Error('Invalid cache package: continuity folder is not supported. Use the documents folder.');
             error.status = 400;
             throw error;
         }
@@ -1230,7 +1230,7 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
         throw error;
     }
     if (!hasDocuments) {
-        const error = new Error('Installed cache is missing documents/.');
+        const error = new Error('Installed cache is missing documents folder.');
         error.status = 400;
         throw error;
     }

@@ -410,7 +410,7 @@ function _writeZipToTarget(buffer, packageId, targetDir, options = {}) {
         if (normalized === 'manifest.json') hasManifest = true;
         if (normalized.startsWith('documents/')) hasDocuments = true;
         if (normalized.startsWith('continuity/')) {
-            throw new Error('Unsupported cache layer "continuity/". Use "documents/" instead.');
+            throw new Error('Unsupported cache layer "continuity". Use "documents" instead.');
         }
     }
     if (packageId !== 'green-fire-core') {
