@@ -259,27 +259,30 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
                         }
                         : null,
                     files: (() => {
-                        const continuityRoot = path.join(cacheRoot, 'continuity');
+                        const documentsRoot = path.join(cacheRoot, 'documents');
                         const artifactsRoot = path.join(cacheRoot, 'artifacts');
-                        const hasContinuityLayer = fs.existsSync(continuityRoot) && fs.statSync(continuityRoot).isDirectory();
-                        const continuityFiles = hasContinuityLayer
+                        const cacheRootFiles = listMarkdownFilesRecursive(
+                            cacheRoot,
+                            'archive-cache/' + cacheId,
+                            'archive/caches/' + cacheId,
+                            /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
+                            summaryContext,
+                        ).filter(entry => entry.sourcePath === 'archive/caches/' + cacheId + '/README.md');
+                        const hasDocumentsLayer = fs.existsSync(documentsRoot) && fs.statSync(documentsRoot).isDirectory();
+                        const documentFiles = hasDocumentsLayer
                             ? listMarkdownFilesRecursive(
-                                continuityRoot,
+                                documentsRoot,
                                 'archive-cache/' + cacheId,
-                                'archive/caches/' + cacheId + '/continuity',
+                                'archive/caches/' + cacheId + '/documents',
                                 /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
                                 summaryContext,
                             )
-                            : listMarkdownFilesRecursive(
-                                cacheRoot,
-                                'archive-cache/' + cacheId,
-                                'archive/caches/' + cacheId,
-                                /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
-                                summaryContext,
-                            );
-                        if (!includeArtifacts) return continuityFiles;
+                            : [];
+                        const baseFiles = [...cacheRootFiles, ...documentFiles]
+                            .sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
+                        if (!includeArtifacts) return baseFiles;
                         if (!fs.existsSync(artifactsRoot) || !fs.statSync(artifactsRoot).isDirectory()) {
-                            return continuityFiles;
+                            return baseFiles;
                         }
                         const artifactFiles = listMarkdownFilesRecursive(
                             artifactsRoot,
@@ -288,7 +291,7 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
                             /codices/i.test(cacheId) ? 'Codices Cache Artifact' : 'Archive Cache Artifact',
                             summaryContext,
                         );
-                        return [...continuityFiles, ...artifactFiles]
+                        return [...baseFiles, ...artifactFiles]
                             .sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
                     })(),
                 };

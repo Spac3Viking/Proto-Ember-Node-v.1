@@ -423,7 +423,8 @@ function isVisiblePath(relPath) {
 function isAllowedDraftPayloadPath(relPath) {
     return relPath === 'manifest.json' ||
         relPath === 'README.md' ||
-        relPath.startsWith('documents/');
+        relPath.startsWith('documents/') ||
+        relPath.startsWith('artifacts/');
 }
 
 function toRootRelative(absPath) {
@@ -539,12 +540,6 @@ function normalizeDraftManifest(manifest, draftId, updatedAtFallback) {
                 const fallback = normalizeDraftDocumentEntry(null, entry.path);
                 if (fallback) documentEntries.push(fallback);
             }
-        });
-    }
-    if (documentEntries.length === 0 && raw.continuity && Array.isArray(raw.continuity.documents)) {
-        raw.continuity.documents.forEach(rel => {
-            const fallback = normalizeDraftDocumentEntry(null, rel);
-            if (fallback) documentEntries.push(fallback);
         });
     }
     return {
@@ -760,6 +755,7 @@ function writeCacheDraftReadme({ draftId, title, description, purposeSummary, up
         '- `manifest.json`',
         '- `README.md`',
         '- `documents/`',
+        '- `artifacts/`',
         '',
         ...documents.map(entry => '- `' + entry.path + '`'),
         '',
@@ -1141,11 +1137,25 @@ function exportCacheDraftZip(draftId) {
         zip.addFile(resolved.id + '/' + rel, fs.readFileSync(abs));
     }
     const documentsDir = path.join(resolved.path, 'documents');
+    if (!fs.existsSync(documentsDir) || !fs.statSync(documentsDir).isDirectory()) {
+        const error = new Error('Cache draft is incomplete (documents/ required).');
+        error.status = 400;
+        throw error;
+    }
     const documentFiles = fs.existsSync(documentsDir) ? listFilesRecursive(documentsDir) : [];
     for (const filePath of documentFiles) {
         const rel = path.relative(resolved.path, filePath).replace(/\\/g, '/');
         if (!rel || rel.includes('..')) continue;
         if (!rel.startsWith('documents/')) continue;
+        if (!isVisiblePath(rel)) continue;
+        zip.addFile(resolved.id + '/' + rel, fs.readFileSync(filePath));
+    }
+    const artifactsDir = path.join(resolved.path, 'artifacts');
+    const artifactFiles = fs.existsSync(artifactsDir) ? listFilesRecursive(artifactsDir) : [];
+    for (const filePath of artifactFiles) {
+        const rel = path.relative(resolved.path, filePath).replace(/\\/g, '/');
+        if (!rel || rel.includes('..')) continue;
+        if (!rel.startsWith('artifacts/')) continue;
         if (!isVisiblePath(rel)) continue;
         zip.addFile(resolved.id + '/' + rel, fs.readFileSync(filePath));
     }
@@ -1195,7 +1205,37 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
     fs.mkdirSync(destinationRoot, { recursive: true });
 
     const zip = new AdmZip(zipPath);
-    for (const entry of zip.getEntries()) {
+    const entries = zip.getEntries();
+    let hasManifest = false;
+    let hasDocuments = false;
+    for (const entry of entries) {
+        let rel = String(entry.entryName || '').replace(/\\/g, '/').replace(/^\/+/, '');
+        if (!rel) continue;
+        if (rel.startsWith(normalizedDraftId + '/')) {
+            rel = rel.slice(normalizedDraftId.length + 1);
+        }
+        if (!rel || rel === '.' || rel.includes('..')) continue;
+        const normalizedRel = rel.replace(/\\/g, '/');
+        if (normalizedRel === 'manifest.json') hasManifest = true;
+        if (normalizedRel.startsWith('documents/')) hasDocuments = true;
+        if (normalizedRel.startsWith('continuity/')) {
+            const error = new Error('Invalid cache package: continuity/ is not supported. Use documents/.');
+            error.status = 400;
+            throw error;
+        }
+    }
+    if (!hasManifest) {
+        const error = new Error('Installed cache is missing manifest.json.');
+        error.status = 400;
+        throw error;
+    }
+    if (!hasDocuments) {
+        const error = new Error('Installed cache is missing documents/.');
+        error.status = 400;
+        throw error;
+    }
+
+    for (const entry of entries) {
         let rel = String(entry.entryName || '').replace(/\\/g, '/').replace(/^\/+/, '');
         if (!rel) continue;
         if (rel.startsWith(normalizedDraftId + '/')) {
@@ -1223,8 +1263,19 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
 
     const manifestPath = path.join(destinationRoot, 'manifest.json');
     const readmePath = path.join(destinationRoot, 'README.md');
-    if (!fs.existsSync(manifestPath) || !fs.existsSync(readmePath)) {
-        const error = new Error('Installed cache is missing manifest.json or README.md.');
+    const documentsPath = path.join(destinationRoot, 'documents');
+    if (!fs.existsSync(manifestPath)) {
+        const error = new Error('Installed cache is missing manifest.json.');
+        error.status = 400;
+        throw error;
+    }
+    if (!fs.existsSync(documentsPath) || !fs.statSync(documentsPath).isDirectory()) {
+        const error = new Error('Installed cache is missing documents/.');
+        error.status = 400;
+        throw error;
+    }
+    if (!fs.existsSync(readmePath)) {
+        const error = new Error('Installed cache is missing README.md.');
         error.status = 400;
         throw error;
     }
