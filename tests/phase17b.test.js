@@ -85,7 +85,7 @@ describe('Phase 17B — Canonical Cache Package Structure', () => {
         fs.mkdirSync(path.join(cacheRoot, 'documents'), { recursive: true });
         fs.mkdirSync(path.join(cacheRoot, 'artifacts', 'reference'), { recursive: true });
         fs.writeFileSync(path.join(cacheRoot, 'manifest.json'), JSON.stringify({ id: 'green-fire-gallery-cache' }), 'utf8');
-        fs.writeFileSync(path.join(cacheRoot, 'documents', 'summary.md'), '# continuity', 'utf8');
+        fs.writeFileSync(path.join(cacheRoot, 'documents', 'summary.md'), '# summary', 'utf8');
         fs.writeFileSync(path.join(cacheRoot, 'artifacts', 'reference', 'reference.pdf'), 'pdf', 'utf8');
 
         const { detectArchiveFiles } = require('../app/archiveService');
