@@ -109,6 +109,7 @@ function detectArchiveFiles(options = {}) {
 
     // Scan archive/caches/ — each cache is a sub-directory with continuity/artifact layers.
     // Default behavior is continuity-first; artifacts are included only when explicitly requested.
+    // Legacy caches without a continuity/ directory still fall back to full-directory scanning.
     if (fs.existsSync(ARCHIVE_CACHES_DIR)) {
         let cacheEntries;
         try { cacheEntries = fs.readdirSync(ARCHIVE_CACHES_DIR, { withFileTypes: true }); }

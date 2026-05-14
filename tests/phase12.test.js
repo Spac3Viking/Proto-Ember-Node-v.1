@@ -155,7 +155,7 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
         expect(installRes.body.installed.manifest.version).toBe('1.5.0');
 
         const continuityFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'continuity', 'codex.md');
-        const artifactFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'artifacts', 'assets', 'original.pdf');
+        const artifactFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'artifacts', 'original.pdf');
         expect(fs.existsSync(continuityFile)).toBe(true);
         expect(fs.existsSync(artifactFile)).toBe(true);
 

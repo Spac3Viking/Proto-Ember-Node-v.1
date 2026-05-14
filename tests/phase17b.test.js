@@ -18,7 +18,7 @@ describe('Phase 17B — Canonical Cache Package Structure', () => {
         axiosMock.get.mockReset();
         axiosMock.post.mockReset();
         axiosMock.post.mockRejectedValue(new Error('offline'));
-        dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-p17b-'));
+        dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-phase17b-test-'));
         process.env.EMBER_NODE_DATA_ROOT = dataRoot;
         delete process.env.EMBER_DATA_ROOT;
     });
@@ -74,7 +74,7 @@ describe('Phase 17B — Canonical Cache Package Structure', () => {
         expect(fs.existsSync(path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'artifacts'))).toBe(true);
         expect(fs.existsSync(path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'continuity', 'README.md'))).toBe(true);
         expect(fs.existsSync(path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'continuity', 'bootstrap.md'))).toBe(true);
-        expect(fs.existsSync(path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'artifacts', 'scans', 'source.pdf'))).toBe(true);
+        expect(fs.existsSync(path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'artifacts', 'source.pdf'))).toBe(true);
     });
 
     test('archive cache detection is continuity-first by default', () => {

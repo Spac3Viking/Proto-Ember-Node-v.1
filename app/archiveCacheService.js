@@ -32,6 +32,37 @@ const CANONICAL_CACHE_PACKAGE_IDS = [
 const CANONICAL_CACHE_PACKAGE_ID_SET = new Set(CANONICAL_CACHE_PACKAGE_IDS);
 const CANONICAL_CACHE_CONTINUITY_DIR = 'continuity';
 const CANONICAL_CACHE_ARTIFACTS_DIR = 'artifacts';
+const CANONICAL_CONTINUITY_HINTS = new Set([
+    'documents',
+    'document',
+    'summaries',
+    'summary',
+    'bootstrap',
+    'bootstraps',
+    'handoff',
+    'handoffs',
+    'distillation',
+    'distillations',
+    'distillation-notes',
+    'notes',
+    'markdown',
+    'md',
+]);
+const CANONICAL_ARTIFACT_HINTS = new Set([
+    'artifact',
+    'artifacts',
+    'assets',
+    'images',
+    'image',
+    'img',
+    'scan',
+    'scans',
+    'source',
+    'sources',
+    'raw',
+    'reference',
+    'references',
+]);
 const ARCHIVE_CACHE_INDEX_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-upstream-index.json');
 const ARCHIVE_CACHE_REGISTRY_FILE = path.join(SYSTEM_DIR, 'archive-cache-registry.json');
 const ARCHIVE_SIGNAL_CACHE_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-signal.json');
@@ -336,33 +367,22 @@ function _canonicalizeCacheEntryPath(relPath, packageId) {
     const segs = normalized.split('/');
     const first = String(segs[0] || '').toLowerCase();
     const rest = segs.slice(1).join('/');
-    const fileName = path.posix.basename(normalized);
 
-    const continuityHints = new Set([
-        'documents',
-        'document',
-        'summaries',
-        'summary',
-        'bootstrap',
-        'bootstraps',
-        'handoff',
-        'handoffs',
-        'distillation',
-        'distillations',
-        'distillation-notes',
-        'notes',
-        'markdown',
-        'md',
-    ]);
-
-    if (continuityHints.has(first)) {
-        return CANONICAL_CACHE_CONTINUITY_DIR + '/' + (rest || fileName);
+    if (CANONICAL_CONTINUITY_HINTS.has(first)) {
+        if (!rest) return null;
+        return CANONICAL_CACHE_CONTINUITY_DIR + '/' + rest;
+    }
+    if (CANONICAL_ARTIFACT_HINTS.has(first)) {
+        if (!rest) return null;
+        return CANONICAL_CACHE_ARTIFACTS_DIR + '/' + rest;
     }
 
     if (ext === '.md' || ext === '.txt') {
         return CANONICAL_CACHE_CONTINUITY_DIR + '/' + normalized;
     }
 
+    // Unknown entries default to artifacts so source material is preserved without polluting
+    // the continuity layer that the node uses for primary markdown-first retrieval.
     return CANONICAL_CACHE_ARTIFACTS_DIR + '/' + normalized;
 }
 

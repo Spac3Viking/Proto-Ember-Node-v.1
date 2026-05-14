@@ -223,7 +223,7 @@ router.get('/api/archive', readLimiter, (req, res) => {
  * Return a cache-aware markdown catalog for local archive roots.
  */
 router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
-    const includeArtifacts = String(req.query && req.query.includeArtifacts ? req.query.includeArtifacts : '')
+    const includeArtifacts = String(req.query?.includeArtifacts ?? '')
         .trim()
         .toLowerCase() === 'true';
     const cacheSummaries = loadCacheSummaries();
