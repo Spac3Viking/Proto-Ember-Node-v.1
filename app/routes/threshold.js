@@ -1142,7 +1142,7 @@ function exportCacheDraftZip(draftId) {
         error.status = 400;
         throw error;
     }
-    const documentFiles = fs.existsSync(documentsDir) ? listFilesRecursive(documentsDir) : [];
+    const documentFiles = listFilesRecursive(documentsDir);
     for (const filePath of documentFiles) {
         const rel = path.relative(resolved.path, filePath).replace(/\\/g, '/');
         if (!rel || rel.includes('..')) continue;
@@ -1262,23 +1262,6 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
     }
 
     const manifestPath = path.join(destinationRoot, 'manifest.json');
-    const readmePath = path.join(destinationRoot, 'README.md');
-    const documentsPath = path.join(destinationRoot, 'documents');
-    if (!fs.existsSync(manifestPath)) {
-        const error = new Error('Installed cache is missing manifest.json.');
-        error.status = 400;
-        throw error;
-    }
-    if (!fs.existsSync(documentsPath) || !fs.statSync(documentsPath).isDirectory()) {
-        const error = new Error('Installed cache is missing documents/.');
-        error.status = 400;
-        throw error;
-    }
-    if (!fs.existsSync(readmePath)) {
-        const error = new Error('Installed cache is missing README.md.');
-        error.status = 400;
-        throw error;
-    }
     try {
         recordCacheInteraction({
             kind: 'cache_draft_installed',

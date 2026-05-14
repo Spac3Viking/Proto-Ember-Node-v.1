@@ -422,13 +422,7 @@ function _writeZipToTarget(buffer, packageId, targetDir, options = {}) {
         const rel = _resolveEntryRelativePath(entry.entryName, packageId);
         if (!rel) continue;
         const canonicalRel = _canonicalizeCacheEntryPath(rel, packageId);
-        if (!canonicalRel) {
-            const normalized = _safeRel(rel);
-            if (normalized && normalized.startsWith('continuity/')) {
-                throw new Error('Unsupported cache layer "continuity/". Use "documents/" instead.');
-            }
-            continue;
-        }
+        if (!canonicalRel) continue;
 
         const destination = path.resolve(path.join(base, canonicalRel));
         if (!destination.startsWith(base + path.sep) && destination !== base) {
