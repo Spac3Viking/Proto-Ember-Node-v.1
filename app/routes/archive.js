@@ -171,6 +171,19 @@ function resolveReaderEntry(entryId) {
         };
     }
 
+    if (rootKey.startsWith('archive-cache-artifact/')) {
+        const cacheId = rootKey.slice('archive-cache-artifact/'.length);
+        if (!CACHE_ID_PATTERN.test(cacheId)) return null;
+        const artifactsRoot = path.join(ARCHIVE_CACHES_DIR, cacheId, 'artifacts');
+        const abs = path.resolve(artifactsRoot, relativePath);
+        if (!isPathInside(artifactsRoot, abs)) return null;
+        return {
+            absolutePath: abs,
+            sourcePath: 'archive/caches/' + cacheId + '/artifacts/' + relativePath,
+            sourceLabel: /codices/i.test(cacheId) ? 'Codices Cache Artifact' : 'Archive Cache Artifact',
+        };
+    }
+
     return null;
 }
 
@@ -210,6 +223,9 @@ router.get('/api/archive', readLimiter, (req, res) => {
  * Return a cache-aware markdown catalog for local archive roots.
  */
 router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
+    const includeArtifacts = String(req.query?.includeArtifacts ?? '')
+        .trim()
+        .toLowerCase() === 'true';
     const cacheSummaries = loadCacheSummaries();
     const documentSummaries = loadDocumentSummaries();
     const summaryContext = { documentSummaries, cacheSummaries };
@@ -242,13 +258,39 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
                                 : [],
                         }
                         : null,
-                    files: listMarkdownFilesRecursive(
-                        cacheRoot,
-                        'archive-cache/' + cacheId,
-                        'archive/caches/' + cacheId,
-                        /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
-                        summaryContext,
-                    ),
+                    files: (() => {
+                        const continuityRoot = path.join(cacheRoot, 'continuity');
+                        const artifactsRoot = path.join(cacheRoot, 'artifacts');
+                        const hasContinuityLayer = fs.existsSync(continuityRoot) && fs.statSync(continuityRoot).isDirectory();
+                        const continuityFiles = hasContinuityLayer
+                            ? listMarkdownFilesRecursive(
+                                continuityRoot,
+                                'archive-cache/' + cacheId,
+                                'archive/caches/' + cacheId + '/continuity',
+                                /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
+                                summaryContext,
+                            )
+                            : listMarkdownFilesRecursive(
+                                cacheRoot,
+                                'archive-cache/' + cacheId,
+                                'archive/caches/' + cacheId,
+                                /codices/i.test(cacheId) ? 'Codices Cache' : 'Archive Cache',
+                                summaryContext,
+                            );
+                        if (!includeArtifacts) return continuityFiles;
+                        if (!fs.existsSync(artifactsRoot) || !fs.statSync(artifactsRoot).isDirectory()) {
+                            return continuityFiles;
+                        }
+                        const artifactFiles = listMarkdownFilesRecursive(
+                            artifactsRoot,
+                            'archive-cache-artifact/' + cacheId,
+                            'archive/caches/' + cacheId + '/artifacts',
+                            /codices/i.test(cacheId) ? 'Codices Cache Artifact' : 'Archive Cache Artifact',
+                            summaryContext,
+                        );
+                        return [...continuityFiles, ...artifactFiles]
+                            .sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
+                    })(),
                 };
             })
         : [];

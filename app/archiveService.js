@@ -78,8 +78,9 @@ function removeStaleEmbeddingsForSource(sourceId) {
  *
  * @returns {Array<{ filePath: string, shelf: string, sourceClass: string }>}
  */
-function detectArchiveFiles() {
+function detectArchiveFiles(options = {}) {
     if (!fs.existsSync(ARCHIVE_DIR)) return [];
+    const includeArtifacts = options && options.includeArtifacts === true;
 
     const found = [];
 
@@ -106,7 +107,9 @@ function detectArchiveFiles() {
         found.push({ filePath: path.join(ARCHIVE_DIR, entry.name), shelf: 'archive', sourceClass: SOURCE_CLASS_ARCHIVE });
     }
 
-    // Scan archive/caches/ — each cache is a sub-directory with its own content
+    // Scan archive/caches/ — each cache is a sub-directory with continuity/artifact layers.
+    // Default behavior is continuity-first; artifacts are included only when explicitly requested.
+    // Legacy caches without a continuity/ directory still fall back to full-directory scanning.
     if (fs.existsSync(ARCHIVE_CACHES_DIR)) {
         let cacheEntries;
         try { cacheEntries = fs.readdirSync(ARCHIVE_CACHES_DIR, { withFileTypes: true }); }
@@ -114,11 +117,27 @@ function detectArchiveFiles() {
         for (const cacheEntry of cacheEntries) {
             if (!cacheEntry.isDirectory()) continue;
             const cacheDir = path.join(ARCHIVE_CACHES_DIR, cacheEntry.name);
-            const files = collectFiles(cacheDir);
-            for (const filePath of files) {
-                // Skip manifest.json — it is metadata, not content
-                if (path.basename(filePath) === 'manifest.json') continue;
-                found.push({ filePath, shelf: cacheEntry.name, sourceClass: SOURCE_CLASS_ARCHIVE_CACHE });
+            const continuityDir = path.join(cacheDir, 'continuity');
+            const artifactsDir = path.join(cacheDir, 'artifacts');
+            const hasContinuityLayer = fs.existsSync(continuityDir);
+
+            const scanRoots = [];
+            if (hasContinuityLayer) {
+                scanRoots.push({ dir: continuityDir, type: 'continuity' });
+                if (includeArtifacts && fs.existsSync(artifactsDir)) {
+                    scanRoots.push({ dir: artifactsDir, type: 'artifacts' });
+                }
+            } else {
+                scanRoots.push({ dir: cacheDir, type: 'legacy' });
+            }
+
+            for (const scanRoot of scanRoots) {
+                const files = collectFiles(scanRoot.dir);
+                for (const filePath of files) {
+                    // Skip manifest.json — it is metadata, not content
+                    if (path.basename(filePath) === 'manifest.json') continue;
+                    found.push({ filePath, shelf: cacheEntry.name, sourceClass: SOURCE_CLASS_ARCHIVE_CACHE });
+                }
             }
         }
     }
