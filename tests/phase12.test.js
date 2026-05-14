@@ -122,6 +122,7 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
             type: 'archive-cache',
         })));
         cacheZip.addFile('green-fire-codices-cache/documents/codex.md', Buffer.from('# Codex Cache'));
+        cacheZip.addFile('green-fire-codices-cache/assets/original.pdf', Buffer.from('PDF bytes'));
         const cacheZipBuffer = cacheZip.toBuffer();
 
         axios.get.mockImplementation((url, options) => {
@@ -153,8 +154,10 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
         expect(installRes.body.installed.packageId).toBe('green-fire-codices-cache');
         expect(installRes.body.installed.manifest.version).toBe('1.5.0');
 
-        const cacheFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'documents', 'codex.md');
-        expect(fs.existsSync(cacheFile)).toBe(true);
+        const continuityFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'continuity', 'codex.md');
+        const artifactFile = path.join(sc.ARCHIVE_CACHES_DIR, 'green-fire-codices-cache', 'artifacts', 'assets', 'original.pdf');
+        expect(fs.existsSync(continuityFile)).toBe(true);
+        expect(fs.existsSync(artifactFile)).toBe(true);
 
         const listRes = await request(app).get('/api/archive/caches/installed');
         expect(listRes.status).toBe(200);

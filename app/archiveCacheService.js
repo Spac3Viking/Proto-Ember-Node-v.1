@@ -30,6 +30,8 @@ const CANONICAL_CACHE_PACKAGE_IDS = [
 ];
 
 const CANONICAL_CACHE_PACKAGE_ID_SET = new Set(CANONICAL_CACHE_PACKAGE_IDS);
+const CANONICAL_CACHE_CONTINUITY_DIR = 'continuity';
+const CANONICAL_CACHE_ARTIFACTS_DIR = 'artifacts';
 const ARCHIVE_CACHE_INDEX_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-upstream-index.json');
 const ARCHIVE_CACHE_REGISTRY_FILE = path.join(SYSTEM_DIR, 'archive-cache-registry.json');
 const ARCHIVE_SIGNAL_CACHE_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-signal.json');
@@ -322,6 +324,54 @@ function _resolveEntryRelativePath(entryName, packageId) {
     return _safeRel(rel);
 }
 
+function _canonicalizeCacheEntryPath(relPath, packageId) {
+    if (packageId === 'green-fire-core') return _safeRel(relPath);
+    const normalized = _safeRel(relPath);
+    if (!normalized) return null;
+    if (normalized === 'manifest.json') return normalized;
+    if (normalized.startsWith(CANONICAL_CACHE_CONTINUITY_DIR + '/')) return normalized;
+    if (normalized.startsWith(CANONICAL_CACHE_ARTIFACTS_DIR + '/')) return normalized;
+
+    const ext = path.posix.extname(normalized).toLowerCase();
+    const segs = normalized.split('/');
+    const first = String(segs[0] || '').toLowerCase();
+    const rest = segs.slice(1).join('/');
+    const fileName = path.posix.basename(normalized);
+
+    const continuityHints = new Set([
+        'documents',
+        'document',
+        'summaries',
+        'summary',
+        'bootstrap',
+        'bootstraps',
+        'handoff',
+        'handoffs',
+        'distillation',
+        'distillations',
+        'distillation-notes',
+        'notes',
+        'markdown',
+        'md',
+    ]);
+
+    if (continuityHints.has(first)) {
+        return CANONICAL_CACHE_CONTINUITY_DIR + '/' + (rest || fileName);
+    }
+
+    if (ext === '.md' || ext === '.txt') {
+        return CANONICAL_CACHE_CONTINUITY_DIR + '/' + normalized;
+    }
+
+    return CANONICAL_CACHE_ARTIFACTS_DIR + '/' + normalized;
+}
+
+function _ensureCanonicalCacheLayers(targetDir, packageId) {
+    if (packageId === 'green-fire-core') return;
+    fs.mkdirSync(path.join(targetDir, CANONICAL_CACHE_CONTINUITY_DIR), { recursive: true });
+    fs.mkdirSync(path.join(targetDir, CANONICAL_CACHE_ARTIFACTS_DIR), { recursive: true });
+}
+
 function _writeZipToTarget(buffer, packageId, targetDir, options = {}) {
     const zip = new AdmZip(Buffer.from(buffer));
     const base = path.resolve(targetDir);
@@ -330,8 +380,10 @@ function _writeZipToTarget(buffer, packageId, targetDir, options = {}) {
     for (const entry of zip.getEntries()) {
         const rel = _resolveEntryRelativePath(entry.entryName, packageId);
         if (!rel) continue;
+        const canonicalRel = _canonicalizeCacheEntryPath(rel, packageId);
+        if (!canonicalRel) continue;
 
-        const destination = path.resolve(path.join(base, rel));
+        const destination = path.resolve(path.join(base, canonicalRel));
         if (!destination.startsWith(base + path.sep) && destination !== base) {
             throw new Error('Unsafe zip path detected: ' + entry.entryName);
         }
@@ -444,6 +496,7 @@ async function installArchiveCachePackage({ packageId }) {
         fs.rmSync(targetDir, { recursive: true, force: true });
     }
     fs.mkdirSync(targetDir, { recursive: true });
+    _ensureCanonicalCacheLayers(targetDir, packageId);
 
     const response = await axios.get(resolvedUrl, {
         timeout: 30000,
@@ -615,6 +668,8 @@ module.exports = {
     BUNDLED_CACHES_DIR,
     BUNDLED_CORE_CACHE_FILE,
     CANONICAL_CACHE_PACKAGE_IDS,
+    CANONICAL_CACHE_CONTINUITY_DIR,
+    CANONICAL_CACHE_ARTIFACTS_DIR,
     CANONICAL_PACKAGE_DOWNLOAD_URLS,
     compareVersionStrings,
     normalizeUpstreamPackageIndex,
