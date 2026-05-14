@@ -30,9 +30,9 @@ const CANONICAL_CACHE_PACKAGE_IDS = [
 ];
 
 const CANONICAL_CACHE_PACKAGE_ID_SET = new Set(CANONICAL_CACHE_PACKAGE_IDS);
-const CANONICAL_CACHE_CONTINUITY_DIR = 'continuity';
+const CANONICAL_CACHE_DOCUMENTS_DIR = 'documents';
 const CANONICAL_CACHE_ARTIFACTS_DIR = 'artifacts';
-const CANONICAL_CONTINUITY_HINTS = new Set([
+const CANONICAL_DOCUMENTS_HINTS = new Set([
     'documents',
     'document',
     'summaries',
@@ -360,7 +360,9 @@ function _canonicalizeCacheEntryPath(relPath, packageId) {
     const normalized = _safeRel(relPath);
     if (!normalized) return null;
     if (normalized === 'manifest.json') return normalized;
-    if (normalized.startsWith(CANONICAL_CACHE_CONTINUITY_DIR + '/')) return normalized;
+    if (normalized === 'README.md') return normalized;
+    if (normalized.startsWith('continuity/')) return null;
+    if (normalized.startsWith(CANONICAL_CACHE_DOCUMENTS_DIR + '/')) return normalized;
     if (normalized.startsWith(CANONICAL_CACHE_ARTIFACTS_DIR + '/')) return normalized;
 
     const ext = path.posix.extname(normalized).toLowerCase();
@@ -368,9 +370,9 @@ function _canonicalizeCacheEntryPath(relPath, packageId) {
     const first = String(segs[0] || '').toLowerCase();
     const rest = segs.slice(1).join('/');
 
-    if (CANONICAL_CONTINUITY_HINTS.has(first)) {
+    if (CANONICAL_DOCUMENTS_HINTS.has(first)) {
         if (!rest) return null;
-        return CANONICAL_CACHE_CONTINUITY_DIR + '/' + rest;
+        return CANONICAL_CACHE_DOCUMENTS_DIR + '/' + rest;
     }
     if (CANONICAL_ARTIFACT_HINTS.has(first)) {
         if (!rest) return null;
@@ -378,17 +380,17 @@ function _canonicalizeCacheEntryPath(relPath, packageId) {
     }
 
     if (ext === '.md' || ext === '.txt') {
-        return CANONICAL_CACHE_CONTINUITY_DIR + '/' + normalized;
+        return CANONICAL_CACHE_DOCUMENTS_DIR + '/' + normalized;
     }
 
     // Unknown entries default to artifacts so source material is preserved without polluting
-    // the continuity layer that the node uses for primary markdown-first retrieval.
+    // the documents layer that the node uses for primary markdown-first retrieval.
     return CANONICAL_CACHE_ARTIFACTS_DIR + '/' + normalized;
 }
 
 function _ensureCanonicalCacheLayers(targetDir, packageId) {
     if (packageId === 'green-fire-core') return;
-    fs.mkdirSync(path.join(targetDir, CANONICAL_CACHE_CONTINUITY_DIR), { recursive: true });
+    fs.mkdirSync(path.join(targetDir, CANONICAL_CACHE_DOCUMENTS_DIR), { recursive: true });
     fs.mkdirSync(path.join(targetDir, CANONICAL_CACHE_ARTIFACTS_DIR), { recursive: true });
 }
 
@@ -397,7 +399,26 @@ function _writeZipToTarget(buffer, packageId, targetDir, options = {}) {
     const base = path.resolve(targetDir);
     const overwrite = options.overwrite ?? true;
 
-    for (const entry of zip.getEntries()) {
+    const entries = zip.getEntries();
+    let hasManifest = false;
+    let hasDocuments = false;
+    for (const entry of entries) {
+        const rel = _resolveEntryRelativePath(entry.entryName, packageId);
+        if (!rel) continue;
+        const normalized = _safeRel(rel);
+        if (!normalized) continue;
+        if (normalized === 'manifest.json') hasManifest = true;
+        if (normalized.startsWith('documents/')) hasDocuments = true;
+        if (normalized.startsWith('continuity/')) {
+            throw new Error('Unsupported cache layer "continuity". Use "documents" instead.');
+        }
+    }
+    if (packageId !== 'green-fire-core') {
+        if (!hasManifest) throw new Error('Cache package missing required file: manifest.json');
+        if (!hasDocuments) throw new Error('Cache package missing required folder: documents/');
+    }
+
+    for (const entry of entries) {
         const rel = _resolveEntryRelativePath(entry.entryName, packageId);
         if (!rel) continue;
         const canonicalRel = _canonicalizeCacheEntryPath(rel, packageId);
@@ -688,7 +709,7 @@ module.exports = {
     BUNDLED_CACHES_DIR,
     BUNDLED_CORE_CACHE_FILE,
     CANONICAL_CACHE_PACKAGE_IDS,
-    CANONICAL_CACHE_CONTINUITY_DIR,
+    CANONICAL_CACHE_DOCUMENTS_DIR,
     CANONICAL_CACHE_ARTIFACTS_DIR,
     CANONICAL_PACKAGE_DOWNLOAD_URLS,
     compareVersionStrings,

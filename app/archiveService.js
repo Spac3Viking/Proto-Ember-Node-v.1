@@ -107,9 +107,8 @@ function detectArchiveFiles(options = {}) {
         found.push({ filePath: path.join(ARCHIVE_DIR, entry.name), shelf: 'archive', sourceClass: SOURCE_CLASS_ARCHIVE });
     }
 
-    // Scan archive/caches/ — each cache is a sub-directory with continuity/artifact layers.
-    // Default behavior is continuity-first; artifacts are included only when explicitly requested.
-    // Legacy caches without a continuity/ directory still fall back to full-directory scanning.
+    // Scan archive/caches/ — each cache is a sub-directory with documents/artifacts layers.
+    // Default behavior is documents-first; artifacts are included only when explicitly requested.
     if (fs.existsSync(ARCHIVE_CACHES_DIR)) {
         let cacheEntries;
         try { cacheEntries = fs.readdirSync(ARCHIVE_CACHES_DIR, { withFileTypes: true }); }
@@ -117,18 +116,16 @@ function detectArchiveFiles(options = {}) {
         for (const cacheEntry of cacheEntries) {
             if (!cacheEntry.isDirectory()) continue;
             const cacheDir = path.join(ARCHIVE_CACHES_DIR, cacheEntry.name);
-            const continuityDir = path.join(cacheDir, 'continuity');
+            const documentsDir = path.join(cacheDir, 'documents');
             const artifactsDir = path.join(cacheDir, 'artifacts');
-            const hasContinuityLayer = fs.existsSync(continuityDir);
+            const hasDocumentsLayer = fs.existsSync(documentsDir) && fs.statSync(documentsDir).isDirectory();
 
             const scanRoots = [];
-            if (hasContinuityLayer) {
-                scanRoots.push({ dir: continuityDir, type: 'continuity' });
+            if (hasDocumentsLayer) {
+                scanRoots.push({ dir: documentsDir, type: 'documents' });
                 if (includeArtifacts && fs.existsSync(artifactsDir)) {
                     scanRoots.push({ dir: artifactsDir, type: 'artifacts' });
                 }
-            } else {
-                scanRoots.push({ dir: cacheDir, type: 'legacy' });
             }
 
             for (const scanRoot of scanRoots) {

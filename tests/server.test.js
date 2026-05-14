@@ -675,6 +675,9 @@ describe('Threshold cache draft workflow', () => {
     test('exports cache draft as zip containing only normalized draft files', async () => {
         const hiddenFile = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId, '.DS_Store');
         await fs.promises.writeFile(hiddenFile, 'junk', 'utf8');
+        const artifactDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId, 'artifacts', 'raw');
+        await fs.promises.mkdir(artifactDir, { recursive: true });
+        await fs.promises.writeFile(path.join(artifactDir, 'seed.txt'), 'artifact payload', 'utf8');
 
         const res = await request(app)
             .post('/api/threshold/cache-drafts/' + draftId + '/export')
@@ -690,6 +693,7 @@ describe('Threshold cache draft workflow', () => {
         expect(names).toContain(draftId + '/manifest.json');
         expect(names).toContain(draftId + '/README.md');
         expect(names).toContain(draftId + '/documents/cache-draft-source.md');
+        expect(names).toContain(draftId + '/artifacts/raw/seed.txt');
         expect(names).not.toContain(draftId + '/.DS_Store');
     });
 
@@ -716,6 +720,42 @@ describe('Threshold cache draft workflow', () => {
         expect(hasInstalledReadme).toBe(true);
     });
 
+    test('rejects cache install when export zip is missing documents/', async () => {
+        const badDraftId = draftId + '-bad-no-docs';
+        const badZip = new AdmZip();
+        badZip.addFile(badDraftId + '/manifest.json', Buffer.from(JSON.stringify({ id: badDraftId }), 'utf8'));
+        badZip.addFile(badDraftId + '/README.md', Buffer.from('# Missing documents', 'utf8'));
+        const exportRelPath = 'exports/cache-drafts/' + badDraftId + '.zip';
+        const absBadZipPath = path.join(DATA_ROOT, exportRelPath);
+        await fs.promises.mkdir(path.dirname(absBadZipPath), { recursive: true });
+        badZip.writeZip(absBadZipPath);
+
+        const installRes = await request(app)
+            .post('/api/threshold/cache-drafts/' + badDraftId + '/install')
+            .send({ exportPath: exportRelPath });
+        expect(installRes.status).toBe(400);
+        expect(String(installRes.body.error || '')).toMatch(/missing documents/i);
+    });
+
+    test('rejects cache install when export zip includes continuity/ paths', async () => {
+        const badDraftId = draftId + '-bad-continuity';
+        const badZip = new AdmZip();
+        badZip.addFile(badDraftId + '/manifest.json', Buffer.from(JSON.stringify({ id: badDraftId }), 'utf8'));
+        badZip.addFile(badDraftId + '/README.md', Buffer.from('# Invalid continuity layer', 'utf8'));
+        badZip.addFile(badDraftId + '/documents/valid.md', Buffer.from('# valid', 'utf8'));
+        badZip.addFile(badDraftId + '/continuity/legacy.md', Buffer.from('# legacy', 'utf8'));
+        const exportRelPath = 'exports/cache-drafts/' + badDraftId + '.zip';
+        const absBadZipPath = path.join(DATA_ROOT, exportRelPath);
+        await fs.promises.mkdir(path.dirname(absBadZipPath), { recursive: true });
+        badZip.writeZip(absBadZipPath);
+
+        const installRes = await request(app)
+            .post('/api/threshold/cache-drafts/' + badDraftId + '/install')
+            .send({ exportPath: exportRelPath });
+        expect(installRes.status).toBe(400);
+        expect(String(installRes.body.error || '')).toMatch(/continuity/i);
+    });
+
     afterAll(async () => {
         for (const importedPath of importedPaths) {
             if (!importedPath) continue;
@@ -728,6 +768,10 @@ describe('Threshold cache draft workflow', () => {
         const textDraftDir = path.join(DATA_ROOT, 'threshold', 'cache-drafts', draftId + '-text');
         const draftZipMulti = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '-multi.zip');
         const draftZipText = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '-text.zip');
+        const badZipNoDocs = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '-bad-no-docs.zip');
+        const badZipContinuity = path.join(DATA_ROOT, 'exports', 'cache-drafts', draftId + '-bad-continuity.zip');
+        const badInstallNoDocs = path.join(DATA_ROOT, 'archive', 'caches', draftId + '-bad-no-docs');
+        const badInstallContinuity = path.join(DATA_ROOT, 'archive', 'caches', draftId + '-bad-continuity');
         await fs.promises.rm(draftDir, { recursive: true, force: true });
         await fs.promises.rm(draftZip, { force: true });
         await fs.promises.rm(installDir, { recursive: true, force: true });
@@ -735,6 +779,10 @@ describe('Threshold cache draft workflow', () => {
         await fs.promises.rm(textDraftDir, { recursive: true, force: true });
         await fs.promises.rm(draftZipMulti, { force: true });
         await fs.promises.rm(draftZipText, { force: true });
+        await fs.promises.rm(badZipNoDocs, { force: true });
+        await fs.promises.rm(badZipContinuity, { force: true });
+        await fs.promises.rm(badInstallNoDocs, { recursive: true, force: true });
+        await fs.promises.rm(badInstallContinuity, { recursive: true, force: true });
     });
 });
 
