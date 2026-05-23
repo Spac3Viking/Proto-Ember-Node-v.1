@@ -245,11 +245,26 @@ function normalizeBooleanToggle(value, fallback = false) {
     return fallback;
 }
 
-function formatModelRoleLabel(role) {
+function formatModelRoleLabel(role, fallbackUsed = false) {
     const normalized = String(role || '').trim().toLowerCase();
-    if (normalized === 'forge') return 'Forge';
-    if (normalized === 'scribe') return 'Scribe';
-    return 'Hearth';
+    const base = normalized === 'forge'
+        ? 'Forge'
+        : normalized === 'scribe'
+            ? 'Scribe'
+            : 'Hearth';
+    if (fallbackUsed) return base + ' fallback';
+    return base;
+}
+
+function formatModelFallbackNote(runtime) {
+    const safe = runtime && typeof runtime === 'object' ? runtime : {};
+    if (!safe.fallbackUsed) return '';
+    const roleLabel = formatModelRoleLabel(safe.modelRole, false);
+    const reason = String(safe.fallbackReason || '').trim();
+    if (reason === 'role_model_not_installed') return `Fallback: ${roleLabel} role model unavailable`;
+    if (reason === 'role_model_blank') return `Fallback: ${roleLabel} role model unset`;
+    if (reason === 'selected_model_not_installed') return 'Fallback: selected model unavailable';
+    return `Fallback: ${roleLabel} model fallback`;
 }
 
 function buildDistillationGuidanceBlock() {
@@ -1352,7 +1367,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
         // Resolve Ember Prime runtime (Ollama-first).
-        const heart = resolveEmberPrimeRuntime({
+        const heart = await resolveEmberPrimeRuntime({
             depth: contextBudget.id,
             query,
             taskType,
@@ -1539,7 +1554,8 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 'Runtime: ~' + Math.ceil(promptAudit.finalPromptLength / CHARS_PER_TOKEN_ESTIMATE) +
                     ' tok · bootstrap ' + (sentinelIdentityPart ? 'on' : 'off') +
                     ' · archetype ' + (archetypePart ? 'on' : 'off'),
-                'Model: ' + heart.model + ' / ' + formatModelRoleLabel(heart.modelRole),
+                'Model: ' + heart.model + ' / ' + formatModelRoleLabel(heart.modelRole, Boolean(heart.fallbackUsed)),
+                ...(heart.fallbackUsed ? [formatModelFallbackNote(heart)] : []),
             ].join('\n');
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
@@ -1592,6 +1608,8 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 loadedCacheHits: runtimeConfidenceHints.loadedCacheHits,
                 modelRole: heart.modelRole,
                 fallbackUsed: Boolean(heart.fallbackUsed),
+                fallbackReason: heart.fallbackReason || null,
+                requestedRoleModel: heart.requestedRoleModel || null,
             },
             compact: compactSignalTrace,
         };

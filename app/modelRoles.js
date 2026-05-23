@@ -8,6 +8,13 @@ const MODEL_ROLES = Object.freeze({
     scribe: 'scribe',
 });
 
+const FALLBACK_REASONS = Object.freeze({
+    role_model_blank: 'role_model_blank',
+    role_model_not_installed: 'role_model_not_installed',
+    selected_model_not_installed: 'selected_model_not_installed',
+    missing_model_roles: 'missing_model_roles',
+});
+
 const TASK_ROUTES = Object.freeze({
     spark: 'hearth',
     ember: 'hearth',
@@ -154,30 +161,95 @@ function resolveModelForRole(role, aiConfig) {
     return { model: selectedModel || DEFAULT_OLLAMA_MODEL, fallbackUsed: true };
 }
 
-function resolveModelRuntimeForRequest({ role, depth, query, taskType, aiConfig } = {}) {
+function normalizeInstalledModels(installedModels) {
+    if (!Array.isArray(installedModels)) return null;
+    const cleaned = installedModels
+        .map(name => (typeof name === 'string' ? name.trim() : ''))
+        .filter(Boolean);
+    return cleaned.length > 0 ? new Set(cleaned) : new Set();
+}
+
+function resolveModelRuntimeForRequest({
+    depth,
+    query,
+    explicitRole,
+    role,
+    taskType,
+    installedModels,
+    aiConfig,
+} = {}) {
     const cfg = aiConfig || loadAiConfig();
     const routing = (cfg && typeof cfg === 'object') ? cfg.routing : null;
+    const installedSet = normalizeInstalledModels(installedModels);
 
-    const explicitRole = normalizeModelRole(role);
+    const explicit = normalizeModelRole(explicitRole) || normalizeModelRole(role);
     const taskRoute = detectTaskRoute({ taskType, query });
-    const resolvedRole = explicitRole
-        ? explicitRole
+    const resolvedRole = explicit
+        ? explicit
         : taskRoute
             ? resolveRoleForTask(taskRoute, routing)
             : resolveRoleForDepth(depth, routing);
 
-    const { model, fallbackUsed } = resolveModelForRole(resolvedRole, cfg);
+    const selectedModel = typeof (cfg && cfg.selected_model) === 'string' && cfg.selected_model.trim()
+        ? cfg.selected_model.trim()
+        : DEFAULT_OLLAMA_MODEL;
+    const configuredRoles = normalizeModelRolesConfig(cfg && cfg.model_roles);
+    const rolesConfigured = configuredRoles !== null;
+    const hasAnyRoleAssignment = rolesConfigured
+        ? Object.values(configuredRoles).some(value => typeof value === 'string' && value.trim())
+        : false;
+    const singleModelMode = !rolesConfigured || !hasAnyRoleAssignment;
+
+    const requestedRoleModel = rolesConfigured ? (configuredRoles[resolvedRole] || '') : '';
+
+    let model = selectedModel || DEFAULT_OLLAMA_MODEL;
+    let fallbackUsed = false;
+    let fallbackReason = null;
+
+    if (!singleModelMode) {
+        if (requestedRoleModel) {
+            if (installedSet && !installedSet.has(requestedRoleModel)) {
+                fallbackUsed = true;
+                fallbackReason = FALLBACK_REASONS.role_model_not_installed;
+            } else {
+                model = requestedRoleModel;
+            }
+        } else if (rolesConfigured) {
+            // Role layer exists and other roles may be configured, but this role is blank.
+            fallbackUsed = true;
+            fallbackReason = FALLBACK_REASONS.role_model_blank;
+        } else {
+            fallbackUsed = false;
+        }
+    } else if (!rolesConfigured) {
+        // Legacy config shape: keep single-model mode clean.
+        fallbackUsed = false;
+        fallbackReason = null;
+    }
+
+    // Runtime validation: if the selected model is missing, fall back to DEFAULT_OLLAMA_MODEL.
+    if (installedSet && model && !installedSet.has(model)) {
+        if (!fallbackUsed) {
+            fallbackUsed = true;
+            fallbackReason = FALLBACK_REASONS.selected_model_not_installed;
+        }
+        model = DEFAULT_OLLAMA_MODEL;
+    }
+
     return {
         model,
         modelRole: resolvedRole,
-        fallbackUsed,
+        requestedRoleModel: singleModelMode ? null : requestedRoleModel,
+        fallbackUsed: Boolean(fallbackUsed),
+        fallbackReason,
         taskRoute,
-        roleSource: explicitRole ? 'explicit' : (taskRoute ? 'task' : 'depth'),
+        roleSource: explicit ? 'explicit' : (taskRoute ? 'task' : 'depth'),
     };
 }
 
 module.exports = {
     MODEL_ROLES,
+    FALLBACK_REASONS,
     TASK_ROUTES,
     normalizeModelRole,
     detectTaskRoute,
@@ -186,4 +258,3 @@ module.exports = {
     resolveModelForRole,
     resolveModelRuntimeForRequest,
 };
-

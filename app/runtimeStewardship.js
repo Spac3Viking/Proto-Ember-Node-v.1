@@ -13,14 +13,42 @@ function getEmberPrimeModel() {
     return getSelectedModel();
 }
 
-function resolveEmberPrimeRuntime(request = null) {
-    const resolved = resolveModelRuntimeForRequest(request || undefined);
+let _ollamaTagsCache = {
+    updatedAt: 0,
+    models: [],
+};
+
+async function getInstalledOllamaModels() {
+    const cacheTtlMs = 15_000;
+    const now = Date.now();
+    if (_ollamaTagsCache.models.length > 0 && (now - _ollamaTagsCache.updatedAt) < cacheTtlMs) {
+        return _ollamaTagsCache.models.slice();
+    }
+    const probed = await probeOllamaRuntime();
+    if (probed.ok) {
+        _ollamaTagsCache = { updatedAt: now, models: probed.models.slice() };
+        return probed.models.slice();
+    }
+    // If Ollama is unreachable and we have no prior successful probe, return null
+    // so downstream routing does not treat "no models" as authoritative.
+    if (_ollamaTagsCache.updatedAt <= 0) return null;
+    return _ollamaTagsCache.models.slice();
+}
+
+async function resolveEmberPrimeRuntime(request = null) {
+    const installedModels = await getInstalledOllamaModels().catch(() => null);
+    const resolved = resolveModelRuntimeForRequest({
+        ...(request || undefined),
+        ...(installedModels ? { installedModels } : {}),
+    });
     return {
         chatUrl: OLLAMA_CHAT_URL,
         model: resolved.model || getSelectedModel(),
         runtimeId: 'ollama-local',
         modelRole: resolved.modelRole || 'hearth',
         fallbackUsed: Boolean(resolved.fallbackUsed),
+        requestedRoleModel: resolved.requestedRoleModel || null,
+        fallbackReason: resolved.fallbackReason || null,
     };
 }
 
