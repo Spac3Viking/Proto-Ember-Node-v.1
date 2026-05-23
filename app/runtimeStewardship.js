@@ -3,6 +3,7 @@
 const axios = require('axios');
 const { spawn } = require('child_process');
 const { DEFAULT_OLLAMA_MODEL, getSelectedModel } = require('./aiConfig');
+const { resolveModelRuntimeForRequest } = require('./modelRoles');
 
 const MODEL = DEFAULT_OLLAMA_MODEL;
 const OLLAMA_BASE_URL = 'http://localhost:11434';
@@ -12,11 +13,14 @@ function getEmberPrimeModel() {
     return getSelectedModel();
 }
 
-function resolveEmberPrimeRuntime() {
+function resolveEmberPrimeRuntime(request = null) {
+    const resolved = resolveModelRuntimeForRequest(request || undefined);
     return {
         chatUrl: OLLAMA_CHAT_URL,
-        model: getSelectedModel(),
+        model: resolved.model || getSelectedModel(),
         runtimeId: 'ollama-local',
+        modelRole: resolved.modelRole || 'hearth',
+        fallbackUsed: Boolean(resolved.fallbackUsed),
     };
 }
 
