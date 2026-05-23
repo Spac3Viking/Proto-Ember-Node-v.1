@@ -245,6 +245,13 @@ function normalizeBooleanToggle(value, fallback = false) {
     return fallback;
 }
 
+function formatModelRoleLabel(role) {
+    const normalized = String(role || '').trim().toLowerCase();
+    if (normalized === 'forge') return 'Forge';
+    if (normalized === 'scribe') return 'Scribe';
+    return 'Hearth';
+}
+
 function buildDistillationGuidanceBlock() {
     return `=== Distillation Guidance Mode ===
 Mentor stance: practical, reflective, and non-gamey.
@@ -1054,6 +1061,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
     try {
         const {
             query,
+            taskType = null,
             room      = null,
             rooms     = null,
             cacheId = null,
@@ -1344,7 +1352,11 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
         // Resolve Ember Prime runtime (Ollama-first).
-        const heart = resolveEmberPrimeRuntime();
+        const heart = resolveEmberPrimeRuntime({
+            depth: contextBudget.id,
+            query,
+            taskType,
+        });
 
         const payload = {
             model:    heart.model,
@@ -1527,7 +1539,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 'Runtime: ~' + Math.ceil(promptAudit.finalPromptLength / CHARS_PER_TOKEN_ESTIMATE) +
                     ' tok · bootstrap ' + (sentinelIdentityPart ? 'on' : 'off') +
                     ' · archetype ' + (archetypePart ? 'on' : 'off'),
-                'Model: ' + heart.model + ' / Ollama',
+                'Model: ' + heart.model + ' / ' + formatModelRoleLabel(heart.modelRole),
             ].join('\n');
         const signalTrace = {
             contextStatus: mapContextStatus(retrievalState),
@@ -1547,6 +1559,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             chunksUsed: retrieved.length,
             sourceList,
             model: heart.model,
+            modelRole: heart.modelRole,
             provider: 'Ollama',
             modelResponseMs: modelResponseTimeMs,
             retrievalNote: buildRetrievalNote(retrievalState, retrieved.length, missingPinnedSources.length),
@@ -1577,6 +1590,8 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 cacheOverlapStrength: runtimeConfidenceHints.cacheOverlapStrength,
                 continuityDensity: runtimeConfidenceHints.continuityDensity,
                 loadedCacheHits: runtimeConfidenceHints.loadedCacheHits,
+                modelRole: heart.modelRole,
+                fallbackUsed: Boolean(heart.fallbackUsed),
             },
             compact: compactSignalTrace,
         };
