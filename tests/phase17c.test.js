@@ -39,7 +39,7 @@ describe('Phase 17C — model roles + routing', () => {
         expect(res.model).toBe('gemma3:4b');
     });
 
-    test('blank role models fall back safely and flag fallbackUsed', () => {
+    test('blank role models keep single-model mode clean', () => {
         const res = resolveModelRuntimeForRequest({
             depth: 'archive',
             query: 'hello',
@@ -52,7 +52,65 @@ describe('Phase 17C — model roles + routing', () => {
 
         expect(res.modelRole).toBe('forge');
         expect(res.model).toBe('gemma3:4b');
+        expect(res.fallbackUsed).toBe(false);
+        expect(res.fallbackReason).toBe(null);
+        expect(res.requestedRoleModel).toBe(null);
+    });
+
+    test('configured Forge role missing at runtime falls back to selected_model', () => {
+        const res = resolveModelRuntimeForRequest({
+            depth: 'archive',
+            query: 'hello',
+            installedModels: ['gemma3:4b'],
+            aiConfig: {
+                provider: 'ollama',
+                selected_model: 'gemma3:4b',
+                model_roles: { hearth: '', forge: 'qwen2.5:14b', scribe: '' },
+            },
+        });
+
+        expect(res.modelRole).toBe('forge');
+        expect(res.requestedRoleModel).toBe('qwen2.5:14b');
+        expect(res.model).toBe('gemma3:4b');
         expect(res.fallbackUsed).toBe(true);
+        expect(res.fallbackReason).toBe('role_model_not_installed');
+    });
+
+    test('configured Scribe role missing at runtime falls back to selected_model', () => {
+        const res = resolveModelRuntimeForRequest({
+            depth: 'ember',
+            query: 'format this as JSON',
+            installedModels: ['gemma3:4b'],
+            aiConfig: {
+                provider: 'ollama',
+                selected_model: 'gemma3:4b',
+                model_roles: { hearth: '', forge: '', scribe: 'deepseek-coder:6.7b' },
+            },
+        });
+
+        expect(res.modelRole).toBe('scribe');
+        expect(res.requestedRoleModel).toBe('deepseek-coder:6.7b');
+        expect(res.model).toBe('gemma3:4b');
+        expect(res.fallbackUsed).toBe(true);
+        expect(res.fallbackReason).toBe('role_model_not_installed');
+    });
+
+    test('blank Forge role falls back cleanly when other roles are configured', () => {
+        const res = resolveModelRuntimeForRequest({
+            depth: 'archive',
+            query: 'hello',
+            installedModels: ['gemma3:4b', 'deepseek-coder:6.7b'],
+            aiConfig: {
+                provider: 'ollama',
+                selected_model: 'gemma3:4b',
+                model_roles: { hearth: '', forge: '', scribe: 'deepseek-coder:6.7b' },
+            },
+        });
+
+        expect(res.modelRole).toBe('forge');
+        expect(res.model).toBe('gemma3:4b');
+        expect(res.fallbackUsed).toBe(true);
+        expect(res.fallbackReason).toBe('role_model_blank');
     });
 
     test('configured role models override selected_model', () => {
@@ -89,10 +147,17 @@ describe('Phase 17C — resolveEmberPrimeRuntime() compatibility', () => {
 
     test('supports no-arg calls and returns runtime metadata', () => {
         const runtime = resolveEmberPrimeRuntime();
+        expect(runtime).toBeInstanceOf(Promise);
+    });
+
+    test('resolves runtime metadata asynchronously', async () => {
+        const runtime = await resolveEmberPrimeRuntime();
         expect(runtime).toHaveProperty('chatUrl', OLLAMA_CHAT_URL);
         expect(runtime).toHaveProperty('runtimeId', 'ollama-local');
         expect(runtime).toHaveProperty('model', 'gemma3:4b');
         expect(runtime).toHaveProperty('modelRole');
         expect(typeof runtime.fallbackUsed).toBe('boolean');
+        expect(runtime).toHaveProperty('fallbackReason');
+        expect(runtime).toHaveProperty('requestedRoleModel');
     });
 });
