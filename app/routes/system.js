@@ -369,6 +369,9 @@ function createSystemRouter({ migrationResult }) {
             const models = Array.isArray(response.data && response.data.models)
                 ? response.data.models
                 : [];
+            const installed_models = models
+                .map(model => (model && typeof model.name === 'string' ? model.name : null))
+                .filter(Boolean);
             res.json({
                 provider: 'ollama',
                 available: true,
@@ -378,6 +381,7 @@ function createSystemRouter({ migrationResult }) {
                     modified_at: model.modified_at || null,
                 })).filter(model => model.name),
                 selected_model: getSelectedModel(),
+                installed_models,
                 ...payloadExtras,
             });
         } catch {
@@ -385,7 +389,8 @@ function createSystemRouter({ migrationResult }) {
                 provider: 'ollama',
                 available: false,
                 models: [],
-                selected_model: null,
+                selected_model: getSelectedModel(),
+                installed_models: [],
                 error: 'Ollama is not running',
                 ...payloadExtras,
             });

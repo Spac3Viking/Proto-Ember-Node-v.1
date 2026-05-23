@@ -133,6 +133,7 @@ describe('GET /api/ai/models', () => {
         expect(res.body.provider).toBe('ollama');
         expect(res.body.available).toBe(true);
         expect(res.body.selected_model).toBe('gemma3:4b');
+        expect(res.body.installed_models).toEqual(['gemma3:4b', 'llama3.2:3b']);
         expect(res.body.model_roles).toEqual({ hearth: 'gemma3:4b', forge: '', scribe: '' });
         expect(res.body.routing).toBeDefined();
         expect(res.body.routing.spark).toBe('hearth');
@@ -154,7 +155,8 @@ describe('GET /api/ai/models', () => {
             provider: 'ollama',
             available: false,
             models: [],
-            selected_model: null,
+            selected_model: 'gemma3:4b',
+            installed_models: [],
             error: 'Ollama is not running',
             model_roles: { hearth: 'gemma3:4b', forge: '', scribe: '' },
         });
