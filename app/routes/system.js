@@ -31,7 +31,8 @@ const {
     ensureDataRoot, ensureCanonicalDataFiles,
 } = require('../storageConfig');
 const { OLLAMA_BASE_URL } = require('../runtimeStewardship');
-const { getSelectedModel, setSelectedModel } = require('../aiConfig');
+const { TASK_ROUTES } = require('../modelRoles');
+const { getSelectedModel, setSelectedModel, loadAiConfig, setModelRole } = require('../aiConfig');
 const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
 const { getEmbeddingStatus }                        = require('../embeddings');
 const { listCaches }                            = require('../cacheLoader');
@@ -349,6 +350,16 @@ function createSystemRouter({ migrationResult }) {
      * GET /api/ai/models
      */
     router.get('/api/ai/models', readLimiter, async (req, res) => {
+        const config = loadAiConfig();
+        const modelRoles = config.model_roles || null;
+        const payloadExtras = {
+            model_roles: {
+                hearth: (modelRoles && modelRoles.hearth ? modelRoles.hearth : '') || config.selected_model,
+                forge: modelRoles && modelRoles.forge ? modelRoles.forge : '',
+                scribe: modelRoles && modelRoles.scribe ? modelRoles.scribe : '',
+            },
+            routing: config.routing || { ...TASK_ROUTES },
+        };
         try {
             const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
             const models = Array.isArray(response.data && response.data.models)
@@ -363,6 +374,7 @@ function createSystemRouter({ migrationResult }) {
                     modified_at: model.modified_at || null,
                 })).filter(model => model.name),
                 selected_model: getSelectedModel(),
+                ...payloadExtras,
             });
         } catch {
             res.json({
@@ -371,6 +383,7 @@ function createSystemRouter({ migrationResult }) {
                 models: [],
                 selected_model: null,
                 error: 'Ollama is not running',
+                ...payloadExtras,
             });
         }
     });
@@ -404,6 +417,65 @@ function createSystemRouter({ migrationResult }) {
                 success: true,
                 provider: 'ollama',
                 selected_model: setSelectedModel(nextModel),
+            });
+        } catch {
+            return res.status(503).json({
+                success: false,
+                error: 'Ollama is not running',
+            });
+        }
+    });
+
+    /**
+     * POST /api/ai/models/roles
+     * Body: { role: 'hearth' | 'forge' | 'scribe', model: string } (empty model clears role)
+     */
+    router.post('/api/ai/models/roles', writeLimiter, async (req, res) => {
+        const role = req.body && typeof req.body.role === 'string'
+            ? req.body.role.trim().toLowerCase()
+            : '';
+        if (!['hearth', 'forge', 'scribe'].includes(role)) {
+            return res.status(400).json({ success: false, error: 'role must be hearth, forge, or scribe' });
+        }
+
+        const model = req.body && typeof req.body.model === 'string'
+            ? req.body.model.trim()
+            : null;
+        if (model === null) {
+            return res.status(400).json({ success: false, error: 'model is required (use empty string to clear)' });
+        }
+
+        if (!model) {
+            const updated = setModelRole(role, '');
+            return res.json({
+                success: true,
+                provider: 'ollama',
+                selected_model: updated.selected_model,
+                model_roles: updated.model_roles || null,
+                routing: updated.routing || null,
+            });
+        }
+
+        try {
+            const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+            const models = Array.isArray(response.data && response.data.models)
+                ? response.data.models
+                : [];
+            const availableModelNames = new Set(models.map(m => m && m.name).filter(Boolean));
+            if (!availableModelNames.has(model)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Model is not installed in Ollama',
+                });
+            }
+
+            const updated = setModelRole(role, model);
+            return res.json({
+                success: true,
+                provider: 'ollama',
+                selected_model: updated.selected_model,
+                model_roles: updated.model_roles || null,
+                routing: updated.routing || null,
             });
         } catch {
             return res.status(503).json({
