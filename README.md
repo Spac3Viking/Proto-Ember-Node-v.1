@@ -60,6 +60,7 @@ Open `http://localhost:3477`.
 - Threshold cache drafts: `POST /api/threshold/cache-drafts`, `GET /api/threshold/cache-drafts`, `GET /api/threshold/cache-drafts/:id`, `POST /api/threshold/cache-drafts/:id/documents/add`, `DELETE /api/threshold/cache-drafts/:id/documents`, `GET /api/threshold/cache-drafts/:id/documents/content`, `POST /api/threshold/cache-drafts/:id/export`, `POST /api/threshold/cache-drafts/:id/install`, `DELETE /api/threshold/cache-drafts/:id`
 - Reader: `GET /api/threshold/files/content`, `GET /api/archive/read`
 - Runtime/model stewardship: `GET /api/ai/models`, `POST /api/ai/models/select`
+- Model roles: `POST /api/ai/models/roles` (roles fall back at runtime if the role model is unavailable)
 - Continuity + memory: `GET /api/bootstrap`, `POST /api/bootstrap/refresh`, `POST /api/system/memory-compression/refresh`
 - Concept index + court: `GET /api/status`, `GET /api/court`
 - Cache manager: `GET /caches`, `GET /api/user-caches`, `POST /api/user-caches`
