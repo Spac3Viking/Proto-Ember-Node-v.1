@@ -5,7 +5,7 @@ const AdmZip = require('adm-zip');
 const request = require('supertest');
 const { app, MODEL, OLLAMA_CHAT_URL, OLLAMA_BASE_URL } = require('../app/server');
 const { DATA_ROOT } = require('../app/storageConfig');
-const { setSelectedModel } = require('../app/aiConfig');
+const { setSelectedModel, setModelRole } = require('../app/aiConfig');
 
 jest.mock('axios');
 
@@ -27,6 +27,9 @@ describe('POST /chat enforces gemma3:4b model', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         setSelectedModel('gemma3:4b');
+        setModelRole('hearth', '');
+        setModelRole('forge', '');
+        setModelRole('scribe', '');
     });
 
     test('injects the configured model into every Ollama request', async () => {
@@ -81,6 +84,9 @@ describe('GET /api/status', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         setSelectedModel('gemma3:4b');
+        setModelRole('hearth', '');
+        setModelRole('forge', '');
+        setModelRole('scribe', '');
     });
 
     test('returns 200 with model, cacheCount, and port', async () => {
@@ -108,6 +114,9 @@ describe('GET /api/ai/models', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         setSelectedModel('gemma3:4b');
+        setModelRole('hearth', '');
+        setModelRole('forge', '');
+        setModelRole('scribe', '');
     });
 
     test('returns provider, availability, models and selected model when Ollama is reachable', async () => {
@@ -124,6 +133,11 @@ describe('GET /api/ai/models', () => {
         expect(res.body.provider).toBe('ollama');
         expect(res.body.available).toBe(true);
         expect(res.body.selected_model).toBe('gemma3:4b');
+        expect(res.body.model_roles).toEqual({ hearth: 'gemma3:4b', forge: '', scribe: '' });
+        expect(res.body.routing).toBeDefined();
+        expect(res.body.routing.spark).toBe('hearth');
+        expect(res.body.routing.archive).toBe('forge');
+        expect(res.body.routing.code).toBe('scribe');
         expect(Array.isArray(res.body.models)).toBe(true);
         expect(res.body.models[0]).toEqual({
             name: 'gemma3:4b',
@@ -136,13 +150,64 @@ describe('GET /api/ai/models', () => {
         axios.get.mockRejectedValue(new Error('ECONNREFUSED'));
         const res = await request(app).get('/api/ai/models');
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({
+        expect(res.body).toMatchObject({
             provider: 'ollama',
             available: false,
             models: [],
             selected_model: null,
             error: 'Ollama is not running',
+            model_roles: { hearth: 'gemma3:4b', forge: '', scribe: '' },
         });
+        expect(res.body.routing).toBeDefined();
+        expect(res.body.routing.spark).toBe('hearth');
+        expect(res.body.routing.archive).toBe('forge');
+        expect(res.body.routing.code).toBe('scribe');
+    });
+});
+
+describe('POST /api/ai/models/roles', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        setSelectedModel('gemma3:4b');
+        setModelRole('hearth', '');
+        setModelRole('forge', '');
+        setModelRole('scribe', '');
+    });
+
+    test('clears a role when model is empty (offline-safe)', async () => {
+        const res = await request(app)
+            .post('/api/ai/models/roles')
+            .send({ role: 'forge', model: '' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.provider).toBe('ollama');
+        expect(res.body.selected_model).toBe('gemma3:4b');
+        expect(res.body.model_roles).toEqual({ hearth: 'gemma3:4b', forge: '', scribe: '' });
+        expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    test('rejects invalid role values', async () => {
+        const res = await request(app)
+            .post('/api/ai/models/roles')
+            .send({ role: 'invalid', model: 'qwen2.5:14b' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.success).toBe(false);
+    });
+
+    test('sets a role when model exists in Ollama tags', async () => {
+        axios.get.mockResolvedValue({
+            data: { models: [{ name: 'gemma3:4b' }, { name: 'qwen2.5:14b' }] },
+        });
+
+        const res = await request(app)
+            .post('/api/ai/models/roles')
+            .send({ role: 'scribe', model: 'qwen2.5:14b' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.model_roles).toEqual({ hearth: 'gemma3:4b', forge: '', scribe: 'qwen2.5:14b' });
     });
 });
 
@@ -150,6 +215,9 @@ describe('POST /api/ai/models/select', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         setSelectedModel('gemma3:4b');
+        setModelRole('hearth', '');
+        setModelRole('forge', '');
+        setModelRole('scribe', '');
     });
 
     test('updates selected model when model exists in Ollama tags', async () => {

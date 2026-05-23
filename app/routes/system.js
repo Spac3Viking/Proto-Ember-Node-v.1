@@ -77,6 +77,19 @@ const MAX_RUNTIME_TUNING_PROMPT_LENGTH = 280;
 const MAX_RUNTIME_TUNING_RESPONSE_PREVIEW_LENGTH = 320;
 let shutdownScheduled = false;
 
+function buildAiRolePayload(config) {
+    const cfg = config && typeof config === 'object' ? config : loadAiConfig();
+    const modelRoles = cfg.model_roles || null;
+    return {
+        model_roles: {
+            hearth: (modelRoles && modelRoles.hearth ? modelRoles.hearth : '') || cfg.selected_model,
+            forge: modelRoles && modelRoles.forge ? modelRoles.forge : '',
+            scribe: modelRoles && modelRoles.scribe ? modelRoles.scribe : '',
+        },
+        routing: cfg.routing || { ...TASK_ROUTES },
+    };
+}
+
 function _loadPackageConfig() {
     try {
         return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
@@ -350,16 +363,7 @@ function createSystemRouter({ migrationResult }) {
      * GET /api/ai/models
      */
     router.get('/api/ai/models', readLimiter, async (req, res) => {
-        const config = loadAiConfig();
-        const modelRoles = config.model_roles || null;
-        const payloadExtras = {
-            model_roles: {
-                hearth: (modelRoles && modelRoles.hearth ? modelRoles.hearth : '') || config.selected_model,
-                forge: modelRoles && modelRoles.forge ? modelRoles.forge : '',
-                scribe: modelRoles && modelRoles.scribe ? modelRoles.scribe : '',
-            },
-            routing: config.routing || { ...TASK_ROUTES },
-        };
+        const payloadExtras = buildAiRolePayload(loadAiConfig());
         try {
             const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
             const models = Array.isArray(response.data && response.data.models)
@@ -447,12 +451,12 @@ function createSystemRouter({ migrationResult }) {
 
         if (!model) {
             const updated = setModelRole(role, '');
+            const payloadExtras = buildAiRolePayload(updated);
             return res.json({
                 success: true,
                 provider: 'ollama',
                 selected_model: updated.selected_model,
-                model_roles: updated.model_roles || null,
-                routing: updated.routing || null,
+                ...payloadExtras,
             });
         }
 
@@ -470,12 +474,12 @@ function createSystemRouter({ migrationResult }) {
             }
 
             const updated = setModelRole(role, model);
+            const payloadExtras = buildAiRolePayload(updated);
             return res.json({
                 success: true,
                 provider: 'ollama',
                 selected_model: updated.selected_model,
-                model_roles: updated.model_roles || null,
-                routing: updated.routing || null,
+                ...payloadExtras,
             });
         } catch {
             return res.status(503).json({
