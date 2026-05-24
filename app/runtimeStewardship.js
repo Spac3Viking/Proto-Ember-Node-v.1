@@ -9,8 +9,13 @@ const MODEL = DEFAULT_OLLAMA_MODEL;
 const OLLAMA_BASE_URL = 'http://localhost:11434';
 const OLLAMA_CHAT_URL = `${OLLAMA_BASE_URL}/api/chat`;
 
-function getEmberPrimeModel() {
+function getSelectedModelFallback() {
     return getSelectedModel();
+}
+
+// Legacy naming: keep until call sites are fully migrated.
+function getEmberPrimeModel() {
+    return getSelectedModelFallback();
 }
 
 let _ollamaTagsCache = {
@@ -35,7 +40,7 @@ async function getInstalledOllamaModels() {
     return _ollamaTagsCache.models.slice();
 }
 
-async function resolveEmberPrimeRuntime(request = null) {
+async function resolveModelRoleRuntime(request = null) {
     const installedModels = await getInstalledOllamaModels().catch(() => null);
     const resolved = resolveModelRuntimeForRequest({
         ...(request || undefined),
@@ -50,6 +55,11 @@ async function resolveEmberPrimeRuntime(request = null) {
         requestedRoleModel: resolved.requestedRoleModel || null,
         fallbackReason: resolved.fallbackReason || null,
     };
+}
+
+// Legacy naming: keep until call sites are fully migrated.
+async function resolveEmberPrimeRuntime(request = null) {
+    return resolveModelRoleRuntime(request);
 }
 
 async function probeOllamaRuntime() {
@@ -95,7 +105,9 @@ module.exports = {
     MODEL,
     OLLAMA_BASE_URL,
     OLLAMA_CHAT_URL,
+    getSelectedModelFallback,
     getEmberPrimeModel,
+    resolveModelRoleRuntime,
     resolveEmberPrimeRuntime,
     probeOllamaRuntime,
     launchOllamaRuntime,

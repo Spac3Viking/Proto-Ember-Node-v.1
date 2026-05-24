@@ -79,13 +79,30 @@ let shutdownScheduled = false;
 
 function buildAiRolePayload(config) {
     const cfg = config && typeof config === 'object' ? config : loadAiConfig();
-    const modelRoles = cfg.model_roles || null;
+    const modelRoles = (cfg.model_roles && typeof cfg.model_roles === 'object') ? cfg.model_roles : null;
+    const selectedModel = (typeof cfg.selected_model === 'string' && cfg.selected_model.trim())
+        ? cfg.selected_model.trim()
+        : '';
+    const configuredRoles = {
+        hearth: modelRoles && typeof modelRoles.hearth === 'string' ? modelRoles.hearth.trim() : '',
+        forge: modelRoles && typeof modelRoles.forge === 'string' ? modelRoles.forge.trim() : '',
+        scribe: modelRoles && typeof modelRoles.scribe === 'string' ? modelRoles.scribe.trim() : '',
+    };
+    const effectiveRoles = {
+        hearth: configuredRoles.hearth || selectedModel,
+        forge: configuredRoles.forge || selectedModel,
+        scribe: configuredRoles.scribe || selectedModel,
+    };
     return {
+        // Back-compat: keep the original shape where Hearth defaults to selected_model.
         model_roles: {
-            hearth: (modelRoles && modelRoles.hearth ? modelRoles.hearth : '') || cfg.selected_model,
-            forge: modelRoles && modelRoles.forge ? modelRoles.forge : '',
-            scribe: modelRoles && modelRoles.scribe ? modelRoles.scribe : '',
+            hearth: effectiveRoles.hearth,
+            forge: configuredRoles.forge,
+            scribe: configuredRoles.scribe,
         },
+        // New: explicit configured vs effective values so the UI can show fallbacks clearly.
+        model_roles_configured: configuredRoles,
+        model_roles_effective: effectiveRoles,
         routing: cfg.routing || { ...TASK_ROUTES },
     };
 }
@@ -330,7 +347,7 @@ function createSystemRouter({ migrationResult }) {
             storageRootSource: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
                              : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
                              : 'default',
-            // Phase 11.5
+            // Runtime bootstrap + loadout status
             forgeLoaded,
             bootstrapStatus,
             lastBootstrapRefresh: legacyLastRefresh,

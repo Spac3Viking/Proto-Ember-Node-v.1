@@ -6551,18 +6551,29 @@ async function refreshSystemStatus() {
             const fallbackEl = document.getElementById('sys-model-role-fallback');
             if (!hearthEl && !forgeEl && !scribeEl && !fallbackEl) return;
 
-            const roles = data && data.model_roles && typeof data.model_roles === 'object'
-                ? data.model_roles
-                : {};
+            const configuredRoles = data && data.model_roles_configured && typeof data.model_roles_configured === 'object'
+                ? data.model_roles_configured
+                : (data && data.model_roles && typeof data.model_roles === 'object'
+                    ? data.model_roles
+                    : {});
+            const installed = Array.isArray(data && data.installed_models)
+                ? new Set(data.installed_models.map(name => String(name || '').trim()).filter(Boolean))
+                : null;
             const selected = data.selected_model || DEFAULT_MODEL_LABEL;
-            const hearth = String(roles.hearth || selected || DEFAULT_MODEL_LABEL);
-            const forge = String(roles.forge || '');
-            const scribe = String(roles.scribe || '');
             const fallbackLabel = String(selected || DEFAULT_MODEL_LABEL);
 
-            if (hearthEl) hearthEl.textContent = hearth || '—';
-            if (forgeEl) forgeEl.textContent = forge ? forge : ('fallback → ' + fallbackLabel);
-            if (scribeEl) scribeEl.textContent = scribe ? scribe : ('fallback → ' + fallbackLabel);
+            function renderRoleValue(roleKey) {
+                const configured = String(configuredRoles[roleKey] || '').trim();
+                if (!configured) return 'fallback → ' + fallbackLabel;
+                if (installed && installed.size > 0 && !installed.has(configured)) {
+                    return configured + ' (missing)';
+                }
+                return configured;
+            }
+
+            if (hearthEl) hearthEl.textContent = renderRoleValue('hearth') || '—';
+            if (forgeEl) forgeEl.textContent = renderRoleValue('forge') || '—';
+            if (scribeEl) scribeEl.textContent = renderRoleValue('scribe') || '—';
             if (fallbackEl) fallbackEl.textContent = fallbackLabel || '—';
         })();
         if (modelSelectEl) {
@@ -6590,7 +6601,7 @@ async function refreshSystemStatus() {
         const forgeEl = document.getElementById('sys-model-role-forge');
         const scribeEl = document.getElementById('sys-model-role-scribe');
         const fallbackEl = document.getElementById('sys-model-role-fallback');
-        if (hearthEl) hearthEl.textContent = DEFAULT_MODEL_LABEL;
+        if (hearthEl) hearthEl.textContent = 'fallback → ' + DEFAULT_MODEL_LABEL;
         if (forgeEl) forgeEl.textContent = 'fallback → ' + DEFAULT_MODEL_LABEL;
         if (scribeEl) scribeEl.textContent = 'fallback → ' + DEFAULT_MODEL_LABEL;
         if (fallbackEl) fallbackEl.textContent = DEFAULT_MODEL_LABEL;

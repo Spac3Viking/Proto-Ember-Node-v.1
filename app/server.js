@@ -1,11 +1,11 @@
 /**
- * Ember Node v.ᚠ — Phase 8.95 server (bootstrap)
+ * Ember Node v.ᚠ — Server bootstrap
  *
  * This file is the thin bootstrap entry point.  All route logic lives in
  * dedicated modules under app/routes/.  Shared service logic lives in:
  *
  *   app/intakeState.js    — Threshold intake state persistence
- *   app/runtimeStewardship.js — Ollama runtime stewardship + Ember Prime resolution
+ *   app/runtimeStewardship.js — Ollama runtime stewardship + Model Role resolution
  *   app/startupCheck.js   — Startup summary generation
  *   app/rateLimiters.js   — Shared rate limiter instances
  *
@@ -37,7 +37,7 @@ const { runLegacyCleanupPass } = require('./system/nodeMaintenance');
 const { listCaches, loadCache } = require('./cacheLoader');
 const {
     MODEL, OLLAMA_BASE_URL, OLLAMA_CHAT_URL,
-    getEmberPrimeModel,
+    getSelectedModelFallback,
     probeOllamaRuntime,
 } = require('./runtimeStewardship');
 const { loadIntakeState, saveIntakeState,
@@ -98,7 +98,7 @@ async function checkModel() {
     try {
         const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
         const models   = (response.data.models || []).map(function(m) { return m.name; });
-        const selectedModel = getEmberPrimeModel();
+        const selectedModel = getSelectedModelFallback();
         if (!models.some(function(name) { return name === selectedModel || name.startsWith(selectedModel + ':'); })) {
             console.warn(
                 'WARNING: Model "' + selectedModel + '" was not found in Ollama. ' +
@@ -128,12 +128,12 @@ if (require.main === module) {
         }
     } catch { /* non-critical — threshold route handles this on first list call */ }
 
-    // Phase 11: Bootstrap trusted archive sources (non-blocking)
+    // Bootstrap trusted archive sources (non-blocking)
     require('./archiveService').bootstrapArchive().catch(function(err) {
         console.warn('[archive] Bootstrap failed:', err.message);
     });
 
-    // Phase 11.5: Seed Forge identity files and initial bootstrap
+    // Seed Forge identity files and initial bootstrap
     try {
         const { seedForgeFiles, refreshBootstrap } = require('./bootstrap');
         seedForgeFiles();
