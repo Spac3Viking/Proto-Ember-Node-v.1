@@ -2464,6 +2464,98 @@ button.secondary:disabled {
   gap: 0.4rem;
 }
 
+.first-ember-trials-card {
+  border: 1px solid hsla(38, 100%, 70%, 0.12);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.first-ember-trials-card > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--archive-text);
+  list-style: none;
+}
+
+.first-ember-trials-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.first-ember-trials-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.55rem;
+}
+
+.sentinel-trials-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.sentinel-trial {
+  border: 1px solid hsla(140, 100%, 70%, 0.08);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.sentinel-trial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.sentinel-trial-title {
+  font-size: 0.82rem;
+  color: var(--archive-text);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.sentinel-trial-status {
+  font-size: 0.72rem;
+  opacity: 0.74;
+}
+
+.sentinel-trial-purpose {
+  margin: 0.4rem 0 0;
+  font-size: 0.76rem;
+  color: var(--archive-muted);
+  line-height: 1.35;
+}
+
+.sentinel-trial-steps {
+  margin: 0.45rem 0 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--archive-text);
+}
+
+.sentinel-trial-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sentinel-trial-guidance {
+  margin-top: 0.5rem;
+  font-size: 0.74rem;
+  color: var(--archive-muted);
+  border-left: 2px solid hsla(140, 100%, 70%, 0.18);
+  padding-left: 0.55rem;
+  display: none;
+}
+
 .gf-reader-panel {
   width: min(1020px, 95vw);
 }

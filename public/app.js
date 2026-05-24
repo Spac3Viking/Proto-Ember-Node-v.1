@@ -504,6 +504,233 @@ function closeFirstEmberOverlay() {
     if (overlay) overlay.style.display = 'none';
 }
 
+/* ================================================================
+   Phase 17D — Sentinel Trials (optional)
+   ================================================================ */
+
+let _sentinelTrialsSnapshot = null;
+let _sentinelTrialsRefreshTimer = null;
+
+function sentinelTrialsProgressText(payload) {
+    const trials = payload && Array.isArray(payload.trials) ? payload.trials : [];
+    const state = payload && payload.state && typeof payload.state === 'object' ? payload.state : {};
+    const total = trials.length;
+    const completed = trials.filter(trial => state[trial.id] && state[trial.id].completed).length;
+    return total > 0 ? (completed + ' / ' + total) : '—';
+}
+
+function scheduleSentinelTrialsRefresh(delayMs = 220) {
+    if (_sentinelTrialsRefreshTimer) clearTimeout(_sentinelTrialsRefreshTimer);
+    _sentinelTrialsRefreshTimer = setTimeout(() => {
+        _sentinelTrialsRefreshTimer = null;
+        loadSentinelTrials();
+    }, delayMs);
+}
+
+async function fetchSentinelTrialsPayload() {
+    try {
+        const res = await fetch('/api/system/sentinel-trials');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || data.success !== true) return null;
+        return data;
+    } catch {
+        return null;
+    }
+}
+
+async function markSentinelTrialStep(trialId, stepId) {
+    const payload = {
+        trialId: String(trialId || '').trim(),
+        stepId: String(stepId || '').trim(),
+    };
+    if (!payload.trialId || !payload.stepId) return;
+    try {
+        await fetch('/api/system/sentinel-trials/step', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+    } catch { /* non-blocking */ }
+    scheduleSentinelTrialsRefresh();
+}
+
+async function resetSentinelTrialsState() {
+    try {
+        const res = await fetch('/api/system/sentinel-trials/reset', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data && data.success) {
+            showFlashMessage('Sentinel Trials reset.');
+            scheduleSentinelTrialsRefresh(50);
+            return true;
+        }
+    } catch { /* ignore */ }
+    showFlashMessage('Could not reset Sentinel Trials.');
+    return false;
+}
+
+function openSentinelTrials() {
+    openFirstEmberOverlay();
+    setTimeout(() => {
+        const details = document.getElementById('first-ember-sentinel-trials-details');
+        if (details) details.open = true;
+    }, 40);
+}
+
+function openTrialSurface(trialId) {
+    const id = String(trialId || '').trim();
+    if (id === 'first_ember') return openSentinelTrials();
+    if (id === 'forge_reflection') return openRoomAndSubtab('hearth', 'hearth-chat');
+    if (id === 'scribe_structuring') return openRoomAndSubtab('threshold', 'th-imports');
+    if (id === 'distillation_trial') return openRoomAndSubtab('council', 'ws-caches');
+    if (id === 'transmission_trial') return openRoomAndSubtab('threshold', 'th-imports');
+    return openSentinelTrials();
+}
+
+function renderSentinelTrialsList(host, payload) {
+    if (!host) return;
+    const trials = payload && Array.isArray(payload.trials) ? payload.trials : [];
+    const state = payload && payload.state && typeof payload.state === 'object' ? payload.state : {};
+
+    host.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'sentinel-trials-list';
+
+    if (trials.length === 0) {
+        const empty = document.createElement('span');
+        empty.className = 'message-system';
+        empty.textContent = 'No Sentinel Trials registered.';
+        host.appendChild(empty);
+        return;
+    }
+
+    trials.forEach(trial => {
+        const row = document.createElement('div');
+        row.className = 'sentinel-trial';
+        const trialState = state[trial.id] && typeof state[trial.id] === 'object' ? state[trial.id] : {};
+        const completed = Boolean(trialState.completed);
+        const stepsState = trialState.steps && typeof trialState.steps === 'object' ? trialState.steps : {};
+
+        const header = document.createElement('div');
+        header.className = 'sentinel-trial-header';
+
+        const title = document.createElement('div');
+        title.className = 'sentinel-trial-title';
+        title.textContent = (completed ? '✓ ' : '· ') + String(trial.title || trial.id);
+
+        const actions = document.createElement('div');
+        actions.className = 'sentinel-trial-actions';
+
+        const openBtn = document.createElement('button');
+        openBtn.className = 'secondary';
+        openBtn.textContent = 'Open';
+        openBtn.addEventListener('click', () => openTrialSurface(trial.id));
+
+        const verifyBtn = document.createElement('button');
+        verifyBtn.className = 'secondary';
+        verifyBtn.textContent = 'Verify';
+
+        const guidance = document.createElement('div');
+        guidance.className = 'sentinel-trial-guidance';
+
+        verifyBtn.addEventListener('click', async () => {
+            guidance.style.display = 'none';
+            guidance.textContent = '';
+            try {
+                const res = await fetch('/api/system/sentinel-trials/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ trialId: trial.id }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data || data.success !== true) {
+                    showFlashMessage('Capability check failed.');
+                    return;
+                }
+                if (data.ok) {
+                    showFlashMessage('Capability check passed.');
+                } else {
+                    const checks = Array.isArray(data.checks) ? data.checks : [];
+                    const missing = checks.filter(c => c && c.ok === false && c.guidance);
+                    if (missing.length > 0) {
+                        guidance.textContent = missing.slice(0, 3).map(c => '• ' + c.guidance).join('\n');
+                        guidance.style.display = '';
+                    }
+                    showFlashMessage('Capability check incomplete.');
+                }
+                scheduleSentinelTrialsRefresh(50);
+            } catch {
+                showFlashMessage('Could not reach server.');
+            }
+        });
+
+        actions.appendChild(openBtn);
+        actions.appendChild(verifyBtn);
+
+        const status = document.createElement('div');
+        status.className = 'sentinel-trial-status';
+        status.textContent = completed
+            ? ('completed ' + (trialState.completed_at ? formatRelativeTime(trialState.completed_at) : ''))
+            : 'optional';
+
+        header.appendChild(title);
+        header.appendChild(actions);
+        header.appendChild(status);
+
+        const purpose = document.createElement('p');
+        purpose.className = 'sentinel-trial-purpose';
+        purpose.textContent = String(trial.purpose || '').trim();
+
+        const stepsList = document.createElement('ol');
+        stepsList.className = 'sentinel-trial-steps';
+        const stepDefs = Array.isArray(trial.steps) ? trial.steps : [];
+        stepDefs.forEach(step => {
+            const li = document.createElement('li');
+            const done = stepsState[step.id] && stepsState[step.id].completed;
+            li.textContent = (done ? '✓ ' : '· ') + String(step.label || step.id);
+            stepsList.appendChild(li);
+        });
+
+        row.appendChild(header);
+        if (purpose.textContent) row.appendChild(purpose);
+        if (stepDefs.length > 0) row.appendChild(stepsList);
+        row.appendChild(guidance);
+
+        list.appendChild(row);
+    });
+
+    host.appendChild(list);
+}
+
+async function loadSentinelTrials() {
+    const payload = await fetchSentinelTrialsPayload();
+    _sentinelTrialsSnapshot = payload;
+
+    const sysProgress = document.getElementById('sys-sentinel-trials-progress');
+    const sysStatus = document.getElementById('sys-sentinel-trials-status');
+    if (sysProgress) sysProgress.textContent = payload ? sentinelTrialsProgressText(payload) : '—';
+    if (sysStatus) sysStatus.textContent = payload ? 'Optional drills available.' : 'Sentinel Trials unavailable.';
+
+    const overlayHost = document.getElementById('first-ember-sentinel-trials-list');
+    if (overlayHost) {
+        if (!payload) {
+            overlayHost.innerHTML = '<span class="message-system">Sentinel Trials unavailable.</span>';
+        } else {
+            renderSentinelTrialsList(overlayHost, payload);
+        }
+    }
+}
+
+function recordSentinelDepthUsage(depthId) {
+    const depth = String(depthId || '').trim().toLowerCase();
+    if (depth === 'spark') {
+        markSentinelTrialStep('first_ember', 'spark_question');
+        return;
+    }
+    if (depth === 'ember') return markSentinelTrialStep('forge_reflection', 'ember_depth_used');
+    if (depth === 'hearth') return markSentinelTrialStep('forge_reflection', 'hearth_depth_used');
+    if (depth === 'archive') return markSentinelTrialStep('forge_reflection', 'archive_depth_used');
+}
+
 /**
  * Build a dismissible onboarding hint element.
  * Returns null when key is missing or the hint was already dismissed.
@@ -1749,6 +1976,7 @@ async function requestDistillationRecommendation(options = {}) {
         initialRawView: false,
     });
     showFlashMessage('Distillation recommendation generated.');
+    markSentinelTrialStep('distillation_trial', 'distillation_recommendation_generated');
 }
 
 function createCouncilDiscussActions(resolvePrompt, resolveLabel) {
@@ -1803,6 +2031,7 @@ async function saveMarkdownToThresholdInbox(markdown, filename, successMessage) 
     }
     if (successMessage) showFlashMessage(successMessage);
     await loadThresholdList();
+    markSentinelTrialStep('scribe_structuring', 'handoff_saved');
     return data.file || null;
 }
 
@@ -2421,6 +2650,9 @@ function renderSignalTrace(sources, signalTrace = null) {
         const isCollapsed = panel.classList.toggle('collapsed');
         toggle.textContent = isCollapsed ? '▸' : '▾';
         toggle.setAttribute('aria-expanded', String(!isCollapsed));
+        if (!isCollapsed) {
+            markSentinelTrialStep('first_ember', 'signal_trace_opened');
+        }
     });
 })();
 
@@ -2469,6 +2701,7 @@ async function sendMessage() {
         }
     }, LONG_WAIT_THRESHOLD_MS);
 
+    const responseDepth = getActiveResponseDepth();
     try {
         const response = await fetch('/api/chat', {
             method:  'POST',
@@ -2479,7 +2712,7 @@ async function sendMessage() {
                 room:      'hearth',
                 sourceIds: _chatRefs.length > 0 ? _chatRefs.map(r => r.sourceId) : undefined,
                 courtMember: getEffectiveCourtMemberForApi(),
-                responseDepth: getActiveResponseDepth(),
+                responseDepth,
                 runtimeProfile: getActiveRuntimeProfile(),
                 loadoutFocus: getActiveLoadoutFocus(),
                 distillationGuidance: false,
@@ -2511,7 +2744,7 @@ async function sendMessage() {
             chatContainer.scrollTop = chatContainer.scrollHeight;
             setChatState(CHAT_STATES.RESPONDING);
             const revealResult = await resolveGlyphText(responseEl, data.answer, {
-                glyphEffect: _glyphResolveEnabled && getActiveResponseDepth() !== 'spark',
+                glyphEffect: _glyphResolveEnabled && responseDepth !== 'spark',
                 onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
                 shouldStop: () => _activeChatRevealToken.cancelled,
             });
@@ -2531,6 +2764,7 @@ async function sendMessage() {
                 chatContainer.appendChild(bridgeActions);
                 renderSignalTrace(data.sources || [], data.signalTrace || null);
                 setChatState(CHAT_STATES.COMPLETE);
+                recordSentinelDepthUsage(responseDepth);
                 _lastDiscussionExchange = {
                     room: 'hearth',
                     user: message,
@@ -2645,6 +2879,7 @@ async function sendCouncilMessage() {
         }
     }, LONG_WAIT_THRESHOLD_MS);
 
+    const responseDepth = getActiveResponseDepth();
     try {
         const response = await fetch('/api/chat', {
             method:  'POST',
@@ -2654,7 +2889,7 @@ async function sendCouncilMessage() {
                 query: message,
                 room: 'council',
                 courtMember: getEffectiveCourtMemberForApi(),
-                responseDepth: getActiveResponseDepth(),
+                responseDepth,
                 runtimeProfile: getActiveRuntimeProfile(),
                 loadoutFocus: getActiveLoadoutFocus(),
                 distillationGuidance: consumePendingCouncilDistillationGuidance(),
@@ -2683,7 +2918,7 @@ async function sendCouncilMessage() {
             chatContainer.scrollTop = chatContainer.scrollHeight;
             setChatState(CHAT_STATES.RESPONDING);
             const revealResult = await resolveGlyphText(responseEl, data.answer, {
-                glyphEffect: _glyphResolveEnabled && getActiveResponseDepth() !== 'spark',
+                glyphEffect: _glyphResolveEnabled && responseDepth !== 'spark',
                 onFrame: () => { chatContainer.scrollTop = chatContainer.scrollHeight; },
                 shouldStop: () => _activeChatRevealToken.cancelled,
             });
@@ -2706,6 +2941,7 @@ async function sendCouncilMessage() {
                     assistant: data.answer,
                     created: new Date().toISOString(),
                 };
+                recordSentinelDepthUsage(responseDepth);
             }
         } else {
             displayMessage(chatContainer, HEART_TECHNICAL_ERROR, 'message-system');
@@ -3930,6 +4166,9 @@ async function setCacheLoadedState(cacheId, shouldLoad) {
     const data = await res.json();
     if (!res.ok || !data.success) {
         throw new Error(data.error || 'Could not update cache loadout.');
+    }
+    if (shouldLoad) {
+        markSentinelTrialStep('first_ember', 'cache_loaded');
     }
 }
 
@@ -5300,6 +5539,8 @@ async function saveExternalAiResponseAsHandoff() {
     const markdown = ensureMarkdownHandoffFromInput(raw, 'External AI Response');
     try {
         await saveMarkdownToThresholdInbox(markdown, 'external-ai-response.md', 'Saved to threshold/inbox/');
+        markSentinelTrialStep('transmission_trial', 'external_response_saved');
+        markSentinelTrialStep('scribe_structuring', 'handoff_saved');
     } catch (error) {
         showFlashMessage(error.message || 'Could not save external response.');
     }
@@ -5328,6 +5569,8 @@ async function addExternalAiResponseToCacheDraft() {
         await openThresholdCacheDraft(data.draft.id);
         _activeThresholdDraftId = data.draft.id;
         showFlashMessage('External response added to cache draft.');
+        markSentinelTrialStep('transmission_trial', 'external_response_added_to_draft');
+        markSentinelTrialStep('scribe_structuring', 'cache_draft_created');
     } catch (error) {
         showFlashMessage(error.message || 'Could not add to cache draft.');
     }
@@ -5578,6 +5821,8 @@ async function generateThresholdExternalPrompt() {
                 'Prompt bridge copied.',
                 'Could not copy prompt bridge.',
             );
+            const text = output ? String(output.value || '').trim() : '';
+            if (text) markSentinelTrialStep('transmission_trial', 'prompt_bridge_exported');
         });
     }
     if (externalPromptDownloadBtn) {
@@ -5585,6 +5830,8 @@ async function generateThresholdExternalPrompt() {
             const output = document.getElementById('th-external-prompt-output');
             downloadPlainText('external-ai-prompt-bridge.md', output ? output.value : '', 'text/markdown');
             showFlashMessage('Prompt bridge downloaded.');
+            const text = output ? String(output.value || '').trim() : '';
+            if (text) markSentinelTrialStep('transmission_trial', 'prompt_bridge_exported');
         });
     }
 
@@ -5978,6 +6225,7 @@ async function createCacheDraftFromSelectedThresholdFiles() {
         _selectedThresholdPaths = new Set();
         refreshThresholdSelectionActions(_thresholdImportedFiles);
         showFlashMessage('Cache draft created.');
+        markSentinelTrialStep('scribe_structuring', 'cache_draft_created');
         await loadThresholdCacheDrafts();
         if (data.draft && data.draft.id) {
             await openThresholdCacheDraft(data.draft.id);
@@ -6011,6 +6259,7 @@ async function addSelectedThresholdFilesToDraft() {
         _selectedThresholdPaths = new Set();
         refreshThresholdSelectionActions(_thresholdImportedFiles);
         showFlashMessage('Selected files added to draft.');
+        markSentinelTrialStep('scribe_structuring', 'cache_draft_created');
         await loadThresholdCacheDrafts();
         await openThresholdCacheDraft(draftId);
     } catch (error) {
@@ -9072,6 +9321,15 @@ function renderSystemStartupSummary(data) {
                 openRoomAndSubtab('council', 'ws-council-chat');
             });
         }
+
+        const sysSentinelTrialsOpenBtn = document.getElementById('sys-sentinel-trials-open-btn');
+        const sysSentinelTrialsResetBtn = document.getElementById('sys-sentinel-trials-reset-btn');
+        if (sysSentinelTrialsOpenBtn) {
+            sysSentinelTrialsOpenBtn.addEventListener('click', openSentinelTrials);
+        }
+        if (sysSentinelTrialsResetBtn) {
+            sysSentinelTrialsResetBtn.addEventListener('click', resetSentinelTrialsState);
+        }
     });
 })();
 
@@ -9138,6 +9396,7 @@ async function launchOllama(runtimeId) {
     loadArchiveSignalPanel();
     loadStartupCheck();
     updateCouncilChatActiveArchetype();
+    loadSentinelTrials();
 
     // Close all source action dropdown menus when clicking outside
     document.addEventListener('click', () => {

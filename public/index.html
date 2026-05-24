@@ -276,6 +276,23 @@
                     <span class="system-val">./caches/ (app folder)</span>
                   </div>
                 </div>
+                <div class="ember-card system-block" id="sys-sentinel-trials-card">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
+                    <div class="system-block-title" style="margin:0;">Sentinel Trials</div>
+                    <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                      <button class="secondary" id="sys-sentinel-trials-open-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Open</button>
+                      <button class="secondary" id="sys-sentinel-trials-reset-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Reset</button>
+                    </div>
+                  </div>
+                  <p class="system-future-note" style="margin-top:0.55rem;">
+                    Optional field exercises for learning the Forge by working it. Understanding is the reward.
+                  </p>
+                  <div class="system-row">
+                    <span class="system-key">Completed</span>
+                    <span class="system-val" id="sys-sentinel-trials-progress">—</span>
+                  </div>
+                  <div id="sys-sentinel-trials-status" class="message-system" style="margin-top:0.35rem;"></div>
+                </div>
                 <div class="ember-card system-block">
                   <div class="system-block-title">Knowledge Index</div>
                   <div class="system-row">
@@ -1153,6 +1170,17 @@
           <button class="secondary" id="first-ember-go-forge">Open Loadout Forge</button>
           <button class="secondary" id="first-ember-go-chat">Open Council Chat</button>
         </div>
+        <details class="first-ember-trials-card" id="first-ember-sentinel-trials-details">
+          <summary>Sentinel Trials (optional)</summary>
+          <div class="first-ember-trials-body">
+            <div class="message-system" style="font-size:0.78rem;">
+              Short drills that double as capability checks. Quiet, practical, repeatable.
+            </div>
+            <div id="first-ember-sentinel-trials-list">
+              <span class="message-system">Loading Sentinel Trials…</span>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   </div>
