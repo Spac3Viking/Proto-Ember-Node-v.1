@@ -56,6 +56,13 @@ const {
     refreshMemoryCompression,
     getMemoryCompressionStatus,
 } = require('../memoryCompression');
+const {
+    getSentinelTrialsDefinitions,
+    loadSentinelTrialsState,
+    markSentinelTrialStep,
+    resetSentinelTrials,
+    runSentinelTrialCapabilityCheck,
+} = require('../system/sentinelTrials');
 
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
@@ -785,6 +792,56 @@ function createSystemRouter({ migrationResult }) {
             return res.status(500).json({
                 success: false,
                 error: 'Could not save runtime tuning run: ' + err.message,
+            });
+        }
+    });
+
+    // ── Phase 17D — Sentinel Trials + Capability Checks ──────────────────────
+
+    router.get('/api/system/sentinel-trials', readLimiter, (req, res) => {
+        try {
+            const trials = getSentinelTrialsDefinitions();
+            const state = loadSentinelTrialsState();
+            return res.json({ success: true, trials, state });
+        } catch (err) {
+            return res.status(500).json({ success: false, error: 'Could not load Sentinel Trials.' });
+        }
+    });
+
+    router.post('/api/system/sentinel-trials/step', writeLimiter, (req, res) => {
+        try {
+            const trialId = req.body && typeof req.body.trialId === 'string' ? req.body.trialId : '';
+            const stepId = req.body && typeof req.body.stepId === 'string' ? req.body.stepId : '';
+            const result = markSentinelTrialStep(trialId, stepId);
+            return res.json({ success: true, trial: result.trial, state: result.state });
+        } catch (err) {
+            const status = Number.isInteger(err.status) ? err.status : 500;
+            return res.status(status).json({
+                success: false,
+                error: status === 500 ? 'Could not update Sentinel Trials.' : err.message,
+            });
+        }
+    });
+
+    router.post('/api/system/sentinel-trials/reset', writeLimiter, (req, res) => {
+        try {
+            const state = resetSentinelTrials();
+            return res.json({ success: true, state });
+        } catch (err) {
+            return res.status(500).json({ success: false, error: 'Could not reset Sentinel Trials.' });
+        }
+    });
+
+    router.post('/api/system/sentinel-trials/check', writeLimiter, (req, res) => {
+        try {
+            const trialId = req.body && typeof req.body.trialId === 'string' ? req.body.trialId : '';
+            const result = runSentinelTrialCapabilityCheck(trialId);
+            return res.json({ success: true, ...result });
+        } catch (err) {
+            const status = Number.isInteger(err.status) ? err.status : 500;
+            return res.status(status).json({
+                success: false,
+                error: status === 500 ? 'Could not run capability check.' : err.message,
             });
         }
     });
