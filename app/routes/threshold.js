@@ -1281,7 +1281,7 @@ function installCacheDraftFromExport({ draftId, exportRelPath }) {
 
 /**
  * Build the current runtime stewardship view for Threshold.
- * Returns a single Ollama runtime card plus the active Ember Prime assignment.
+ * Returns a single Ollama runtime card plus the active runtime assignment.
  *
  * @returns {Promise<{runtimes: object[], active: object}>}
  */

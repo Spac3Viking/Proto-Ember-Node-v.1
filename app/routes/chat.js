@@ -3,8 +3,8 @@
 /**
  * Ember Node v.ᚠ — Chat Routes
  *
- * POST /chat          (legacy Phase 2 direct-Ollama endpoint)
- * POST /api/chat      (grounded Ember Prime chat with retrieval)
+ * POST /chat          (legacy direct-Ollama endpoint)
+ * POST /api/chat      (grounded chat with retrieval + Model Role routing)
  *
  * Assembly order:
  *   [1] Runtime system identity
@@ -17,7 +17,7 @@
 const express = require('express');
 const axios   = require('axios');
 const { chatLimiter } = require('../rateLimiters');
-const { OLLAMA_CHAT_URL, getEmberPrimeModel, resolveEmberPrimeRuntime } = require('../runtimeStewardship');
+const { OLLAMA_CHAT_URL, getSelectedModelFallback, resolveModelRoleRuntime } = require('../runtimeStewardship');
 const { loadChunks }                                  = require('../indexStore');
 const { retrieve, buildGroundedPrompt, detectRoute }  = require('../retrieval');
 const { buildSignalTrace, formatSignalTraceSummary }  = require('../signalTrace');
@@ -43,13 +43,13 @@ const {
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
 const CHAT_REQUEST_TIMEOUT_MS = 120000;
-// Phase 16F target: keep raw grounding in the 4–8 range for faster starts.
+// Tuning target: keep raw grounding in the 4–8 range for faster starts.
 const MAX_CHAT_CONTEXT_CHUNKS = 8;
 const MAX_CHAT_CONTEXT_CHARS = 16000;
 const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
 const MAX_CHAT_HISTORY_TURNS = 8;
-// Phase 16F target: compact Signal Trace routing/context lists.
+// Tuning target: compact Signal Trace routing/context lists.
 const MAX_SIGNAL_TRACE_SOURCES = 5;
 const MAX_SIGNAL_TRACE_ROUTING_LIST = 4;
 const CHARS_PER_TOKEN_ESTIMATE = 4;
@@ -337,7 +337,7 @@ function isOllamaRuntime(runtime) {
 }
 
 const HEART_SYSTEM_PROMPT = (
-    'You are Ember Prime, a continuity mentor for writing and synthesis inside an Ember Node.\n' +
+    'You are Hearth, a continuity mentor for writing and synthesis inside an Ember Node.\n' +
     'Use compressed identity and context. Do not lecture or repeat philosophy.\n' +
     'Do not restate Green Fire philosophy unless the user explicitly asks for it.\n' +
     'Answer directly, then add only necessary support, then optional next step.\n' +
@@ -346,7 +346,7 @@ const HEART_SYSTEM_PROMPT = (
     'Guide with concise questions when useful. The user remains final authority.'
 );
 
-/** Room-specific system prompts for Phase 11 room-bounded context */
+/** Room-specific system prompts for room-bounded context */
 const ROOM_SYSTEM_PROMPTS = {
     hearth: HEART_SYSTEM_PROMPT,
     council: (
@@ -1034,15 +1034,15 @@ function computeRawChunkBudgetWithSummaries(archetypeProfile, contextBudget, max
  */
 const MAX_PINNED_CHUNKS = 8;
 
-// ── Phase 2: original chat endpoint (kept for backward compatibility) ─────────
+// ── Legacy chat endpoint (kept for backward compatibility) ────────────────────
 // This endpoint bypasses retrieval and goes directly to Ollama.
-// New code should use POST /api/chat which routes through Ember Prime
-// with grounded retrieval.  Kept to avoid breaking any existing integrations.
+// New code should use POST /api/chat which routes through Model Roles
+// with grounded retrieval. Kept to avoid breaking any existing integrations.
 
 router.post('/chat', async (req, res) => {
     try {
         const { message, prompt, model: _ignored, ...rest } = req.body;
-        const selectedModel = getEmberPrimeModel();
+        const selectedModel = getSelectedModelFallback();
         const payload = {
             stream:   false,
             ...rest,
@@ -1057,7 +1057,7 @@ router.post('/chat', async (req, res) => {
     }
 });
 
-// ── Phase 3: grounded chat ────────────────────────────────────────────────────
+// ── Grounded chat (retrieval + Model Roles) ───────────────────────────────────
 
 /**
  * POST /api/chat
@@ -1225,7 +1225,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
 
         const sources = buildSignalTrace(retrieved);
 
-        // ── Phase 16M-B: Prompt assembly order ─────────────────────────────────
+        // Prompt assembly order:
         // Base runtime instruction (system prompt) → Sentinel summary →
         // archetype delta → depth instruction → minimal retrieval context → user message
 
@@ -1366,8 +1366,8 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
         // Select room-appropriate system prompt
         const systemPrompt = ROOM_SYSTEM_PROMPTS[activeRoom] || HEART_SYSTEM_PROMPT;
 
-        // Resolve Ember Prime runtime (Ollama-first).
-        const heart = await resolveEmberPrimeRuntime({
+        // Resolve local runtime model via Model Role routing (Ollama-first).
+        const heart = await resolveModelRoleRuntime({
             depth: contextBudget.id,
             query,
             taskType,
@@ -1425,11 +1425,12 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 });
             }
             if (err && err.code === 'ECONNABORTED') {
+                const roleLabel = formatModelRoleLabel(heart && heart.modelRole, false);
                 return res.status(504).json({
                     error: 'Generation timed out',
                     timeout: true,
                     requestId: normalizedRequestId,
-                    message: 'Ember Prime is taking longer than usual. You may wait or still the signal.',
+                    message: roleLabel + ' model is taking longer than usual. You may wait or still the signal.',
                 });
             }
             throw err;

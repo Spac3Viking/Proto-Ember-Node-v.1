@@ -1,8 +1,8 @@
-# Architecture Alignment Audit — Phase 16Q-D
+# Architecture Alignment Audit
 
 ## Canonical Runtime Architecture
 
-- **Hearth / Ember Prime** — remembered continuity and active chat.
+- **Hearth** — remembered continuity and active chat (Model Roles route Hearth/Forge/Scribe).
 - **Ember Council** — archetypal refinement and draft shaping.
 - **Archive / Reader / Caches** — installed memory surfaces and readable source traversal.
 - **Threshold** — intake, inspection, cache drafts, and runtime stewardship.

@@ -99,7 +99,7 @@ preserved knowledge.
 
 ### What Hearth Contains
 
-- Ember Prime chat interface
+- Hearth chat interface (Model Roles routing)
 - remembered prompts
 - remembered documents
 - remembered shelves

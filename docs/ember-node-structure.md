@@ -3,6 +3,7 @@
 ## Elemental Rooms
 
 - **🜂 Hearth** → Ember Prime continuity layer and remembered conversation.
+- **🜂 Hearth** → remembered continuity + chat surface (Model Roles route Hearth/Forge/Scribe runtimes).
 - **🜁 Ember Council** → archetypal perspectives that shape interpretation, never replace continuity.
 - **🜃 Archive** → installed memory, including `archive/core/`, `archive/caches/`, and `archive/mirror/`.
 - **🜄 Threshold** → outside-file intake and inspection, with imported files landing in `threshold/inbox/` and natural cache draft continuity bundles in `threshold/cache-drafts/`.
