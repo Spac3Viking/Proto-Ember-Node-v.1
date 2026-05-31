@@ -11,6 +11,7 @@
  * POST   /api/signal-threads/:id/reflections
  * POST   /api/signal-threads/:id/observations
  * PUT    /api/signal-threads/:id/compression
+ * POST   /api/signal-threads/:id/saga-cycle
  * GET    /api/signal-threads/:id/export
  *
  * Signal Threads are a continuity layer distinct from conversation threads.
@@ -30,6 +31,7 @@ const {
     addReflection,
     addObservation,
     setCompression,
+    saveSagaCycle,
     exportSignalThreadMarkdown,
 } = require('../signalThreads');
 
@@ -127,6 +129,21 @@ router.put('/api/signal-threads/:id/compression', writeLimiter, (req, res) => {
     const thread = setCompression(req.params.id, req.body && req.body.compression);
     if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
     res.json({ success: true, thread });
+});
+
+router.post('/api/signal-threads/:id/saga-cycle', writeLimiter, (req, res) => {
+    try {
+        const result = saveSagaCycle(req.params.id, req.body);
+        if (!result) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({
+            success: true,
+            thread: result.thread,
+            observation: result.observation,
+            reflection: result.reflection,
+        });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 router.get('/api/signal-threads/:id/export', readLimiter, (req, res) => {
