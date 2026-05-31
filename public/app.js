@@ -764,6 +764,7 @@ function renderSignalThreadEntries(host, entries) {
         const time = document.createElement('div');
         time.className = 'signal-thread-entry-time';
         time.textContent = entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '';
+        if (entry && entry.timestamp) time.title = String(entry.timestamp);
 
         const content = document.createElement('div');
         content.className = 'signal-thread-entry-content';
@@ -771,6 +772,160 @@ function renderSignalThreadEntries(host, entries) {
 
         row.appendChild(time);
         row.appendChild(content);
+        host.appendChild(row);
+    });
+}
+
+function _parseSagaCycleObservation(entry) {
+    const stamp = entry && entry.timestamp ? String(entry.timestamp) : '';
+    const raw = entry && entry.content ? String(entry.content) : '';
+    if (!raw.trim().startsWith('Saga Smith — Cycle')) return null;
+
+    const lines = raw.split('\n');
+    let mode = '';
+    let section = '';
+    const sections = { situation: [], application: [], observation: [] };
+    lines.forEach((line, index) => {
+        if (index === 0) return;
+        const trimmed = String(line || '').trimEnd();
+        if (!trimmed.trim()) return;
+        if (trimmed.startsWith('Mode:')) {
+            mode = trimmed.slice('Mode:'.length).trim();
+            return;
+        }
+        if (trimmed === 'Situation') { section = 'situation'; return; }
+        if (trimmed === 'Application') { section = 'application'; return; }
+        if (trimmed === 'Observation') { section = 'observation'; return; }
+        if (section && sections[section]) sections[section].push(trimmed);
+    });
+
+    return {
+        timestamp: stamp,
+        mode,
+        situation: sections.situation.join('\n').trim(),
+        application: sections.application.join('\n').trim(),
+        observation: sections.observation.join('\n').trim(),
+    };
+}
+
+function _parseSagaCycleReflection(entry) {
+    const stamp = entry && entry.timestamp ? String(entry.timestamp) : '';
+    const raw = entry && entry.content ? String(entry.content) : '';
+    if (!raw.trim().startsWith('Saga Smith — Reflection')) return null;
+
+    const lines = raw.split('\n');
+    let mode = '';
+    let inReflection = false;
+    const reflectionLines = [];
+    lines.forEach((line, index) => {
+        if (index === 0) return;
+        const trimmed = String(line || '').trimEnd();
+        if (trimmed.startsWith('Mode:')) {
+            mode = trimmed.slice('Mode:'.length).trim();
+            return;
+        }
+        if (trimmed === 'Reflection') {
+            inReflection = true;
+            return;
+        }
+        if (!inReflection) return;
+        reflectionLines.push(trimmed);
+    });
+
+    return {
+        timestamp: stamp,
+        mode,
+        reflection: reflectionLines.join('\n').trim(),
+    };
+}
+
+function deriveSagaCycles(thread) {
+    const t = thread && typeof thread === 'object' ? thread : {};
+    const map = new Map();
+
+    (Array.isArray(t.observations) ? t.observations : []).forEach(entry => {
+        const parsed = _parseSagaCycleObservation(entry);
+        if (!parsed || !parsed.timestamp) return;
+        const existing = map.get(parsed.timestamp) || { timestamp: parsed.timestamp };
+        map.set(parsed.timestamp, Object.assign(existing, parsed));
+    });
+
+    (Array.isArray(t.reflections) ? t.reflections : []).forEach(entry => {
+        const parsed = _parseSagaCycleReflection(entry);
+        if (!parsed || !parsed.timestamp) return;
+        const existing = map.get(parsed.timestamp) || { timestamp: parsed.timestamp };
+        map.set(parsed.timestamp, Object.assign(existing, parsed));
+    });
+
+    return Array.from(map.values())
+        .filter(row => row && row.timestamp)
+        .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+}
+
+function renderSignalThreadSagaCycles(host, thread) {
+    if (!host) return;
+    host.innerHTML = '';
+    const cycles = deriveSagaCycles(thread);
+    if (cycles.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'message-system';
+        empty.textContent = 'No cycle history recorded yet. Recent cycle material may appear inside Observations / Reflections.';
+        host.appendChild(empty);
+        return;
+    }
+
+    cycles.forEach(cycle => {
+        const card = document.createElement('div');
+        card.className = 'signal-thread-cycle';
+
+        const title = document.createElement('div');
+        title.className = 'signal-thread-cycle-title';
+        const stamp = cycle && cycle.timestamp ? String(cycle.timestamp) : '';
+        title.textContent = stamp ? (formatRelativeTime(stamp) + (cycle.mode ? (' · ' + cycle.mode) : '')) : (cycle.mode || 'cycle');
+        if (stamp) title.title = stamp;
+
+        const body = document.createElement('div');
+        body.className = 'signal-thread-cycle-body';
+        const parts = [];
+        if (cycle.situation) parts.push('situation:\n' + String(cycle.situation));
+        if (cycle.application) parts.push('application:\n' + String(cycle.application));
+        if (cycle.observation) parts.push('observation:\n' + String(cycle.observation));
+        if (cycle.reflection) parts.push('reflection:\n' + String(cycle.reflection));
+        body.textContent = parts.join('\n\n');
+
+        card.appendChild(title);
+        card.appendChild(body);
+        host.appendChild(card);
+    });
+}
+
+function renderSignalThreadOverviewMeta(host, thread) {
+    if (!host) return;
+    host.innerHTML = '';
+    const t = thread && typeof thread === 'object' ? thread : {};
+    const reflections = Array.isArray(t.reflections) ? t.reflections.length : 0;
+    const observations = Array.isArray(t.observations) ? t.observations.length : 0;
+    const cycles = deriveSagaCycles(t).length;
+
+    const items = [
+        ['created', t.createdAt ? String(t.createdAt) : '—'],
+        ['updated', t.updatedAt ? String(t.updatedAt) : '—'],
+        ['reflections', String(reflections)],
+        ['observations', String(observations)],
+        ['cycles', cycles ? String(cycles) : '—'],
+    ];
+
+    items.forEach(([key, val]) => {
+        const row = document.createElement('div');
+        row.className = 'signal-thread-meta-item';
+        const k = document.createElement('span');
+        k.className = 'signal-thread-meta-key';
+        k.textContent = key + ':';
+        const v = document.createElement('span');
+        v.className = 'signal-thread-meta-val';
+        v.textContent = val;
+        row.appendChild(k);
+        row.appendChild(v);
         host.appendChild(row);
     });
 }
@@ -789,6 +944,8 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     const statusSelect = document.getElementById('signal-thread-status-select');
     const tagsInput = document.getElementById('signal-thread-tags-input');
     const summaryInput = document.getElementById('signal-thread-summary-input');
+    const situationInput = document.getElementById('signal-thread-current-situation-input');
+    const pressureInput = document.getElementById('signal-thread-open-pressure-input');
     const compressionInput = document.getElementById('signal-thread-compression-input');
     const saveBtn = document.getElementById('signal-thread-save-btn');
 
@@ -797,13 +954,21 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (statusSelect) statusSelect.value = thread && thread.status ? thread.status : 'active';
     if (tagsInput) tagsInput.value = thread && Array.isArray(thread.tags) ? thread.tags.join(', ') : '';
     if (summaryInput) summaryInput.value = thread && typeof thread.summary === 'string' ? thread.summary : '';
+    if (situationInput) situationInput.value = thread && typeof thread.currentSituation === 'string' ? thread.currentSituation : '';
+    if (pressureInput) pressureInput.value = thread && typeof thread.openPressure === 'string' ? thread.openPressure : '';
     if (compressionInput) compressionInput.value = thread && typeof thread.compression === 'string' ? thread.compression : '';
     if (saveBtn) saveBtn.textContent = createMode ? 'Create' : 'Save';
+
+    const overviewMetaHost = document.getElementById('signal-thread-overview-meta');
+    renderSignalThreadOverviewMeta(overviewMetaHost, thread);
 
     const reflectionsHost = document.getElementById('signal-thread-reflections');
     const observationsHost = document.getElementById('signal-thread-observations');
     renderSignalThreadEntries(reflectionsHost, thread && Array.isArray(thread.reflections) ? thread.reflections : []);
     renderSignalThreadEntries(observationsHost, thread && Array.isArray(thread.observations) ? thread.observations : []);
+
+    const sagaCyclesHost = document.getElementById('signal-thread-saga-cycles');
+    renderSignalThreadSagaCycles(sagaCyclesHost, thread);
 }
 
 function showSignalThreadEmptyState() {
@@ -923,6 +1088,8 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
             posture: 'exploratory',
             status: 'active',
             summary: '',
+            currentSituation: '',
+            openPressure: '',
             compression: '',
             tags: [],
             reflections: [],
@@ -947,12 +1114,16 @@ async function saveActiveSignalThread() {
     const statusSelect = document.getElementById('signal-thread-status-select');
     const tagsInput = document.getElementById('signal-thread-tags-input');
     const summaryInput = document.getElementById('signal-thread-summary-input');
+    const situationInput = document.getElementById('signal-thread-current-situation-input');
+    const pressureInput = document.getElementById('signal-thread-open-pressure-input');
     const compressionInput = document.getElementById('signal-thread-compression-input');
 
     const title = titleInput ? titleInput.value : '';
     const posture = postureSelect ? postureSelect.value : 'exploratory';
     const status = statusSelect ? statusSelect.value : 'active';
     const summary = summaryInput ? summaryInput.value : '';
+    const currentSituation = situationInput ? situationInput.value : '';
+    const openPressure = pressureInput ? pressureInput.value : '';
     const compression = compressionInput ? compressionInput.value : '';
     const tags = parseTagsFromInput(tagsInput ? tagsInput.value : '');
 
@@ -961,7 +1132,7 @@ async function saveActiveSignalThread() {
             const res = await fetch('/api/signal-threads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, posture, summary, tags }),
+                body: JSON.stringify({ title, posture, summary, tags, currentSituation, openPressure }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data || !data.success || !data.thread) {
@@ -985,7 +1156,7 @@ async function saveActiveSignalThread() {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, posture, status, summary, compression, tags }),
+            body: JSON.stringify({ title, posture, status, summary, currentSituation, openPressure, compression, tags }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success || !data.thread) {

@@ -43,6 +43,8 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(typeof thread.createdAt).toBe('string');
         expect(typeof thread.updatedAt).toBe('string');
         expect(thread.summary).toBe('A continuity vessel.');
+        expect(thread.currentSituation).toBe('');
+        expect(thread.openPressure).toBe('');
         expect(Array.isArray(thread.reflections)).toBe(true);
         expect(Array.isArray(thread.observations)).toBe(true);
         expect(thread.compression).toBe('');
@@ -55,6 +57,8 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(onDisk.title).toBe('The Drying Well');
         expect(onDisk.posture).toBe('exploratory');
         expect(onDisk.status).toBe('active');
+        expect(onDisk.currentSituation).toBe('');
+        expect(onDisk.openPressure).toBe('');
 
         const list = await request(app).get('/api/signal-threads');
         expect(list.status).toBe(200);
@@ -69,6 +73,14 @@ describe('Phase 17E — Signal Threads foundations', () => {
             .post('/api/signal-threads')
             .send({ title: 'Signal Thread Test', posture: 'reflective', summary: '' });
         const threadId = create.body.thread.id;
+
+        const patch = await request(app)
+            .put('/api/signal-threads/' + encodeURIComponent(threadId))
+            .send({ currentSituation: 'Exploring the well collapse.', openPressure: 'Can we find a new source?' });
+        expect(patch.status).toBe(200);
+        expect(patch.body.success).toBe(true);
+        expect(patch.body.thread.currentSituation).toBe('Exploring the well collapse.');
+        expect(patch.body.thread.openPressure).toBe('Can we find a new source?');
 
         const refl = await request(app)
             .post('/api/signal-threads/' + encodeURIComponent(threadId) + '/reflections')
@@ -104,12 +116,19 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(md).toContain('Title: Signal Thread Test');
         expect(md).toContain('Posture: reflective');
         expect(md).toContain('Status: active');
-        expect(md).toContain('## Summary');
+        expect(md).toContain('Tags:');
+        expect(md).toContain('Created:');
+        expect(md).toContain('Updated:');
+        expect(md).toContain('## Current Situation');
+        expect(md).toContain('Exploring the well collapse.');
+        expect(md).toContain('## Open Pressure');
+        expect(md).toContain('Can we find a new source?');
+        expect(md).toContain('## Current Compression');
         expect(md).toContain('## Reflections');
         expect(md).toContain('This matters because it preserves meaning.');
         expect(md).toContain('## Observations');
         expect(md).toContain('The well water level dropped overnight.');
-        expect(md).toContain('## Compression');
         expect(md).toContain('We must ration and investigate the source.');
+        expect(md).toContain('## Saga Cycles');
     });
 });

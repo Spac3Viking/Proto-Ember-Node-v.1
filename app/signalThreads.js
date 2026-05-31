@@ -100,6 +100,8 @@ function normalizeSignalThread(raw) {
         createdAt: data.createdAt ? String(data.createdAt) : now,
         updatedAt: data.updatedAt ? String(data.updatedAt) : (data.createdAt ? String(data.createdAt) : now),
         summary: String(data.summary || ''),
+        currentSituation: String(data.currentSituation || ''),
+        openPressure: String(data.openPressure || ''),
         reflections: Array.isArray(data.reflections) ? data.reflections.map(_normalizeEntry) : [],
         observations: Array.isArray(data.observations) ? data.observations.map(_normalizeEntry) : [],
         compression: String(data.compression || ''),
@@ -162,6 +164,8 @@ function createSignalThread(input) {
         createdAt: now,
         updatedAt: now,
         summary: String(body.summary || ''),
+        currentSituation: String(body.currentSituation || ''),
+        openPressure: String(body.openPressure || ''),
         reflections: [],
         observations: [],
         compression: '',
@@ -182,6 +186,8 @@ function updateSignalThread(id, patch) {
     if (typeof data.posture === 'string') existing.posture = _normalizePosture(data.posture);
     if (typeof data.status === 'string') existing.status = _normalizeStatus(data.status);
     if (typeof data.summary === 'string') existing.summary = data.summary;
+    if (typeof data.currentSituation === 'string') existing.currentSituation = data.currentSituation;
+    if (typeof data.openPressure === 'string') existing.openPressure = data.openPressure;
     if (typeof data.compression === 'string') existing.compression = data.compression;
     if (Array.isArray(data.tags)) existing.tags = _normalizeTags(data.tags);
 
@@ -332,6 +338,93 @@ function saveSagaCycle(threadId, cycle) {
     return { thread, observation: observationEntry, reflection: reflectionEntry };
 }
 
+function _parseSagaCycleObservation(entry) {
+    const stamp = entry && entry.timestamp ? String(entry.timestamp) : '';
+    const raw = entry && entry.content ? String(entry.content) : '';
+    if (!raw.trim().startsWith('Saga Smith — Cycle')) return null;
+
+    const lines = raw.split('\n');
+    let mode = '';
+    let section = '';
+    const sections = { situation: [], application: [], observation: [] };
+
+    lines.forEach((line, index) => {
+        if (index === 0) return;
+        const trimmed = String(line || '').trimEnd();
+        if (!trimmed.trim()) return;
+        if (trimmed.startsWith('Mode:')) {
+            mode = trimmed.slice('Mode:'.length).trim();
+            return;
+        }
+        if (trimmed === 'Situation') { section = 'situation'; return; }
+        if (trimmed === 'Application') { section = 'application'; return; }
+        if (trimmed === 'Observation') { section = 'observation'; return; }
+        if (section && sections[section]) sections[section].push(trimmed);
+    });
+
+    return {
+        timestamp: stamp,
+        mode,
+        situation: sections.situation.join('\n').trim(),
+        application: sections.application.join('\n').trim(),
+        observation: sections.observation.join('\n').trim(),
+    };
+}
+
+function _parseSagaCycleReflection(entry) {
+    const stamp = entry && entry.timestamp ? String(entry.timestamp) : '';
+    const raw = entry && entry.content ? String(entry.content) : '';
+    if (!raw.trim().startsWith('Saga Smith — Reflection')) return null;
+
+    const lines = raw.split('\n');
+    let mode = '';
+    let inReflection = false;
+    const reflectionLines = [];
+    lines.forEach((line, index) => {
+        if (index === 0) return;
+        const trimmed = String(line || '').trimEnd();
+        if (trimmed.startsWith('Mode:')) {
+            mode = trimmed.slice('Mode:'.length).trim();
+            return;
+        }
+        if (trimmed === 'Reflection') {
+            inReflection = true;
+            return;
+        }
+        if (!inReflection) return;
+        reflectionLines.push(trimmed);
+    });
+
+    return {
+        timestamp: stamp,
+        mode,
+        reflection: reflectionLines.join('\n').trim(),
+    };
+}
+
+function _deriveSagaCycles(thread) {
+    const t = normalizeSignalThread(thread);
+    const map = new Map();
+
+    t.observations.forEach(entry => {
+        const parsed = _parseSagaCycleObservation(entry);
+        if (!parsed || !parsed.timestamp) return;
+        const existing = map.get(parsed.timestamp) || { timestamp: parsed.timestamp };
+        map.set(parsed.timestamp, { ...existing, ...parsed });
+    });
+
+    t.reflections.forEach(entry => {
+        const parsed = _parseSagaCycleReflection(entry);
+        if (!parsed || !parsed.timestamp) return;
+        const existing = map.get(parsed.timestamp) || { timestamp: parsed.timestamp };
+        map.set(parsed.timestamp, { ...existing, ...parsed });
+    });
+
+    return Array.from(map.values())
+        .filter(row => row && row.timestamp)
+        .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+}
+
 function exportSignalThreadMarkdown(thread) {
     const t = normalizeSignalThread(thread);
     const lines = [];
@@ -339,37 +432,54 @@ function exportSignalThreadMarkdown(thread) {
     lines.push('Title: ' + (t.title || ''));
     lines.push('Posture: ' + (t.posture || ''));
     lines.push('Status: ' + (t.status || ''));
+    lines.push('Tags: ' + (Array.isArray(t.tags) && t.tags.length ? t.tags.join(', ') : ''));
+    lines.push('Created: ' + (t.createdAt || ''));
+    lines.push('Updated: ' + (t.updatedAt || ''));
     lines.push('');
-    lines.push('## Summary');
-    lines.push(String(t.summary || ''));
+    lines.push('## Current Situation');
+    lines.push(String(t.currentSituation || ''));
     lines.push('');
-    lines.push('## Reflections');
-    if (t.reflections.length === 0) {
-        lines.push('');
-    } else {
-        t.reflections.forEach(r => {
-            const stamp = r.timestamp ? String(r.timestamp) : '';
-            lines.push('- ' + stamp);
-            lines.push('');
-            lines.push(String(r.content || ''));
-            lines.push('');
-        });
-    }
-    lines.push('## Observations');
-    if (t.observations.length === 0) {
-        lines.push('');
-    } else {
-        t.observations.forEach(o => {
-            const stamp = o.timestamp ? String(o.timestamp) : '';
-            lines.push('- ' + stamp);
-            lines.push('');
-            lines.push(String(o.content || ''));
-            lines.push('');
-        });
-    }
-    lines.push('## Compression');
+    lines.push('## Open Pressure');
+    lines.push(String(t.openPressure || ''));
+    lines.push('');
+    lines.push('## Current Compression');
     lines.push(String(t.compression || ''));
     lines.push('');
+    lines.push('## Observations');
+    const obs = Array.isArray(t.observations) ? t.observations.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
+    if (obs.length === 0) lines.push('');
+    obs.forEach(o => {
+        const stamp = o && o.timestamp ? String(o.timestamp) : '';
+        lines.push('- ' + stamp);
+        lines.push('');
+        lines.push(String(o && o.content ? o.content : ''));
+        lines.push('');
+    });
+    lines.push('## Reflections');
+    const refl = Array.isArray(t.reflections) ? t.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
+    if (refl.length === 0) lines.push('');
+    refl.forEach(r => {
+        const stamp = r && r.timestamp ? String(r.timestamp) : '';
+        lines.push('- ' + stamp);
+        lines.push('');
+        lines.push(String(r && r.content ? r.content : ''));
+        lines.push('');
+    });
+    lines.push('## Saga Cycles');
+    const cycles = _deriveSagaCycles(t);
+    if (cycles.length === 0) {
+        lines.push('');
+    } else {
+        cycles.forEach(cycle => {
+            lines.push('- ' + String(cycle.timestamp || ''));
+            if (cycle.mode) lines.push('  mode: ' + String(cycle.mode));
+            if (cycle.situation) lines.push('  situation: ' + String(cycle.situation).replace(/\n/g, '\n  '));
+            if (cycle.application) lines.push('  application: ' + String(cycle.application).replace(/\n/g, '\n  '));
+            if (cycle.observation) lines.push('  observation: ' + String(cycle.observation).replace(/\n/g, '\n  '));
+            if (cycle.reflection) lines.push('  reflection: ' + String(cycle.reflection).replace(/\n/g, '\n  '));
+            lines.push('');
+        });
+    }
     return lines.join('\n');
 }
 

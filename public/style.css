@@ -2669,10 +2669,65 @@ button.secondary:disabled {
   margin-top: 0.55rem;
 }
 
+.signal-thread-workspace-panel {
+  margin-top: 0.55rem;
+}
+
+.signal-thread-overview-meta {
+  margin-top: 0.55rem;
+  font-size: 0.72rem;
+  color: var(--archive-muted);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem 0.85rem;
+}
+
+.signal-thread-meta-item {
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.signal-thread-meta-key {
+  opacity: 0.85;
+}
+
+.signal-thread-meta-val {
+  color: var(--archive-text);
+  opacity: 0.82;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .signal-thread-section-title {
   font-size: 0.82rem;
   color: var(--archive-text);
   margin: 0.25rem 0 0.25rem;
+}
+
+.signal-thread-cycles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.signal-thread-cycle {
+  border-left: 2px solid hsla(140, 100%, 70%, 0.18);
+  padding-left: 0.55rem;
+}
+
+.signal-thread-cycle-title {
+  font-size: 0.7rem;
+  color: var(--archive-muted);
+}
+
+.signal-thread-cycle-body {
+  font-size: 0.76rem;
+  color: var(--archive-text);
+  white-space: pre-wrap;
+  margin-top: 0.15rem;
+  line-height: 1.35;
 }
 
 .signal-thread-split {
@@ -2726,6 +2781,9 @@ button.secondary:disabled {
     width: auto;
   }
   .signal-thread-split {
+    grid-template-columns: 1fr;
+  }
+  .signal-thread-overview-meta {
     grid-template-columns: 1fr;
   }
 }
