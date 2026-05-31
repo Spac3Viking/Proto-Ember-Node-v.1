@@ -731,6 +731,358 @@ function recordSentinelDepthUsage(depthId) {
     if (depth === 'archive') return markSentinelTrialStep('forge_reflection', 'archive_depth_used');
 }
 
+/* ================================================================
+   Phase 17E — Signal Threads (meaning continuity)
+   ================================================================ */
+
+let _signalThreadsListSnapshot = [];
+let _activeSignalThreadId = null;
+let _activeSignalThread = null;
+
+function parseTagsFromInput(text) {
+    return String(text || '')
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean);
+}
+
+function renderSignalThreadEntries(host, entries) {
+    if (!host) return;
+    host.innerHTML = '';
+    const list = Array.isArray(entries) ? entries : [];
+    if (list.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'message-system';
+        empty.textContent = 'No entries yet.';
+        host.appendChild(empty);
+        return;
+    }
+    list.slice().reverse().forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'signal-thread-entry';
+
+        const time = document.createElement('div');
+        time.className = 'signal-thread-entry-time';
+        time.textContent = entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '';
+
+        const content = document.createElement('div');
+        content.className = 'signal-thread-entry-content';
+        content.textContent = entry && entry.content ? String(entry.content) : '';
+
+        row.appendChild(time);
+        row.appendChild(content);
+        host.appendChild(row);
+    });
+}
+
+function fillSignalThreadEditor(thread, { createMode = false } = {}) {
+    _activeSignalThread = thread;
+    _activeSignalThreadId = thread && thread.id ? thread.id : null;
+
+    const empty = document.getElementById('signal-thread-empty');
+    const editor = document.getElementById('signal-thread-editor');
+    if (empty) empty.style.display = 'none';
+    if (editor) editor.style.display = '';
+
+    const titleInput = document.getElementById('signal-thread-title-input');
+    const postureSelect = document.getElementById('signal-thread-posture-select');
+    const statusSelect = document.getElementById('signal-thread-status-select');
+    const tagsInput = document.getElementById('signal-thread-tags-input');
+    const summaryInput = document.getElementById('signal-thread-summary-input');
+    const compressionInput = document.getElementById('signal-thread-compression-input');
+    const saveBtn = document.getElementById('signal-thread-save-btn');
+
+    if (titleInput) titleInput.value = thread && thread.title ? thread.title : '';
+    if (postureSelect) postureSelect.value = thread && thread.posture ? thread.posture : 'exploratory';
+    if (statusSelect) statusSelect.value = thread && thread.status ? thread.status : 'active';
+    if (tagsInput) tagsInput.value = thread && Array.isArray(thread.tags) ? thread.tags.join(', ') : '';
+    if (summaryInput) summaryInput.value = thread && typeof thread.summary === 'string' ? thread.summary : '';
+    if (compressionInput) compressionInput.value = thread && typeof thread.compression === 'string' ? thread.compression : '';
+    if (saveBtn) saveBtn.textContent = createMode ? 'Create' : 'Save';
+
+    const reflectionsHost = document.getElementById('signal-thread-reflections');
+    const observationsHost = document.getElementById('signal-thread-observations');
+    renderSignalThreadEntries(reflectionsHost, thread && Array.isArray(thread.reflections) ? thread.reflections : []);
+    renderSignalThreadEntries(observationsHost, thread && Array.isArray(thread.observations) ? thread.observations : []);
+}
+
+function showSignalThreadEmptyState() {
+    _activeSignalThreadId = null;
+    _activeSignalThread = null;
+    const empty = document.getElementById('signal-thread-empty');
+    const editor = document.getElementById('signal-thread-editor');
+    if (empty) empty.style.display = '';
+    if (editor) editor.style.display = 'none';
+}
+
+async function fetchSignalThreadsList() {
+    try {
+        const res = await fetch('/api/signal-threads');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !Array.isArray(data.threads)) return null;
+        return data.threads;
+    } catch {
+        return null;
+    }
+}
+
+async function fetchSignalThread(threadId) {
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.thread) return null;
+        return data.thread;
+    } catch {
+        return null;
+    }
+}
+
+function renderSignalThreadsList(host, threads) {
+    if (!host) return;
+    host.innerHTML = '';
+    const list = Array.isArray(threads) ? threads : [];
+    if (list.length === 0) {
+        host.innerHTML = '<span class="message-system">No Signal Threads yet.</span>';
+        return;
+    }
+
+    list.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'signal-thread-list-item' + (t.id === _activeSignalThreadId ? ' active' : '');
+        row.addEventListener('click', async () => {
+            const thread = await fetchSignalThread(t.id);
+            if (!thread) {
+                showFlashMessage('Could not load Signal Thread.');
+                return;
+            }
+            fillSignalThreadEditor(thread, { createMode: false });
+            renderSignalThreadsList(host, _signalThreadsListSnapshot);
+        });
+
+        const title = document.createElement('div');
+        title.className = 'signal-thread-list-title';
+        title.textContent = String(t.title || 'Untitled');
+
+        const meta = document.createElement('div');
+        meta.className = 'signal-thread-list-meta';
+        const posture = document.createElement('span');
+        posture.textContent = 'posture: ' + String(t.posture || 'exploratory');
+        const status = document.createElement('span');
+        status.textContent = 'status: ' + String(t.status || 'active');
+        const updated = document.createElement('span');
+        updated.textContent = t.updatedAt ? ('updated ' + formatRelativeTime(t.updatedAt)) : '';
+        meta.appendChild(posture);
+        meta.appendChild(status);
+        if (updated.textContent) meta.appendChild(updated);
+
+        row.appendChild(title);
+        row.appendChild(meta);
+        host.appendChild(row);
+    });
+}
+
+async function loadSignalThreadsSummary() {
+    const threads = await fetchSignalThreadsList();
+    _signalThreadsListSnapshot = threads || [];
+
+    const countEl = document.getElementById('sys-signal-threads-count');
+    const statusEl = document.getElementById('sys-signal-threads-status');
+    if (countEl) countEl.textContent = threads ? String(threads.length) : '—';
+    if (statusEl) statusEl.textContent = threads ? 'Meaning continuity available.' : 'Signal Threads unavailable.';
+}
+
+function openSignalThreadsOverlay() {
+    const overlay = document.getElementById('signal-threads-overlay');
+    if (overlay) overlay.style.display = 'flex';
+}
+
+function closeSignalThreadsOverlay() {
+    const overlay = document.getElementById('signal-threads-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
+    const listHost = document.getElementById('signal-threads-list');
+    const status = document.getElementById('signal-threads-list-status');
+    if (status) status.textContent = 'Loading…';
+    const threads = await fetchSignalThreadsList();
+    _signalThreadsListSnapshot = threads || [];
+    if (status) status.textContent = threads ? (threads.length + ' threads') : 'Unavailable';
+    renderSignalThreadsList(listHost, _signalThreadsListSnapshot);
+    loadSignalThreadsSummary();
+
+    if (createNew) {
+        fillSignalThreadEditor({
+            id: null,
+            title: '',
+            posture: 'exploratory',
+            status: 'active',
+            summary: '',
+            compression: '',
+            tags: [],
+            reflections: [],
+            observations: [],
+        }, { createMode: true });
+        return;
+    }
+
+    if (_activeSignalThreadId) {
+        const thread = await fetchSignalThread(_activeSignalThreadId);
+        if (thread) {
+            fillSignalThreadEditor(thread, { createMode: false });
+            return;
+        }
+    }
+    showSignalThreadEmptyState();
+}
+
+async function saveActiveSignalThread() {
+    const titleInput = document.getElementById('signal-thread-title-input');
+    const postureSelect = document.getElementById('signal-thread-posture-select');
+    const statusSelect = document.getElementById('signal-thread-status-select');
+    const tagsInput = document.getElementById('signal-thread-tags-input');
+    const summaryInput = document.getElementById('signal-thread-summary-input');
+    const compressionInput = document.getElementById('signal-thread-compression-input');
+
+    const title = titleInput ? titleInput.value : '';
+    const posture = postureSelect ? postureSelect.value : 'exploratory';
+    const status = statusSelect ? statusSelect.value : 'active';
+    const summary = summaryInput ? summaryInput.value : '';
+    const compression = compressionInput ? compressionInput.value : '';
+    const tags = parseTagsFromInput(tagsInput ? tagsInput.value : '');
+
+    try {
+        if (!_activeSignalThreadId) {
+            const res = await fetch('/api/signal-threads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, posture, summary, tags }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data || !data.success || !data.thread) {
+                showFlashMessage(data && data.error ? data.error : 'Could not create thread.');
+                return;
+            }
+            _activeSignalThreadId = data.thread.id;
+            showFlashMessage('Signal Thread created.');
+            await refreshSignalThreadsOverlay({ createNew: false });
+            if (compression) {
+                await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/compression', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ compression }),
+                });
+                await refreshSignalThreadsOverlay({ createNew: false });
+            }
+            return;
+        }
+
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, posture, status, summary, compression, tags }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success || !data.thread) {
+            showFlashMessage(data && data.error ? data.error : 'Could not save thread.');
+            return;
+        }
+        showFlashMessage('Signal Thread saved.');
+        await refreshSignalThreadsOverlay({ createNew: false });
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function deleteActiveSignalThread() {
+    if (!_activeSignalThreadId) return;
+    if (!confirm('Delete this Signal Thread? This cannot be undone.')) return;
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success) {
+            showFlashMessage(data && data.error ? data.error : 'Could not delete thread.');
+            return;
+        }
+        showFlashMessage('Signal Thread deleted.');
+        _activeSignalThreadId = null;
+        await refreshSignalThreadsOverlay({ createNew: false });
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function addReflectionToActiveThread() {
+    if (!_activeSignalThreadId) return;
+    const input = document.getElementById('signal-thread-reflection-input');
+    const content = input ? input.value : '';
+    if (!String(content || '').trim()) return;
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/reflections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success) {
+            showFlashMessage(data && data.error ? data.error : 'Could not add reflection.');
+            return;
+        }
+        if (input) input.value = '';
+        await refreshSignalThreadsOverlay({ createNew: false });
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function addObservationToActiveThread() {
+    if (!_activeSignalThreadId) return;
+    const input = document.getElementById('signal-thread-observation-input');
+    const content = input ? input.value : '';
+    if (!String(content || '').trim()) return;
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/observations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success) {
+            showFlashMessage(data && data.error ? data.error : 'Could not add observation.');
+            return;
+        }
+        if (input) input.value = '';
+        await refreshSignalThreadsOverlay({ createNew: false });
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function exportActiveSignalThread() {
+    if (!_activeSignalThreadId) return;
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/export');
+        if (!res.ok) {
+            showFlashMessage('Export failed.');
+            return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const title = _activeSignalThread && _activeSignalThread.title ? String(_activeSignalThread.title) : 'signal-thread';
+        const safe = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'signal-thread';
+        a.download = safe + '.md';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showFlashMessage('Export downloaded.');
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
 /**
  * Build a dismissible onboarding hint element.
  * Returns null when key is missing or the hint was already dismissed.
@@ -9330,6 +9682,21 @@ function renderSystemStartupSummary(data) {
         if (sysSentinelTrialsResetBtn) {
             sysSentinelTrialsResetBtn.addEventListener('click', resetSentinelTrialsState);
         }
+
+        const sysSignalThreadsOpenBtn = document.getElementById('sys-signal-threads-open-btn');
+        const sysSignalThreadsNewBtn = document.getElementById('sys-signal-threads-new-btn');
+        if (sysSignalThreadsOpenBtn) {
+            sysSignalThreadsOpenBtn.addEventListener('click', async () => {
+                openSignalThreadsOverlay();
+                await refreshSignalThreadsOverlay({ createNew: false });
+            });
+        }
+        if (sysSignalThreadsNewBtn) {
+            sysSignalThreadsNewBtn.addEventListener('click', async () => {
+                openSignalThreadsOverlay();
+                await refreshSignalThreadsOverlay({ createNew: true });
+            });
+        }
     });
 })();
 
@@ -9397,6 +9764,7 @@ async function launchOllama(runtimeId) {
     loadStartupCheck();
     updateCouncilChatActiveArchetype();
     loadSentinelTrials();
+    loadSignalThreadsSummary();
 
     // Close all source action dropdown menus when clicking outside
     document.addEventListener('click', () => {
@@ -9412,6 +9780,37 @@ async function launchOllama(runtimeId) {
             if (e.target === inspOverlay) closeInspector();
         });
     }
+
+    const signalOverlay = document.getElementById('signal-threads-overlay');
+    const signalClose = document.getElementById('signal-threads-close');
+    if (signalClose) signalClose.addEventListener('click', closeSignalThreadsOverlay);
+    if (signalOverlay) {
+        signalOverlay.addEventListener('click', e => {
+            if (e.target === signalOverlay) closeSignalThreadsOverlay();
+        });
+    }
+
+    const signalNewBtn = document.getElementById('signal-threads-new-btn');
+    if (signalNewBtn) {
+        signalNewBtn.addEventListener('click', async () => {
+            await refreshSignalThreadsOverlay({ createNew: true });
+        });
+    }
+
+    const signalSaveBtn = document.getElementById('signal-thread-save-btn');
+    if (signalSaveBtn) signalSaveBtn.addEventListener('click', saveActiveSignalThread);
+
+    const signalDeleteBtn = document.getElementById('signal-thread-delete-btn');
+    if (signalDeleteBtn) signalDeleteBtn.addEventListener('click', deleteActiveSignalThread);
+
+    const signalExportBtn = document.getElementById('signal-thread-export-btn');
+    if (signalExportBtn) signalExportBtn.addEventListener('click', exportActiveSignalThread);
+
+    const addReflectionBtn = document.getElementById('signal-thread-add-reflection-btn');
+    if (addReflectionBtn) addReflectionBtn.addEventListener('click', addReflectionToActiveThread);
+
+    const addObservationBtn = document.getElementById('signal-thread-add-observation-btn');
+    if (addObservationBtn) addObservationBtn.addEventListener('click', addObservationToActiveThread);
 
     // Chat refs clear button
     const clearRefsBtn = document.getElementById('clear-chat-refs');

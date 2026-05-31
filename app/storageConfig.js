@@ -137,6 +137,7 @@ const INDEXES_DIR         = path.join(DATA_ROOT, 'indexes');
 const THREADS_DIR         = path.join(DATA_ROOT, 'threads');
 const USER_CACHES_DIR = path.join(DATA_ROOT, 'caches');
 const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
+const SIGNAL_THREADS_DIR  = path.join(SYSTEM_DIR, 'signal-threads');
 const EXPORTS_DIR         = path.join(DATA_ROOT, 'exports');
 const DOCUMENTS_DIR       = path.join(DATA_ROOT, 'documents');
 
@@ -365,6 +366,7 @@ function ensureDataRoot() {
         THREADS_DIR,
         USER_CACHES_DIR,
         SYSTEM_DIR,
+        SIGNAL_THREADS_DIR,
         EXPORTS_DIR,
         DOCUMENTS_DIR,
         // Phase 11: Trusted Archive
@@ -567,6 +569,7 @@ module.exports = {
     THREADS_DIR,
     USER_CACHES_DIR,
     SYSTEM_DIR,
+    SIGNAL_THREADS_DIR,
     EXPORTS_DIR,
     DOCUMENTS_DIR,
     LEGACY_DATA_DIR,
