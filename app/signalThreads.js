@@ -437,7 +437,10 @@ function exportSignalThreadMarkdown(thread) {
     lines.push('Status: ' + (t.status || ''));
     lines.push('Tags: ' + (Array.isArray(t.tags) && t.tags.length ? t.tags.join(', ') : ''));
     lines.push('Created: ' + (t.createdAt || ''));
-    lines.push('Updated: ' + (t.updatedAt || ''));
+    lines.push('Last Updated: ' + (t.updatedAt || ''));
+    lines.push('');
+    lines.push('## Current Compression');
+    lines.push(String(t.compression || ''));
     lines.push('');
     lines.push('## Current Situation');
     lines.push(String(t.currentSituation || ''));
@@ -445,10 +448,7 @@ function exportSignalThreadMarkdown(thread) {
     lines.push('## Open Pressure');
     lines.push(String(t.openPressure || ''));
     lines.push('');
-    lines.push('## Current Compression');
-    lines.push(String(t.compression || ''));
-    lines.push('');
-    lines.push('## Observations');
+    lines.push('## Recent Observations');
     const obs = Array.isArray(t.observations) ? t.observations.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
     if (obs.length === 0) lines.push('');
     obs.forEach(o => {
@@ -458,7 +458,7 @@ function exportSignalThreadMarkdown(thread) {
         lines.push(String(o && o.content ? o.content : ''));
         lines.push('');
     });
-    lines.push('## Reflections');
+    lines.push('## Recent Reflections');
     const refl = Array.isArray(t.reflections) ? t.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
     if (refl.length === 0) lines.push('');
     refl.forEach(r => {
@@ -468,6 +468,9 @@ function exportSignalThreadMarkdown(thread) {
         lines.push(String(r && r.content ? r.content : ''));
         lines.push('');
     });
+    lines.push('## Source Notes');
+    lines.push(String(t.sourceNotes || ''));
+    lines.push('');
     lines.push('## Saga Cycles');
     const cycles = _deriveSagaCycles(t);
     if (cycles.length === 0) {
@@ -486,6 +489,83 @@ function exportSignalThreadMarkdown(thread) {
     return lines.join('\n');
 }
 
+function exportSignalThreadBrief(thread) {
+    const t = normalizeSignalThread(thread);
+
+    function block(label, value) {
+        const lines = [];
+        lines.push(label + ':');
+        lines.push(String(value || '').trim());
+        return lines.join('\n');
+    }
+
+    function entryList(title, entries) {
+        const out = [];
+        out.push(title + ':');
+        const list = Array.isArray(entries) ? entries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
+        if (list.length === 0) {
+            out.push('');
+            return out.join('\n');
+        }
+        list.forEach(entry => {
+            const stamp = entry && entry.timestamp ? String(entry.timestamp) : '';
+            out.push('- ' + stamp);
+            const content = entry && entry.content ? String(entry.content) : '';
+            content.split('\n').forEach(line => {
+                out.push('  ' + line);
+            });
+            out.push('');
+        });
+        return out.join('\n').trimEnd();
+    }
+
+    const lines = [];
+    lines.push('SIGNAL THREAD');
+    lines.push('Title: ' + String(t.title || ''));
+    lines.push('Posture: ' + String(t.posture || ''));
+    lines.push('Status: ' + String(t.status || ''));
+    lines.push('Mirror:');
+    lines.push('');
+    lines.push('Last Updated: ' + String(t.updatedAt || ''));
+    lines.push('');
+    lines.push(block('Current Compression', t.compression));
+    lines.push('');
+    lines.push(block('Current Situation', t.currentSituation));
+    lines.push('');
+    lines.push(block('Open Pressure', t.openPressure));
+    lines.push('');
+    lines.push(entryList('Recent Observations', t.observations));
+    lines.push('');
+    lines.push(entryList('Recent Reflections', t.reflections));
+    lines.push('');
+    lines.push(block('Source Notes', t.sourceNotes));
+    lines.push('');
+    lines.push('Saga Cycles:');
+    const cycles = _deriveSagaCycles(t);
+    if (cycles.length === 0) {
+        lines.push('');
+        return lines.join('\n');
+    }
+    cycles.forEach(cycle => {
+        lines.push('- ' + String(cycle.timestamp || ''));
+        if (cycle.mode) lines.push('  mode: ' + String(cycle.mode));
+        if (cycle.situation) {
+            lines.push('  situation: ' + String(cycle.situation).replace(/\n/g, '\n  '));
+        }
+        if (cycle.application) {
+            lines.push('  application: ' + String(cycle.application).replace(/\n/g, '\n  '));
+        }
+        if (cycle.observation) {
+            lines.push('  observation: ' + String(cycle.observation).replace(/\n/g, '\n  '));
+        }
+        if (cycle.reflection) {
+            lines.push('  reflection: ' + String(cycle.reflection).replace(/\n/g, '\n  '));
+        }
+        lines.push('');
+    });
+    return lines.join('\n').trimEnd() + '\n';
+}
+
 module.exports = {
     SIGNAL_THREAD_POSTURES,
     SIGNAL_THREAD_STATUSES,
@@ -502,4 +582,5 @@ module.exports = {
     setCompression,
     saveSagaCycle,
     exportSignalThreadMarkdown,
+    exportSignalThreadBrief,
 };

@@ -907,11 +907,23 @@ function renderSignalThreadOverviewMeta(host, thread) {
     const observations = Array.isArray(t.observations) ? t.observations.length : 0;
     const cycles = deriveSagaCycles(t).length;
 
+    function previewText(text, fallback = '—') {
+        const raw = String(text || '').trim();
+        if (!raw) return fallback;
+        const firstLine = raw.split('\n')[0].trim();
+        const short = firstLine.length > 84 ? firstLine.slice(0, 84).trimEnd() + '…' : firstLine;
+        return short || fallback;
+    }
+
     const items = [
+        ['compression', previewText(t.compression)],
+        ['situation', previewText(t.currentSituation)],
+        ['pressure', previewText(t.openPressure)],
+        ['mirror', '—'],
         ['created', t.createdAt ? String(t.createdAt) : '—'],
-        ['updated', t.updatedAt ? String(t.updatedAt) : '—'],
-        ['reflections', String(reflections)],
+        ['last updated', t.updatedAt ? String(t.updatedAt) : '—'],
         ['observations', String(observations)],
+        ['reflections', String(reflections)],
         ['cycles', cycles ? String(cycles) : '—'],
     ];
 
@@ -1259,6 +1271,21 @@ async function exportActiveSignalThread() {
         a.remove();
         URL.revokeObjectURL(url);
         showFlashMessage('Export downloaded.');
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function copyActiveSignalThreadBrief() {
+    if (!_activeSignalThreadId) return;
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/brief');
+        if (!res.ok) {
+            showFlashMessage('Copy Brief failed.');
+            return;
+        }
+        const text = await res.text();
+        await copyPlainText(text || '', 'Brief copied.', 'Could not copy brief.');
     } catch {
         showFlashMessage('Could not reach server.');
     }
@@ -10136,6 +10163,9 @@ async function launchOllama(runtimeId) {
 
     const signalExportBtn = document.getElementById('signal-thread-export-btn');
     if (signalExportBtn) signalExportBtn.addEventListener('click', exportActiveSignalThread);
+
+    const signalCopyBriefBtn = document.getElementById('signal-thread-copy-brief-btn');
+    if (signalCopyBriefBtn) signalCopyBriefBtn.addEventListener('click', copyActiveSignalThreadBrief);
 
     const addReflectionBtn = document.getElementById('signal-thread-add-reflection-btn');
     if (addReflectionBtn) addReflectionBtn.addEventListener('click', addReflectionToActiveThread);
