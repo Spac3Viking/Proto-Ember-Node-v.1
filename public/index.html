@@ -293,6 +293,23 @@
                   </div>
                   <div id="sys-sentinel-trials-status" class="message-system" style="margin-top:0.35rem;"></div>
                 </div>
+                <div class="ember-card system-block" id="sys-signal-threads-card">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
+                    <div class="system-block-title" style="margin:0;">Signal Threads</div>
+                    <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                      <button class="secondary" id="sys-signal-threads-open-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Open</button>
+                      <button class="secondary" id="sys-signal-threads-new-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">New</button>
+                    </div>
+                  </div>
+                  <p class="system-future-note" style="margin-top:0.55rem;">
+                    A living continuity vessel for situations, observations, reflections, and compression.
+                  </p>
+                  <div class="system-row">
+                    <span class="system-key">Threads</span>
+                    <span class="system-val" id="sys-signal-threads-count">—</span>
+                  </div>
+                  <div id="sys-signal-threads-status" class="message-system" style="margin-top:0.35rem;"></div>
+                </div>
                 <div class="ember-card system-block">
                   <div class="system-block-title">Knowledge Index</div>
                   <div class="system-row">
@@ -1181,6 +1198,96 @@
             </div>
           </div>
         </details>
+      </div>
+    </div>
+  </div>
+
+  <div class="source-inspector-overlay" id="signal-threads-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Signal Threads">
+    <div class="source-inspector-panel signal-threads-panel">
+      <div class="source-inspector-header">
+        <span class="source-inspector-title">⌁ Signal Threads</span>
+        <button class="source-inspector-close" id="signal-threads-close" aria-label="Close Signal Threads">✕</button>
+      </div>
+      <div class="source-inspector-body signal-threads-body">
+        <div class="signal-threads-layout">
+          <div class="signal-threads-list-pane">
+            <div class="signal-threads-list-header">
+              <button class="secondary" id="signal-threads-new-btn">New Thread</button>
+              <span class="message-system" id="signal-threads-list-status">—</span>
+            </div>
+            <div id="signal-threads-list" class="signal-threads-list">
+              <span class="message-system">Loading…</span>
+            </div>
+          </div>
+          <div class="signal-thread-editor-pane">
+            <div class="message-system" id="signal-thread-empty">Select a thread, or create a new one.</div>
+
+            <div id="signal-thread-editor" style="display:none;">
+              <div class="signal-thread-grid">
+                <div class="signal-thread-field">
+                  <label for="signal-thread-title-input">Title</label>
+                  <input id="signal-thread-title-input" type="text" placeholder="The Drying Well" />
+                </div>
+                <div class="signal-thread-field">
+                  <label for="signal-thread-posture-select">Posture</label>
+                  <select id="signal-thread-posture-select" class="gf-select">
+                    <option value="exploratory">exploratory</option>
+                    <option value="reflective">reflective</option>
+                    <option value="practical">practical</option>
+                    <option value="narrative">narrative</option>
+                    <option value="strategic">strategic</option>
+                    <option value="active">active</option>
+                    <option value="dormant">dormant</option>
+                  </select>
+                </div>
+                <div class="signal-thread-field">
+                  <label for="signal-thread-status-select">Status</label>
+                  <select id="signal-thread-status-select" class="gf-select">
+                    <option value="active">active</option>
+                    <option value="resolved">resolved</option>
+                    <option value="dormant">dormant</option>
+                    <option value="archived">archived</option>
+                  </select>
+                </div>
+                <div class="signal-thread-field">
+                  <label for="signal-thread-tags-input">Tags</label>
+                  <input id="signal-thread-tags-input" type="text" placeholder="comma, separated, tags" />
+                </div>
+              </div>
+
+              <div class="signal-thread-field">
+                <label for="signal-thread-summary-input">Summary</label>
+                <textarea id="signal-thread-summary-input" rows="3" placeholder="Optional. What is this thread about?"></textarea>
+              </div>
+
+              <div class="signal-thread-field">
+                <label for="signal-thread-compression-input">Compression</label>
+                <textarea id="signal-thread-compression-input" rows="3" placeholder="Current distilled understanding (user-controlled)."></textarea>
+              </div>
+
+              <div class="signal-thread-actions">
+                <button class="primary" id="signal-thread-save-btn">Save</button>
+                <button class="secondary" id="signal-thread-export-btn">Export Markdown</button>
+                <button class="secondary" id="signal-thread-delete-btn">Delete</button>
+              </div>
+
+              <div class="signal-thread-split">
+                <div class="signal-thread-split-pane">
+                  <div class="signal-thread-section-title">Reflections</div>
+                  <textarea id="signal-thread-reflection-input" rows="3" placeholder="Add a reflection…"></textarea>
+                  <button class="secondary" id="signal-thread-add-reflection-btn" style="margin-top:0.35rem;">Add Reflection</button>
+                  <div id="signal-thread-reflections" class="signal-thread-entries"></div>
+                </div>
+                <div class="signal-thread-split-pane">
+                  <div class="signal-thread-section-title">Observations</div>
+                  <textarea id="signal-thread-observation-input" rows="3" placeholder="Add an observation…"></textarea>
+                  <button class="secondary" id="signal-thread-add-observation-btn" style="margin-top:0.35rem;">Add Observation</button>
+                  <div id="signal-thread-observations" class="signal-thread-entries"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

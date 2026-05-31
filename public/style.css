@@ -2556,6 +2556,165 @@ button.secondary:disabled {
   display: none;
 }
 
+.signal-threads-panel {
+  width: min(980px, 96vw);
+}
+
+.signal-threads-body {
+  padding: 1rem 1.1rem;
+}
+
+.signal-threads-layout {
+  display: flex;
+  gap: 1rem;
+  min-height: 60vh;
+}
+
+.signal-threads-list-pane {
+  width: 280px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.signal-threads-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.signal-threads-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.signal-thread-list-item {
+  border: 1px solid hsla(140, 100%, 70%, 0.08);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background: rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.signal-thread-list-item:hover {
+  border-color: hsla(140, 100%, 70%, 0.22);
+}
+
+.signal-thread-list-item.active {
+  border-color: hsla(38, 100%, 70%, 0.22);
+}
+
+.signal-thread-list-title {
+  font-size: 0.82rem;
+  color: var(--archive-text);
+  margin: 0;
+}
+
+.signal-thread-list-meta {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--archive-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+}
+
+.signal-thread-editor-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.signal-thread-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.signal-thread-field label {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.82;
+  margin-bottom: 0.25rem;
+}
+
+.signal-thread-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.55rem;
+}
+
+.signal-thread-section-title {
+  font-size: 0.82rem;
+  color: var(--archive-text);
+  margin: 0.25rem 0 0.25rem;
+}
+
+.signal-thread-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.85rem;
+}
+
+.signal-thread-split-pane {
+  border: 1px solid hsla(140, 100%, 70%, 0.08);
+  border-radius: 12px;
+  padding: 0.7rem 0.75rem;
+  background: rgba(0, 0, 0, 0.08);
+  min-width: 0;
+}
+
+.signal-thread-entries {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.signal-thread-entry {
+  border-left: 2px solid hsla(140, 100%, 70%, 0.18);
+  padding-left: 0.55rem;
+}
+
+.signal-thread-entry-time {
+  font-size: 0.7rem;
+  color: var(--archive-muted);
+}
+
+.signal-thread-entry-content {
+  font-size: 0.76rem;
+  color: var(--archive-text);
+  white-space: pre-wrap;
+  margin-top: 0.15rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 860px) {
+  .signal-threads-layout {
+    flex-direction: column;
+  }
+  .signal-threads-list-pane {
+    width: auto;
+  }
+  .signal-thread-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 .gf-reader-panel {
   width: min(1020px, 95vw);
 }

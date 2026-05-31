@@ -16,6 +16,7 @@
  *   app/routes/threshold.js — Threshold intake + runtime stewardship API
  *   app/routes/chat.js      — Chat (legacy + grounded)
  *   app/routes/threads.js   — Thread persistence
+ *   app/routes/signalThreads.js — Signal Thread persistence (meaning continuity)
  *   app/routes/system.js    — System status, storage info, intake state
  */
 
@@ -64,6 +65,7 @@ const chatRouter           = require('./routes/chat');
 const sourcesRouter        = require('./routes/sources');
 const thresholdRouter      = require('./routes/threshold');
 const threadsRouter        = require('./routes/threads');
+const signalThreadsRouter  = require('./routes/signalThreads');
 const documentsRouter      = require('./routes/documents');
 const archiveRouter        = require('./routes/archive');
 const bootstrapRouter      = require('./routes/bootstrap');
@@ -87,6 +89,7 @@ app.use(chatRouter);
 app.use(sourcesRouter);
 app.use(thresholdRouter);
 app.use(threadsRouter);
+app.use(signalThreadsRouter);
 app.use(documentsRouter);
 app.use(archiveRouter);
 app.use(bootstrapRouter);
