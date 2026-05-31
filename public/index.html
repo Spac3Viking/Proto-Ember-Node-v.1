@@ -1240,7 +1240,7 @@
 
             <div id="signal-thread-editor" style="display:none;">
               <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-overview-details" open>
-                <summary>Signal Thread</summary>
+                <summary>Overview</summary>
                 <div class="gf-collapsible-panel-body">
                   <div class="signal-thread-grid">
                     <div class="signal-thread-field">
@@ -1276,7 +1276,7 @@
 
                   <div class="signal-thread-field" style="margin-top:0.6rem;">
                     <label for="signal-thread-summary-input">Thread Note</label>
-                    <textarea id="signal-thread-summary-input" rows="3" placeholder="Optional. A short line for continuity."></textarea>
+                    <textarea id="signal-thread-summary-input" rows="3" placeholder="Optional. One line that still holds next cycle."></textarea>
                   </div>
 
                   <div class="signal-thread-overview-meta" id="signal-thread-overview-meta"></div>
@@ -1288,7 +1288,7 @@
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-compression-details" open>
+              <details class="gf-collapsible-panel signal-thread-workspace-panel signal-thread-anchor-panel" id="signal-thread-compression-details" open>
                 <summary>Current Compression</summary>
                 <div class="gf-collapsible-panel-body">
                   <div class="signal-thread-field">
@@ -1299,24 +1299,67 @@
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-situation-details" open>
+              <details class="gf-collapsible-panel signal-thread-workspace-panel signal-thread-anchor-panel" id="signal-thread-situation-details" open>
                 <summary>Current Situation</summary>
                 <div class="gf-collapsible-panel-body">
                   <div class="signal-thread-field">
                     <label for="signal-thread-current-situation-input">Current Situation</label>
-                    <textarea id="signal-thread-current-situation-input" rows="3" placeholder="What is the thread currently exploring?"></textarea>
+                    <textarea id="signal-thread-current-situation-input" rows="3" placeholder="What is happening now?"></textarea>
                     <div class="message-system" style="margin-top:0.25rem;">Ground it. Enough to orient a future reader.</div>
                   </div>
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel signal-thread-pressure-panel" id="signal-thread-open-pressure-details" open>
+              <details class="gf-collapsible-panel signal-thread-workspace-panel signal-thread-anchor-panel signal-thread-pressure-panel" id="signal-thread-open-pressure-details" open>
                 <summary>Open Pressure</summary>
                 <div class="gf-collapsible-panel-body">
                   <div class="signal-thread-field">
                     <label for="signal-thread-open-pressure-input">Open Pressure</label>
-                    <textarea id="signal-thread-open-pressure-input" rows="3" placeholder="What unresolved pressure, question, or tension remains active?"></textarea>
+                    <textarea id="signal-thread-open-pressure-input" rows="3" placeholder="What deserves attention next?"></textarea>
                     <div class="message-system" style="margin-top:0.25rem;">What deserves attention next? Avoid task-manager phrasing.</div>
+                  </div>
+                </div>
+              </details>
+
+              <details class="gf-collapsible-panel signal-thread-workspace-panel signal-thread-cycle-panel" id="signal-thread-saga-cycle-details" open>
+                <summary>Saga Cycle / Continue</summary>
+                <div class="gf-collapsible-panel-body">
+                  <div class="message-system" style="margin-top:0;">
+                    Application: what did you try? Observation: what happened? Reflection: what did it mean? Update Compression when needed.
+                  </div>
+
+                  <div class="signal-thread-grid" style="margin-top:0.55rem;">
+                    <div class="signal-thread-field">
+                      <label for="signal-thread-cycle-mode-select">Mode</label>
+                      <select id="signal-thread-cycle-mode-select" class="gf-select">
+                        <option value="real">real</option>
+                        <option value="exploratory">exploratory</option>
+                      </select>
+                    </div>
+                    <div class="signal-thread-field">
+                      <label for="signal-thread-cycle-situation-input">Cycle Situation (optional)</label>
+                      <textarea id="signal-thread-cycle-situation-input" rows="2" placeholder="If different from Current Situation…"></textarea>
+                    </div>
+                  </div>
+
+                  <div class="signal-thread-field" style="margin-top:0.55rem;">
+                    <label for="signal-thread-cycle-application-input">Application</label>
+                    <textarea id="signal-thread-cycle-application-input" rows="3" placeholder="What did you try, choose, test, imagine, or enact?"></textarea>
+                  </div>
+
+                  <div class="signal-thread-field" style="margin-top:0.55rem;">
+                    <label for="signal-thread-cycle-observation-input">Observation</label>
+                    <textarea id="signal-thread-cycle-observation-input" rows="3" placeholder="What happened? What changed?"></textarea>
+                  </div>
+
+                  <div class="signal-thread-field" style="margin-top:0.55rem;">
+                    <label for="signal-thread-cycle-reflection-input">Reflection</label>
+                    <textarea id="signal-thread-cycle-reflection-input" rows="3" placeholder="What did it mean?"></textarea>
+                  </div>
+
+                  <div class="signal-thread-actions" style="margin-top:0.65rem;">
+                    <button class="primary" id="signal-thread-save-cycle-btn">Save Cycle</button>
+                    <span class="message-system">Saves the cycle to this thread.</span>
                   </div>
                 </div>
               </details>
@@ -1324,7 +1367,7 @@
               <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-observations-details">
                 <summary>Recent Observations</summary>
                 <div class="gf-collapsible-panel-body">
-                  <textarea id="signal-thread-observation-input" rows="3" placeholder="Add an observation…"></textarea>
+                  <textarea id="signal-thread-observation-input" rows="3" placeholder="What happened? What changed?"></textarea>
                   <button class="secondary" id="signal-thread-add-observation-btn" style="margin-top:0.35rem;">Add Observation</button>
                   <div id="signal-thread-observations" class="signal-thread-entries"></div>
                 </div>
@@ -1333,9 +1376,16 @@
               <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-reflections-details">
                 <summary>Recent Reflections</summary>
                 <div class="gf-collapsible-panel-body">
-                  <textarea id="signal-thread-reflection-input" rows="3" placeholder="Add a reflection…"></textarea>
+                  <textarea id="signal-thread-reflection-input" rows="3" placeholder="What did it mean?"></textarea>
                   <button class="secondary" id="signal-thread-add-reflection-btn" style="margin-top:0.35rem;">Add Reflection</button>
                   <div id="signal-thread-reflections" class="signal-thread-entries"></div>
+                </div>
+              </details>
+
+              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-saga-cycles-details">
+                <summary>Saga Cycles (History)</summary>
+                <div class="gf-collapsible-panel-body">
+                  <div id="signal-thread-saga-cycles" class="signal-thread-cycles"></div>
                 </div>
               </details>
 
@@ -1344,23 +1394,16 @@
                 <div class="gf-collapsible-panel-body">
                   <div class="signal-thread-field">
                     <label for="signal-thread-source-notes-input">Source Notes</label>
-                    <textarea id="signal-thread-source-notes-input" rows="3" placeholder="What influenced this thread? (e.g. Chat Session 12, roadside note, Builder Mirror exercise)"></textarea>
+                    <textarea id="signal-thread-source-notes-input" rows="3" placeholder="What influenced this thread? (e.g. Chat Session 12, roadside note, field note)"></textarea>
                   </div>
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-saga-cycles-details">
-                <summary>Saga Cycles</summary>
-                <div class="gf-collapsible-panel-body">
-                  <div id="signal-thread-saga-cycles" class="signal-thread-cycles"></div>
-                </div>
-              </details>
-
               <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-export-details">
-                <summary>Exports</summary>
+                <summary>Copy / Export</summary>
                 <div class="gf-collapsible-panel-body">
-                  <button class="secondary" id="signal-thread-export-btn">Export Markdown</button>
-                  <button class="secondary" id="signal-thread-copy-brief-btn" style="margin-left:0.35rem;">Copy Brief</button>
+                  <button class="secondary" id="signal-thread-copy-brief-btn">Copy Brief</button>
+                  <button class="secondary" id="signal-thread-export-btn" style="margin-left:0.35rem;">Export Markdown</button>
                 </div>
               </details>
             </div>

@@ -2673,6 +2673,24 @@ button.secondary:disabled {
   margin-top: 0.55rem;
 }
 
+.signal-thread-anchor-panel {
+  border-color: hsla(38, 100%, 70%, 0.18);
+  background: linear-gradient(180deg, hsla(38, 100%, 70%, 0.04), hsla(120, 16%, 5%, 0.72));
+}
+
+.signal-thread-anchor-panel > summary {
+  color: var(--gf-wire-amber);
+}
+
+.signal-thread-cycle-panel {
+  border-color: hsla(140, 100%, 70%, 0.18);
+  background: linear-gradient(180deg, hsla(140, 100%, 70%, 0.035), hsla(120, 16%, 5%, 0.72));
+}
+
+.signal-thread-cycle-panel > summary {
+  color: var(--gf-wire-amber);
+}
+
 .signal-thread-pressure-panel {
   border-color: hsla(20, 75%, 40%, 0.35);
   background: linear-gradient(180deg, hsla(20, 75%, 40%, 0.06), hsla(120, 16%, 5%, 0.72));
