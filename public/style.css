@@ -2564,6 +2564,21 @@ button.secondary:disabled {
   padding: 1rem 1.1rem;
 }
 
+.saga-smith-panel {
+  width: min(980px, 96vw);
+}
+
+.saga-smith-body {
+  padding: 1rem 1.1rem;
+}
+
+.saga-smith-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .signal-threads-layout {
   display: flex;
   gap: 1rem;

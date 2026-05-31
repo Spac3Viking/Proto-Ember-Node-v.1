@@ -310,6 +310,22 @@
                   </div>
                   <div id="sys-signal-threads-status" class="message-system" style="margin-top:0.35rem;"></div>
                 </div>
+                <div class="ember-card system-block" id="sys-saga-smith-card">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
+                    <div class="system-block-title" style="margin:0;">Saga Smith</div>
+                    <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                      <button class="secondary" id="sys-saga-smith-open-btn" style="font-size:0.75rem; padding:0.2rem 0.6rem;">Open</button>
+                    </div>
+                  </div>
+                  <p class="system-future-note" style="margin-top:0.55rem;">
+                    Practice layer for continuity: application → observation → reflection → compression.
+                  </p>
+                  <div class="system-row">
+                    <span class="system-key">Vessel</span>
+                    <span class="system-val">Signal Threads</span>
+                  </div>
+                  <div id="sys-saga-smith-status" class="message-system" style="margin-top:0.35rem;"></div>
+                </div>
                 <div class="ember-card system-block">
                   <div class="system-block-title">Knowledge Index</div>
                   <div class="system-row">
@@ -1287,6 +1303,72 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="source-inspector-overlay" id="saga-smith-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Saga Smith">
+    <div class="source-inspector-panel saga-smith-panel">
+      <div class="source-inspector-header">
+        <span class="source-inspector-title">⌁ Saga Smith</span>
+        <button class="source-inspector-close" id="saga-smith-close" aria-label="Close Saga Smith">✕</button>
+      </div>
+      <div class="source-inspector-body saga-smith-body">
+        <p class="message-system" style="margin-top:0;">
+          A Signal Thread carries continuity across cycles. Application tests understanding. Observation grounds the thread. Reflection gives the cycle meaning. Compression preserves what is worth carrying forward.
+        </p>
+
+        <div class="signal-thread-grid" style="margin-top:0.6rem;">
+          <div class="signal-thread-field">
+            <label for="saga-smith-thread-select">Signal Thread</label>
+            <select id="saga-smith-thread-select" class="gf-select"></select>
+          </div>
+          <div class="signal-thread-field">
+            <label for="saga-smith-mode-select">Thread Mode (this cycle)</label>
+            <select id="saga-smith-mode-select" class="gf-select">
+              <option value="exploratory">exploratory</option>
+              <option value="real">real</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="saga-smith-actions" style="margin-top:0.35rem;">
+          <button class="secondary" id="saga-smith-open-threads-btn">Open Signal Threads</button>
+          <button class="secondary" id="saga-smith-create-thread-btn">Create Signal Thread</button>
+          <span class="message-system" id="saga-smith-status">—</span>
+        </div>
+
+        <div class="signal-thread-field" style="margin-top:0.85rem;">
+          <label for="saga-smith-situation-input">Situation</label>
+          <textarea id="saga-smith-situation-input" rows="3" placeholder="What is happening? What pressure or question is in motion?"></textarea>
+          <div class="message-system" style="margin-top:0.25rem;">Ground it. Pressure, not exposition.</div>
+        </div>
+
+        <div class="signal-thread-field" style="margin-top:0.65rem;">
+          <label for="saga-smith-application-input">Application</label>
+          <textarea id="saga-smith-application-input" rows="3" placeholder="What did you try, choose, test, imagine, discuss, roll, or enact?"></textarea>
+          <div class="message-system" style="margin-top:0.25rem;">This is where understanding leaves abstraction.</div>
+        </div>
+
+        <div class="signal-thread-grid" style="margin-top:0.65rem;">
+          <div class="signal-thread-field">
+            <label for="saga-smith-observation-input">Observation</label>
+            <textarea id="saga-smith-observation-input" rows="4" placeholder="What happened? What changed? What did reality or simulation reveal?"></textarea>
+          </div>
+          <div class="signal-thread-field">
+            <label for="saga-smith-reflection-input">Reflection</label>
+            <textarea id="saga-smith-reflection-input" rows="4" placeholder="What did this mean? What shifted? What remains unresolved?"></textarea>
+          </div>
+        </div>
+
+        <div class="signal-thread-field" style="margin-top:0.65rem;">
+          <label for="saga-smith-compression-input">Current Compression</label>
+          <textarea id="saga-smith-compression-input" rows="3" placeholder="What is worth carrying forward? (user-controlled)"></textarea>
+        </div>
+
+        <div class="saga-smith-actions" style="margin-top:0.65rem;">
+          <button class="primary" id="saga-smith-save-btn">Save Cycle to Thread</button>
         </div>
       </div>
     </div>

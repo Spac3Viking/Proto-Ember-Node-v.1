@@ -887,8 +887,13 @@ async function loadSignalThreadsSummary() {
 
     const countEl = document.getElementById('sys-signal-threads-count');
     const statusEl = document.getElementById('sys-signal-threads-status');
+    const sagaStatusEl = document.getElementById('sys-saga-smith-status');
     if (countEl) countEl.textContent = threads ? String(threads.length) : '—';
     if (statusEl) statusEl.textContent = threads ? 'Meaning continuity available.' : 'Signal Threads unavailable.';
+    if (sagaStatusEl) {
+        if (!threads) sagaStatusEl.textContent = 'Saga Smith unavailable.';
+        else sagaStatusEl.textContent = threads.length > 0 ? 'Ready for a continuity cycle.' : 'Create a Signal Thread to begin.';
+    }
 }
 
 function openSignalThreadsOverlay() {
@@ -1080,6 +1085,148 @@ async function exportActiveSignalThread() {
         showFlashMessage('Export downloaded.');
     } catch {
         showFlashMessage('Could not reach server.');
+    }
+}
+
+/* ================================================================
+   Phase 17F — Saga Smith (continuity practice)
+   ================================================================ */
+
+let _sagaSmithThreadId = null;
+let _sagaSmithThread = null;
+
+function openSagaSmithOverlay() {
+    const overlay = document.getElementById('saga-smith-overlay');
+    if (overlay) overlay.style.display = 'flex';
+}
+
+function closeSagaSmithOverlay() {
+    const overlay = document.getElementById('saga-smith-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+function _setSagaSmithStatus(text) {
+    const el = document.getElementById('saga-smith-status');
+    if (el) el.textContent = String(text || '').trim() || '—';
+}
+
+function _renderSagaSmithThreadOptions(selectEl, threads) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    const list = Array.isArray(threads) ? threads : [];
+    if (list.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No Signal Threads yet';
+        selectEl.appendChild(opt);
+        selectEl.disabled = true;
+        return;
+    }
+    selectEl.disabled = false;
+    list.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = String(t.id || '');
+        opt.textContent = String(t.title || 'Untitled');
+        selectEl.appendChild(opt);
+    });
+}
+
+async function setSagaSmithActiveThread(threadId) {
+    const id = String(threadId || '').trim();
+    _sagaSmithThreadId = id || null;
+    _sagaSmithThread = null;
+
+    const compressionInput = document.getElementById('saga-smith-compression-input');
+    if (compressionInput) compressionInput.value = '';
+
+    if (!id) return;
+    const thread = await fetchSignalThread(id);
+    if (!thread) {
+        _setSagaSmithStatus('Could not load Signal Thread.');
+        return;
+    }
+    _sagaSmithThread = thread;
+    if (compressionInput) compressionInput.value = typeof thread.compression === 'string' ? thread.compression : '';
+}
+
+async function refreshSagaSmithOverlay() {
+    _setSagaSmithStatus('Loading…');
+    const selectEl = document.getElementById('saga-smith-thread-select');
+    const saveBtn = document.getElementById('saga-smith-save-btn');
+
+    const threads = await fetchSignalThreadsList();
+    if (!threads) {
+        _renderSagaSmithThreadOptions(selectEl, []);
+        if (saveBtn) saveBtn.disabled = true;
+        _setSagaSmithStatus('Saga Smith unavailable.');
+        return;
+    }
+
+    _signalThreadsListSnapshot = threads;
+    _renderSagaSmithThreadOptions(selectEl, threads);
+    if (saveBtn) saveBtn.disabled = threads.length === 0;
+
+    if (threads.length === 0) {
+        _setSagaSmithStatus('Create a Signal Thread to begin.');
+        return;
+    }
+
+    const desiredId = (_sagaSmithThreadId && threads.some(t => t.id === _sagaSmithThreadId))
+        ? _sagaSmithThreadId
+        : String(threads[0].id || '');
+    if (selectEl) selectEl.value = desiredId;
+    await setSagaSmithActiveThread(desiredId);
+    _setSagaSmithStatus('Ready.');
+}
+
+async function saveSagaSmithCycle() {
+    const selectEl = document.getElementById('saga-smith-thread-select');
+    const modeEl = document.getElementById('saga-smith-mode-select');
+    const situationEl = document.getElementById('saga-smith-situation-input');
+    const applicationEl = document.getElementById('saga-smith-application-input');
+    const observationEl = document.getElementById('saga-smith-observation-input');
+    const reflectionEl = document.getElementById('saga-smith-reflection-input');
+    const compressionEl = document.getElementById('saga-smith-compression-input');
+
+    const threadId = selectEl ? String(selectEl.value || '').trim() : '';
+    if (!threadId) {
+        _setSagaSmithStatus('Select or create a Signal Thread first.');
+        return;
+    }
+
+    const mode = modeEl ? String(modeEl.value || '').trim() : 'exploratory';
+    const situation = situationEl ? situationEl.value : '';
+    const application = applicationEl ? applicationEl.value : '';
+    const observation = observationEl ? observationEl.value : '';
+    const reflection = reflectionEl ? reflectionEl.value : '';
+    const compression = compressionEl ? compressionEl.value : '';
+
+    _setSagaSmithStatus('Saving…');
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/saga-cycle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, situation, application, observation, reflection, compression }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success || !data.thread) {
+            _setSagaSmithStatus(data && data.error ? data.error : 'Could not save cycle.');
+            return;
+        }
+
+        if (situationEl) situationEl.value = '';
+        if (applicationEl) applicationEl.value = '';
+        if (observationEl) observationEl.value = '';
+        if (reflectionEl) reflectionEl.value = '';
+
+        _sagaSmithThread = data.thread;
+        _sagaSmithThreadId = data.thread.id;
+        if (compressionEl) compressionEl.value = typeof data.thread.compression === 'string' ? data.thread.compression : '';
+        _setSagaSmithStatus('Saved to thread.');
+        showFlashMessage('Cycle saved to Signal Thread.');
+        loadSignalThreadsSummary();
+    } catch {
+        _setSagaSmithStatus('Could not reach server.');
     }
 }
 
@@ -9697,6 +9844,14 @@ function renderSystemStartupSummary(data) {
                 await refreshSignalThreadsOverlay({ createNew: true });
             });
         }
+
+        const sysSagaSmithOpenBtn = document.getElementById('sys-saga-smith-open-btn');
+        if (sysSagaSmithOpenBtn) {
+            sysSagaSmithOpenBtn.addEventListener('click', async () => {
+                openSagaSmithOverlay();
+                await refreshSagaSmithOverlay();
+            });
+        }
     });
 })();
 
@@ -9811,6 +9966,43 @@ async function launchOllama(runtimeId) {
 
     const addObservationBtn = document.getElementById('signal-thread-add-observation-btn');
     if (addObservationBtn) addObservationBtn.addEventListener('click', addObservationToActiveThread);
+
+    const sagaOverlay = document.getElementById('saga-smith-overlay');
+    const sagaClose = document.getElementById('saga-smith-close');
+    if (sagaClose) sagaClose.addEventListener('click', closeSagaSmithOverlay);
+    if (sagaOverlay) {
+        sagaOverlay.addEventListener('click', e => {
+            if (e.target === sagaOverlay) closeSagaSmithOverlay();
+        });
+    }
+
+    const sagaThreadSelect = document.getElementById('saga-smith-thread-select');
+    if (sagaThreadSelect) {
+        sagaThreadSelect.addEventListener('change', async () => {
+            await setSagaSmithActiveThread(sagaThreadSelect.value);
+        });
+    }
+
+    const sagaOpenThreadsBtn = document.getElementById('saga-smith-open-threads-btn');
+    if (sagaOpenThreadsBtn) {
+        sagaOpenThreadsBtn.addEventListener('click', async () => {
+            closeSagaSmithOverlay();
+            openSignalThreadsOverlay();
+            await refreshSignalThreadsOverlay({ createNew: false });
+        });
+    }
+
+    const sagaCreateThreadBtn = document.getElementById('saga-smith-create-thread-btn');
+    if (sagaCreateThreadBtn) {
+        sagaCreateThreadBtn.addEventListener('click', async () => {
+            closeSagaSmithOverlay();
+            openSignalThreadsOverlay();
+            await refreshSignalThreadsOverlay({ createNew: true });
+        });
+    }
+
+    const sagaSaveBtn = document.getElementById('saga-smith-save-btn');
+    if (sagaSaveBtn) sagaSaveBtn.addEventListener('click', saveSagaSmithCycle);
 
     // Chat refs clear button
     const clearRefsBtn = document.getElementById('clear-chat-refs');

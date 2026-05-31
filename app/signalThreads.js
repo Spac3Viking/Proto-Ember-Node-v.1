@@ -23,6 +23,11 @@ const SIGNAL_THREAD_STATUSES = Object.freeze([
     'archived',
 ]);
 
+const SAGA_CYCLE_MODES = Object.freeze([
+    'exploratory',
+    'real',
+]);
+
 function _nowIso() {
     return new Date().toISOString();
 }
@@ -233,6 +238,100 @@ function setCompression(threadId, compression) {
     return saveSignalThread(thread);
 }
 
+function _normalizeSagaMode(mode) {
+    const value = String(mode || '').trim().toLowerCase();
+    return SAGA_CYCLE_MODES.includes(value) ? value : null;
+}
+
+function _pushThreadEntry(thread, { prefix, content, timestamp }) {
+    const text = String(content || '').trim();
+    if (!text) throw new Error(prefix + ' content is required');
+    const now = timestamp || _nowIso();
+    const entry = {
+        id: prefix + '-' + crypto.randomUUID(),
+        timestamp: now,
+        content: text,
+    };
+    return entry;
+}
+
+function _buildSagaCycleObservationContent({ mode, situation, application, observation }) {
+    const lines = [];
+    lines.push('Saga Smith — Cycle');
+    lines.push('Mode: ' + mode);
+
+    const sit = String(situation || '').trim();
+    if (sit) {
+        lines.push('');
+        lines.push('Situation');
+        lines.push(sit);
+    }
+
+    const app = String(application || '').trim();
+    if (app) {
+        lines.push('');
+        lines.push('Application');
+        lines.push(app);
+    }
+
+    lines.push('');
+    lines.push('Observation');
+    lines.push(String(observation || '').trim());
+    return lines.join('\n');
+}
+
+function _buildSagaCycleReflectionContent({ mode, reflection }) {
+    const lines = [];
+    lines.push('Saga Smith — Reflection');
+    lines.push('Mode: ' + mode);
+    lines.push('');
+    lines.push('Reflection');
+    lines.push(String(reflection || '').trim());
+    return lines.join('\n');
+}
+
+function saveSagaCycle(threadId, cycle) {
+    const thread = loadSignalThread(threadId);
+    if (!thread) return null;
+    const body = cycle && typeof cycle === 'object' ? cycle : {};
+
+    const mode = _normalizeSagaMode(body.mode);
+    if (!mode) throw new Error('Invalid saga mode');
+
+    const observationText = String(body.observation || '').trim();
+    const reflectionText = String(body.reflection || '').trim();
+    if (!observationText) throw new Error('Observation content is required');
+    if (!reflectionText) throw new Error('Reflection content is required');
+
+    const stamp = _nowIso();
+    const observationEntry = _pushThreadEntry(thread, {
+        prefix: 'observation',
+        content: _buildSagaCycleObservationContent({
+            mode,
+            situation: body.situation,
+            application: body.application,
+            observation: observationText,
+        }),
+        timestamp: stamp,
+    });
+    const reflectionEntry = _pushThreadEntry(thread, {
+        prefix: 'reflection',
+        content: _buildSagaCycleReflectionContent({ mode, reflection: reflectionText }),
+        timestamp: stamp,
+    });
+
+    thread.observations.push(observationEntry);
+    thread.reflections.push(reflectionEntry);
+
+    if (typeof body.compression === 'string') {
+        thread.compression = body.compression;
+    }
+
+    thread.updatedAt = stamp;
+    saveSignalThread(thread);
+    return { thread, observation: observationEntry, reflection: reflectionEntry };
+}
+
 function exportSignalThreadMarkdown(thread) {
     const t = normalizeSignalThread(thread);
     const lines = [];
@@ -277,6 +376,7 @@ function exportSignalThreadMarkdown(thread) {
 module.exports = {
     SIGNAL_THREAD_POSTURES,
     SIGNAL_THREAD_STATUSES,
+    SAGA_CYCLE_MODES,
     normalizeSignalThread,
     listSignalThreads,
     loadSignalThread,
@@ -287,6 +387,6 @@ module.exports = {
     addReflection,
     addObservation,
     setCompression,
+    saveSagaCycle,
     exportSignalThreadMarkdown,
 };
-
