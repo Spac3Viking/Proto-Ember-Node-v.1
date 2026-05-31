@@ -907,11 +907,23 @@ function renderSignalThreadOverviewMeta(host, thread) {
     const observations = Array.isArray(t.observations) ? t.observations.length : 0;
     const cycles = deriveSagaCycles(t).length;
 
+    function previewText(text, fallback = '—') {
+        const raw = String(text || '').trim();
+        if (!raw) return fallback;
+        const firstLine = raw.split('\n')[0].trim();
+        const short = firstLine.length > 84 ? firstLine.slice(0, 84).trimEnd() + '…' : firstLine;
+        return short || fallback;
+    }
+
     const items = [
+        ['compression', previewText(t.compression)],
+        ['situation', previewText(t.currentSituation)],
+        ['pressure', previewText(t.openPressure)],
+        ['mirror', '—'],
         ['created', t.createdAt ? String(t.createdAt) : '—'],
-        ['updated', t.updatedAt ? String(t.updatedAt) : '—'],
-        ['reflections', String(reflections)],
+        ['last updated', t.updatedAt ? String(t.updatedAt) : '—'],
         ['observations', String(observations)],
+        ['reflections', String(reflections)],
         ['cycles', cycles ? String(cycles) : '—'],
     ];
 
@@ -947,6 +959,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     const situationInput = document.getElementById('signal-thread-current-situation-input');
     const pressureInput = document.getElementById('signal-thread-open-pressure-input');
     const compressionInput = document.getElementById('signal-thread-compression-input');
+    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
     const saveBtn = document.getElementById('signal-thread-save-btn');
 
     if (titleInput) titleInput.value = thread && thread.title ? thread.title : '';
@@ -957,6 +970,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (situationInput) situationInput.value = thread && typeof thread.currentSituation === 'string' ? thread.currentSituation : '';
     if (pressureInput) pressureInput.value = thread && typeof thread.openPressure === 'string' ? thread.openPressure : '';
     if (compressionInput) compressionInput.value = thread && typeof thread.compression === 'string' ? thread.compression : '';
+    if (sourceNotesInput) sourceNotesInput.value = thread && typeof thread.sourceNotes === 'string' ? thread.sourceNotes : '';
     if (saveBtn) saveBtn.textContent = createMode ? 'Create' : 'Save';
 
     const overviewMetaHost = document.getElementById('signal-thread-overview-meta');
@@ -1091,6 +1105,7 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
             currentSituation: '',
             openPressure: '',
             compression: '',
+            sourceNotes: '',
             tags: [],
             reflections: [],
             observations: [],
@@ -1117,6 +1132,7 @@ async function saveActiveSignalThread() {
     const situationInput = document.getElementById('signal-thread-current-situation-input');
     const pressureInput = document.getElementById('signal-thread-open-pressure-input');
     const compressionInput = document.getElementById('signal-thread-compression-input');
+    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
 
     const title = titleInput ? titleInput.value : '';
     const posture = postureSelect ? postureSelect.value : 'exploratory';
@@ -1125,6 +1141,7 @@ async function saveActiveSignalThread() {
     const currentSituation = situationInput ? situationInput.value : '';
     const openPressure = pressureInput ? pressureInput.value : '';
     const compression = compressionInput ? compressionInput.value : '';
+    const sourceNotes = sourceNotesInput ? sourceNotesInput.value : '';
     const tags = parseTagsFromInput(tagsInput ? tagsInput.value : '');
 
     try {
@@ -1132,7 +1149,7 @@ async function saveActiveSignalThread() {
             const res = await fetch('/api/signal-threads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, posture, summary, tags, currentSituation, openPressure }),
+                body: JSON.stringify({ title, posture, summary, tags, currentSituation, openPressure, sourceNotes }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data || !data.success || !data.thread) {
@@ -1156,7 +1173,7 @@ async function saveActiveSignalThread() {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, posture, status, summary, currentSituation, openPressure, compression, tags }),
+            body: JSON.stringify({ title, posture, status, summary, currentSituation, openPressure, compression, sourceNotes, tags }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success || !data.thread) {
@@ -1254,6 +1271,21 @@ async function exportActiveSignalThread() {
         a.remove();
         URL.revokeObjectURL(url);
         showFlashMessage('Export downloaded.');
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function copyActiveSignalThreadBrief() {
+    if (!_activeSignalThreadId) return;
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/brief');
+        if (!res.ok) {
+            showFlashMessage('Copy Brief failed.');
+            return;
+        }
+        const text = await res.text();
+        await copyPlainText(text || '', 'Brief copied.', 'Could not copy brief.');
     } catch {
         showFlashMessage('Could not reach server.');
     }
@@ -10131,6 +10163,9 @@ async function launchOllama(runtimeId) {
 
     const signalExportBtn = document.getElementById('signal-thread-export-btn');
     if (signalExportBtn) signalExportBtn.addEventListener('click', exportActiveSignalThread);
+
+    const signalCopyBriefBtn = document.getElementById('signal-thread-copy-brief-btn');
+    if (signalCopyBriefBtn) signalCopyBriefBtn.addEventListener('click', copyActiveSignalThreadBrief);
 
     const addReflectionBtn = document.getElementById('signal-thread-add-reflection-btn');
     if (addReflectionBtn) addReflectionBtn.addEventListener('click', addReflectionToActiveThread);

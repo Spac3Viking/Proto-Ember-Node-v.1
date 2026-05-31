@@ -68,9 +68,9 @@ describe('Phase 17F — Saga Smith ignition layer', () => {
 
         const exportRes = await request(app).get('/api/signal-threads/' + encodeURIComponent(threadId) + '/export');
         expect(exportRes.status).toBe(200);
-        expect(exportRes.text).toContain('## Observations');
+        expect(exportRes.text).toContain('## Recent Observations');
         expect(exportRes.text).toContain('Saga Smith — Cycle');
-        expect(exportRes.text).toContain('## Reflections');
+        expect(exportRes.text).toContain('## Recent Reflections');
         expect(exportRes.text).toContain('Saga Smith — Reflection');
     });
 
@@ -109,4 +109,3 @@ describe('Phase 17F — Saga Smith ignition layer', () => {
         expect(fetched.body.thread.observations.map(o => o.content).join('\n')).toContain('Mode: real');
     });
 });
-

@@ -33,6 +33,7 @@ const {
     setCompression,
     saveSagaCycle,
     exportSignalThreadMarkdown,
+    exportSignalThreadBrief,
 } = require('../signalThreads');
 
 const router = express.Router();
@@ -53,7 +54,7 @@ router.get('/api/signal-threads', readLimiter, (req, res) => {
 });
 
 router.post('/api/signal-threads', writeLimiter, (req, res) => {
-    const { title, posture, summary, tags, currentSituation, openPressure } = req.body || {};
+    const { title, posture, summary, tags, currentSituation, openPressure, sourceNotes } = req.body || {};
     const t = String(title || '').trim();
     if (!t) return res.status(400).json({ error: 'Title is required' });
     const p = String(posture || '').trim().toLowerCase();
@@ -67,6 +68,7 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
             summary: String(summary || ''),
             currentSituation: String(currentSituation || ''),
             openPressure: String(openPressure || ''),
+            sourceNotes: String(sourceNotes || ''),
             tags: Array.isArray(tags) ? tags : [],
         });
         res.json({ success: true, thread });
@@ -156,6 +158,14 @@ router.get('/api/signal-threads/:id/export', readLimiter, (req, res) => {
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
     res.send(md);
+});
+
+router.get('/api/signal-threads/:id/brief', readLimiter, (req, res) => {
+    const thread = loadSignalThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+    const brief = exportSignalThreadBrief(thread);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(brief);
 });
 
 module.exports = router;
