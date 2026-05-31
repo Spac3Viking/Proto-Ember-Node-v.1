@@ -947,6 +947,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     const situationInput = document.getElementById('signal-thread-current-situation-input');
     const pressureInput = document.getElementById('signal-thread-open-pressure-input');
     const compressionInput = document.getElementById('signal-thread-compression-input');
+    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
     const saveBtn = document.getElementById('signal-thread-save-btn');
 
     if (titleInput) titleInput.value = thread && thread.title ? thread.title : '';
@@ -957,6 +958,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (situationInput) situationInput.value = thread && typeof thread.currentSituation === 'string' ? thread.currentSituation : '';
     if (pressureInput) pressureInput.value = thread && typeof thread.openPressure === 'string' ? thread.openPressure : '';
     if (compressionInput) compressionInput.value = thread && typeof thread.compression === 'string' ? thread.compression : '';
+    if (sourceNotesInput) sourceNotesInput.value = thread && typeof thread.sourceNotes === 'string' ? thread.sourceNotes : '';
     if (saveBtn) saveBtn.textContent = createMode ? 'Create' : 'Save';
 
     const overviewMetaHost = document.getElementById('signal-thread-overview-meta');
@@ -1091,6 +1093,7 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
             currentSituation: '',
             openPressure: '',
             compression: '',
+            sourceNotes: '',
             tags: [],
             reflections: [],
             observations: [],
@@ -1117,6 +1120,7 @@ async function saveActiveSignalThread() {
     const situationInput = document.getElementById('signal-thread-current-situation-input');
     const pressureInput = document.getElementById('signal-thread-open-pressure-input');
     const compressionInput = document.getElementById('signal-thread-compression-input');
+    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
 
     const title = titleInput ? titleInput.value : '';
     const posture = postureSelect ? postureSelect.value : 'exploratory';
@@ -1125,6 +1129,7 @@ async function saveActiveSignalThread() {
     const currentSituation = situationInput ? situationInput.value : '';
     const openPressure = pressureInput ? pressureInput.value : '';
     const compression = compressionInput ? compressionInput.value : '';
+    const sourceNotes = sourceNotesInput ? sourceNotesInput.value : '';
     const tags = parseTagsFromInput(tagsInput ? tagsInput.value : '');
 
     try {
@@ -1132,7 +1137,7 @@ async function saveActiveSignalThread() {
             const res = await fetch('/api/signal-threads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, posture, summary, tags, currentSituation, openPressure }),
+                body: JSON.stringify({ title, posture, summary, tags, currentSituation, openPressure, sourceNotes }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data || !data.success || !data.thread) {
@@ -1156,7 +1161,7 @@ async function saveActiveSignalThread() {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, posture, status, summary, currentSituation, openPressure, compression, tags }),
+            body: JSON.stringify({ title, posture, status, summary, currentSituation, openPressure, compression, sourceNotes, tags }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success || !data.thread) {

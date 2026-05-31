@@ -2673,6 +2673,20 @@ button.secondary:disabled {
   margin-top: 0.55rem;
 }
 
+.signal-thread-pressure-panel {
+  border-color: hsla(20, 75%, 40%, 0.35);
+  background: linear-gradient(180deg, hsla(20, 75%, 40%, 0.06), hsla(120, 16%, 5%, 0.72));
+}
+
+.signal-thread-pressure-panel > summary {
+  color: var(--gf-wire-gold);
+}
+
+.signal-thread-pressure-panel textarea:focus {
+  border-color: hsla(20, 75%, 40%, 0.55);
+  box-shadow: 0 0 0 2px hsla(20, 75%, 40%, 0.14);
+}
+
 .signal-thread-overview-meta {
   margin-top: 0.55rem;
   font-size: 0.72rem;

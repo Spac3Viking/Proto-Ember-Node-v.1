@@ -102,6 +102,7 @@ function normalizeSignalThread(raw) {
         summary: String(data.summary || ''),
         currentSituation: String(data.currentSituation || ''),
         openPressure: String(data.openPressure || ''),
+        sourceNotes: String(data.sourceNotes || ''),
         reflections: Array.isArray(data.reflections) ? data.reflections.map(_normalizeEntry) : [],
         observations: Array.isArray(data.observations) ? data.observations.map(_normalizeEntry) : [],
         compression: String(data.compression || ''),
@@ -166,6 +167,7 @@ function createSignalThread(input) {
         summary: String(body.summary || ''),
         currentSituation: String(body.currentSituation || ''),
         openPressure: String(body.openPressure || ''),
+        sourceNotes: String(body.sourceNotes || ''),
         reflections: [],
         observations: [],
         compression: '',
@@ -188,6 +190,7 @@ function updateSignalThread(id, patch) {
     if (typeof data.summary === 'string') existing.summary = data.summary;
     if (typeof data.currentSituation === 'string') existing.currentSituation = data.currentSituation;
     if (typeof data.openPressure === 'string') existing.openPressure = data.openPressure;
+    if (typeof data.sourceNotes === 'string') existing.sourceNotes = data.sourceNotes;
     if (typeof data.compression === 'string') existing.compression = data.compression;
     if (Array.isArray(data.tags)) existing.tags = _normalizeTags(data.tags);
 

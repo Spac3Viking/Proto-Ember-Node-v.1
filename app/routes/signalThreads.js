@@ -53,7 +53,7 @@ router.get('/api/signal-threads', readLimiter, (req, res) => {
 });
 
 router.post('/api/signal-threads', writeLimiter, (req, res) => {
-    const { title, posture, summary, tags, currentSituation, openPressure } = req.body || {};
+    const { title, posture, summary, tags, currentSituation, openPressure, sourceNotes } = req.body || {};
     const t = String(title || '').trim();
     if (!t) return res.status(400).json({ error: 'Title is required' });
     const p = String(posture || '').trim().toLowerCase();
@@ -67,6 +67,7 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
             summary: String(summary || ''),
             currentSituation: String(currentSituation || ''),
             openPressure: String(openPressure || ''),
+            sourceNotes: String(sourceNotes || ''),
             tags: Array.isArray(tags) ? tags : [],
         });
         res.json({ success: true, thread });
