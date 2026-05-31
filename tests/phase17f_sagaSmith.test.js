@@ -68,6 +68,13 @@ describe('Phase 17F — Saga Smith ignition layer', () => {
 
         const exportRes = await request(app).get('/api/signal-threads/' + encodeURIComponent(threadId) + '/export');
         expect(exportRes.status).toBe(200);
+        expect(exportRes.text).toContain('## Application / Observation / Reflection');
+        expect(exportRes.text).toContain('Application');
+        expect(exportRes.text).toContain('I practiced naming the constraint without blame.');
+        expect(exportRes.text).toContain('Observation');
+        expect(exportRes.text).toContain('The tone softened after I stated the boundary clearly.');
+        expect(exportRes.text).toContain('Reflection');
+        expect(exportRes.text).toContain('Clarity reduced defensiveness. I need to repeat this calmly.');
         expect(exportRes.text).toContain('## Recent Observations');
         expect(exportRes.text).toContain('Saga Smith — Cycle');
         expect(exportRes.text).toContain('## Recent Reflections');

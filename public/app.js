@@ -916,15 +916,12 @@ function renderSignalThreadOverviewMeta(host, thread) {
     }
 
     const items = [
-        ['compression', previewText(t.compression)],
-        ['situation', previewText(t.currentSituation)],
-        ['pressure', previewText(t.openPressure)],
-        ['mirror', '—'],
         ['created', t.createdAt ? String(t.createdAt) : '—'],
         ['last updated', t.updatedAt ? String(t.updatedAt) : '—'],
         ['observations', String(observations)],
         ['reflections', String(reflections)],
         ['cycles', cycles ? String(cycles) : '—'],
+        ['note', previewText(t.summary)],
     ];
 
     items.forEach(([key, val]) => {
@@ -972,6 +969,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (compressionInput) compressionInput.value = thread && typeof thread.compression === 'string' ? thread.compression : '';
     if (sourceNotesInput) sourceNotesInput.value = thread && typeof thread.sourceNotes === 'string' ? thread.sourceNotes : '';
     if (saveBtn) saveBtn.textContent = createMode ? 'Create' : 'Save';
+    if (createMode && titleInput) setTimeout(() => titleInput.focus(), 0);
 
     const overviewMetaHost = document.getElementById('signal-thread-overview-meta');
     renderSignalThreadOverviewMeta(overviewMetaHost, thread);
@@ -983,6 +981,8 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
 
     const sagaCyclesHost = document.getElementById('signal-thread-saga-cycles');
     renderSignalThreadSagaCycles(sagaCyclesHost, thread);
+
+    clearSignalThreadCycleInputs();
 }
 
 function showSignalThreadEmptyState() {
@@ -992,6 +992,113 @@ function showSignalThreadEmptyState() {
     const editor = document.getElementById('signal-thread-editor');
     if (empty) empty.style.display = '';
     if (editor) editor.style.display = 'none';
+}
+
+function clearSignalThreadCycleInputs() {
+    const modeEl = document.getElementById('signal-thread-cycle-mode-select');
+    const situationEl = document.getElementById('signal-thread-cycle-situation-input');
+    const applicationEl = document.getElementById('signal-thread-cycle-application-input');
+    const observationEl = document.getElementById('signal-thread-cycle-observation-input');
+    const reflectionEl = document.getElementById('signal-thread-cycle-reflection-input');
+
+    if (modeEl) modeEl.value = 'real';
+    if (situationEl) situationEl.value = '';
+    if (applicationEl) applicationEl.value = '';
+    if (observationEl) observationEl.value = '';
+    if (reflectionEl) reflectionEl.value = '';
+}
+
+function _readSignalThreadEditorPayload() {
+    const titleInput = document.getElementById('signal-thread-title-input');
+    const postureSelect = document.getElementById('signal-thread-posture-select');
+    const statusSelect = document.getElementById('signal-thread-status-select');
+    const tagsInput = document.getElementById('signal-thread-tags-input');
+    const summaryInput = document.getElementById('signal-thread-summary-input');
+    const situationInput = document.getElementById('signal-thread-current-situation-input');
+    const pressureInput = document.getElementById('signal-thread-open-pressure-input');
+    const compressionInput = document.getElementById('signal-thread-compression-input');
+    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
+
+    const title = titleInput ? titleInput.value : '';
+    const posture = postureSelect ? postureSelect.value : 'exploratory';
+    const status = statusSelect ? statusSelect.value : 'active';
+    const summary = summaryInput ? summaryInput.value : '';
+    const currentSituation = situationInput ? situationInput.value : '';
+    const openPressure = pressureInput ? pressureInput.value : '';
+    const compression = compressionInput ? compressionInput.value : '';
+    const sourceNotes = sourceNotesInput ? sourceNotesInput.value : '';
+    const tags = parseTagsFromInput(tagsInput ? tagsInput.value : '');
+
+    return {
+        title,
+        posture,
+        status,
+        summary,
+        currentSituation,
+        openPressure,
+        compression,
+        sourceNotes,
+        tags,
+    };
+}
+
+async function persistActiveSignalThreadFromEditor({ createIfMissing = false } = {}) {
+    const payload = _readSignalThreadEditorPayload();
+    const title = String(payload.title || '').trim();
+    if (!title) {
+        showFlashMessage('Title is required.');
+        return null;
+    }
+
+    try {
+        if (!_activeSignalThreadId) {
+            if (!createIfMissing) return null;
+            const res = await fetch('/api/signal-threads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    posture: payload.posture,
+                    summary: payload.summary,
+                    tags: payload.tags,
+                    currentSituation: payload.currentSituation,
+                    openPressure: payload.openPressure,
+                    sourceNotes: payload.sourceNotes,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data || !data.success || !data.thread) {
+                showFlashMessage(data && data.error ? data.error : 'Could not create thread.');
+                return null;
+            }
+            _activeSignalThreadId = data.thread.id;
+        }
+
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title,
+                posture: payload.posture,
+                status: payload.status,
+                summary: payload.summary,
+                currentSituation: payload.currentSituation,
+                openPressure: payload.openPressure,
+                compression: payload.compression,
+                sourceNotes: payload.sourceNotes,
+                tags: payload.tags,
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success || !data.thread) {
+            showFlashMessage(data && data.error ? data.error : 'Could not save thread.');
+            return null;
+        }
+        return _activeSignalThreadId;
+    } catch {
+        showFlashMessage('Could not reach server.');
+        return null;
+    }
 }
 
 async function fetchSignalThreadsList() {
@@ -1124,25 +1231,7 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
 }
 
 async function saveActiveSignalThread() {
-    const titleInput = document.getElementById('signal-thread-title-input');
-    const postureSelect = document.getElementById('signal-thread-posture-select');
-    const statusSelect = document.getElementById('signal-thread-status-select');
-    const tagsInput = document.getElementById('signal-thread-tags-input');
-    const summaryInput = document.getElementById('signal-thread-summary-input');
-    const situationInput = document.getElementById('signal-thread-current-situation-input');
-    const pressureInput = document.getElementById('signal-thread-open-pressure-input');
-    const compressionInput = document.getElementById('signal-thread-compression-input');
-    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
-
-    const title = titleInput ? titleInput.value : '';
-    const posture = postureSelect ? postureSelect.value : 'exploratory';
-    const status = statusSelect ? statusSelect.value : 'active';
-    const summary = summaryInput ? summaryInput.value : '';
-    const currentSituation = situationInput ? situationInput.value : '';
-    const openPressure = pressureInput ? pressureInput.value : '';
-    const compression = compressionInput ? compressionInput.value : '';
-    const sourceNotes = sourceNotesInput ? sourceNotesInput.value : '';
-    const tags = parseTagsFromInput(tagsInput ? tagsInput.value : '');
+    const { title, posture, status, summary, currentSituation, openPressure, compression, sourceNotes, tags } = _readSignalThreadEditorPayload();
 
     try {
         if (!_activeSignalThreadId) {
@@ -1158,15 +1247,8 @@ async function saveActiveSignalThread() {
             }
             _activeSignalThreadId = data.thread.id;
             showFlashMessage('Signal Thread created.');
+            if (compression) await persistActiveSignalThreadFromEditor();
             await refreshSignalThreadsOverlay({ createNew: false });
-            if (compression) {
-                await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/compression', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ compression }),
-                });
-                await refreshSignalThreadsOverlay({ createNew: false });
-            }
             return;
         }
 
@@ -1286,6 +1368,61 @@ async function copyActiveSignalThreadBrief() {
         }
         const text = await res.text();
         await copyPlainText(text || '', 'Brief copied.', 'Could not copy brief.');
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function saveSignalThreadWorkspaceCycle() {
+    const modeEl = document.getElementById('signal-thread-cycle-mode-select');
+    const cycleSituationEl = document.getElementById('signal-thread-cycle-situation-input');
+    const applicationEl = document.getElementById('signal-thread-cycle-application-input');
+    const observationEl = document.getElementById('signal-thread-cycle-observation-input');
+    const reflectionEl = document.getElementById('signal-thread-cycle-reflection-input');
+
+    const mode = modeEl ? String(modeEl.value || '').trim() : 'real';
+    const cycleSituation = cycleSituationEl ? cycleSituationEl.value : '';
+    const application = applicationEl ? applicationEl.value : '';
+    const observation = observationEl ? observationEl.value : '';
+    const reflection = reflectionEl ? reflectionEl.value : '';
+
+    if (!String(observation || '').trim()) {
+        showFlashMessage('Observation is required.');
+        return;
+    }
+    if (!String(reflection || '').trim()) {
+        showFlashMessage('Reflection is required.');
+        return;
+    }
+
+    const editorPayload = _readSignalThreadEditorPayload();
+    const situation = String(cycleSituation || '').trim() || String(editorPayload.currentSituation || '').trim();
+
+    const threadId = await persistActiveSignalThreadFromEditor({ createIfMissing: true });
+    if (!threadId) return;
+
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/saga-cycle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mode,
+                situation,
+                application,
+                observation,
+                reflection,
+                compression: editorPayload.compression,
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success) {
+            showFlashMessage(data && data.error ? data.error : 'Could not save cycle.');
+            return;
+        }
+
+        clearSignalThreadCycleInputs();
+        showFlashMessage('Cycle saved.');
+        await refreshSignalThreadsOverlay({ createNew: false });
     } catch {
         showFlashMessage('Could not reach server.');
     }
@@ -10157,6 +10294,19 @@ async function launchOllama(runtimeId) {
 
     const signalSaveBtn = document.getElementById('signal-thread-save-btn');
     if (signalSaveBtn) signalSaveBtn.addEventListener('click', saveActiveSignalThread);
+
+    const signalSaveCycleBtn = document.getElementById('signal-thread-save-cycle-btn');
+    if (signalSaveCycleBtn) signalSaveCycleBtn.addEventListener('click', saveSignalThreadWorkspaceCycle);
+
+    function _bindCycleHotkey(el) {
+        if (!el) return;
+        el.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') saveSignalThreadWorkspaceCycle();
+        });
+    }
+
+    _bindCycleHotkey(document.getElementById('signal-thread-cycle-observation-input'));
+    _bindCycleHotkey(document.getElementById('signal-thread-cycle-reflection-input'));
 
     const signalDeleteBtn = document.getElementById('signal-thread-delete-btn');
     if (signalDeleteBtn) signalDeleteBtn.addEventListener('click', deleteActiveSignalThread);

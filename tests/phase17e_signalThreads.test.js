@@ -120,6 +120,7 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(String(exportRes.headers['content-type'] || '')).toContain('text/markdown');
         const md = exportRes.text;
         expect(md).toContain('# Signal Thread');
+        expect(md).toContain('## Overview');
         expect(md).toContain('Title: Signal Thread Test');
         expect(md).toContain('Posture: reflective');
         expect(md).toContain('Status: active');
@@ -131,6 +132,7 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(md).toContain('Exploring the well collapse.');
         expect(md).toContain('## Open Pressure');
         expect(md).toContain('Can we find a new source?');
+        expect(md).toContain('## Application / Observation / Reflection');
         expect(md).toContain('## Source Notes');
         expect(md).toContain('Chat Session 12');
         expect(md).toContain('## Recent Reflections');
@@ -140,10 +142,12 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(md).toContain('We must ration and investigate the source.');
         expect(md).toContain('## Saga Cycles');
 
-        expect(md.indexOf('## Current Compression')).toBeGreaterThanOrEqual(0);
+        expect(md.indexOf('## Overview')).toBeGreaterThanOrEqual(0);
+        expect(md.indexOf('## Current Compression')).toBeGreaterThan(md.indexOf('## Overview'));
         expect(md.indexOf('## Current Situation')).toBeGreaterThan(md.indexOf('## Current Compression'));
         expect(md.indexOf('## Open Pressure')).toBeGreaterThan(md.indexOf('## Current Situation'));
-        expect(md.indexOf('## Recent Observations')).toBeGreaterThan(md.indexOf('## Open Pressure'));
+        expect(md.indexOf('## Application / Observation / Reflection')).toBeGreaterThan(md.indexOf('## Open Pressure'));
+        expect(md.indexOf('## Recent Observations')).toBeGreaterThan(md.indexOf('## Application / Observation / Reflection'));
         expect(md.indexOf('## Recent Reflections')).toBeGreaterThan(md.indexOf('## Recent Observations'));
         expect(md.indexOf('## Source Notes')).toBeGreaterThan(md.indexOf('## Recent Reflections'));
 
@@ -152,6 +156,7 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(String(briefRes.headers['content-type'] || '')).toContain('text/plain');
         const brief = briefRes.text;
         expect(brief).toContain('SIGNAL THREAD');
+        expect(brief).toContain('Overview:');
         expect(brief).toContain('Title: Signal Thread Test');
         expect(brief).toContain('Posture: reflective');
         expect(brief).toContain('Status: active');
@@ -161,16 +166,19 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(brief).toContain('Exploring the well collapse.');
         expect(brief).toContain('Open Pressure:');
         expect(brief).toContain('Can we find a new source?');
+        expect(brief).toContain('Application / Observation / Reflection:');
         expect(brief).toContain('Recent Observations:');
         expect(brief).toContain('Recent Reflections:');
         expect(brief).toContain('Source Notes:');
         expect(brief).toContain('Chat Session 12');
         expect(brief).toContain('Saga Cycles:');
 
-        expect(brief.indexOf('Current Compression:')).toBeGreaterThanOrEqual(0);
+        expect(brief.indexOf('Overview:')).toBeGreaterThanOrEqual(0);
+        expect(brief.indexOf('Current Compression:')).toBeGreaterThan(brief.indexOf('Overview:'));
         expect(brief.indexOf('Current Situation:')).toBeGreaterThan(brief.indexOf('Current Compression:'));
         expect(brief.indexOf('Open Pressure:')).toBeGreaterThan(brief.indexOf('Current Situation:'));
-        expect(brief.indexOf('Recent Observations:')).toBeGreaterThan(brief.indexOf('Open Pressure:'));
+        expect(brief.indexOf('Application / Observation / Reflection:')).toBeGreaterThan(brief.indexOf('Open Pressure:'));
+        expect(brief.indexOf('Recent Observations:')).toBeGreaterThan(brief.indexOf('Application / Observation / Reflection:'));
         expect(brief.indexOf('Recent Reflections:')).toBeGreaterThan(brief.indexOf('Recent Observations:'));
         expect(brief.indexOf('Source Notes:')).toBeGreaterThan(brief.indexOf('Recent Reflections:'));
     });

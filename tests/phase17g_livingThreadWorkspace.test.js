@@ -31,6 +31,13 @@ describe('Phase 17G — Living Thread workspace polish', () => {
         expect(res.text).toContain('id="signal-threads-overlay"');
         expect(res.text).toContain('id="signal-thread-copy-brief-btn"');
         expect(res.text).toContain('id="signal-thread-source-notes-input"');
+        expect(res.text).toContain('id="signal-thread-saga-cycle-details"');
+        expect(res.text).toContain('id="signal-thread-save-cycle-btn"');
+
+        expect(res.text.indexOf('id="signal-thread-compression-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-situation-details"'));
+        expect(res.text.indexOf('id="signal-thread-situation-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-open-pressure-details"'));
+        expect(res.text.indexOf('id="signal-thread-open-pressure-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-saga-cycle-details"'));
+        expect(res.text.indexOf('id="signal-thread-saga-cycle-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-observations-details"'));
+        expect(res.text.indexOf('id="signal-thread-saga-cycles-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-source-notes-details"'));
     });
 });
-
