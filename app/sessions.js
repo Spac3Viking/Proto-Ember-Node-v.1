@@ -47,6 +47,7 @@ function _isoToCompact(isoStr) {
     const m = String(isoStr || '').match(
         /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.?(\d*)/,
     );
+    // Fallback: use epoch millis as a plain numeric string when input is not ISO
     if (!m) return String(Date.now());
     const ms = m[7] ? m[7].slice(0, 3).padEnd(3, '0') : '000';
     return m[1] + m[2] + m[3] + '-' + m[4] + m[5] + m[6] + '-' + ms;

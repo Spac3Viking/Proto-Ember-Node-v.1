@@ -10645,20 +10645,21 @@ async function launchOllama(runtimeId) {
     // ── Continue last session ─────────────────────────────────────────────────
 
     async function continueLastSession() {
-        const statusEl = $ip('ip-new-session-status');
         try {
             const data = await _apiGet('/api/sessions');
             const sessions = data && Array.isArray(data.sessions) ? data.sessions : [];
             if (sessions.length === 0) {
-                // Surface message in the home status area rather than alert()
-                const formEl = $ip('ip-new-session-form');
-                if (formEl) formEl.style.display = '';
+                // Show the new-session form and surface the message there
+                beginNewSession();
+                const statusEl = $ip('ip-new-session-status');
                 if (statusEl) statusEl.textContent = 'No sessions found. Begin a new one.';
                 return;
             }
             // Sessions are sorted newest-first
             _loadSessionView(sessions[0]);
         } catch {
+            beginNewSession();
+            const statusEl = $ip('ip-new-session-status');
             if (statusEl) statusEl.textContent = 'Error loading sessions.';
         }
     }

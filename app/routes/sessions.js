@@ -138,7 +138,7 @@ router.get('/api/sessions/:id/export', readLimiter, (req, res) => {
 
 /**
  * Build a focused field-assistant prompt for the given stage.
- * The assistant asks clarifying questions, summarises notes, and suggests next steps.
+ * The assistant asks clarifying questions, summarizes notes, and suggests next steps.
  * It deliberately avoids large essays and stays brief.
  */
 function _buildAssistPrompt(stage, notes, sessionTitle) {
