@@ -10605,34 +10605,61 @@ async function launchOllama(runtimeId) {
 
     // ── Begin new session ────────────────────────────────────────────────────
 
-    async function beginNewSession() {
-        const title = window.prompt('Session title (optional):') || '';
+    function beginNewSession() {
+        // Show the inline new-session form instead of a blocking prompt
+        const formEl    = $ip('ip-new-session-form');
+        const inputEl   = $ip('ip-new-session-title');
+        const statusEl  = $ip('ip-new-session-status');
+        if (formEl)   formEl.style.display = '';
+        if (inputEl)  { inputEl.value = ''; inputEl.focus(); }
+        if (statusEl) statusEl.textContent = '';
+    }
+
+    async function _submitNewSession() {
+        const inputEl  = $ip('ip-new-session-title');
+        const statusEl = $ip('ip-new-session-status');
+        const title = inputEl ? inputEl.value.trim() : '';
+        if (statusEl) statusEl.textContent = 'Creating…';
         try {
             const data = await _apiPost('/api/sessions', { title });
             if (data && data.success && data.session) {
+                _hideNewSessionForm();
                 _loadSessionView(data.session);
             } else {
-                alert('Could not create session.');
+                if (statusEl) statusEl.textContent = 'Could not create session. Try again.';
             }
         } catch {
-            alert('Error creating session.');
+            if (statusEl) statusEl.textContent = 'Error creating session.';
         }
+    }
+
+    function _hideNewSessionForm() {
+        const formEl   = $ip('ip-new-session-form');
+        const inputEl  = $ip('ip-new-session-title');
+        const statusEl = $ip('ip-new-session-status');
+        if (formEl)   formEl.style.display = 'none';
+        if (inputEl)  inputEl.value = '';
+        if (statusEl) statusEl.textContent = '';
     }
 
     // ── Continue last session ─────────────────────────────────────────────────
 
     async function continueLastSession() {
+        const statusEl = $ip('ip-new-session-status');
         try {
             const data = await _apiGet('/api/sessions');
             const sessions = data && Array.isArray(data.sessions) ? data.sessions : [];
             if (sessions.length === 0) {
-                alert('No sessions found. Begin a new one.');
+                // Surface message in the home status area rather than alert()
+                const formEl = $ip('ip-new-session-form');
+                if (formEl) formEl.style.display = '';
+                if (statusEl) statusEl.textContent = 'No sessions found. Begin a new one.';
                 return;
             }
             // Sessions are sorted newest-first
             _loadSessionView(sessions[0]);
         } catch {
-            alert('Error loading last session.');
+            if (statusEl) statusEl.textContent = 'Error loading sessions.';
         }
     }
 
@@ -10661,38 +10688,80 @@ async function launchOllama(runtimeId) {
         sessions.forEach(s => {
             const card = document.createElement('div');
             card.className = 'ip-session-card';
-            card.innerHTML =
-                '<div class="ip-session-card-body">' +
-                  '<div class="ip-session-card-title">' + escapeHtml(s.title || 'Untitled Session') + '</div>' +
-                  '<div class="ip-session-card-meta">' + escapeHtml(_fmtDate(s.updatedAt || s.createdAt)) + '</div>' +
-                '</div>' +
-                '<span class="ip-session-card-stage">' + escapeHtml(s.currentStage || 'observe') + '</span>' +
-                '<div class="ip-session-card-actions">' +
-                  '<button class="secondary ip-open-session-btn" style="font-size:0.75rem; padding:0.2rem 0.5rem;" data-id="' + escapeHtml(s.id) + '">Open</button>' +
-                  '<button class="secondary ip-delete-session-btn" style="font-size:0.75rem; padding:0.2rem 0.5rem;" data-id="' + escapeHtml(s.id) + '">✕</button>' +
-                '</div>';
+
+            const body = document.createElement('div');
+            body.className = 'ip-session-card-body';
+
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'ip-session-card-title';
+            titleDiv.textContent = s.title || 'Untitled Session';
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'ip-session-card-meta';
+            metaDiv.textContent = _fmtDate(s.updatedAt || s.createdAt);
+
+            body.appendChild(titleDiv);
+            body.appendChild(metaDiv);
+
+            const stageSpan = document.createElement('span');
+            stageSpan.className = 'ip-session-card-stage';
+            stageSpan.textContent = s.currentStage || 'observe';
+
+            const actions = document.createElement('div');
+            actions.className = 'ip-session-card-actions';
+
+            const openBtn = document.createElement('button');
+            openBtn.className = 'secondary';
+            openBtn.style.cssText = 'font-size:0.75rem; padding:0.2rem 0.5rem;';
+            openBtn.textContent = 'Open';
+            openBtn.setAttribute('aria-label', 'Open session: ' + (s.title || 'Untitled Session'));
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'secondary';
+            deleteBtn.style.cssText = 'font-size:0.75rem; padding:0.2rem 0.5rem;';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.setAttribute('aria-label', 'Delete session: ' + (s.title || 'Untitled Session'));
+            deleteBtn.dataset.pendingDelete = 'false';
+
+            actions.appendChild(openBtn);
+            actions.appendChild(deleteBtn);
+
+            card.appendChild(body);
+            card.appendChild(stageSpan);
+            card.appendChild(actions);
 
             // Open
-            card.querySelector('.ip-open-session-btn').addEventListener('click', async (e) => {
+            openBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                const id = e.currentTarget.dataset.id;
-                const detail = await _apiGet('/api/sessions/' + encodeURIComponent(id)).catch(() => null);
+                const detail = await _apiGet('/api/sessions/' + encodeURIComponent(s.id)).catch(() => null);
                 if (detail && detail.session) {
                     _loadSessionView(detail.session);
                 }
             });
 
-            // Delete
-            card.querySelector('.ip-delete-session-btn').addEventListener('click', async (e) => {
+            // Delete — two-click accessible confirmation (no confirm())
+            deleteBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                const id = e.currentTarget.dataset.id;
-                const title = s.title || 'this session';
-                if (!confirm('Delete "' + title + '"?')) return;
-                await _apiDelete('/api/sessions/' + encodeURIComponent(id)).catch(() => null);
+                if (deleteBtn.dataset.pendingDelete !== 'true') {
+                    // First click: ask for confirmation inline
+                    deleteBtn.textContent = 'Confirm?';
+                    deleteBtn.dataset.pendingDelete = 'true';
+                    // Reset after 3 seconds if no second click
+                    setTimeout(() => {
+                        if (deleteBtn.dataset.pendingDelete === 'true') {
+                            deleteBtn.textContent = 'Delete';
+                            deleteBtn.dataset.pendingDelete = 'false';
+                        }
+                    }, 3000);
+                    return;
+                }
+                // Second click: perform delete
+                deleteBtn.disabled = true;
+                await _apiDelete('/api/sessions/' + encodeURIComponent(s.id)).catch(() => null);
                 reviewSessions();
             });
 
-            // Click anywhere on card = open
+            // Click card body = open
             card.addEventListener('click', async () => {
                 const detail = await _apiGet('/api/sessions/' + encodeURIComponent(s.id)).catch(() => null);
                 if (detail && detail.session) {
@@ -10848,8 +10917,20 @@ async function launchOllama(runtimeId) {
     _bind('ip-review-btn',         'click', reviewSessions);
     _bind('ip-settings-btn',       'click', openSettings);
 
+    // Inline new-session form
+    _bind('ip-new-session-start-btn',  'click', _submitNewSession);
+    _bind('ip-new-session-cancel-btn', 'click', _hideNewSessionForm);
+    const newTitleInput = $ip('ip-new-session-title');
+    if (newTitleInput) {
+        newTitleInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') _submitNewSession();
+            if (e.key === 'Escape') _hideNewSessionForm();
+        });
+    }
+
     _bind('ip-back-home-btn',      'click', () => {
         _activeSession = null;
+        _hideNewSessionForm();
         _showView('home');
     });
 

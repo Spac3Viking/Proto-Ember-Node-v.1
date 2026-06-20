@@ -88,6 +88,24 @@
                 <button class="secondary ip-home-secondary-btn" id="ip-review-btn">Review Sessions</button>
                 <button class="secondary ip-home-secondary-btn" id="ip-settings-btn">Settings →</button>
               </div>
+              <!-- Inline new-session form — shown when Begin is clicked -->
+              <div id="ip-new-session-form" class="ip-new-session-form" style="display:none;" aria-live="polite">
+                <label for="ip-new-session-title" class="ip-new-session-label">Session title <span style="opacity:0.5;">(optional)</span></label>
+                <input
+                  type="text"
+                  id="ip-new-session-title"
+                  class="ip-new-session-input"
+                  placeholder="e.g. Water pressure situation"
+                  maxlength="120"
+                  autocomplete="off"
+                  aria-label="New session title"
+                >
+                <div class="ip-new-session-btns">
+                  <button class="primary" id="ip-new-session-start-btn">Start Session</button>
+                  <button class="secondary" id="ip-new-session-cancel-btn">Cancel</button>
+                </div>
+                <div class="message-system ip-new-session-status" id="ip-new-session-status" aria-live="assertive"></div>
+              </div>
             </div>
           </div>
 

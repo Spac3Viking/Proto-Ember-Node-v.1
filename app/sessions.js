@@ -44,16 +44,12 @@ function _ensureDir() {
  * @returns {string}
  */
 function _isoToCompact(isoStr) {
-    const str = String(isoStr || '');
-    // Extract date + time parts and milliseconds
-    const msMatch = str.match(/\.(\d+)Z?$/);
-    const ms = msMatch ? msMatch[1].slice(0, 3) : '000';
-    return str
-        .replace(/[-:]/g, '')
-        .replace('T', '-')
-        .replace(/\.\d+Z?$/, '')
-        .replace(/Z$/, '')
-        + '-' + ms;
+    const m = String(isoStr || '').match(
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.?(\d*)/,
+    );
+    if (!m) return String(Date.now());
+    const ms = m[7] ? m[7].slice(0, 3).padEnd(3, '0') : '000';
+    return m[1] + m[2] + m[3] + '-' + m[4] + m[5] + m[6] + '-' + ms;
 }
 
 /**
