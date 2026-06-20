@@ -4154,3 +4154,424 @@ button.secondary:disabled {
   border: 1px solid hsla(140, 100%, 70%, 0.1);
   border-radius: var(--radius-sm);
 }
+
+/* ============================================================
+   Phase 18A — Instrument Panel
+   ============================================================ */
+
+/* ── Layout ─────────────────────────────────────────────────── */
+
+.ip-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ── Status strip ───────────────────────────────────────────── */
+
+.ip-status-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.82rem;
+}
+
+.ip-node-name {
+  font-family: 'Cinzel', serif;
+  color: var(--gf-wire-amber);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.ip-status-pill {
+  color: var(--archive-muted);
+  font-size: 0.78rem;
+}
+
+.ip-status-val {
+  color: var(--archive-text);
+}
+
+.ip-status-val.ok   { color: var(--gf-wire-green); }
+.ip-status-val.warn { color: var(--gf-wire-amber); }
+.ip-status-val.off  { color: var(--archive-muted); }
+
+/* ── Home screen ─────────────────────────────────────────────── */
+
+.ip-home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 1.5rem;
+}
+
+.ip-home-card {
+  width: 100%;
+  max-width: 480px;
+  padding: 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ip-home-heading {
+  font-family: 'Cinzel', serif;
+  color: var(--gf-wire-amber);
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  opacity: 0.9;
+}
+
+.ip-home-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.ip-home-primary-btn {
+  font-size: 1rem;
+  padding: 0.8rem 1.2rem;
+  letter-spacing: 0.02em;
+}
+
+.ip-home-secondary-btn {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.8rem;
+}
+
+/* ── Stage progress bar ─────────────────────────────────────── */
+
+.ip-stage-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  flex-wrap: wrap;
+}
+
+.ip-back-btn {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  flex-shrink: 0;
+}
+
+.ip-stage-steps {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.ip-stage-step {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 20px;
+  border: 1px solid hsla(140, 100%, 70%, 0.2);
+  color: var(--archive-muted);
+  background: transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.ip-stage-step.active {
+  border-color: var(--gf-wire-amber);
+  color: var(--gf-wire-amber);
+  background: hsla(38, 100%, 70%, 0.08);
+}
+
+.ip-stage-step.done {
+  border-color: hsla(140, 100%, 70%, 0.35);
+  color: var(--gf-wire-green);
+  background: hsla(140, 100%, 70%, 0.06);
+}
+
+/* ── Stage work area ─────────────────────────────────────────── */
+
+.ip-stage-card {
+  padding: 1.25rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ip-stage-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ip-stage-label {
+  font-family: 'Cinzel', serif;
+  font-size: 1.05rem;
+  color: var(--gf-wire-amber);
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.ip-session-title {
+  font-size: 0.82rem;
+  color: var(--archive-muted);
+  opacity: 0.75;
+  font-style: italic;
+}
+
+.ip-stage-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+  color: var(--archive-muted);
+  opacity: 0.85;
+  line-height: 1.55;
+}
+
+.ip-stage-textarea {
+  width: 100%;
+  min-height: 160px;
+  background: hsla(120, 20%, 4%, 0.6);
+  border: 1px solid hsla(140, 100%, 70%, 0.14);
+  border-radius: var(--radius-sm);
+  color: var(--archive-text);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  padding: 0.75rem 0.875rem;
+  resize: vertical;
+  transition: border-color 0.18s;
+}
+
+.ip-stage-textarea:focus {
+  outline: none;
+  border-color: hsla(38, 100%, 70%, 0.35);
+  background: hsla(120, 20%, 4%, 0.8);
+}
+
+/* ── AI Assist ───────────────────────────────────────────────── */
+
+.ip-ai-assist-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ip-ai-assist-btn {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.ip-ai-assist-status {
+  font-size: 0.78rem;
+}
+
+.ip-ai-response {
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--archive-text);
+  padding: 0.75rem 0.9rem;
+  white-space: pre-wrap;
+  border-left: 2px solid hsla(38, 100%, 70%, 0.28);
+  background: hsla(38, 100%, 70%, 0.04);
+}
+
+/* ── Stage actions ───────────────────────────────────────────── */
+
+.ip-stage-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.ip-stage-status {
+  text-align: right;
+  font-size: 0.78rem;
+  min-height: 1.2em;
+}
+
+/* ── Archive completion card ─────────────────────────────────── */
+
+.ip-archive-actions {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ip-archive-actions-title {
+  font-family: 'Cinzel', serif;
+  color: var(--gf-wire-green);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+}
+
+.ip-archive-btns {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* ── Sessions list view ─────────────────────────────────────── */
+
+.ip-sessions-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ip-list-header-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  flex-wrap: wrap;
+}
+
+.ip-list-title {
+  font-family: 'Cinzel', serif;
+  color: var(--gf-wire-amber);
+  font-size: 0.95rem;
+  flex: 1;
+}
+
+.ip-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ip-session-card {
+  background: var(--archive-card);
+  border: 1px solid hsla(140, 100%, 70%, 0.1);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ip-session-card:hover {
+  border-color: hsla(140, 100%, 70%, 0.3);
+  background: hsla(120, 25%, 12%, 0.9);
+}
+
+.ip-session-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ip-session-card-title {
+  font-size: 0.9rem;
+  color: var(--archive-text);
+  font-weight: 500;
+  margin-bottom: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ip-session-card-meta {
+  font-size: 0.76rem;
+  color: var(--archive-muted);
+}
+
+.ip-session-card-stage {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid hsla(38, 100%, 70%, 0.25);
+  color: var(--gf-wire-amber);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.ip-session-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+/* ── Responsive adjustments ─────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .ip-layout {
+    padding: 0.75rem;
+  }
+
+  .ip-home-card {
+    padding: 1.25rem 1rem;
+  }
+
+  .ip-stage-card {
+    padding: 1rem 0.9rem 0.85rem;
+  }
+
+  .ip-stage-steps {
+    gap: 0.25rem;
+  }
+
+  .ip-stage-step {
+    font-size: 0.68rem;
+    padding: 0.18rem 0.45rem;
+  }
+}
+
+/* ── Inline new-session form ────────────────────────────────── */
+
+.ip-new-session-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid hsla(140, 100%, 70%, 0.1);
+  margin-top: 0.25rem;
+}
+
+.ip-new-session-label {
+  font-size: 0.82rem;
+  color: var(--archive-muted);
+}
+
+.ip-new-session-input {
+  width: 100%;
+  background: hsla(120, 20%, 4%, 0.6);
+  border: 1px solid hsla(140, 100%, 70%, 0.18);
+  border-radius: var(--radius-sm);
+  color: var(--archive-text);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.75rem;
+  transition: border-color 0.18s;
+}
+
+.ip-new-session-input:focus {
+  outline: none;
+  border-color: hsla(38, 100%, 70%, 0.4);
+}
+
+.ip-new-session-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ip-new-session-status {
+  min-height: 1.2em;
+}

@@ -10376,3 +10376,577 @@ async function launchOllama(runtimeId) {
     initRuntimeTuningBench();
     initFirstEmberHintsDismissal();
 })();
+
+/* ================================================================
+   Phase 18A — Instrument Panel
+   Observe → Reflect → Act → Refine → Archive
+   ================================================================ */
+
+(function initInstrumentPanel() {
+
+    // ── Constants ───────────────────────────────────────────────────────────
+
+    const IP_STAGES = ['observe', 'reflect', 'act', 'refine', 'archive'];
+
+    const IP_STAGE_LABELS = Object.freeze({
+        observe: 'OBSERVE',
+        reflect: 'REFLECT',
+        act:     'ACT',
+        refine:  'REFINE',
+        archive: 'ARCHIVE',
+    });
+
+    const IP_STAGE_QUESTIONS = Object.freeze({
+        observe: [
+            'What are you noticing?',
+            'What is happening?',
+            'What is known?',
+            'What is uncertain?',
+        ],
+        reflect: [
+            'Why does this matter?',
+            'What assumptions are present?',
+            'What perspectives should be considered?',
+        ],
+        act: [
+            'What is the next useful step?',
+            'What can be tested?',
+            'What should be avoided?',
+        ],
+        refine: [
+            'What happened?',
+            'What worked?',
+            'What changed?',
+            'What was learned?',
+        ],
+        archive: [
+            'What should be remembered?',
+            'What is worth carrying forward?',
+        ],
+    });
+
+    // ── State ────────────────────────────────────────────────────────────────
+
+    let _activeSession = null;   // full session object currently loaded
+    let _ipView = 'home';        // 'home' | 'session' | 'list'
+    let _aiAssistActive = false;
+
+    // ── Element refs (resolved lazily) ───────────────────────────────────────
+
+    function $ip(id) { return document.getElementById(id); }
+
+    // ── Utility ──────────────────────────────────────────────────────────────
+
+    function _fmtDate(isoStr) {
+        if (!isoStr) return '';
+        try {
+            return new Date(isoStr).toLocaleDateString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric',
+            });
+        } catch {
+            return String(isoStr).slice(0, 10);
+        }
+    }
+
+    function _setStatus(msg, clear) {
+        const el = $ip('ip-stage-status');
+        if (!el) return;
+        el.textContent = msg;
+        if (clear) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2400);
+    }
+
+    function _setArchiveMsg(msg) {
+        const el = $ip('ip-archive-status-msg');
+        if (el) el.textContent = msg;
+    }
+
+    // ── View switcher ─────────────────────────────────────────────────────────
+
+    function _showView(view) {
+        _ipView = view;
+        const home    = $ip('ip-home');
+        const session = $ip('ip-session-view');
+        const list    = $ip('ip-sessions-list-view');
+        if (home)    home.style.display    = view === 'home'    ? '' : 'none';
+        if (session) session.style.display = view === 'session' ? '' : 'none';
+        if (list)    list.style.display    = view === 'list'    ? '' : 'none';
+    }
+
+    // ── AI status indicator ───────────────────────────────────────────────────
+
+    async function _refreshAiStatus() {
+        const el = $ip('ip-ai-status');
+        if (!el) return;
+        try {
+            const res = await fetch('/api/system/status').catch(() => null);
+            if (!res || !res.ok) { el.textContent = 'Unavailable'; el.className = 'ip-status-val off'; return; }
+            const data = await res.json().catch(() => ({}));
+            const ok = data && (data.ollamaRunning || data.aiAvailable || data.runtimeAvailable);
+            el.textContent = ok ? 'Available' : 'Unavailable';
+            el.className = 'ip-status-val ' + (ok ? 'ok' : 'off');
+        } catch {
+            el.textContent = 'Unavailable';
+            el.className = 'ip-status-val off';
+        }
+    }
+
+    // ── Stage progress render ─────────────────────────────────────────────────
+
+    function _renderStageBar(currentStage, entries) {
+        const container = $ip('ip-stage-steps');
+        if (!container) return;
+        container.innerHTML = '';
+        const completedStages = new Set((entries || []).filter(e => e.completedAt).map(e => e.stage));
+        IP_STAGES.forEach(stage => {
+            const span = document.createElement('span');
+            const label = IP_STAGE_LABELS[stage] || stage;
+            span.setAttribute('role', 'listitem');
+            if (stage === currentStage) {
+                span.className = 'ip-stage-step active';
+                span.textContent = label;
+            } else if (completedStages.has(stage)) {
+                span.className = 'ip-stage-step done';
+                span.textContent = '✓ ' + label;
+            } else {
+                span.className = 'ip-stage-step';
+                span.textContent = label;
+            }
+            container.appendChild(span);
+        });
+    }
+
+    // ── Stage questions render ───────────────────────────────────────────────
+
+    function _renderStageQuestions(stage) {
+        const container = $ip('ip-stage-questions');
+        if (!container) return;
+        const questions = IP_STAGE_QUESTIONS[stage] || [];
+        container.innerHTML = '';
+        questions.forEach(q => {
+            const div = document.createElement('div');
+            div.textContent = q;
+            container.appendChild(div);
+        });
+    }
+
+    // ── Load session into view ────────────────────────────────────────────────
+
+    function _loadSessionView(session) {
+        _activeSession = session;
+        const stage = session.currentStage || 'observe';
+
+        // Stage label
+        const labelEl = $ip('ip-stage-label');
+        if (labelEl) labelEl.textContent = IP_STAGE_LABELS[stage] || stage.toUpperCase();
+
+        // Session title
+        const titleEl = $ip('ip-session-title-display');
+        if (titleEl) titleEl.textContent = session.title || 'Session';
+
+        // Stage bar
+        _renderStageBar(stage, session.entries);
+
+        // Questions
+        _renderStageQuestions(stage);
+
+        // Pre-fill existing notes
+        const notesEl = $ip('ip-stage-notes');
+        if (notesEl) {
+            const existingEntry = (session.entries || []).find(e => e.stage === stage);
+            notesEl.value = existingEntry ? (existingEntry.notes || '') : '';
+        }
+
+        // Hide AI response if visible
+        const aiResp = $ip('ip-ai-response');
+        if (aiResp) aiResp.style.display = 'none';
+
+        const aiStatus = $ip('ip-ai-assist-status');
+        if (aiStatus) aiStatus.textContent = '';
+
+        // Archive actions
+        const archiveActions = $ip('ip-archive-actions');
+        if (archiveActions) {
+            archiveActions.style.display = stage === 'archive' ? '' : 'none';
+        }
+
+        _setStatus('');
+        _showView('session');
+    }
+
+    // ── API helpers ──────────────────────────────────────────────────────────
+
+    async function _apiGet(path) {
+        const res = await fetch(path);
+        return res.json();
+    }
+
+    async function _apiPost(path, body) {
+        const res = await fetch(path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        return res.json();
+    }
+
+    async function _apiPut(path, body) {
+        const res = await fetch(path, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        return res.json();
+    }
+
+    async function _apiDelete(path) {
+        const res = await fetch(path, { method: 'DELETE' });
+        return res.json();
+    }
+
+    // ── Begin new session ────────────────────────────────────────────────────
+
+    function beginNewSession() {
+        // Show the inline new-session form instead of a blocking prompt
+        const formEl    = $ip('ip-new-session-form');
+        const inputEl   = $ip('ip-new-session-title');
+        const statusEl  = $ip('ip-new-session-status');
+        if (formEl)   formEl.style.display = '';
+        if (inputEl)  { inputEl.value = ''; inputEl.focus(); }
+        if (statusEl) statusEl.textContent = '';
+    }
+
+    async function _submitNewSession() {
+        const inputEl  = $ip('ip-new-session-title');
+        const statusEl = $ip('ip-new-session-status');
+        const title = inputEl ? inputEl.value.trim() : '';
+        if (statusEl) statusEl.textContent = 'Creating…';
+        try {
+            const data = await _apiPost('/api/sessions', { title });
+            if (data && data.success && data.session) {
+                _hideNewSessionForm();
+                _loadSessionView(data.session);
+            } else {
+                if (statusEl) statusEl.textContent = 'Could not create session. Try again.';
+            }
+        } catch {
+            if (statusEl) statusEl.textContent = 'Error creating session.';
+        }
+    }
+
+    function _hideNewSessionForm() {
+        const formEl   = $ip('ip-new-session-form');
+        const inputEl  = $ip('ip-new-session-title');
+        const statusEl = $ip('ip-new-session-status');
+        if (formEl)   formEl.style.display = 'none';
+        if (inputEl)  inputEl.value = '';
+        if (statusEl) statusEl.textContent = '';
+    }
+
+    // ── Continue last session ─────────────────────────────────────────────────
+
+    async function continueLastSession() {
+        try {
+            const data = await _apiGet('/api/sessions');
+            const sessions = data && Array.isArray(data.sessions) ? data.sessions : [];
+            if (sessions.length === 0) {
+                // Show the new-session form and surface the message there
+                beginNewSession();
+                const statusEl = $ip('ip-new-session-status');
+                if (statusEl) statusEl.textContent = 'No sessions found. Begin a new one.';
+                return;
+            }
+            // Sessions are sorted newest-first
+            _loadSessionView(sessions[0]);
+        } catch {
+            beginNewSession();
+            const statusEl = $ip('ip-new-session-status');
+            if (statusEl) statusEl.textContent = 'Error loading sessions.';
+        }
+    }
+
+    // ── Review sessions list ─────────────────────────────────────────────────
+
+    async function reviewSessions() {
+        try {
+            const data = await _apiGet('/api/sessions');
+            const sessions = data && Array.isArray(data.sessions) ? data.sessions : [];
+            _renderSessionsList(sessions);
+            _showView('list');
+        } catch {
+            _renderSessionsList([]);
+            _showView('list');
+        }
+    }
+
+    function _renderSessionsList(sessions) {
+        const container = $ip('ip-sessions-list');
+        if (!container) return;
+        if (!sessions || sessions.length === 0) {
+            container.innerHTML = '<span class="message-system">No sessions yet. Begin your first session.</span>';
+            return;
+        }
+        container.innerHTML = '';
+        sessions.forEach(s => {
+            const card = document.createElement('div');
+            card.className = 'ip-session-card';
+
+            const body = document.createElement('div');
+            body.className = 'ip-session-card-body';
+
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'ip-session-card-title';
+            titleDiv.textContent = s.title || 'Untitled Session';
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'ip-session-card-meta';
+            metaDiv.textContent = _fmtDate(s.updatedAt || s.createdAt);
+
+            body.appendChild(titleDiv);
+            body.appendChild(metaDiv);
+
+            const stageSpan = document.createElement('span');
+            stageSpan.className = 'ip-session-card-stage';
+            stageSpan.textContent = s.currentStage || 'observe';
+
+            const actions = document.createElement('div');
+            actions.className = 'ip-session-card-actions';
+
+            const openBtn = document.createElement('button');
+            openBtn.className = 'secondary';
+            openBtn.style.cssText = 'font-size:0.75rem; padding:0.2rem 0.5rem;';
+            openBtn.textContent = 'Open';
+            openBtn.setAttribute('aria-label', 'Open session: ' + (s.title || 'Untitled Session'));
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'secondary';
+            deleteBtn.style.cssText = 'font-size:0.75rem; padding:0.2rem 0.5rem;';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.setAttribute('aria-label', 'Delete session: ' + (s.title || 'Untitled Session'));
+            deleteBtn.dataset.pendingDelete = 'false';
+
+            actions.appendChild(openBtn);
+            actions.appendChild(deleteBtn);
+
+            card.appendChild(body);
+            card.appendChild(stageSpan);
+            card.appendChild(actions);
+
+            // Open
+            openBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const detail = await _apiGet('/api/sessions/' + encodeURIComponent(s.id)).catch(() => null);
+                if (detail && detail.session) {
+                    _loadSessionView(detail.session);
+                }
+            });
+
+            // Delete — two-click accessible confirmation (no confirm())
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (deleteBtn.dataset.pendingDelete !== 'true') {
+                    // First click: ask for confirmation inline
+                    deleteBtn.textContent = 'Confirm?';
+                    deleteBtn.dataset.pendingDelete = 'true';
+                    // Reset after 3 seconds if no second click
+                    setTimeout(() => {
+                        if (deleteBtn.dataset.pendingDelete === 'true') {
+                            deleteBtn.textContent = 'Delete';
+                            deleteBtn.dataset.pendingDelete = 'false';
+                        }
+                    }, 3000);
+                    return;
+                }
+                // Second click: perform delete
+                deleteBtn.disabled = true;
+                await _apiDelete('/api/sessions/' + encodeURIComponent(s.id)).catch(() => null);
+                reviewSessions();
+            });
+
+            // Click card body = open
+            card.addEventListener('click', async () => {
+                const detail = await _apiGet('/api/sessions/' + encodeURIComponent(s.id)).catch(() => null);
+                if (detail && detail.session) {
+                    _loadSessionView(detail.session);
+                }
+            });
+
+            container.appendChild(card);
+        });
+    }
+
+    // ── Save stage notes ─────────────────────────────────────────────────────
+
+    async function saveCurrentStage(advance) {
+        if (!_activeSession) return;
+        const notesEl = $ip('ip-stage-notes');
+        const notes = notesEl ? notesEl.value : '';
+        const stage = _activeSession.currentStage;
+
+        _setStatus('Saving…');
+
+        try {
+            const data = await _apiPost(
+                '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/stage',
+                { stage, notes, advance: Boolean(advance) },
+            );
+            if (data && data.success && data.session) {
+                _activeSession = data.session;
+                if (advance) {
+                    // Re-render for the new stage
+                    _loadSessionView(_activeSession);
+                } else {
+                    // Just update stage bar to reflect saved state
+                    _renderStageBar(_activeSession.currentStage, _activeSession.entries);
+                    _setStatus('Saved.', true);
+                }
+            } else {
+                _setStatus('Save failed.');
+            }
+        } catch {
+            _setStatus('Error saving.');
+        }
+    }
+
+    // ── AI Assist ────────────────────────────────────────────────────────────
+
+    async function requestAiAssist() {
+        if (!_activeSession || _aiAssistActive) return;
+        _aiAssistActive = true;
+
+        const notesEl  = $ip('ip-stage-notes');
+        const statusEl = $ip('ip-ai-assist-status');
+        const respEl   = $ip('ip-ai-response');
+        const btnEl    = $ip('ip-ai-assist-btn');
+
+        const notes = notesEl ? notesEl.value : '';
+        const stage = _activeSession.currentStage;
+
+        if (statusEl) statusEl.textContent = 'Asking…';
+        if (btnEl)    btnEl.disabled = true;
+        if (respEl)   respEl.style.display = 'none';
+
+        try {
+            const data = await _apiPost(
+                '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/ai-assist',
+                { stage, notes },
+            );
+            if (data && data.content) {
+                if (respEl) {
+                    respEl.textContent = data.content;
+                    respEl.style.display = '';
+                }
+                if (statusEl) statusEl.textContent = '';
+            } else if (data && data.offline) {
+                if (statusEl) statusEl.textContent = 'AI unavailable — continue without it.';
+            } else {
+                if (statusEl) statusEl.textContent = 'No response.';
+            }
+        } catch {
+            if (statusEl) statusEl.textContent = 'AI request failed.';
+        } finally {
+            _aiAssistActive = false;
+            if (btnEl) btnEl.disabled = false;
+        }
+    }
+
+    // ── Export session as Markdown ────────────────────────────────────────────
+
+    async function exportSessionMarkdown() {
+        if (!_activeSession) return;
+        _setArchiveMsg('Exporting…');
+        try {
+            const res = await fetch(
+                '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/export',
+            );
+            if (!res.ok) { _setArchiveMsg('Export failed.'); return; }
+            const text = await res.text();
+            const blob = new Blob([text], { type: 'text/markdown' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = 'session-' + (_activeSession.id || 'export') + '.md';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            _setArchiveMsg('Exported.');
+            setTimeout(() => _setArchiveMsg(''), 2200);
+        } catch {
+            _setArchiveMsg('Export error.');
+        }
+    }
+
+    // ── Save to archive (marks archive stage complete) ───────────────────────
+
+    async function saveToArchive() {
+        if (!_activeSession) return;
+        const notesEl = $ip('ip-stage-notes');
+        const notes = notesEl ? notesEl.value : '';
+        _setArchiveMsg('Saving to archive…');
+        try {
+            const data = await _apiPost(
+                '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/stage',
+                { stage: 'archive', notes, advance: true },
+            );
+            if (data && data.success) {
+                _activeSession = data.session;
+                _renderStageBar(_activeSession.currentStage, _activeSession.entries);
+                _setArchiveMsg('Saved to archive.');
+            } else {
+                _setArchiveMsg('Save failed.');
+            }
+        } catch {
+            _setArchiveMsg('Error saving.');
+        }
+    }
+
+    // ── Settings shortcut ────────────────────────────────────────────────────
+
+    function openSettings() {
+        openRoomAndSubtab('hearth', 'hearth-system');
+    }
+
+    // ── Bind events ──────────────────────────────────────────────────────────
+
+    function _bind(id, event, fn) {
+        const el = $ip(id);
+        if (el) el.addEventListener(event, fn);
+    }
+
+    _bind('ip-begin-btn',          'click', beginNewSession);
+    _bind('ip-continue-btn',       'click', continueLastSession);
+    _bind('ip-review-btn',         'click', reviewSessions);
+    _bind('ip-settings-btn',       'click', openSettings);
+
+    // Inline new-session form
+    _bind('ip-new-session-start-btn',  'click', _submitNewSession);
+    _bind('ip-new-session-cancel-btn', 'click', _hideNewSessionForm);
+    const newTitleInput = $ip('ip-new-session-title');
+    if (newTitleInput) {
+        newTitleInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') _submitNewSession();
+            if (e.key === 'Escape') _hideNewSessionForm();
+        });
+    }
+
+    _bind('ip-back-home-btn',      'click', () => {
+        _activeSession = null;
+        _hideNewSessionForm();
+        _showView('home');
+    });
+
+    _bind('ip-save-btn',           'click', () => saveCurrentStage(false));
+    _bind('ip-continue-stage-btn', 'click', () => saveCurrentStage(true));
+    _bind('ip-ai-assist-btn',      'click', requestAiAssist);
+    _bind('ip-save-archive-btn',   'click', saveToArchive);
+    _bind('ip-export-md-btn',      'click', exportSessionMarkdown);
+
+    _bind('ip-list-back-btn',      'click', () => _showView('home'));
+    _bind('ip-list-new-btn',       'click', beginNewSession);
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+
+    _showView('home');
+    _refreshAiStatus();
+
+})();
