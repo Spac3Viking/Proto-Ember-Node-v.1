@@ -139,6 +139,11 @@ const USER_CACHES_DIR = path.join(DATA_ROOT, 'caches');
 const SYSTEM_DIR          = path.join(DATA_ROOT, 'system');
 const SIGNAL_THREADS_DIR  = path.join(SYSTEM_DIR, 'signal-threads');
 const EXPORTS_DIR         = path.join(DATA_ROOT, 'exports');
+
+// ── Phase 18A: Sessions (Instrument Panel) ────────────────────────────────────
+
+/** Sessions directory — each session is a JSON file stored here */
+const SESSIONS_DIR        = path.join(DATA_ROOT, 'sessions');
 const DOCUMENTS_DIR       = path.join(DATA_ROOT, 'documents');
 
 // ── Phase 11: Context Architecture ───────────────────────────────────────────
@@ -398,6 +403,8 @@ function ensureDataRoot() {
         THRESHOLD_CHANGED_DIR,
         THRESHOLD_FLAGGED_DIR,
         THRESHOLD_CACHE_DRAFTS_DIR,
+        // Phase 18A: Sessions
+        SESSIONS_DIR,
     ];
     for (const dir of dirs) {
         if (!fs.existsSync(dir)) {
@@ -608,6 +615,8 @@ module.exports = {
     THRESHOLD_CACHE_DRAFTS_DIR,
     CORE_ARCHIVE_MANIFEST_PATH,
     INTAKE_STATE_PATH,
+    // Phase 18A: Sessions
+    SESSIONS_DIR,
     ensureDataRoot,
     ensureCanonicalDataFiles,
     migrateLegacyData,

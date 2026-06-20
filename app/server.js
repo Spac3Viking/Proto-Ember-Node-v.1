@@ -70,6 +70,7 @@ const documentsRouter      = require('./routes/documents');
 const archiveRouter        = require('./routes/archive');
 const bootstrapRouter      = require('./routes/bootstrap');
 const cachesRouter         = require('./routes/caches');
+const sessionsRouter       = require('./routes/sessions');
 
 // ── Express setup ─────────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ app.use(documentsRouter);
 app.use(archiveRouter);
 app.use(bootstrapRouter);
 app.use(cachesRouter);
+app.use(sessionsRouter);
 
 // ── Server start ──────────────────────────────────────────────────────────────
 
