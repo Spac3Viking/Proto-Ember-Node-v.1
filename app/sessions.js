@@ -86,7 +86,9 @@ function _normalizeContinuity(continuity) {
     return {
         threadId: String(c.threadId || ''),
         threadTitle: String(c.threadTitle || ''),
+        threadPurpose: String(c.threadPurpose || ''),
         openPressure: String(c.openPressure || ''),
+        carryForward: String(c.carryForward || ''),
         mostRecentReflection: String(c.mostRecentReflection || ''),
         lastSessionDate: String(c.lastSessionDate || ''),
     };
@@ -330,7 +332,9 @@ function exportSessionMarkdown(id) {
         lines.push('## Continuity');
         lines.push('');
         lines.push('- Thread: ' + (session.continuity.threadTitle || session.continuity.threadId));
+        lines.push('- Purpose: ' + (session.continuity.threadPurpose || ''));
         lines.push('- Open Pressure: ' + (session.continuity.openPressure || ''));
+        lines.push('- Carry Forward: ' + (session.continuity.carryForward || ''));
         lines.push('- Last Reflection: ' + (session.continuity.mostRecentReflection || ''));
         lines.push('- Last Session Date: ' + (session.continuity.lastSessionDate || ''));
         lines.push('');

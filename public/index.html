@@ -91,9 +91,21 @@
                 <button class="secondary ip-home-secondary-btn" id="ip-settings-btn">Settings →</button>
               </div>
               <div class="ember-card" style="margin-top:0.8rem; padding:0.8rem;">
+                <div class="ip-list-title" style="font-size:0.88rem;">Living Continuity</div>
+                <div id="ip-living-continuity-card" class="ip-sessions-list" style="margin-top:0.5rem;">
+                  <span class="message-system">No recent thread yet.</span>
+                </div>
+              </div>
+              <div class="ember-card" style="margin-top:0.55rem; padding:0.8rem;">
                 <div class="ip-list-title" style="font-size:0.88rem;">Carry Forward</div>
                 <div id="ip-carry-forward-list" class="ip-sessions-list" style="margin-top:0.5rem;">
                   <span class="message-system">No recently active Signal Threads.</span>
+                </div>
+              </div>
+              <div class="ember-card" style="margin-top:0.55rem; padding:0.8rem;">
+                <div class="ip-list-title" style="font-size:0.88rem;">Open Pressures</div>
+                <div id="ip-open-pressure-list" class="ip-sessions-list" style="margin-top:0.5rem;">
+                  <span class="message-system">No active open pressures.</span>
                 </div>
               </div>
               <!-- Inline new-session form — shown when Begin is clicked -->
@@ -171,6 +183,7 @@
               <div class="ip-archive-actions-title">Session Archived</div>
               <div class="message-system" id="ip-archive-carry-forward-state">Carry Forward Pending</div>
               <div class="message-system" id="ip-archive-thread-update-state">Thread Update Pending</div>
+              <div class="message-system" id="ip-archive-open-pressure-state">Open Pressures Pending</div>
               <div class="ip-archive-thread-row">
                 <label for="ip-archive-thread-select">Thread:</label>
                 <select id="ip-archive-thread-select" class="gf-select">
@@ -178,7 +191,7 @@
                 </select>
               </div>
               <div class="ip-archive-thread-row">
-                <input id="ip-archive-new-thread-title" type="text" placeholder="Create New Thread" maxlength="120" />
+                <input id="ip-archive-new-thread-title" type="text" placeholder="Create new thread (or select existing above)" maxlength="120" />
               </div>
               <div class="ip-archive-thread-row">
                 <label for="ip-archive-open-pressure-input">Open Pressure</label>
@@ -190,7 +203,6 @@
               </div>
               <div class="ip-archive-btns">
                 <button class="primary"   id="ip-attach-thread-btn">Continue Thread</button>
-                <button class="secondary" id="ip-create-thread-btn">Start New Thread</button>
                 <button class="secondary" id="ip-export-md-btn">Export Markdown</button>
                 <button class="secondary" id="ip-archive-home-btn">Return Home</button>
                 <button class="secondary" id="ip-archive-new-session-btn">Start New Session</button>
@@ -226,13 +238,12 @@
             <div class="ember-card ip-list-header-card">
               <button class="secondary" id="ip-thread-detail-back-btn">← Threads</button>
               <span class="ip-list-title" id="ip-thread-detail-title">Thread</span>
-              <button class="secondary" id="ip-generate-thread-summary-btn">Generate Thread Summary</button>
             </div>
             <div class="ember-card" style="padding:0.9rem 1rem;">
               <div class="ip-thread-meta" id="ip-thread-detail-meta"></div>
             </div>
             <div class="ember-card" style="padding:0.9rem 1rem;">
-              <div class="ip-thread-section-title">Thread Summary</div>
+              <div class="ip-thread-section-title">Recent Reflection</div>
               <pre class="ip-thread-summary" id="ip-thread-detail-summary"></pre>
             </div>
             <div class="ember-card" style="padding:0.9rem 1rem;">
@@ -1454,6 +1465,11 @@
                       <label for="signal-thread-tags-input">Tags</label>
                       <input id="signal-thread-tags-input" type="text" placeholder="comma, separated, tags" />
                     </div>
+                  </div>
+
+                  <div class="signal-thread-field" style="margin-top:0.6rem;">
+                    <label for="signal-thread-purpose-input">Purpose</label>
+                    <textarea id="signal-thread-purpose-input" rows="3" placeholder="Optional but encouraged. Why does this thread exist?"></textarea>
                   </div>
 
                   <div class="signal-thread-field" style="margin-top:0.6rem;">
