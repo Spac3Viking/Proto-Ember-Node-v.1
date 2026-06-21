@@ -29,6 +29,11 @@ const {
     deleteSession,
     exportSessionMarkdown,
 } = require('../sessions');
+const {
+    createSignalThread,
+    addSessionToSignalThread,
+    loadSignalThread,
+} = require('../signalThreads');
 const { OLLAMA_CHAT_URL, getSelectedModelFallback } = require('../runtimeStewardship');
 
 const router = express.Router();
@@ -148,8 +153,10 @@ function _buildAssistPrompt(stage, notes, sessionTitle) {
 
     const systemPrompt = [
         'You are a quiet field assistant helping a person work through a structured reflection session.',
-        'Your role is to ask clarifying questions, briefly summarise their notes, and suggest focused next steps.',
-        'Keep your response short — no more than 120 words. Avoid essays. Stay practical and grounded.',
+        'Your role is to ask clarifying questions, briefly summarise notes, and suggest practical next steps.',
+        'Respond in 3–8 sentences. Keep it concise and calm.',
+        'Prioritize: clarifying questions, reflection prompts, continuity compression, and next actions.',
+        'Avoid long essays, repeated paraphrases, and over-analysis.',
         'Stage: ' + heading,
         'Stage questions:\n- ' + questions,
     ].join('\n');
@@ -205,6 +212,39 @@ router.post('/api/sessions/:id/ai-assist', chatLimiter, async (req, res) => {
             });
         }
         res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/api/sessions/:id/archive-thread', writeLimiter, (req, res) => {
+    const session = loadSession(req.params.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const threadId = String(body.threadId || '').trim();
+    const newThreadTitle = String(body.newThreadTitle || '').trim();
+
+    if (!threadId && !newThreadTitle) {
+        return res.status(400).json({ error: 'threadId or newThreadTitle is required' });
+    }
+
+    try {
+        let thread = null;
+        if (threadId) {
+            thread = addSessionToSignalThread(threadId, session.id);
+            if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+        } else {
+            const created = createSignalThread({
+                title: newThreadTitle,
+                posture: 'practical',
+                summary: '',
+                tags: [],
+                sessionIds: [session.id],
+            });
+            thread = loadSignalThread(created.id);
+        }
+        res.json({ success: true, session, thread });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
     }
 });
 

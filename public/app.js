@@ -10387,6 +10387,7 @@ async function launchOllama(runtimeId) {
     // ── Constants ───────────────────────────────────────────────────────────
 
     const IP_STAGES = ['observe', 'reflect', 'act', 'refine', 'archive'];
+    const IP_UNTITLED_THREAD = 'Untitled Signal Thread';
 
     const IP_STAGE_LABELS = Object.freeze({
         observe: 'OBSERVE',
@@ -10428,7 +10429,8 @@ async function launchOllama(runtimeId) {
     // ── State ────────────────────────────────────────────────────────────────
 
     let _activeSession = null;   // full session object currently loaded
-    let _ipView = 'home';        // 'home' | 'session' | 'list'
+    let _activeThreadDetailId = null;
+    let _ipView = 'home';        // 'home' | 'session' | 'list' | 'threads' | 'thread-detail'
     let _aiAssistActive = false;
 
     // ── Element refs (resolved lazily) ───────────────────────────────────────
@@ -10467,9 +10469,13 @@ async function launchOllama(runtimeId) {
         const home    = $ip('ip-home');
         const session = $ip('ip-session-view');
         const list    = $ip('ip-sessions-list-view');
+        const threads = $ip('ip-threads-list-view');
+        const detail  = $ip('ip-thread-detail-view');
         if (home)    home.style.display    = view === 'home'    ? '' : 'none';
         if (session) session.style.display = view === 'session' ? '' : 'none';
         if (list)    list.style.display    = view === 'list'    ? '' : 'none';
+        if (threads) threads.style.display = view === 'threads' ? '' : 'none';
+        if (detail)  detail.style.display  = view === 'thread-detail' ? '' : 'none';
     }
 
     // ── AI status indicator ───────────────────────────────────────────────────
@@ -10567,6 +10573,10 @@ async function launchOllama(runtimeId) {
         const archiveActions = $ip('ip-archive-actions');
         if (archiveActions) {
             archiveActions.style.display = stage === 'archive' ? '' : 'none';
+            if (stage === 'archive') {
+                _setArchiveMsg('Session Archived');
+                _prepareArchiveThreadOptions();
+            }
         }
 
         _setStatus('');
@@ -10774,6 +10784,190 @@ async function launchOllama(runtimeId) {
         });
     }
 
+    async function _prepareArchiveThreadOptions() {
+        const selectEl = $ip('ip-archive-thread-select');
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">Select an existing thread</option>';
+        try {
+            const data = await _apiGet('/api/signal-threads');
+            const threads = data && Array.isArray(data.threads) ? data.threads : [];
+            threads.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = t.title || IP_UNTITLED_THREAD;
+                selectEl.appendChild(opt);
+            });
+        } catch { /* ignore */ }
+    }
+
+    async function _attachToExistingThread() {
+        if (!_activeSession) return;
+        const selectEl = $ip('ip-archive-thread-select');
+        const threadId = selectEl ? String(selectEl.value || '').trim() : '';
+        if (!threadId) {
+            _setArchiveMsg('Select an existing thread first.');
+            return;
+        }
+        _setArchiveMsg('Attaching…');
+        try {
+            const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { threadId });
+            if (data && data.success) {
+                _setArchiveMsg('Session attached to thread.');
+                return;
+            }
+            _setArchiveMsg(data && data.error ? data.error : 'Attach failed.');
+        } catch {
+            _setArchiveMsg('Attach failed.');
+        }
+    }
+
+    async function _createNewArchiveThread() {
+        if (!_activeSession) return;
+        const inputEl = $ip('ip-archive-new-thread-title');
+        const newThreadTitle = inputEl ? String(inputEl.value || '').trim() : '';
+        if (!newThreadTitle) {
+            _setArchiveMsg('Enter a new thread title.');
+            return;
+        }
+        _setArchiveMsg('Creating thread…');
+        try {
+            const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { newThreadTitle });
+            if (data && data.success) {
+                if (inputEl) inputEl.value = '';
+                await _prepareArchiveThreadOptions();
+                _setArchiveMsg('New thread created and linked.');
+                return;
+            }
+            _setArchiveMsg(data && data.error ? data.error : 'Create failed.');
+        } catch {
+            _setArchiveMsg('Create failed.');
+        }
+    }
+
+    async function reviewThreads() {
+        const host = $ip('ip-threads-list');
+        if (!host) return;
+        host.innerHTML = '<span class="message-system">Loading threads…</span>';
+        _showView('threads');
+        try {
+            const data = await _apiGet('/api/signal-threads');
+            const threads = data && Array.isArray(data.threads) ? data.threads : [];
+            if (!threads.length) {
+                host.innerHTML = '<span class="message-system">No threads yet.</span>';
+                return;
+            }
+            host.innerHTML = '';
+            threads.forEach(t => {
+                const card = document.createElement('div');
+                card.className = 'ip-session-card';
+                const body = document.createElement('div');
+                body.className = 'ip-session-card-body';
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'ip-session-card-title';
+                titleDiv.textContent = t.title || IP_UNTITLED_THREAD;
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'ip-session-card-meta';
+                metaDiv.textContent = String(t.sessionCount || 0) + ' Sessions';
+                body.appendChild(titleDiv);
+                body.appendChild(metaDiv);
+                const stageSpan = document.createElement('span');
+                stageSpan.className = 'ip-session-card-stage';
+                stageSpan.textContent = t.updatedAt ? ('Updated ' + _fmtDate(t.updatedAt)) : 'Updated —';
+                card.appendChild(body);
+                card.appendChild(stageSpan);
+                card.addEventListener('click', () => _openThreadDetail(String(t.id || '')));
+                host.appendChild(card);
+            });
+        } catch {
+            host.innerHTML = '<span class="message-system">Could not load threads.</span>';
+        }
+    }
+
+    async function _openThreadDetail(threadId) {
+        if (!threadId) return;
+        _activeThreadDetailId = threadId;
+        const titleEl = $ip('ip-thread-detail-title');
+        const metaEl = $ip('ip-thread-detail-meta');
+        const summaryEl = $ip('ip-thread-detail-summary');
+        const listEl = $ip('ip-thread-linked-sessions');
+        if (titleEl) titleEl.textContent = 'Thread';
+        if (metaEl) metaEl.innerHTML = '';
+        if (summaryEl) summaryEl.textContent = 'Loading…';
+        if (listEl) listEl.innerHTML = '<span class="message-system">Loading linked sessions…</span>';
+        _showView('thread-detail');
+        try {
+            const [threadData, linkedData] = await Promise.all([
+                _apiGet('/api/signal-threads/' + encodeURIComponent(threadId)),
+                _apiGet('/api/signal-threads/' + encodeURIComponent(threadId) + '/linked-sessions'),
+            ]);
+            const thread = threadData && threadData.thread ? threadData.thread : null;
+            const sessions = linkedData && Array.isArray(linkedData.sessions) ? linkedData.sessions : [];
+            if (!thread) {
+                if (summaryEl) summaryEl.textContent = 'Thread unavailable.';
+                return;
+            }
+            if (titleEl) titleEl.textContent = thread.title || 'Thread';
+            if (metaEl) {
+                metaEl.innerHTML = '';
+                const rows = [
+                    'Session Count: ' + String(Array.isArray(thread.sessionIds) ? thread.sessionIds.length : 0),
+                    'Last Updated: ' + _fmtDate(thread.updatedAt || thread.createdAt),
+                ];
+                rows.forEach(text => {
+                    const row = document.createElement('div');
+                    row.textContent = text;
+                    metaEl.appendChild(row);
+                });
+            }
+            if (summaryEl) summaryEl.textContent = String(thread.summary || '').trim() || 'No summary yet.';
+            if (listEl) {
+                listEl.innerHTML = '';
+                if (!sessions.length) {
+                    listEl.innerHTML = '<span class="message-system">No linked sessions yet.</span>';
+                } else {
+                    sessions.forEach(s => {
+                        const card = document.createElement('div');
+                        card.className = 'ip-session-card';
+                        const body = document.createElement('div');
+                        body.className = 'ip-session-card-body';
+                        const title = document.createElement('div');
+                        title.className = 'ip-session-card-title';
+                        title.textContent = s.title || 'Untitled Session';
+                        const meta = document.createElement('div');
+                        meta.className = 'ip-session-card-meta';
+                        meta.textContent = _fmtDate(s.updatedAt || s.createdAt);
+                        body.appendChild(title);
+                        body.appendChild(meta);
+                        const stage = document.createElement('span');
+                        stage.className = 'ip-session-card-stage';
+                        stage.textContent = String(s.currentStage || 'observe');
+                        card.appendChild(body);
+                        card.appendChild(stage);
+                        listEl.appendChild(card);
+                    });
+                }
+            }
+        } catch {
+            if (summaryEl) summaryEl.textContent = 'Could not load thread.';
+        }
+    }
+
+    async function _generateActiveThreadSummary() {
+        if (!_activeThreadDetailId) return;
+        const summaryEl = $ip('ip-thread-detail-summary');
+        if (summaryEl) summaryEl.textContent = 'Generating…';
+        try {
+            const data = await _apiPost('/api/signal-threads/' + encodeURIComponent(_activeThreadDetailId) + '/generate-summary', {});
+            if (data && data.success) {
+                if (summaryEl) summaryEl.textContent = String(data.summary || '').trim() || 'No summary generated.';
+                return;
+            }
+            if (summaryEl) summaryEl.textContent = 'Could not generate summary.';
+        } catch {
+            if (summaryEl) summaryEl.textContent = 'Could not generate summary.';
+        }
+    }
+
     // ── Save stage notes ─────────────────────────────────────────────────────
 
     async function saveCurrentStage(advance) {
@@ -10906,6 +11100,21 @@ async function launchOllama(runtimeId) {
         openRoomAndSubtab('hearth', 'hearth-system');
     }
 
+    function reviewArchive() {
+        openRoomAndSubtab('hearth', 'hearth-archive');
+    }
+
+    function returnHome() {
+        _activeSession = null;
+        _hideNewSessionForm();
+        _showView('home');
+    }
+
+    function startNewSessionFromArchive() {
+        returnHome();
+        beginNewSession();
+    }
+
     // ── Bind events ──────────────────────────────────────────────────────────
 
     function _bind(id, event, fn) {
@@ -10915,7 +11124,8 @@ async function launchOllama(runtimeId) {
 
     _bind('ip-begin-btn',          'click', beginNewSession);
     _bind('ip-continue-btn',       'click', continueLastSession);
-    _bind('ip-review-btn',         'click', reviewSessions);
+    _bind('ip-review-threads-btn', 'click', reviewThreads);
+    _bind('ip-review-archive-btn', 'click', reviewArchive);
     _bind('ip-settings-btn',       'click', openSettings);
 
     // Inline new-session form
@@ -10929,20 +11139,22 @@ async function launchOllama(runtimeId) {
         });
     }
 
-    _bind('ip-back-home-btn',      'click', () => {
-        _activeSession = null;
-        _hideNewSessionForm();
-        _showView('home');
-    });
+    _bind('ip-back-home-btn',      'click', returnHome);
 
     _bind('ip-save-btn',           'click', () => saveCurrentStage(false));
     _bind('ip-continue-stage-btn', 'click', () => saveCurrentStage(true));
     _bind('ip-ai-assist-btn',      'click', requestAiAssist);
-    _bind('ip-save-archive-btn',   'click', saveToArchive);
+    _bind('ip-attach-thread-btn',  'click', _attachToExistingThread);
+    _bind('ip-create-thread-btn',  'click', _createNewArchiveThread);
     _bind('ip-export-md-btn',      'click', exportSessionMarkdown);
+    _bind('ip-archive-home-btn',   'click', returnHome);
+    _bind('ip-archive-new-session-btn', 'click', startNewSessionFromArchive);
 
-    _bind('ip-list-back-btn',      'click', () => _showView('home'));
+    _bind('ip-list-back-btn',      'click', returnHome);
     _bind('ip-list-new-btn',       'click', beginNewSession);
+    _bind('ip-threads-back-btn',   'click', returnHome);
+    _bind('ip-thread-detail-back-btn', 'click', reviewThreads);
+    _bind('ip-generate-thread-summary-btn', 'click', _generateActiveThreadSummary);
 
     // ── Init ─────────────────────────────────────────────────────────────────
 

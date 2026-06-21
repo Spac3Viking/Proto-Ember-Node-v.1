@@ -71,6 +71,20 @@ function _normalizeTags(tags) {
     return out;
 }
 
+function _normalizeSessionIds(sessionIds) {
+    if (!Array.isArray(sessionIds)) return [];
+    const seen = new Set();
+    const out = [];
+    sessionIds.forEach(id => {
+        const cleaned = _safeId(String(id || '').trim());
+        if (!cleaned) return;
+        if (seen.has(cleaned)) return;
+        seen.add(cleaned);
+        out.push(cleaned);
+    });
+    return out;
+}
+
 function _safeReadJson(filePath) {
     if (!fs.existsSync(filePath)) return null;
     try {
@@ -107,6 +121,7 @@ function normalizeSignalThread(raw) {
         observations: Array.isArray(data.observations) ? data.observations.map(_normalizeEntry) : [],
         compression: String(data.compression || ''),
         tags: _normalizeTags(data.tags),
+        sessionIds: _normalizeSessionIds(data.sessionIds),
     };
 }
 
@@ -129,6 +144,7 @@ function listSignalThreads() {
                 reflectionCount: t.reflections.length,
                 observationCount: t.observations.length,
                 tags: t.tags,
+                sessionCount: Array.isArray(t.sessionIds) ? t.sessionIds.length : 0,
             };
         })
         .filter(Boolean)
@@ -172,6 +188,7 @@ function createSignalThread(input) {
         observations: [],
         compression: '',
         tags: _normalizeTags(body.tags),
+        sessionIds: _normalizeSessionIds(body.sessionIds),
     };
     return saveSignalThread(thread);
 }
@@ -193,6 +210,7 @@ function updateSignalThread(id, patch) {
     if (typeof data.sourceNotes === 'string') existing.sourceNotes = data.sourceNotes;
     if (typeof data.compression === 'string') existing.compression = data.compression;
     if (Array.isArray(data.tags)) existing.tags = _normalizeTags(data.tags);
+    if (Array.isArray(data.sessionIds)) existing.sessionIds = _normalizeSessionIds(data.sessionIds);
 
     existing.updatedAt = _nowIso();
     return saveSignalThread(existing);
@@ -245,6 +263,20 @@ function setCompression(threadId, compression) {
     thread.compression = String(compression || '');
     thread.updatedAt = _nowIso();
     return saveSignalThread(thread);
+}
+
+function addSessionToSignalThread(threadId, sessionId) {
+    const thread = loadSignalThread(threadId);
+    if (!thread) return null;
+    const normalized = _normalizeSessionIds([sessionId]);
+    if (normalized.length === 0) throw new Error('Session id is required');
+    if (!Array.isArray(thread.sessionIds)) thread.sessionIds = [];
+    if (!thread.sessionIds.includes(normalized[0])) {
+        thread.sessionIds.push(normalized[0]);
+        thread.updatedAt = _nowIso();
+        saveSignalThread(thread);
+    }
+    return thread;
 }
 
 function _normalizeSagaMode(mode) {
@@ -613,6 +645,7 @@ module.exports = {
     addReflection,
     addObservation,
     setCompression,
+    addSessionToSignalThread,
     saveSagaCycle,
     exportSignalThreadMarkdown,
     exportSignalThreadBrief,
