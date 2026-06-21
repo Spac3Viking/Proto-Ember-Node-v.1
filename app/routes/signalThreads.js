@@ -39,6 +39,8 @@ const {
 const { loadSession } = require('../sessions');
 
 const router = express.Router();
+const SUMMARY_UNRESOLVED_PATTERN = /\?|uncertain|unknown|blocked|stuck|pressure|risk/i;
+const SUMMARY_PROGRESS_PATTERN = /done|improv|progress|worked|learned|completed|resolved/i;
 
 function _safeFilenameTitle(title) {
     const base = String(title || 'signal-thread')
@@ -165,6 +167,7 @@ router.get('/api/signal-threads/:id/linked-sessions', readLimiter, (req, res) =>
 
 function _summarizeThreadSessions(thread, sessions) {
     const MAX_PATTERN_ENTRIES = 4;
+    // Keep first-line snippets compact so the summary reads like a field notebook.
     const MAX_PATTERN_LENGTH = 110;
     const t = thread && typeof thread === 'object' ? thread : {};
     const list = Array.isArray(sessions) ? sessions : [];
@@ -179,13 +182,11 @@ function _summarizeThreadSessions(thread, sessions) {
             if (text) allNotes.push(text);
         });
     });
-    const unresolvedPattern = /\?|uncertain|unknown|blocked|stuck|pressure|risk/i;
-    const progressPattern = /done|improv|progress|worked|learned|completed|resolved/i;
     let unresolved = 0;
     let progress = 0;
     allNotes.forEach(n => {
-        if (unresolvedPattern.test(n)) unresolved += 1;
-        if (progressPattern.test(n)) progress += 1;
+        if (SUMMARY_UNRESOLVED_PATTERN.test(n)) unresolved += 1;
+        if (SUMMARY_PROGRESS_PATTERN.test(n)) progress += 1;
     });
     const recurring = allNotes
         .slice(0, MAX_PATTERN_ENTRIES)

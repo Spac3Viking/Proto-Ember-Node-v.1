@@ -10457,7 +10457,7 @@ async function launchOllama(runtimeId) {
         if (clear) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2400);
     }
 
-    function _showArchiveMsg(msg) {
+    function _setArchiveMsg(msg) {
         const el = $ip('ip-archive-status-msg');
         if (el) el.textContent = msg;
     }
@@ -10574,7 +10574,7 @@ async function launchOllama(runtimeId) {
         if (archiveActions) {
             archiveActions.style.display = stage === 'archive' ? '' : 'none';
             if (stage === 'archive') {
-                _showArchiveMsg('Session Archived');
+                _setArchiveMsg('Session Archived');
                 _prepareArchiveThreadOptions();
             }
         }
@@ -10805,19 +10805,19 @@ async function launchOllama(runtimeId) {
         const selectEl = $ip('ip-archive-thread-select');
         const threadId = selectEl ? String(selectEl.value || '').trim() : '';
         if (!threadId) {
-            _showArchiveMsg('Select an existing thread first.');
+            _setArchiveMsg('Select an existing thread first.');
             return;
         }
-        _showArchiveMsg('Attaching…');
+        _setArchiveMsg('Attaching…');
         try {
             const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { threadId });
             if (data && data.success) {
-                _showArchiveMsg('Session attached to thread.');
+                _setArchiveMsg('Session attached to thread.');
                 return;
             }
-            _showArchiveMsg(data && data.error ? data.error : 'Attach failed.');
+            _setArchiveMsg(data && data.error ? data.error : 'Attach failed.');
         } catch {
-            _showArchiveMsg('Attach failed.');
+            _setArchiveMsg('Attach failed.');
         }
     }
 
@@ -10826,21 +10826,21 @@ async function launchOllama(runtimeId) {
         const inputEl = $ip('ip-archive-new-thread-title');
         const newThreadTitle = inputEl ? String(inputEl.value || '').trim() : '';
         if (!newThreadTitle) {
-            _showArchiveMsg('Enter a new thread title.');
+            _setArchiveMsg('Enter a new thread title.');
             return;
         }
-        _showArchiveMsg('Creating thread…');
+        _setArchiveMsg('Creating thread…');
         try {
             const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { newThreadTitle });
             if (data && data.success) {
                 if (inputEl) inputEl.value = '';
                 await _prepareArchiveThreadOptions();
-                _showArchiveMsg('New thread created and linked.');
+                _setArchiveMsg('New thread created and linked.');
                 return;
             }
-            _showArchiveMsg(data && data.error ? data.error : 'Create failed.');
+            _setArchiveMsg(data && data.error ? data.error : 'Create failed.');
         } catch {
-            _showArchiveMsg('Create failed.');
+            _setArchiveMsg('Create failed.');
         }
     }
 
@@ -11047,12 +11047,12 @@ async function launchOllama(runtimeId) {
 
     async function exportSessionMarkdown() {
         if (!_activeSession) return;
-        _showArchiveMsg('Exporting…');
+        _setArchiveMsg('Exporting…');
         try {
             const res = await fetch(
                 '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/export',
             );
-            if (!res.ok) { _showArchiveMsg('Export failed.'); return; }
+            if (!res.ok) { _setArchiveMsg('Export failed.'); return; }
             const text = await res.text();
             const blob = new Blob([text], { type: 'text/markdown' });
             const url  = URL.createObjectURL(blob);
@@ -11063,10 +11063,10 @@ async function launchOllama(runtimeId) {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            _showArchiveMsg('Exported.');
-            setTimeout(() => _showArchiveMsg(''), 2200);
+            _setArchiveMsg('Exported.');
+            setTimeout(() => _setArchiveMsg(''), 2200);
         } catch {
-            _showArchiveMsg('Export error.');
+            _setArchiveMsg('Export error.');
         }
     }
 
@@ -11076,7 +11076,7 @@ async function launchOllama(runtimeId) {
         if (!_activeSession) return;
         const notesEl = $ip('ip-stage-notes');
         const notes = notesEl ? notesEl.value : '';
-        _showArchiveMsg('Saving to archive…');
+        _setArchiveMsg('Saving to archive…');
         try {
             const data = await _apiPost(
                 '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/stage',
@@ -11085,12 +11085,12 @@ async function launchOllama(runtimeId) {
             if (data && data.success) {
                 _activeSession = data.session;
                 _renderStageBar(_activeSession.currentStage, _activeSession.entries);
-                _showArchiveMsg('Saved to archive.');
+                _setArchiveMsg('Saved to archive.');
             } else {
-                _showArchiveMsg('Save failed.');
+                _setArchiveMsg('Save failed.');
             }
         } catch {
-            _showArchiveMsg('Error saving.');
+            _setArchiveMsg('Error saving.');
         }
     }
 
