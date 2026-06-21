@@ -52,9 +52,9 @@
       </div>
     </div>
 
-    <!-- Room Tab Row — 4 rooms: Instrument Panel + 3 legacy rooms -->
+    <!-- Room Tab Row — 4 rooms: Session Console + 3 legacy rooms -->
     <nav class="room-tabs" role="tablist" aria-label="Rooms">
-      <button class="room-tab active" role="tab" aria-selected="true"  data-room="panel"    aria-controls="room-panel">ᚠ Panel</button>
+      <button class="room-tab active" role="tab" aria-selected="true"  data-room="panel"    aria-controls="room-panel">ᚠ Session</button>
       <button class="room-tab"        role="tab" aria-selected="false" data-room="hearth"    aria-controls="room-hearth">ᚺ Hearth</button>
       <button class="room-tab"        role="tab" aria-selected="false" data-room="council"  aria-controls="room-council">ᚹ Ember Council</button>
       <button class="room-tab"        role="tab" aria-selected="false" data-room="threshold" aria-controls="room-threshold">ᚦ Threshold</button>
@@ -64,7 +64,7 @@
     <main class="room-content">
 
       <!-- ═══════════════════════════════════════════════════════════
-           INSTRUMENT PANEL — Phase 18A: Primary Entry Point
+           SESSION CONSOLE — Primary Entry Point
            Observe → Reflect → Act → Refine → Archive
            ═══════════════════════════════════════════════════════════ -->
       <section class="room-panel active" id="room-panel" role="tabpanel">
@@ -81,11 +81,13 @@
           <!-- HOME SCREEN — shown when no session is active -->
           <div id="ip-home" class="ip-home">
             <div class="ember-card ip-home-card">
+              <div class="ip-guidance-line">Observe clearly. Reflect honestly. Act practically. Refine through experience. Archive what matters.</div>
               <div class="ip-home-heading">Where would you like to begin?</div>
               <div class="ip-home-actions">
-                <button class="primary ip-home-primary-btn" id="ip-begin-btn">Begin New Session</button>
-                <button class="secondary ip-home-secondary-btn" id="ip-continue-btn">Continue Last Session</button>
-                <button class="secondary ip-home-secondary-btn" id="ip-review-btn">Review Sessions</button>
+                <button class="primary ip-home-primary-btn" id="ip-begin-btn">Begin Session</button>
+                <button class="secondary ip-home-secondary-btn" id="ip-continue-btn">Continue Session</button>
+                <button class="secondary ip-home-secondary-btn" id="ip-review-threads-btn">Review Threads</button>
+                <button class="secondary ip-home-secondary-btn" id="ip-review-archive-btn">Review Archive</button>
                 <button class="secondary ip-home-secondary-btn" id="ip-settings-btn">Settings →</button>
               </div>
               <!-- Inline new-session form — shown when Begin is clicked -->
@@ -148,10 +150,22 @@
 
             <!-- Archive stage — extra actions -->
             <div class="ember-card ip-archive-actions" id="ip-archive-actions" style="display:none;">
-              <div class="ip-archive-actions-title">Session Complete</div>
+              <div class="ip-archive-actions-title">Session Archived</div>
+              <div class="ip-archive-thread-row">
+                <label for="ip-archive-thread-select">Thread:</label>
+                <select id="ip-archive-thread-select" class="gf-select">
+                  <option value="">Existing Thread ▼</option>
+                </select>
+              </div>
+              <div class="ip-archive-thread-row">
+                <input id="ip-archive-new-thread-title" type="text" placeholder="Create New Thread" maxlength="120" />
+              </div>
               <div class="ip-archive-btns">
-                <button class="primary"   id="ip-save-archive-btn">Save to Archive</button>
+                <button class="primary"   id="ip-attach-thread-btn">Attach to Existing Thread</button>
+                <button class="secondary" id="ip-create-thread-btn">Create New Thread</button>
                 <button class="secondary" id="ip-export-md-btn">Export Markdown</button>
+                <button class="secondary" id="ip-archive-home-btn">Return Home</button>
+                <button class="secondary" id="ip-archive-new-session-btn">Start New Session</button>
               </div>
               <div class="message-system" id="ip-archive-status-msg"></div>
             </div>
@@ -167,6 +181,35 @@
             </div>
             <div id="ip-sessions-list" class="ip-sessions-list">
               <span class="message-system">No sessions yet.</span>
+            </div>
+          </div>
+
+          <div id="ip-threads-list-view" class="ip-sessions-list-view" style="display:none;">
+            <div class="ember-card ip-list-header-card">
+              <button class="secondary" id="ip-threads-back-btn">← Back</button>
+              <span class="ip-list-title">Review Threads</span>
+            </div>
+            <div id="ip-threads-list" class="ip-sessions-list">
+              <span class="message-system">No threads yet.</span>
+            </div>
+          </div>
+
+          <div id="ip-thread-detail-view" class="ip-sessions-list-view" style="display:none;">
+            <div class="ember-card ip-list-header-card">
+              <button class="secondary" id="ip-thread-detail-back-btn">← Threads</button>
+              <span class="ip-list-title" id="ip-thread-detail-title">Thread</span>
+              <button class="secondary" id="ip-generate-thread-summary-btn">Generate Thread Summary</button>
+            </div>
+            <div class="ember-card" style="padding:0.9rem 1rem;">
+              <div class="ip-thread-meta" id="ip-thread-detail-meta"></div>
+            </div>
+            <div class="ember-card" style="padding:0.9rem 1rem;">
+              <div class="ip-thread-section-title">Thread Summary</div>
+              <pre class="ip-thread-summary" id="ip-thread-detail-summary"></pre>
+            </div>
+            <div class="ember-card" style="padding:0.9rem 1rem;">
+              <div class="ip-thread-section-title">Linked Sessions</div>
+              <div id="ip-thread-linked-sessions" class="ip-sessions-list"></div>
             </div>
           </div>
 

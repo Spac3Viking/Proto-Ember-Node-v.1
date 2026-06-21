@@ -31,10 +31,12 @@ const {
     addReflection,
     addObservation,
     setCompression,
+    addSessionToSignalThread,
     saveSagaCycle,
     exportSignalThreadMarkdown,
     exportSignalThreadBrief,
 } = require('../signalThreads');
+const { loadSession } = require('../sessions');
 
 const router = express.Router();
 
@@ -54,7 +56,7 @@ router.get('/api/signal-threads', readLimiter, (req, res) => {
 });
 
 router.post('/api/signal-threads', writeLimiter, (req, res) => {
-    const { title, posture, summary, tags, currentSituation, openPressure, sourceNotes } = req.body || {};
+    const { title, posture, summary, tags, currentSituation, openPressure, sourceNotes, sessionIds } = req.body || {};
     const t = String(title || '').trim();
     if (!t) return res.status(400).json({ error: 'Title is required' });
     const p = String(posture || '').trim().toLowerCase();
@@ -70,6 +72,7 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
             openPressure: String(openPressure || ''),
             sourceNotes: String(sourceNotes || ''),
             tags: Array.isArray(tags) ? tags : [],
+            sessionIds: Array.isArray(sessionIds) ? sessionIds : [],
         });
         res.json({ success: true, thread });
     } catch (err) {
@@ -133,6 +136,76 @@ router.put('/api/signal-threads/:id/compression', writeLimiter, (req, res) => {
     const thread = setCompression(req.params.id, req.body && req.body.compression);
     if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
     res.json({ success: true, thread });
+});
+
+router.post('/api/signal-threads/:id/sessions', writeLimiter, (req, res) => {
+    const sessionId = req.body && req.body.sessionId ? String(req.body.sessionId) : '';
+    if (!sessionId.trim()) return res.status(400).json({ error: 'sessionId is required' });
+    const session = loadSession(sessionId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    try {
+        const thread = addSessionToSignalThread(req.params.id, sessionId);
+        if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({ success: true, thread });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+router.get('/api/signal-threads/:id/linked-sessions', readLimiter, (req, res) => {
+    const thread = loadSignalThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+    const ids = Array.isArray(thread.sessionIds) ? thread.sessionIds : [];
+    const sessions = ids
+        .map(id => loadSession(id))
+        .filter(Boolean)
+        .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+    res.json({ sessions });
+});
+
+function _summarizeThreadSessions(thread, sessions) {
+    const t = thread && typeof thread === 'object' ? thread : {};
+    const list = Array.isArray(sessions) ? sessions : [];
+    const stageCounts = { observe: 0, reflect: 0, act: 0, refine: 0, archive: 0 };
+    const allNotes = [];
+    list.forEach(s => {
+        const stage = String(s.currentStage || '').toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(stageCounts, stage)) stageCounts[stage] += 1;
+        const entries = Array.isArray(s.entries) ? s.entries : [];
+        entries.forEach(e => {
+            const text = String(e && e.notes ? e.notes : '').trim();
+            if (text) allNotes.push(text);
+        });
+    });
+    const unresolved = allNotes.filter(n => /\?|uncertain|unknown|blocked|stuck|pressure|risk/i.test(n)).length;
+    const progress = allNotes.filter(n => /done|improv|progress|worked|learned|completed|resolved/i.test(n)).length;
+    const recurring = allNotes.slice(0, 4).map(n => '- ' + n.split('\n')[0].slice(0, 110)).join('\n');
+    return [
+        'Patterns:',
+        recurring || '- Recurring details will appear as more sessions are linked.',
+        '',
+        'Lessons:',
+        '- ' + (progress > 0 ? 'Recent notes include practical progress and retained lessons.' : 'Lessons are still emerging; continue concise archive notes.'),
+        '',
+        'Open Questions:',
+        '- ' + (unresolved > 0 ? 'Some unresolved pressure remains in linked session notes.' : 'No explicit unresolved questions detected in current notes.'),
+        '',
+        'Unresolved Pressures:',
+        '- ' + (stageCounts.archive < list.length ? 'Some sessions are still in-flight and not archived.' : 'Most linked sessions are archived and stable.'),
+        '',
+        'Recent Progress:',
+        '- Thread "' + String(t.title || 'Untitled Signal Thread') + '" now links ' + String(list.length) + ' session(s).',
+    ].join('\n').trim();
+}
+
+router.post('/api/signal-threads/:id/generate-summary', writeLimiter, (req, res) => {
+    const thread = loadSignalThread(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+    const ids = Array.isArray(thread.sessionIds) ? thread.sessionIds : [];
+    const sessions = ids.map(id => loadSession(id)).filter(Boolean);
+    const summary = _summarizeThreadSessions(thread, sessions);
+    const updated = updateSignalThread(req.params.id, { summary });
+    res.json({ success: true, summary, thread: updated });
 });
 
 router.post('/api/signal-threads/:id/saga-cycle', writeLimiter, (req, res) => {
