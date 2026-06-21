@@ -164,6 +164,8 @@ router.get('/api/signal-threads/:id/linked-sessions', readLimiter, (req, res) =>
 });
 
 function _summarizeThreadSessions(thread, sessions) {
+    const MAX_PATTERN_ENTRIES = 4;
+    const MAX_PATTERN_LENGTH = 110;
     const t = thread && typeof thread === 'object' ? thread : {};
     const list = Array.isArray(sessions) ? sessions : [];
     const stageCounts = { observe: 0, reflect: 0, act: 0, refine: 0, archive: 0 };
@@ -177,9 +179,18 @@ function _summarizeThreadSessions(thread, sessions) {
             if (text) allNotes.push(text);
         });
     });
-    const unresolved = allNotes.filter(n => /\?|uncertain|unknown|blocked|stuck|pressure|risk/i.test(n)).length;
-    const progress = allNotes.filter(n => /done|improv|progress|worked|learned|completed|resolved/i.test(n)).length;
-    const recurring = allNotes.slice(0, 4).map(n => '- ' + n.split('\n')[0].slice(0, 110)).join('\n');
+    const unresolvedPattern = /\?|uncertain|unknown|blocked|stuck|pressure|risk/i;
+    const progressPattern = /done|improv|progress|worked|learned|completed|resolved/i;
+    let unresolved = 0;
+    let progress = 0;
+    allNotes.forEach(n => {
+        if (unresolvedPattern.test(n)) unresolved += 1;
+        if (progressPattern.test(n)) progress += 1;
+    });
+    const recurring = allNotes
+        .slice(0, MAX_PATTERN_ENTRIES)
+        .map(n => '- ' + n.split('\n')[0].slice(0, MAX_PATTERN_LENGTH))
+        .join('\n');
     return [
         'Patterns:',
         recurring || '- Recurring details will appear as more sessions are linked.',

@@ -10387,6 +10387,7 @@ async function launchOllama(runtimeId) {
     // ── Constants ───────────────────────────────────────────────────────────
 
     const IP_STAGES = ['observe', 'reflect', 'act', 'refine', 'archive'];
+    const IP_UNTITLED_THREAD = 'Untitled Signal Thread';
 
     const IP_STAGE_LABELS = Object.freeze({
         observe: 'OBSERVE',
@@ -10456,7 +10457,7 @@ async function launchOllama(runtimeId) {
         if (clear) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2400);
     }
 
-    function _setArchiveMsg(msg) {
+    function _showArchiveMsg(msg) {
         const el = $ip('ip-archive-status-msg');
         if (el) el.textContent = msg;
     }
@@ -10573,7 +10574,7 @@ async function launchOllama(runtimeId) {
         if (archiveActions) {
             archiveActions.style.display = stage === 'archive' ? '' : 'none';
             if (stage === 'archive') {
-                _setArchiveMsg('Session Archived');
+                _showArchiveMsg('Session Archived');
                 _prepareArchiveThreadOptions();
             }
         }
@@ -10793,7 +10794,7 @@ async function launchOllama(runtimeId) {
             threads.forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t.id;
-                opt.textContent = t.title || 'Untitled Signal Thread';
+                opt.textContent = t.title || IP_UNTITLED_THREAD;
                 selectEl.appendChild(opt);
             });
         } catch { /* ignore */ }
@@ -10804,19 +10805,19 @@ async function launchOllama(runtimeId) {
         const selectEl = $ip('ip-archive-thread-select');
         const threadId = selectEl ? String(selectEl.value || '').trim() : '';
         if (!threadId) {
-            _setArchiveMsg('Select an existing thread first.');
+            _showArchiveMsg('Select an existing thread first.');
             return;
         }
-        _setArchiveMsg('Attaching…');
+        _showArchiveMsg('Attaching…');
         try {
             const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { threadId });
             if (data && data.success) {
-                _setArchiveMsg('Session attached to thread.');
+                _showArchiveMsg('Session attached to thread.');
                 return;
             }
-            _setArchiveMsg(data && data.error ? data.error : 'Attach failed.');
+            _showArchiveMsg(data && data.error ? data.error : 'Attach failed.');
         } catch {
-            _setArchiveMsg('Attach failed.');
+            _showArchiveMsg('Attach failed.');
         }
     }
 
@@ -10825,21 +10826,21 @@ async function launchOllama(runtimeId) {
         const inputEl = $ip('ip-archive-new-thread-title');
         const newThreadTitle = inputEl ? String(inputEl.value || '').trim() : '';
         if (!newThreadTitle) {
-            _setArchiveMsg('Enter a new thread title.');
+            _showArchiveMsg('Enter a new thread title.');
             return;
         }
-        _setArchiveMsg('Creating thread…');
+        _showArchiveMsg('Creating thread…');
         try {
             const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { newThreadTitle });
             if (data && data.success) {
                 if (inputEl) inputEl.value = '';
                 await _prepareArchiveThreadOptions();
-                _setArchiveMsg('New thread created and linked.');
+                _showArchiveMsg('New thread created and linked.');
                 return;
             }
-            _setArchiveMsg(data && data.error ? data.error : 'Create failed.');
+            _showArchiveMsg(data && data.error ? data.error : 'Create failed.');
         } catch {
-            _setArchiveMsg('Create failed.');
+            _showArchiveMsg('Create failed.');
         }
     }
 
@@ -10863,7 +10864,7 @@ async function launchOllama(runtimeId) {
                 body.className = 'ip-session-card-body';
                 const titleDiv = document.createElement('div');
                 titleDiv.className = 'ip-session-card-title';
-                titleDiv.textContent = t.title || 'Untitled Signal Thread';
+                titleDiv.textContent = t.title || IP_UNTITLED_THREAD;
                 const metaDiv = document.createElement('div');
                 metaDiv.className = 'ip-session-card-meta';
                 metaDiv.textContent = String(t.sessionCount || 0) + ' Sessions';
@@ -11046,12 +11047,12 @@ async function launchOllama(runtimeId) {
 
     async function exportSessionMarkdown() {
         if (!_activeSession) return;
-        _setArchiveMsg('Exporting…');
+        _showArchiveMsg('Exporting…');
         try {
             const res = await fetch(
                 '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/export',
             );
-            if (!res.ok) { _setArchiveMsg('Export failed.'); return; }
+            if (!res.ok) { _showArchiveMsg('Export failed.'); return; }
             const text = await res.text();
             const blob = new Blob([text], { type: 'text/markdown' });
             const url  = URL.createObjectURL(blob);
@@ -11062,10 +11063,10 @@ async function launchOllama(runtimeId) {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            _setArchiveMsg('Exported.');
-            setTimeout(() => _setArchiveMsg(''), 2200);
+            _showArchiveMsg('Exported.');
+            setTimeout(() => _showArchiveMsg(''), 2200);
         } catch {
-            _setArchiveMsg('Export error.');
+            _showArchiveMsg('Export error.');
         }
     }
 
@@ -11075,7 +11076,7 @@ async function launchOllama(runtimeId) {
         if (!_activeSession) return;
         const notesEl = $ip('ip-stage-notes');
         const notes = notesEl ? notesEl.value : '';
-        _setArchiveMsg('Saving to archive…');
+        _showArchiveMsg('Saving to archive…');
         try {
             const data = await _apiPost(
                 '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/stage',
@@ -11084,12 +11085,12 @@ async function launchOllama(runtimeId) {
             if (data && data.success) {
                 _activeSession = data.session;
                 _renderStageBar(_activeSession.currentStage, _activeSession.entries);
-                _setArchiveMsg('Saved to archive.');
+                _showArchiveMsg('Saved to archive.');
             } else {
-                _setArchiveMsg('Save failed.');
+                _showArchiveMsg('Save failed.');
             }
         } catch {
-            _setArchiveMsg('Error saving.');
+            _showArchiveMsg('Error saving.');
         }
     }
 
