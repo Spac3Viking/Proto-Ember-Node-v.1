@@ -188,13 +188,15 @@ function _summarizeThreadSessions(thread, sessions) {
         if (SUMMARY_UNRESOLVED_PATTERN.test(n)) unresolved += 1;
         if (SUMMARY_PROGRESS_PATTERN.test(n)) progress += 1;
     });
-    const recurring = allNotes
+    const sampleNotes = allNotes
         .slice(0, MAX_PATTERN_ENTRIES)
         .map(n => '- ' + n.split('\n')[0].slice(0, MAX_PATTERN_LENGTH))
         .join('\n');
+    const archivedCount = stageCounts.archive;
+    const inFlightCount = Math.max(0, list.length - archivedCount);
     return [
         'Patterns:',
-        recurring || '- Recurring details will appear as more sessions are linked.',
+        sampleNotes || '- Recurring details will appear as more sessions are linked.',
         '',
         'Lessons:',
         '- ' + (progress > 0 ? 'Recent notes include practical progress and retained lessons.' : 'Lessons are still emerging; continue concise archive notes.'),
@@ -203,7 +205,9 @@ function _summarizeThreadSessions(thread, sessions) {
         '- ' + (unresolved > 0 ? 'Some unresolved pressure remains in linked session notes.' : 'No explicit unresolved questions detected in current notes.'),
         '',
         'Unresolved Pressures:',
-        '- ' + (stageCounts.archive < list.length ? 'Some sessions are still in-flight and not archived.' : 'Most linked sessions are archived and stable.'),
+        '- ' + (inFlightCount > 0
+            ? (String(inFlightCount) + ' linked session(s) are still in-flight and not archived.')
+            : 'All linked sessions are archived and stable.'),
         '',
         'Recent Progress:',
         '- Thread "' + String(t.title || 'Untitled Signal Thread') + '" now links ' + String(list.length) + ' session(s).',

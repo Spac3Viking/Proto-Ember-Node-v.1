@@ -10787,7 +10787,7 @@ async function launchOllama(runtimeId) {
     async function _prepareArchiveThreadOptions() {
         const selectEl = $ip('ip-archive-thread-select');
         if (!selectEl) return;
-        selectEl.innerHTML = '<option value="">Existing Thread ▼</option>';
+        selectEl.innerHTML = '<option value="">Select an existing thread</option>';
         try {
             const data = await _apiGet('/api/signal-threads');
             const threads = data && Array.isArray(data.threads) ? data.threads : [];
