@@ -81,6 +81,17 @@ function _normalizeEntry(entry) {
     };
 }
 
+function _normalizeContinuity(continuity) {
+    const c = continuity && typeof continuity === 'object' ? continuity : {};
+    return {
+        threadId: String(c.threadId || ''),
+        threadTitle: String(c.threadTitle || ''),
+        openPressure: String(c.openPressure || ''),
+        mostRecentReflection: String(c.mostRecentReflection || ''),
+        lastSessionDate: String(c.lastSessionDate || ''),
+    };
+}
+
 function _safeReadJson(filePath) {
     if (!fs.existsSync(filePath)) return null;
     try {
@@ -109,6 +120,7 @@ function normalizeSession(raw) {
         entries:      Array.isArray(data.entries)
             ? data.entries.map(_normalizeEntry)
             : [],
+        continuity: _normalizeContinuity(data.continuity),
     };
 }
 
@@ -146,7 +158,7 @@ function loadSession(id) {
  * @param {{ title?: string }} opts
  * @returns {object}
  */
-function createSession({ title = '' } = {}) {
+function createSession({ title = '', continuity = null } = {}) {
     _ensureDir();
     const now = _nowIso();
     const compact = _isoToCompact(now);
@@ -158,6 +170,7 @@ function createSession({ title = '' } = {}) {
         updatedAt: now,
         currentStage: 'observe',
         entries: [],
+        continuity: _normalizeContinuity(continuity),
     });
     fs.writeFileSync(_sessionPath(id), JSON.stringify(session, null, 2), 'utf8');
     return session;
@@ -167,7 +180,7 @@ function createSession({ title = '' } = {}) {
  * Update an existing session.  Only provided fields are changed.
  * Advances currentStage to next when an entry for the current stage is completed.
  *
- * Accepted patch fields: title, currentStage, entries (full replacement).
+ * Accepted patch fields: title, currentStage, entries (full replacement), continuity.
  *
  * @param {string} id
  * @param {object} patch
@@ -188,6 +201,9 @@ function updateSession(id, patch) {
     }
     if (Array.isArray(p.entries)) {
         existing.entries = p.entries.map(_normalizeEntry);
+    }
+    if (p.continuity && typeof p.continuity === 'object') {
+        existing.continuity = _normalizeContinuity(p.continuity);
     }
 
     existing.updatedAt = _nowIso();
@@ -282,6 +298,7 @@ const STAGE_QUESTIONS = Object.freeze({
     ],
     archive: [
         'What should be remembered?',
+        'What remains unresolved?',
         'What is worth carrying forward?',
     ],
 });
@@ -302,10 +319,22 @@ function exportSessionMarkdown(id) {
     lines.push('created: ' + session.createdAt);
     lines.push('updated: ' + session.updatedAt);
     lines.push('stage: ' + session.currentStage);
+    if (session.continuity && session.continuity.threadId) {
+        lines.push('continuity_thread: ' + session.continuity.threadId);
+    }
     lines.push('---');
     lines.push('');
     lines.push('# ' + (session.title || 'Untitled Session'));
     lines.push('');
+    if (session.continuity && session.continuity.threadId) {
+        lines.push('## Continuity');
+        lines.push('');
+        lines.push('- Thread: ' + (session.continuity.threadTitle || session.continuity.threadId));
+        lines.push('- Open Pressure: ' + (session.continuity.openPressure || ''));
+        lines.push('- Last Reflection: ' + (session.continuity.mostRecentReflection || ''));
+        lines.push('- Last Session Date: ' + (session.continuity.lastSessionDate || ''));
+        lines.push('');
+    }
 
     for (const stage of SESSION_STAGES) {
         const entry = session.entries.find(e => e.stage === stage);

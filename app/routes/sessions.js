@@ -32,6 +32,8 @@ const {
 const {
     createSignalThread,
     addSessionToSignalThread,
+    addOpenPressure,
+    addCarryForwardEntry,
     loadSignalThread,
 } = require('../signalThreads');
 const { OLLAMA_CHAT_URL, getSelectedModelFallback } = require('../runtimeStewardship');
@@ -55,8 +57,38 @@ router.get('/api/sessions', readLimiter, (req, res) => {
 
 router.post('/api/sessions', writeLimiter, (req, res) => {
     try {
-        const { title } = req.body || {};
-        const session = createSession({ title: String(title || '') });
+        const { title, continueThreadId } = req.body || {};
+        let continuity = null;
+        const threadId = String(continueThreadId || '').trim();
+        if (threadId) {
+            const thread = loadSignalThread(threadId);
+            if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+            const latestReflection = Array.isArray(thread.reflections)
+                ? thread.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+                : null;
+            continuity = {
+                threadId: thread.id,
+                threadTitle: thread.title,
+                openPressure: Array.isArray(thread.openPressures) && thread.openPressures.length
+                    ? String(thread.openPressures[0])
+                    : String(thread.openPressure || ''),
+                mostRecentReflection: latestReflection && latestReflection.content
+                    ? String(latestReflection.content)
+                    : '',
+                lastSessionDate: '',
+            };
+
+            const linkedIds = Array.isArray(thread.sessionIds) ? thread.sessionIds : [];
+            const linkedSessions = linkedIds.map(id => loadSession(id)).filter(Boolean);
+            if (linkedSessions.length) {
+                const latestSession = linkedSessions
+                    .slice()
+                    .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))[0];
+                continuity.lastSessionDate = String(latestSession.updatedAt || latestSession.createdAt || '');
+            }
+        }
+
+        const session = createSession({ title: String(title || ''), continuity });
         res.json({ success: true, session });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -156,6 +188,8 @@ function _buildAssistPrompt(stage, notes, sessionTitle) {
         'Your role is to ask clarifying questions, briefly summarise notes, and suggest practical next steps.',
         'Respond in 3–8 sentences. Keep it concise and calm.',
         'Prioritize: clarifying questions, reflection prompts, continuity compression, and next actions.',
+        'Support memory and continuity across sessions; prefer questions over conclusions.',
+        'Use prompts like: "What still matters from previous sessions?", "What remains unresolved?", and "What should be carried forward?".',
         'Avoid long essays, repeated paraphrases, and over-analysis.',
         'Stage: ' + heading,
         'Stage questions:\n- ' + questions,
@@ -222,6 +256,8 @@ router.post('/api/sessions/:id/archive-thread', writeLimiter, (req, res) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const threadId = String(body.threadId || '').trim();
     const newThreadTitle = String(body.newThreadTitle || '').trim();
+    const openPressure = String(body.openPressure || '').trim();
+    const carryForward = String(body.carryForward || '').trim();
 
     if (!threadId && !newThreadTitle) {
         return res.status(400).json({ error: 'threadId or newThreadTitle is required' });
@@ -241,6 +277,13 @@ router.post('/api/sessions/:id/archive-thread', writeLimiter, (req, res) => {
                 sessionIds: [session.id],
             });
             thread = loadSignalThread(created.id);
+        }
+        if (openPressure) {
+            thread = addOpenPressure(thread.id, openPressure) || thread;
+        }
+        if (carryForward) {
+            addCarryForwardEntry(thread.id, carryForward, session.id);
+            thread = loadSignalThread(thread.id) || thread;
         }
         res.json({ success: true, session, thread });
     } catch (err) {

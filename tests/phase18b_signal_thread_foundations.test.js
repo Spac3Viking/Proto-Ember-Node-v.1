@@ -96,6 +96,8 @@ describe('Phase 18B — Signal Thread foundations', () => {
         expect(summarize.body.summary).toContain('Lessons:');
         expect(summarize.body.summary).toContain('Open Questions:');
         expect(summarize.body.summary).toContain('Unresolved Pressures:');
+        expect(summarize.body.summary).toContain('Open Pressures:');
+        expect(summarize.body.summary).toContain('Carry Forward:');
         expect(summarize.body.summary).toContain('Recent Progress:');
     });
 });

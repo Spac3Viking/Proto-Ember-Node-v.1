@@ -85,6 +85,25 @@ function _normalizeSessionIds(sessionIds) {
     return out;
 }
 
+function _normalizeTextList(value) {
+    if (Array.isArray(value)) {
+        const seen = new Set();
+        const out = [];
+        value.forEach(item => {
+            const cleaned = String(item || '').trim();
+            if (!cleaned) return;
+            const key = cleaned.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            out.push(cleaned);
+        });
+        return out;
+    }
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+    return _normalizeTextList(raw.split(/\r?\n+/g));
+}
+
 function _safeReadJson(filePath) {
     if (!fs.existsSync(filePath)) return null;
     try {
@@ -103,9 +122,20 @@ function _normalizeEntry(entry) {
     };
 }
 
+function _normalizeCarryForwardEntry(entry) {
+    const row = entry && typeof entry === 'object' ? entry : {};
+    return {
+        id: String(row.id || ''),
+        timestamp: row.timestamp ? String(row.timestamp) : null,
+        content: String(row.content || ''),
+        sessionId: String(row.sessionId || ''),
+    };
+}
+
 function normalizeSignalThread(raw) {
     const data = raw && typeof raw === 'object' ? raw : {};
     const now = _nowIso();
+    const openPressures = _normalizeTextList(data.openPressures || data.openPressure);
     return {
         id: String(data.id || ''),
         title: String(data.title || 'Untitled Signal Thread'),
@@ -115,7 +145,11 @@ function normalizeSignalThread(raw) {
         updatedAt: data.updatedAt ? String(data.updatedAt) : (data.createdAt ? String(data.createdAt) : now),
         summary: String(data.summary || ''),
         currentSituation: String(data.currentSituation || ''),
-        openPressure: String(data.openPressure || ''),
+        openPressure: String(data.openPressure || openPressures[0] || ''),
+        openPressures,
+        carryForwardEntries: Array.isArray(data.carryForwardEntries)
+            ? data.carryForwardEntries.map(_normalizeCarryForwardEntry).filter(e => e.content)
+            : [],
         sourceNotes: String(data.sourceNotes || ''),
         reflections: Array.isArray(data.reflections) ? data.reflections.map(_normalizeEntry) : [],
         observations: Array.isArray(data.observations) ? data.observations.map(_normalizeEntry) : [],
@@ -145,6 +179,8 @@ function listSignalThreads() {
                 observationCount: t.observations.length,
                 tags: t.tags,
                 sessionCount: Array.isArray(t.sessionIds) ? t.sessionIds.length : 0,
+                openPressureCount: Array.isArray(t.openPressures) ? t.openPressures.length : 0,
+                carryForwardCount: Array.isArray(t.carryForwardEntries) ? t.carryForwardEntries.length : 0,
             };
         })
         .filter(Boolean)
@@ -173,6 +209,7 @@ function createSignalThread(input) {
         throw new Error('Title is required');
     }
     const now = _nowIso();
+    const openPressures = _normalizeTextList(body.openPressures || body.openPressure);
     const thread = {
         id: 'thread-' + crypto.randomUUID(),
         title,
@@ -182,7 +219,11 @@ function createSignalThread(input) {
         updatedAt: now,
         summary: String(body.summary || ''),
         currentSituation: String(body.currentSituation || ''),
-        openPressure: String(body.openPressure || ''),
+        openPressure: String(body.openPressure || openPressures[0] || ''),
+        openPressures,
+        carryForwardEntries: Array.isArray(body.carryForwardEntries)
+            ? body.carryForwardEntries.map(_normalizeCarryForwardEntry).filter(e => e.content)
+            : [],
         sourceNotes: String(body.sourceNotes || ''),
         reflections: [],
         observations: [],
@@ -206,7 +247,19 @@ function updateSignalThread(id, patch) {
     if (typeof data.status === 'string') existing.status = _normalizeStatus(data.status);
     if (typeof data.summary === 'string') existing.summary = data.summary;
     if (typeof data.currentSituation === 'string') existing.currentSituation = data.currentSituation;
-    if (typeof data.openPressure === 'string') existing.openPressure = data.openPressure;
+    if (typeof data.openPressure === 'string') {
+        existing.openPressure = data.openPressure;
+        existing.openPressures = _normalizeTextList(data.openPressure);
+    }
+    if (Array.isArray(data.openPressures)) {
+        existing.openPressures = _normalizeTextList(data.openPressures);
+        existing.openPressure = existing.openPressures[0] || '';
+    }
+    if (Array.isArray(data.carryForwardEntries)) {
+        existing.carryForwardEntries = data.carryForwardEntries
+            .map(_normalizeCarryForwardEntry)
+            .filter(e => e.content);
+    }
     if (typeof data.sourceNotes === 'string') existing.sourceNotes = data.sourceNotes;
     if (typeof data.compression === 'string') existing.compression = data.compression;
     if (Array.isArray(data.tags)) existing.tags = _normalizeTags(data.tags);
@@ -277,6 +330,38 @@ function addSessionToSignalThread(threadId, sessionId) {
         saveSignalThread(thread);
     }
     return thread;
+}
+
+function addOpenPressure(threadId, openPressure) {
+    const thread = loadSignalThread(threadId);
+    if (!thread) return null;
+    const text = String(openPressure || '').trim();
+    if (!text) return thread;
+    if (!Array.isArray(thread.openPressures)) thread.openPressures = [];
+    const exists = thread.openPressures.some(item => String(item || '').trim().toLowerCase() === text.toLowerCase());
+    if (exists) return thread;
+    thread.openPressures.push(text);
+    thread.openPressure = thread.openPressures[0] || '';
+    thread.updatedAt = _nowIso();
+    return saveSignalThread(thread);
+}
+
+function addCarryForwardEntry(threadId, content, sessionId) {
+    const thread = loadSignalThread(threadId);
+    if (!thread) return null;
+    const text = String(content || '').trim();
+    if (!text) return null;
+    if (!Array.isArray(thread.carryForwardEntries)) thread.carryForwardEntries = [];
+    const entry = {
+        id: 'carry-forward-' + crypto.randomUUID(),
+        timestamp: _nowIso(),
+        content: text,
+        sessionId: String(sessionId || '').trim(),
+    };
+    thread.carryForwardEntries.push(entry);
+    thread.updatedAt = entry.timestamp;
+    saveSignalThread(thread);
+    return entry;
 }
 
 function _normalizeSagaMode(mode) {
@@ -483,6 +568,27 @@ function exportSignalThreadMarkdown(thread) {
     lines.push('## Open Pressure');
     lines.push(String(t.openPressure || ''));
     lines.push('');
+    lines.push('## Open Pressures');
+    const pressureList = Array.isArray(t.openPressures) ? t.openPressures : [];
+    if (!pressureList.length) {
+        lines.push('');
+    } else {
+        pressureList.forEach(item => lines.push('- ' + String(item)));
+    }
+    lines.push('');
+    lines.push('## Carry Forward');
+    const carryForward = Array.isArray(t.carryForwardEntries)
+        ? t.carryForwardEntries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
+        : [];
+    if (!carryForward.length) {
+        lines.push('');
+    } else {
+        carryForward.forEach(item => {
+            const stamp = item && item.timestamp ? String(item.timestamp) : '';
+            lines.push('- ' + (stamp ? (stamp + ' — ') : '') + String(item && item.content ? item.content : ''));
+        });
+    }
+    lines.push('');
     lines.push('## Application / Observation / Reflection');
     const latestCycle = _deriveSagaCycles(t)[0];
     if (!latestCycle) {
@@ -589,6 +695,15 @@ function exportSignalThreadBrief(thread) {
     lines.push('');
     lines.push(block('Open Pressure', t.openPressure));
     lines.push('');
+    lines.push(block(
+        'Open Pressures',
+        Array.isArray(t.openPressures) && t.openPressures.length
+            ? t.openPressures.map(item => '- ' + item).join('\n')
+            : '',
+    ));
+    lines.push('');
+    lines.push(entryList('Carry Forward', t.carryForwardEntries));
+    lines.push('');
     lines.push('Application / Observation / Reflection:');
     const currentCycle = _deriveSagaCycles(t)[0];
     if (!currentCycle) {
@@ -646,6 +761,8 @@ module.exports = {
     addObservation,
     setCompression,
     addSessionToSignalThread,
+    addOpenPressure,
+    addCarryForwardEntry,
     saveSagaCycle,
     exportSignalThreadMarkdown,
     exportSignalThreadBrief,
