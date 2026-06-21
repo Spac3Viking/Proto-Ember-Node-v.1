@@ -90,6 +90,12 @@
                 <button class="secondary ip-home-secondary-btn" id="ip-review-archive-btn">Review Archive</button>
                 <button class="secondary ip-home-secondary-btn" id="ip-settings-btn">Settings →</button>
               </div>
+              <div class="ember-card" style="margin-top:0.8rem; padding:0.8rem;">
+                <div class="ip-list-title" style="font-size:0.88rem;">Carry Forward</div>
+                <div id="ip-carry-forward-list" class="ip-sessions-list" style="margin-top:0.5rem;">
+                  <span class="message-system">No recently active Signal Threads.</span>
+                </div>
+              </div>
               <!-- Inline new-session form — shown when Begin is clicked -->
               <div id="ip-new-session-form" class="ip-new-session-form" style="display:none;" aria-live="polite">
                 <label for="ip-new-session-title" class="ip-new-session-label">Session title <span style="opacity:0.5;">(optional)</span></label>
@@ -102,6 +108,18 @@
                   autocomplete="off"
                   aria-label="New session title"
                 >
+                <label for="ip-new-session-mode" class="ip-new-session-label" style="margin-top:0.65rem;">Thread path</label>
+                <select id="ip-new-session-mode" class="gf-select">
+                  <option value="new">Begin New Thread</option>
+                  <option value="continue">Continue Existing Thread</option>
+                </select>
+                <div id="ip-new-session-thread-row" style="display:none; margin-top:0.55rem;">
+                  <label for="ip-new-session-thread-select" class="ip-new-session-label">Continue Existing Thread</label>
+                  <select id="ip-new-session-thread-select" class="gf-select">
+                    <option value="">Select an existing thread</option>
+                  </select>
+                  <div class="message-system" id="ip-new-session-thread-context" style="margin-top:0.45rem;"></div>
+                </div>
                 <div class="ip-new-session-btns">
                   <button class="primary" id="ip-new-session-start-btn">Start Session</button>
                   <button class="secondary" id="ip-new-session-cancel-btn">Cancel</button>
@@ -151,6 +169,8 @@
             <!-- Archive stage — extra actions -->
             <div class="ember-card ip-archive-actions" id="ip-archive-actions" style="display:none;">
               <div class="ip-archive-actions-title">Session Archived</div>
+              <div class="message-system" id="ip-archive-carry-forward-state">Carry Forward Pending</div>
+              <div class="message-system" id="ip-archive-thread-update-state">Thread Update Pending</div>
               <div class="ip-archive-thread-row">
                 <label for="ip-archive-thread-select">Thread:</label>
                 <select id="ip-archive-thread-select" class="gf-select">
@@ -160,9 +180,17 @@
               <div class="ip-archive-thread-row">
                 <input id="ip-archive-new-thread-title" type="text" placeholder="Create New Thread" maxlength="120" />
               </div>
+              <div class="ip-archive-thread-row">
+                <label for="ip-archive-open-pressure-input">Open Pressure</label>
+                <textarea id="ip-archive-open-pressure-input" class="ip-stage-textarea" rows="2" placeholder="What remains unresolved? (optional)"></textarea>
+              </div>
+              <div class="ip-archive-thread-row">
+                <label for="ip-archive-carry-forward-input">Carry Forward</label>
+                <textarea id="ip-archive-carry-forward-input" class="ip-stage-textarea" rows="2" placeholder="What should be carried forward?"></textarea>
+              </div>
               <div class="ip-archive-btns">
-                <button class="primary"   id="ip-attach-thread-btn">Attach to Existing Thread</button>
-                <button class="secondary" id="ip-create-thread-btn">Create New Thread</button>
+                <button class="primary"   id="ip-attach-thread-btn">Continue Thread</button>
+                <button class="secondary" id="ip-create-thread-btn">Start New Thread</button>
                 <button class="secondary" id="ip-export-md-btn">Export Markdown</button>
                 <button class="secondary" id="ip-archive-home-btn">Return Home</button>
                 <button class="secondary" id="ip-archive-new-session-btn">Start New Session</button>

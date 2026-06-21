@@ -32,6 +32,8 @@ const {
     addObservation,
     setCompression,
     addSessionToSignalThread,
+    addOpenPressure,
+    addCarryForwardEntry,
     saveSagaCycle,
     exportSignalThreadMarkdown,
     exportSignalThreadBrief,
@@ -39,7 +41,6 @@ const {
 const { loadSession } = require('../sessions');
 
 const router = express.Router();
-const SUMMARY_UNRESOLVED_PATTERN = /\?|uncertain|unknown|blocked|stuck|pressure|risk/i;
 const SUMMARY_PROGRESS_PATTERN = /done|improv|progress|worked|learned|completed|resolved/i;
 
 function _safeFilenameTitle(title) {
@@ -58,7 +59,9 @@ router.get('/api/signal-threads', readLimiter, (req, res) => {
 });
 
 router.post('/api/signal-threads', writeLimiter, (req, res) => {
-    const { title, posture, summary, tags, currentSituation, openPressure, sourceNotes, sessionIds } = req.body || {};
+    const {
+        title, posture, summary, tags, currentSituation, openPressure, openPressures, sourceNotes, sessionIds,
+    } = req.body || {};
     const t = String(title || '').trim();
     if (!t) return res.status(400).json({ error: 'Title is required' });
     const p = String(posture || '').trim().toLowerCase();
@@ -72,6 +75,7 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
             summary: String(summary || ''),
             currentSituation: String(currentSituation || ''),
             openPressure: String(openPressure || ''),
+            openPressures: Array.isArray(openPressures) ? openPressures : [],
             sourceNotes: String(sourceNotes || ''),
             tags: Array.isArray(tags) ? tags : [],
             sessionIds: Array.isArray(sessionIds) ? sessionIds : [],
@@ -182,18 +186,18 @@ function _summarizeThreadSessions(thread, sessions) {
             if (text) allNotes.push(text);
         });
     });
-    let unresolved = 0;
     let progress = 0;
-    allNotes.forEach(n => {
-        if (SUMMARY_UNRESOLVED_PATTERN.test(n)) unresolved += 1;
-        if (SUMMARY_PROGRESS_PATTERN.test(n)) progress += 1;
-    });
+    allNotes.forEach(n => { if (SUMMARY_PROGRESS_PATTERN.test(n)) progress += 1; });
     const sampleNotes = allNotes
         .slice(0, MAX_PATTERN_ENTRIES)
         .map(n => '- ' + n.split('\n')[0].slice(0, MAX_PATTERN_LENGTH))
         .join('\n');
     const archivedCount = stageCounts.archive;
     const inFlightCount = Math.max(0, list.length - archivedCount);
+    const openPressures = Array.isArray(t.openPressures) ? t.openPressures : [];
+    const carryForward = Array.isArray(t.carryForwardEntries)
+        ? t.carryForwardEntries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))).slice(0, 5)
+        : [];
     return [
         'Patterns:',
         sampleNotes || '- Recurring details will appear as more sessions are linked.',
@@ -202,12 +206,24 @@ function _summarizeThreadSessions(thread, sessions) {
         '- ' + (progress > 0 ? 'Recent notes include practical progress and retained lessons.' : 'Lessons are still emerging; continue concise archive notes.'),
         '',
         'Open Questions:',
-        '- ' + (unresolved > 0 ? 'Some unresolved pressure remains in linked session notes.' : 'No explicit unresolved questions detected in current notes.'),
+        '- ' + (openPressures.length ? 'Open pressures indicate unresolved work still in motion.' : 'No explicit unresolved questions detected in current notes.'),
         '',
         'Unresolved Pressures:',
         '- ' + (inFlightCount > 0
-            ? (String(inFlightCount) + ' linked session(s) are still in-flight and not archived.')
-            : 'All linked sessions are archived and stable.'),
+            ? (String(inFlightCount) + ' linked session(s) remain in-flight.')
+            : (openPressures.length ? 'Recorded open pressures remain active.' : 'No unresolved pressures recorded.')),
+        '',
+        'Open Pressures:',
+        (openPressures.length
+            ? openPressures.slice(0, 6).map(item => '- ' + item).join('\n')
+            : ('- ' + (inFlightCount > 0
+                ? (String(inFlightCount) + ' linked session(s) remain in-flight.')
+                : 'No active open pressures recorded.'))),
+        '',
+        'Carry Forward:',
+        (carryForward.length
+            ? carryForward.map(entry => '- ' + String(entry.content || '')).join('\n')
+            : '- No carry forward entries recorded yet.'),
         '',
         'Recent Progress:',
         '- Thread "' + String(t.title || 'Untitled Signal Thread') + '" now links ' + String(list.length) + ' session(s).',
@@ -234,6 +250,32 @@ router.post('/api/signal-threads/:id/saga-cycle', writeLimiter, (req, res) => {
             observation: result.observation,
             reflection: result.reflection,
         });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+router.post('/api/signal-threads/:id/carry-forward', writeLimiter, (req, res) => {
+    try {
+        const existing = loadSignalThread(req.params.id);
+        if (!existing) return res.status(404).json({ error: 'Signal Thread not found' });
+        const content = req.body && req.body.content;
+        const sessionId = req.body && req.body.sessionId;
+        const entry = addCarryForwardEntry(req.params.id, content, sessionId);
+        if (!entry) return res.status(400).json({ error: 'Carry forward content is required' });
+        const thread = loadSignalThread(req.params.id);
+        res.json({ success: true, thread, entry });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+router.post('/api/signal-threads/:id/open-pressures', writeLimiter, (req, res) => {
+    try {
+        const content = req.body && req.body.content;
+        const thread = addOpenPressure(req.params.id, content);
+        if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({ success: true, thread });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }

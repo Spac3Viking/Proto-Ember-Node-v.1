@@ -10422,6 +10422,7 @@ async function launchOllama(runtimeId) {
         ],
         archive: [
             'What should be remembered?',
+            'What remains unresolved?',
             'What is worth carrying forward?',
         ],
     });
@@ -10432,6 +10433,7 @@ async function launchOllama(runtimeId) {
     let _activeThreadDetailId = null;
     let _ipView = 'home';        // 'home' | 'session' | 'list' | 'threads' | 'thread-detail'
     let _aiAssistActive = false;
+    let _newSessionThreadSnapshot = [];
 
     // ── Element refs (resolved lazily) ───────────────────────────────────────
 
@@ -10460,6 +10462,28 @@ async function launchOllama(runtimeId) {
     function _setArchiveMsg(msg) {
         const el = $ip('ip-archive-status-msg');
         if (el) el.textContent = msg;
+    }
+
+    function _clipLine(text, max = 120) {
+        const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!cleaned) return '';
+        return cleaned.length > max ? (cleaned.slice(0, max).trimEnd() + '…') : cleaned;
+    }
+
+    function _setArchiveState({ carryForwardRecorded = false, threadUpdated = false } = {}) {
+        const carryEl = $ip('ip-archive-carry-forward-state');
+        const threadEl = $ip('ip-archive-thread-update-state');
+        if (carryEl) carryEl.textContent = carryForwardRecorded ? 'Carry Forward Recorded' : 'Carry Forward Pending';
+        if (threadEl) threadEl.textContent = threadUpdated ? 'Thread Updated' : 'Thread Update Pending';
+    }
+
+    function _readArchiveContinuityInputs() {
+        const pressureEl = $ip('ip-archive-open-pressure-input');
+        const carryEl = $ip('ip-archive-carry-forward-input');
+        return {
+            openPressure: pressureEl ? String(pressureEl.value || '').trim() : '',
+            carryForward: carryEl ? String(carryEl.value || '').trim() : '',
+        };
     }
 
     // ── View switcher ─────────────────────────────────────────────────────────
@@ -10569,12 +10593,17 @@ async function launchOllama(runtimeId) {
         const aiStatus = $ip('ip-ai-assist-status');
         if (aiStatus) aiStatus.textContent = '';
 
+        if (session && session.continuity && session.continuity.threadId) {
+            _setStatus('Continuing: ' + (session.continuity.threadTitle || session.continuity.threadId));
+        }
+
         // Archive actions
         const archiveActions = $ip('ip-archive-actions');
         if (archiveActions) {
             archiveActions.style.display = stage === 'archive' ? '' : 'none';
             if (stage === 'archive') {
                 _setArchiveMsg('Session Archived');
+                _setArchiveState({ carryForwardRecorded: false, threadUpdated: false });
                 _prepareArchiveThreadOptions();
             }
         }
@@ -10613,6 +10642,132 @@ async function launchOllama(runtimeId) {
         return res.json();
     }
 
+    async function _populateNewSessionThreadOptions() {
+        const selectEl = $ip('ip-new-session-thread-select');
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">Select an existing thread</option>';
+        _newSessionThreadSnapshot = [];
+        try {
+            const data = await _apiGet('/api/signal-threads');
+            const threads = data && Array.isArray(data.threads) ? data.threads : [];
+            _newSessionThreadSnapshot = threads;
+            threads.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                const updated = t.updatedAt ? (' · updated ' + formatRelativeTime(t.updatedAt)) : '';
+                opt.textContent = (t.title || IP_UNTITLED_THREAD) + updated;
+                selectEl.appendChild(opt);
+            });
+        } catch { /* ignore */ }
+    }
+
+    async function _renderNewSessionThreadContext(threadId) {
+        const contextEl = $ip('ip-new-session-thread-context');
+        if (!contextEl) return;
+        const id = String(threadId || '').trim();
+        if (!id) {
+            contextEl.textContent = '';
+            return;
+        }
+        contextEl.textContent = 'Loading thread context…';
+        try {
+            const [threadData, linkedData] = await Promise.all([
+                _apiGet('/api/signal-threads/' + encodeURIComponent(id)),
+                _apiGet('/api/signal-threads/' + encodeURIComponent(id) + '/linked-sessions'),
+            ]);
+            const thread = threadData && threadData.thread ? threadData.thread : null;
+            const sessions = linkedData && Array.isArray(linkedData.sessions) ? linkedData.sessions : [];
+            if (!thread) {
+                contextEl.textContent = 'Thread context unavailable.';
+                return;
+            }
+            const reflections = Array.isArray(thread.reflections) ? thread.reflections : [];
+            const latestReflection = reflections
+                .slice()
+                .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0];
+            const openPressure = Array.isArray(thread.openPressures) && thread.openPressures.length
+                ? String(thread.openPressures[0])
+                : String(thread.openPressure || '');
+            const lastSession = sessions
+                .slice()
+                .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))[0];
+            const parts = [
+                'Thread Name: ' + (thread.title || IP_UNTITLED_THREAD),
+                'Open Pressure: ' + (_clipLine(openPressure, 110) || '—'),
+                'Most Recent Reflection: ' + (_clipLine(latestReflection && latestReflection.content ? latestReflection.content : '', 110) || '—'),
+                'Last Session Date: ' + (lastSession ? _fmtDate(lastSession.updatedAt || lastSession.createdAt) : '—'),
+            ];
+            contextEl.textContent = parts.join('\n');
+        } catch {
+            contextEl.textContent = 'Thread context unavailable.';
+        }
+    }
+
+    async function _refreshCarryForwardHome() {
+        const host = $ip('ip-carry-forward-list');
+        if (!host) return;
+        host.innerHTML = '<span class="message-system">Loading continuity…</span>';
+        try {
+            const data = await _apiGet('/api/signal-threads');
+            const threads = data && Array.isArray(data.threads) ? data.threads.slice(0, 3) : [];
+            if (!threads.length) {
+                host.innerHTML = '<span class="message-system">No recently active Signal Threads.</span>';
+                return;
+            }
+            const detailList = await Promise.all(
+                threads.map(t => _apiGet('/api/signal-threads/' + encodeURIComponent(t.id)).catch(() => null)),
+            );
+            host.innerHTML = '';
+            detailList.forEach((payload, idx) => {
+                const thread = payload && payload.thread ? payload.thread : null;
+                const fallback = threads[idx];
+                const t = thread || fallback;
+                const row = document.createElement('div');
+                row.className = 'ip-session-card';
+                const body = document.createElement('div');
+                body.className = 'ip-session-card-body';
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'ip-session-card-title';
+                titleDiv.textContent = t.title || IP_UNTITLED_THREAD;
+                const openPressure = Array.isArray(t.openPressures) && t.openPressures.length
+                    ? String(t.openPressures[0])
+                    : String(t.openPressure || '');
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'ip-session-card-meta';
+                metaDiv.textContent = 'Open Pressure: ' + (_clipLine(openPressure, 120) || '—');
+                const stageDiv = document.createElement('div');
+                stageDiv.className = 'ip-session-card-meta';
+                stageDiv.textContent = 'Last Active: ' + (t.updatedAt ? formatRelativeTime(t.updatedAt) : '—');
+                body.appendChild(titleDiv);
+                body.appendChild(metaDiv);
+                body.appendChild(stageDiv);
+                const actionWrap = document.createElement('div');
+                actionWrap.className = 'ip-session-card-actions';
+                const continueBtn = document.createElement('button');
+                continueBtn.className = 'secondary';
+                continueBtn.textContent = 'Continue Thread';
+                continueBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const modeEl = $ip('ip-new-session-mode');
+                    const threadEl = $ip('ip-new-session-thread-select');
+                    const rowEl = $ip('ip-new-session-thread-row');
+                    beginNewSession();
+                    if (modeEl) modeEl.value = 'continue';
+                    if (rowEl) rowEl.style.display = '';
+                    await _populateNewSessionThreadOptions();
+                    if (threadEl) threadEl.value = String(t.id || '');
+                    _renderNewSessionThreadContext(t.id);
+                });
+                actionWrap.appendChild(continueBtn);
+                row.appendChild(body);
+                row.appendChild(actionWrap);
+                host.appendChild(row);
+            });
+        } catch {
+            host.innerHTML = '<span class="message-system">Could not load continuity.</span>';
+        }
+    }
+
     // ── Begin new session ────────────────────────────────────────────────────
 
     function beginNewSession() {
@@ -10620,18 +10775,37 @@ async function launchOllama(runtimeId) {
         const formEl    = $ip('ip-new-session-form');
         const inputEl   = $ip('ip-new-session-title');
         const statusEl  = $ip('ip-new-session-status');
+        const modeEl = $ip('ip-new-session-mode');
+        const threadRowEl = $ip('ip-new-session-thread-row');
+        const threadSelectEl = $ip('ip-new-session-thread-select');
+        const contextEl = $ip('ip-new-session-thread-context');
         if (formEl)   formEl.style.display = '';
         if (inputEl)  { inputEl.value = ''; inputEl.focus(); }
         if (statusEl) statusEl.textContent = '';
+        if (modeEl) modeEl.value = 'new';
+        if (threadRowEl) threadRowEl.style.display = 'none';
+        if (threadSelectEl) threadSelectEl.value = '';
+        if (contextEl) contextEl.textContent = '';
+        _populateNewSessionThreadOptions();
     }
 
     async function _submitNewSession() {
         const inputEl  = $ip('ip-new-session-title');
         const statusEl = $ip('ip-new-session-status');
+        const modeEl = $ip('ip-new-session-mode');
+        const threadSelectEl = $ip('ip-new-session-thread-select');
         const title = inputEl ? inputEl.value.trim() : '';
+        const mode = modeEl ? String(modeEl.value || 'new') : 'new';
+        const continueThreadId = mode === 'continue' && threadSelectEl
+            ? String(threadSelectEl.value || '').trim()
+            : '';
+        if (mode === 'continue' && !continueThreadId) {
+            if (statusEl) statusEl.textContent = 'Select a thread to continue.';
+            return;
+        }
         if (statusEl) statusEl.textContent = 'Creating…';
         try {
-            const data = await _apiPost('/api/sessions', { title });
+            const data = await _apiPost('/api/sessions', { title, continueThreadId });
             if (data && data.success && data.session) {
                 _hideNewSessionForm();
                 _loadSessionView(data.session);
@@ -10647,9 +10821,17 @@ async function launchOllama(runtimeId) {
         const formEl   = $ip('ip-new-session-form');
         const inputEl  = $ip('ip-new-session-title');
         const statusEl = $ip('ip-new-session-status');
+        const modeEl = $ip('ip-new-session-mode');
+        const threadRowEl = $ip('ip-new-session-thread-row');
+        const threadSelectEl = $ip('ip-new-session-thread-select');
+        const contextEl = $ip('ip-new-session-thread-context');
         if (formEl)   formEl.style.display = 'none';
         if (inputEl)  inputEl.value = '';
         if (statusEl) statusEl.textContent = '';
+        if (modeEl) modeEl.value = 'new';
+        if (threadRowEl) threadRowEl.style.display = 'none';
+        if (threadSelectEl) threadSelectEl.value = '';
+        if (contextEl) contextEl.textContent = '';
     }
 
     // ── Continue last session ─────────────────────────────────────────────────
@@ -10804,15 +10986,25 @@ async function launchOllama(runtimeId) {
         if (!_activeSession) return;
         const selectEl = $ip('ip-archive-thread-select');
         const threadId = selectEl ? String(selectEl.value || '').trim() : '';
+        const continuity = _readArchiveContinuityInputs();
         if (!threadId) {
             _setArchiveMsg('Select an existing thread first.');
             return;
         }
         _setArchiveMsg('Attaching…');
         try {
-            const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { threadId });
+            const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', {
+                threadId,
+                openPressure: continuity.openPressure,
+                carryForward: continuity.carryForward,
+            });
             if (data && data.success) {
+                _setArchiveState({
+                    carryForwardRecorded: Boolean(continuity.carryForward),
+                    threadUpdated: true,
+                });
                 _setArchiveMsg('Session attached to thread.');
+                _refreshCarryForwardHome();
                 return;
             }
             _setArchiveMsg(data && data.error ? data.error : 'Attach failed.');
@@ -10825,17 +11017,27 @@ async function launchOllama(runtimeId) {
         if (!_activeSession) return;
         const inputEl = $ip('ip-archive-new-thread-title');
         const newThreadTitle = inputEl ? String(inputEl.value || '').trim() : '';
+        const continuity = _readArchiveContinuityInputs();
         if (!newThreadTitle) {
             _setArchiveMsg('Enter a new thread title.');
             return;
         }
         _setArchiveMsg('Creating thread…');
         try {
-            const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', { newThreadTitle });
+            const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', {
+                newThreadTitle,
+                openPressure: continuity.openPressure,
+                carryForward: continuity.carryForward,
+            });
             if (data && data.success) {
                 if (inputEl) inputEl.value = '';
                 await _prepareArchiveThreadOptions();
+                _setArchiveState({
+                    carryForwardRecorded: Boolean(continuity.carryForward),
+                    threadUpdated: true,
+                });
                 _setArchiveMsg('New thread created and linked.');
+                _refreshCarryForwardHome();
                 return;
             }
             _setArchiveMsg(data && data.error ? data.error : 'Create failed.');
@@ -10909,9 +11111,22 @@ async function launchOllama(runtimeId) {
             if (titleEl) titleEl.textContent = thread.title || 'Thread';
             if (metaEl) {
                 metaEl.innerHTML = '';
+                const latestReflection = Array.isArray(thread.reflections)
+                    ? thread.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+                    : null;
+                const carryForwardList = Array.isArray(thread.carryForwardEntries)
+                    ? thread.carryForwardEntries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))).slice(0, 3)
+                    : [];
+                const openPressureList = Array.isArray(thread.openPressures)
+                    ? thread.openPressures.slice(0, 4)
+                    : [];
                 const rows = [
                     'Session Count: ' + String(Array.isArray(thread.sessionIds) ? thread.sessionIds.length : 0),
                     'Last Updated: ' + _fmtDate(thread.updatedAt || thread.createdAt),
+                    'Purpose: ' + (_clipLine(thread.currentSituation || thread.summary, 120) || '—'),
+                    'Open Pressures: ' + (openPressureList.length ? openPressureList.join(' | ') : '—'),
+                    'Carry Forward: ' + (carryForwardList.length ? carryForwardList.map(e => _clipLine(e.content, 60)).join(' | ') : '—'),
+                    'Last Reflection: ' + (_clipLine(latestReflection && latestReflection.content ? latestReflection.content : '', 120) || '—'),
                 ];
                 rows.forEach(text => {
                     const row = document.createElement('div');
@@ -11107,7 +11322,13 @@ async function launchOllama(runtimeId) {
     function returnHome() {
         _activeSession = null;
         _hideNewSessionForm();
+        const pressureEl = $ip('ip-archive-open-pressure-input');
+        const carryEl = $ip('ip-archive-carry-forward-input');
+        if (pressureEl) pressureEl.value = '';
+        if (carryEl) carryEl.value = '';
+        _setArchiveState({ carryForwardRecorded: false, threadUpdated: false });
         _showView('home');
+        _refreshCarryForwardHome();
     }
 
     function startNewSessionFromArchive() {
@@ -11131,6 +11352,25 @@ async function launchOllama(runtimeId) {
     // Inline new-session form
     _bind('ip-new-session-start-btn',  'click', _submitNewSession);
     _bind('ip-new-session-cancel-btn', 'click', _hideNewSessionForm);
+    const newSessionMode = $ip('ip-new-session-mode');
+    if (newSessionMode) {
+        newSessionMode.addEventListener('change', async () => {
+            const isContinue = String(newSessionMode.value || '') === 'continue';
+            const threadRowEl = $ip('ip-new-session-thread-row');
+            if (threadRowEl) threadRowEl.style.display = isContinue ? '' : 'none';
+            if (isContinue) {
+                await _populateNewSessionThreadOptions();
+            } else {
+                _renderNewSessionThreadContext('');
+            }
+        });
+    }
+    const newSessionThreadSelect = $ip('ip-new-session-thread-select');
+    if (newSessionThreadSelect) {
+        newSessionThreadSelect.addEventListener('change', () => {
+            _renderNewSessionThreadContext(newSessionThreadSelect.value);
+        });
+    }
     const newTitleInput = $ip('ip-new-session-title');
     if (newTitleInput) {
         newTitleInput.addEventListener('keydown', e => {
@@ -11160,5 +11400,6 @@ async function launchOllama(runtimeId) {
 
     _showView('home');
     _refreshAiStatus();
+    _refreshCarryForwardHome();
 
 })();
