@@ -28,7 +28,13 @@ describe('Phase 17E — Signal Threads foundations', () => {
 
         const create = await request(app)
             .post('/api/signal-threads')
-            .send({ title: 'The Drying Well', posture: 'exploratory', summary: 'A continuity vessel.', tags: ['water', 'well'] });
+            .send({
+                title: 'The Drying Well',
+                purpose: 'Track and steward the long-term well recovery effort.',
+                posture: 'exploratory',
+                summary: 'A continuity vessel.',
+                tags: ['water', 'well'],
+            });
 
         expect(create.status).toBe(200);
         expect(create.body.success).toBe(true);
@@ -38,6 +44,7 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(typeof thread.id).toBe('string');
         expect(thread.id.startsWith('thread-')).toBe(true);
         expect(thread.title).toBe('The Drying Well');
+        expect(thread.purpose).toBe('Track and steward the long-term well recovery effort.');
         expect(thread.posture).toBe('exploratory');
         expect(thread.status).toBe('active');
         expect(typeof thread.createdAt).toBe('string');
@@ -56,6 +63,7 @@ describe('Phase 17E — Signal Threads foundations', () => {
         expect(fs.existsSync(onDiskPath)).toBe(true);
         const onDisk = JSON.parse(fs.readFileSync(onDiskPath, 'utf8'));
         expect(onDisk.title).toBe('The Drying Well');
+        expect(onDisk.purpose).toBe('Track and steward the long-term well recovery effort.');
         expect(onDisk.posture).toBe('exploratory');
         expect(onDisk.status).toBe('active');
         expect(onDisk.currentSituation).toBe('');

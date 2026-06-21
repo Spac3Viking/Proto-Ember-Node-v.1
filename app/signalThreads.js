@@ -139,6 +139,7 @@ function normalizeSignalThread(raw) {
     return {
         id: String(data.id || ''),
         title: String(data.title || 'Untitled Signal Thread'),
+        purpose: String(data.purpose || ''),
         posture: _normalizePosture(data.posture),
         status: _normalizeStatus(data.status),
         createdAt: data.createdAt ? String(data.createdAt) : now,
@@ -171,6 +172,7 @@ function listSignalThreads() {
             return {
                 id: t.id,
                 title: t.title,
+                purpose: t.purpose,
                 posture: t.posture,
                 status: t.status,
                 createdAt: t.createdAt,
@@ -213,6 +215,7 @@ function createSignalThread(input) {
     const thread = {
         id: 'thread-' + crypto.randomUUID(),
         title,
+        purpose: String(body.purpose || ''),
         posture: _normalizePosture(body.posture),
         status: 'active',
         createdAt: now,
@@ -243,6 +246,7 @@ function updateSignalThread(id, patch) {
         const trimmed = data.title.trim();
         if (trimmed) existing.title = trimmed;
     }
+    if (typeof data.purpose === 'string') existing.purpose = data.purpose;
     if (typeof data.posture === 'string') existing.posture = _normalizePosture(data.posture);
     if (typeof data.status === 'string') existing.status = _normalizeStatus(data.status);
     if (typeof data.summary === 'string') existing.summary = data.summary;
@@ -552,6 +556,7 @@ function exportSignalThreadMarkdown(thread) {
     lines.push('');
     lines.push('## Overview');
     lines.push('Title: ' + (t.title || ''));
+    lines.push('Purpose: ' + String(t.purpose || ''));
     lines.push('Posture: ' + (t.posture || ''));
     lines.push('Status: ' + (t.status || ''));
     lines.push('Tags: ' + (Array.isArray(t.tags) && t.tags.length ? t.tags.join(', ') : ''));
@@ -683,6 +688,7 @@ function exportSignalThreadBrief(thread) {
     lines.push('');
     lines.push('Overview:');
     lines.push('Title: ' + String(t.title || ''));
+    lines.push('Purpose: ' + String(t.purpose || '').trim());
     lines.push('Posture: ' + String(t.posture || ''));
     lines.push('Status: ' + String(t.status || ''));
     lines.push('Tags: ' + (Array.isArray(t.tags) && t.tags.length ? t.tags.join(', ') : ''));

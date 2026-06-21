@@ -906,6 +906,9 @@ function renderSignalThreadOverviewMeta(host, thread) {
     const reflections = Array.isArray(t.reflections) ? t.reflections.length : 0;
     const observations = Array.isArray(t.observations) ? t.observations.length : 0;
     const cycles = deriveSagaCycles(t).length;
+    const latestReflection = Array.isArray(t.reflections)
+        ? t.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+        : null;
 
     function previewText(text, fallback = '—') {
         const raw = String(text || '').trim();
@@ -916,12 +919,17 @@ function renderSignalThreadOverviewMeta(host, thread) {
     }
 
     const items = [
+        ['purpose', previewText(t.purpose)],
+        ['open pressures', Array.isArray(t.openPressures) && t.openPressures.length ? String(t.openPressures.length) : '0'],
+        ['carry forward', Array.isArray(t.carryForwardEntries) ? String(t.carryForwardEntries.length) : '0'],
+        ['recent reflection', previewText(latestReflection && latestReflection.content ? latestReflection.content : '')],
+        ['sessions', Array.isArray(t.sessionIds) ? String(t.sessionIds.length) : '0'],
         ['created', t.createdAt ? String(t.createdAt) : '—'],
         ['last updated', t.updatedAt ? String(t.updatedAt) : '—'],
         ['observations', String(observations)],
         ['reflections', String(reflections)],
         ['cycles', cycles ? String(cycles) : '—'],
-        ['note', previewText(t.summary)],
+        ['thread note', previewText(t.summary)],
     ];
 
     items.forEach(([key, val]) => {
@@ -952,6 +960,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     const postureSelect = document.getElementById('signal-thread-posture-select');
     const statusSelect = document.getElementById('signal-thread-status-select');
     const tagsInput = document.getElementById('signal-thread-tags-input');
+    const purposeInput = document.getElementById('signal-thread-purpose-input');
     const summaryInput = document.getElementById('signal-thread-summary-input');
     const situationInput = document.getElementById('signal-thread-current-situation-input');
     const pressureInput = document.getElementById('signal-thread-open-pressure-input');
@@ -963,6 +972,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (postureSelect) postureSelect.value = thread && thread.posture ? thread.posture : 'exploratory';
     if (statusSelect) statusSelect.value = thread && thread.status ? thread.status : 'active';
     if (tagsInput) tagsInput.value = thread && Array.isArray(thread.tags) ? thread.tags.join(', ') : '';
+    if (purposeInput) purposeInput.value = thread && typeof thread.purpose === 'string' ? thread.purpose : '';
     if (summaryInput) summaryInput.value = thread && typeof thread.summary === 'string' ? thread.summary : '';
     if (situationInput) situationInput.value = thread && typeof thread.currentSituation === 'string' ? thread.currentSituation : '';
     if (pressureInput) pressureInput.value = thread && typeof thread.openPressure === 'string' ? thread.openPressure : '';
@@ -1013,6 +1023,7 @@ function _readSignalThreadEditorPayload() {
     const postureSelect = document.getElementById('signal-thread-posture-select');
     const statusSelect = document.getElementById('signal-thread-status-select');
     const tagsInput = document.getElementById('signal-thread-tags-input');
+    const purposeInput = document.getElementById('signal-thread-purpose-input');
     const summaryInput = document.getElementById('signal-thread-summary-input');
     const situationInput = document.getElementById('signal-thread-current-situation-input');
     const pressureInput = document.getElementById('signal-thread-open-pressure-input');
@@ -1022,6 +1033,7 @@ function _readSignalThreadEditorPayload() {
     const title = titleInput ? titleInput.value : '';
     const posture = postureSelect ? postureSelect.value : 'exploratory';
     const status = statusSelect ? statusSelect.value : 'active';
+    const purpose = purposeInput ? purposeInput.value : '';
     const summary = summaryInput ? summaryInput.value : '';
     const currentSituation = situationInput ? situationInput.value : '';
     const openPressure = pressureInput ? pressureInput.value : '';
@@ -1033,6 +1045,7 @@ function _readSignalThreadEditorPayload() {
         title,
         posture,
         status,
+        purpose,
         summary,
         currentSituation,
         openPressure,
@@ -1058,6 +1071,7 @@ async function persistActiveSignalThreadFromEditor({ createIfMissing = false } =
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title,
+                    purpose: payload.purpose,
                     posture: payload.posture,
                     summary: payload.summary,
                     tags: payload.tags,
@@ -1079,6 +1093,7 @@ async function persistActiveSignalThreadFromEditor({ createIfMissing = false } =
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 title,
+                purpose: payload.purpose,
                 posture: payload.posture,
                 status: payload.status,
                 summary: payload.summary,
@@ -1206,6 +1221,7 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
         fillSignalThreadEditor({
             id: null,
             title: '',
+            purpose: '',
             posture: 'exploratory',
             status: 'active',
             summary: '',
@@ -1231,14 +1247,14 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
 }
 
 async function saveActiveSignalThread() {
-    const { title, posture, status, summary, currentSituation, openPressure, compression, sourceNotes, tags } = _readSignalThreadEditorPayload();
+    const { title, posture, status, purpose, summary, currentSituation, openPressure, compression, sourceNotes, tags } = _readSignalThreadEditorPayload();
 
     try {
         if (!_activeSignalThreadId) {
             const res = await fetch('/api/signal-threads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, posture, summary, tags, currentSituation, openPressure, sourceNotes }),
+                body: JSON.stringify({ title, purpose, posture, summary, tags, currentSituation, openPressure, sourceNotes }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data || !data.success || !data.thread) {
@@ -1255,7 +1271,7 @@ async function saveActiveSignalThread() {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, posture, status, summary, currentSituation, openPressure, compression, sourceNotes, tags }),
+            body: JSON.stringify({ title, purpose, posture, status, summary, currentSituation, openPressure, compression, sourceNotes, tags }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success || !data.thread) {
@@ -10470,11 +10486,25 @@ async function launchOllama(runtimeId) {
         return cleaned.length > max ? (cleaned.slice(0, max).trimEnd() + '…') : cleaned;
     }
 
-    function _setArchiveState({ carryForwardRecorded = false, threadUpdated = false } = {}) {
+    function _clipSentences(text, maxSentences = 3, maxChars = 260) {
+        const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!cleaned) return '';
+        const parts = cleaned.match(/[^.!?]+[.!?]?/g) || [cleaned];
+        const clipped = parts.slice(0, Math.max(1, maxSentences)).join(' ').trim();
+        return clipped.length > maxChars ? (clipped.slice(0, maxChars).trimEnd() + '…') : clipped;
+    }
+
+    function _setArchiveState({
+        carryForwardRecorded = false,
+        threadUpdated = false,
+        openPressuresUpdated = false,
+    } = {}) {
         const carryEl = $ip('ip-archive-carry-forward-state');
         const threadEl = $ip('ip-archive-thread-update-state');
+        const pressureEl = $ip('ip-archive-open-pressure-state');
         if (carryEl) carryEl.textContent = carryForwardRecorded ? 'Carry Forward Recorded' : 'Carry Forward Pending';
         if (threadEl) threadEl.textContent = threadUpdated ? 'Thread Updated' : 'Thread Update Pending';
+        if (pressureEl) pressureEl.textContent = openPressuresUpdated ? 'Open Pressures Updated' : 'Open Pressures Pending';
     }
 
     function _readArchiveContinuityInputs() {
@@ -10603,7 +10633,7 @@ async function launchOllama(runtimeId) {
             archiveActions.style.display = stage === 'archive' ? '' : 'none';
             if (stage === 'archive') {
                 _setArchiveMsg('Session Archived');
-                _setArchiveState({ carryForwardRecorded: false, threadUpdated: false });
+                _setArchiveState({ carryForwardRecorded: false, threadUpdated: false, openPressuresUpdated: false });
                 _prepareArchiveThreadOptions();
             }
         }
@@ -10666,7 +10696,7 @@ async function launchOllama(runtimeId) {
         if (!contextEl) return;
         const id = String(threadId || '').trim();
         if (!id) {
-            contextEl.textContent = '';
+            contextEl.innerHTML = '';
             return;
         }
         contextEl.textContent = 'Loading thread context…';
@@ -10685,6 +10715,11 @@ async function launchOllama(runtimeId) {
             const latestReflection = reflections
                 .slice()
                 .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0];
+            const latestCarryForward = Array.isArray(thread.carryForwardEntries)
+                ? thread.carryForwardEntries
+                    .slice()
+                    .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+                : null;
             const openPressure = Array.isArray(thread.openPressures) && thread.openPressures.length
                 ? String(thread.openPressures[0])
                 : String(thread.openPressure || '');
@@ -10692,79 +10727,140 @@ async function launchOllama(runtimeId) {
                 .slice()
                 .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))[0];
             const parts = [
-                'Thread Name: ' + (thread.title || IP_UNTITLED_THREAD),
-                'Open Pressure: ' + (_clipLine(openPressure, 110) || '—'),
-                'Most Recent Reflection: ' + (_clipLine(latestReflection && latestReflection.content ? latestReflection.content : '', 110) || '—'),
-                'Last Session Date: ' + (lastSession ? _fmtDate(lastSession.updatedAt || lastSession.createdAt) : '—'),
+                ['Continue Existing Thread', ''],
+                ['Thread', thread.title || IP_UNTITLED_THREAD],
+                ['Purpose', _clipLine(thread.purpose || '', 110) || '—'],
+                ['Open Pressure', _clipLine(openPressure, 110) || '—'],
+                ['Carry Forward', _clipLine(latestCarryForward && latestCarryForward.content ? latestCarryForward.content : '', 110) || '—'],
+                ['Recent Reflection', _clipSentences(latestReflection && latestReflection.content ? latestReflection.content : '', 3, 180) || '—'],
+                ['Last Active', lastSession ? _fmtDate(lastSession.updatedAt || lastSession.createdAt) : '—'],
             ];
-            contextEl.textContent = parts.join('\n');
+            contextEl.innerHTML = '';
+            parts.forEach(([label, value], idx) => {
+                const row = document.createElement('div');
+                row.textContent = idx === 0 ? label : (label + ': ' + value);
+                contextEl.appendChild(row);
+            });
         } catch {
             contextEl.textContent = 'Thread context unavailable.';
         }
     }
 
     async function _refreshCarryForwardHome() {
-        const host = $ip('ip-carry-forward-list');
-        if (!host) return;
-        host.innerHTML = '<span class="message-system">Loading continuity…</span>';
+        const carryHost = $ip('ip-carry-forward-list');
+        const pressureHost = $ip('ip-open-pressure-list');
+        const continuityHost = $ip('ip-living-continuity-card');
+        if (carryHost) carryHost.innerHTML = '<span class="message-system">Loading continuity…</span>';
+        if (pressureHost) pressureHost.innerHTML = '<span class="message-system">Loading continuity…</span>';
+        if (continuityHost) continuityHost.innerHTML = '<span class="message-system">Loading continuity…</span>';
         try {
             const data = await _apiGet('/api/signal-threads');
             const threads = data && Array.isArray(data.threads) ? data.threads.slice(0, 3) : [];
-            if (!threads.length) {
-                host.innerHTML = '<span class="message-system">No recently active Signal Threads.</span>';
-                return;
-            }
             const detailList = await Promise.all(
                 threads.map(t => _apiGet('/api/signal-threads/' + encodeURIComponent(t.id)).catch(() => null)),
             );
-            host.innerHTML = '';
-            detailList.forEach((payload, idx) => {
-                const thread = payload && payload.thread ? payload.thread : null;
-                const fallback = threads[idx];
-                const t = thread || fallback;
-                const row = document.createElement('div');
-                row.className = 'ip-session-card';
-                const body = document.createElement('div');
-                body.className = 'ip-session-card-body';
-                const titleDiv = document.createElement('div');
-                titleDiv.className = 'ip-session-card-title';
-                titleDiv.textContent = t.title || IP_UNTITLED_THREAD;
+            const detailedThreads = detailList
+                .map((payload, idx) => payload && payload.thread ? payload.thread : threads[idx])
+                .filter(Boolean);
+            if (!detailedThreads.length) {
+                if (continuityHost) continuityHost.innerHTML = '<span class="message-system">No recent thread yet.</span>';
+                if (carryHost) carryHost.innerHTML = '<span class="message-system">No recently active Signal Threads.</span>';
+                if (pressureHost) pressureHost.innerHTML = '<span class="message-system">No active open pressures.</span>';
+                return;
+            }
+
+            const mostRecent = detailedThreads[0];
+            if (continuityHost) {
+                const openPressure = Array.isArray(mostRecent.openPressures) && mostRecent.openPressures.length
+                    ? String(mostRecent.openPressures[0])
+                    : String(mostRecent.openPressure || '');
+                const latestCarryForward = Array.isArray(mostRecent.carryForwardEntries)
+                    ? mostRecent.carryForwardEntries
+                        .slice()
+                        .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+                    : null;
+                continuityHost.innerHTML = '';
+                const continuityCard = document.createElement('div');
+                continuityCard.className = 'ip-session-card';
+                continuityCard.innerHTML = [
+                    '<div class="ip-session-card-body">',
+                    '<div class="ip-session-card-title">' + escapeHtml(mostRecent.title || IP_UNTITLED_THREAD) + '</div>',
+                    '<div class="ip-session-card-meta">Purpose: ' + escapeHtml(_clipLine(mostRecent.purpose || '', 160) || '—') + '</div>',
+                    '<div class="ip-session-card-meta">Open Pressure: ' + escapeHtml(_clipLine(openPressure, 160) || '—') + '</div>',
+                    '<div class="ip-session-card-meta">Carry Forward: ' + escapeHtml(_clipLine(latestCarryForward && latestCarryForward.content ? latestCarryForward.content : '', 160) || '—') + '</div>',
+                    '</div>',
+                ].join('');
+                continuityHost.appendChild(continuityCard);
+            }
+
+            if (carryHost) carryHost.innerHTML = '';
+            if (pressureHost) pressureHost.innerHTML = '';
+            detailedThreads.forEach(t => {
+                const latestCarryForward = Array.isArray(t.carryForwardEntries)
+                    ? t.carryForwardEntries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+                    : null;
                 const openPressure = Array.isArray(t.openPressures) && t.openPressures.length
                     ? String(t.openPressures[0])
                     : String(t.openPressure || '');
-                const metaDiv = document.createElement('div');
-                metaDiv.className = 'ip-session-card-meta';
-                metaDiv.textContent = 'Open Pressure: ' + (_clipLine(openPressure, 120) || '—');
-                const stageDiv = document.createElement('div');
-                stageDiv.className = 'ip-session-card-meta';
-                stageDiv.textContent = 'Last Active: ' + (t.updatedAt ? formatRelativeTime(t.updatedAt) : '—');
-                body.appendChild(titleDiv);
-                body.appendChild(metaDiv);
-                body.appendChild(stageDiv);
-                const actionWrap = document.createElement('div');
-                actionWrap.className = 'ip-session-card-actions';
-                const continueBtn = document.createElement('button');
-                continueBtn.className = 'secondary';
-                continueBtn.textContent = 'Continue Thread';
-                continueBtn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const modeEl = $ip('ip-new-session-mode');
-                    const threadEl = $ip('ip-new-session-thread-select');
-                    const rowEl = $ip('ip-new-session-thread-row');
-                    beginNewSession();
-                    if (modeEl) modeEl.value = 'continue';
-                    if (rowEl) rowEl.style.display = '';
-                    await _populateNewSessionThreadOptions();
-                    if (threadEl) threadEl.value = String(t.id || '');
-                    _renderNewSessionThreadContext(t.id);
-                });
-                actionWrap.appendChild(continueBtn);
-                row.appendChild(body);
-                row.appendChild(actionWrap);
-                host.appendChild(row);
+                if (carryHost && latestCarryForward && String(latestCarryForward.content || '').trim()) {
+                    const row = document.createElement('div');
+                    row.className = 'ip-session-card';
+                    row.innerHTML = [
+                        '<div class="ip-session-card-body">',
+                        '<div class="ip-session-card-title">' + escapeHtml(t.title || IP_UNTITLED_THREAD) + '</div>',
+                        '<div class="ip-session-card-meta">“' + escapeHtml(_clipLine(latestCarryForward.content, 170)) + '”</div>',
+                        '<div class="ip-session-card-meta">Last Updated: ' + escapeHtml(t.updatedAt ? formatRelativeTime(t.updatedAt) : '—') + '</div>',
+                        '</div>',
+                    ].join('');
+                    carryHost.appendChild(row);
+                }
+                if (pressureHost && String(openPressure || '').trim()) {
+                    const row = document.createElement('div');
+                    row.className = 'ip-session-card';
+                    const body = document.createElement('div');
+                    body.className = 'ip-session-card-body';
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = 'ip-session-card-title';
+                    titleDiv.textContent = t.title || IP_UNTITLED_THREAD;
+                    const metaDiv = document.createElement('div');
+                    metaDiv.className = 'ip-session-card-meta';
+                    metaDiv.textContent = _clipLine(openPressure, 170);
+                    body.appendChild(titleDiv);
+                    body.appendChild(metaDiv);
+                    const actionWrap = document.createElement('div');
+                    actionWrap.className = 'ip-session-card-actions';
+                    const continueBtn = document.createElement('button');
+                    continueBtn.className = 'secondary';
+                    continueBtn.textContent = 'Continue Thread';
+                    continueBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const modeEl = $ip('ip-new-session-mode');
+                        const threadEl = $ip('ip-new-session-thread-select');
+                        const rowEl = $ip('ip-new-session-thread-row');
+                        beginNewSession();
+                        if (modeEl) modeEl.value = 'continue';
+                        if (rowEl) rowEl.style.display = '';
+                        await _populateNewSessionThreadOptions();
+                        if (threadEl) threadEl.value = String(t.id || '');
+                        _renderNewSessionThreadContext(t.id);
+                    });
+                    actionWrap.appendChild(continueBtn);
+                    row.appendChild(body);
+                    row.appendChild(actionWrap);
+                    pressureHost.appendChild(row);
+                }
             });
+
+            if (carryHost && !carryHost.children.length) {
+                carryHost.innerHTML = '<span class="message-system">No recent carry forward yet.</span>';
+            }
+            if (pressureHost && !pressureHost.children.length) {
+                pressureHost.innerHTML = '<span class="message-system">No active open pressures.</span>';
+            }
         } catch {
-            host.innerHTML = '<span class="message-system">Could not load continuity.</span>';
+            if (continuityHost) continuityHost.innerHTML = '<span class="message-system">Could not load continuity.</span>';
+            if (carryHost) carryHost.innerHTML = '<span class="message-system">Could not load continuity.</span>';
+            if (pressureHost) pressureHost.innerHTML = '<span class="message-system">Could not load continuity.</span>';
         }
     }
 
@@ -10985,64 +11081,37 @@ async function launchOllama(runtimeId) {
     async function _attachToExistingThread() {
         if (!_activeSession) return;
         const selectEl = $ip('ip-archive-thread-select');
+        const newTitleEl = $ip('ip-archive-new-thread-title');
         const threadId = selectEl ? String(selectEl.value || '').trim() : '';
+        const newThreadTitle = newTitleEl ? String(newTitleEl.value || '').trim() : '';
         const continuity = _readArchiveContinuityInputs();
-        if (!threadId) {
-            _setArchiveMsg('Select an existing thread first.');
+        if (!threadId && !newThreadTitle) {
+            _setArchiveMsg('Select a thread or enter a new thread title.');
             return;
         }
-        _setArchiveMsg('Attaching…');
+        _setArchiveMsg('Updating thread…');
         try {
             const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', {
                 threadId,
-                openPressure: continuity.openPressure,
-                carryForward: continuity.carryForward,
-            });
-            if (data && data.success) {
-                _setArchiveState({
-                    carryForwardRecorded: Boolean(continuity.carryForward),
-                    threadUpdated: true,
-                });
-                _setArchiveMsg('Session attached to thread.');
-                _refreshCarryForwardHome();
-                return;
-            }
-            _setArchiveMsg(data && data.error ? data.error : 'Attach failed.');
-        } catch {
-            _setArchiveMsg('Attach failed.');
-        }
-    }
-
-    async function _createNewArchiveThread() {
-        if (!_activeSession) return;
-        const inputEl = $ip('ip-archive-new-thread-title');
-        const newThreadTitle = inputEl ? String(inputEl.value || '').trim() : '';
-        const continuity = _readArchiveContinuityInputs();
-        if (!newThreadTitle) {
-            _setArchiveMsg('Enter a new thread title.');
-            return;
-        }
-        _setArchiveMsg('Creating thread…');
-        try {
-            const data = await _apiPost('/api/sessions/' + encodeURIComponent(_activeSession.id) + '/archive-thread', {
                 newThreadTitle,
                 openPressure: continuity.openPressure,
                 carryForward: continuity.carryForward,
             });
             if (data && data.success) {
-                if (inputEl) inputEl.value = '';
-                await _prepareArchiveThreadOptions();
                 _setArchiveState({
                     carryForwardRecorded: Boolean(continuity.carryForward),
                     threadUpdated: true,
+                    openPressuresUpdated: Boolean(continuity.openPressure),
                 });
-                _setArchiveMsg('New thread created and linked.');
+                if (newTitleEl) newTitleEl.value = '';
+                _setArchiveMsg('Thread updated.');
                 _refreshCarryForwardHome();
+                await _prepareArchiveThreadOptions();
                 return;
             }
-            _setArchiveMsg(data && data.error ? data.error : 'Create failed.');
+            _setArchiveMsg(data && data.error ? data.error : 'Attach failed.');
         } catch {
-            _setArchiveMsg('Create failed.');
+            _setArchiveMsg('Attach failed.');
         }
     }
 
@@ -11108,12 +11177,12 @@ async function launchOllama(runtimeId) {
                 if (summaryEl) summaryEl.textContent = 'Thread unavailable.';
                 return;
             }
+            const latestReflection = Array.isArray(thread.reflections)
+                ? thread.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+                : null;
             if (titleEl) titleEl.textContent = thread.title || 'Thread';
             if (metaEl) {
                 metaEl.innerHTML = '';
-                const latestReflection = Array.isArray(thread.reflections)
-                    ? thread.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
-                    : null;
                 const carryForwardList = Array.isArray(thread.carryForwardEntries)
                     ? thread.carryForwardEntries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))).slice(0, 3)
                     : [];
@@ -11121,12 +11190,15 @@ async function launchOllama(runtimeId) {
                     ? thread.openPressures.slice(0, 4)
                     : [];
                 const rows = [
-                    'Session Count: ' + String(Array.isArray(thread.sessionIds) ? thread.sessionIds.length : 0),
-                    'Last Updated: ' + _fmtDate(thread.updatedAt || thread.createdAt),
-                    'Purpose: ' + (_clipLine(thread.currentSituation || thread.summary, 120) || '—'),
+                    'Purpose: ' + (_clipLine(thread.purpose || '', 180) || '—'),
                     'Open Pressures: ' + (openPressureList.length ? openPressureList.join(' | ') : '—'),
                     'Carry Forward: ' + (carryForwardList.length ? carryForwardList.map(e => _clipLine(e.content, 60)).join(' | ') : '—'),
-                    'Last Reflection: ' + (_clipLine(latestReflection && latestReflection.content ? latestReflection.content : '', 120) || '—'),
+                    'Recent Reflection: ' + (_clipSentences(latestReflection && latestReflection.content ? latestReflection.content : '', 3, 220) || '—'),
+                    'Recent Sessions: ' + (sessions.length
+                        ? sessions.slice(0, 3).map(s => s.title || 'Untitled Session').join(' | ')
+                        : '—'),
+                    'Session Count: ' + String(Array.isArray(thread.sessionIds) ? thread.sessionIds.length : 0),
+                    'Last Updated: ' + _fmtDate(thread.updatedAt || thread.createdAt),
                 ];
                 rows.forEach(text => {
                     const row = document.createElement('div');
@@ -11134,7 +11206,9 @@ async function launchOllama(runtimeId) {
                     metaEl.appendChild(row);
                 });
             }
-            if (summaryEl) summaryEl.textContent = String(thread.summary || '').trim() || 'No summary yet.';
+            if (summaryEl) {
+                summaryEl.textContent = _clipSentences(latestReflection && latestReflection.content ? latestReflection.content : '', 3, 320) || 'No reflection yet.';
+            }
             if (listEl) {
                 listEl.innerHTML = '';
                 if (!sessions.length) {
@@ -11326,7 +11400,7 @@ async function launchOllama(runtimeId) {
         const carryEl = $ip('ip-archive-carry-forward-input');
         if (pressureEl) pressureEl.value = '';
         if (carryEl) carryEl.value = '';
-        _setArchiveState({ carryForwardRecorded: false, threadUpdated: false });
+        _setArchiveState({ carryForwardRecorded: false, threadUpdated: false, openPressuresUpdated: false });
         _showView('home');
         _refreshCarryForwardHome();
     }
@@ -11385,7 +11459,6 @@ async function launchOllama(runtimeId) {
     _bind('ip-continue-stage-btn', 'click', () => saveCurrentStage(true));
     _bind('ip-ai-assist-btn',      'click', requestAiAssist);
     _bind('ip-attach-thread-btn',  'click', _attachToExistingThread);
-    _bind('ip-create-thread-btn',  'click', _createNewArchiveThread);
     _bind('ip-export-md-btn',      'click', exportSessionMarkdown);
     _bind('ip-archive-home-btn',   'click', returnHome);
     _bind('ip-archive-new-session-btn', 'click', startNewSessionFromArchive);
@@ -11394,7 +11467,6 @@ async function launchOllama(runtimeId) {
     _bind('ip-list-new-btn',       'click', beginNewSession);
     _bind('ip-threads-back-btn',   'click', returnHome);
     _bind('ip-thread-detail-back-btn', 'click', reviewThreads);
-    _bind('ip-generate-thread-summary-btn', 'click', _generateActiveThreadSummary);
 
     // ── Init ─────────────────────────────────────────────────────────────────
 

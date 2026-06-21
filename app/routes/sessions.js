@@ -66,12 +66,21 @@ router.post('/api/sessions', writeLimiter, (req, res) => {
             const latestReflection = Array.isArray(thread.reflections)
                 ? thread.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
                 : null;
+            const latestCarryForward = Array.isArray(thread.carryForwardEntries)
+                ? thread.carryForwardEntries
+                    .slice()
+                    .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
+                : null;
             continuity = {
                 threadId: thread.id,
                 threadTitle: thread.title,
+                threadPurpose: String(thread.purpose || ''),
                 openPressure: Array.isArray(thread.openPressures) && thread.openPressures.length
                     ? String(thread.openPressures[0])
                     : String(thread.openPressure || ''),
+                carryForward: latestCarryForward && latestCarryForward.content
+                    ? String(latestCarryForward.content)
+                    : '',
                 mostRecentReflection: latestReflection && latestReflection.content
                     ? String(latestReflection.content)
                     : '',
@@ -185,12 +194,12 @@ function _buildAssistPrompt(stage, notes, sessionTitle) {
 
     const systemPrompt = [
         'You are a quiet field assistant helping a person work through a structured reflection session.',
-        'Your role is to ask clarifying questions, briefly summarise notes, and suggest practical next steps.',
-        'Respond in 3–8 sentences. Keep it concise and calm.',
-        'Prioritize: clarifying questions, reflection prompts, continuity compression, and next actions.',
-        'Support memory and continuity across sessions; prefer questions over conclusions.',
+        'Ask short, clarifying questions first. Keep a reflective, steady tone.',
+        'Respond in 3–6 sentences, mostly as questions.',
+        'Support continuity across sessions: unresolved pressure, carry forward, and next meaningful attention.',
+        'Avoid conclusions, avoid long explanations, and avoid certainty language.',
         'Use prompts like: "What still matters from previous sessions?", "What remains unresolved?", and "What should be carried forward?".',
-        'Avoid long essays, repeated paraphrases, and over-analysis.',
+        'Do not over-explain or narrate; stay practical and compact.',
         'Stage: ' + heading,
         'Stage questions:\n- ' + questions,
     ].join('\n');

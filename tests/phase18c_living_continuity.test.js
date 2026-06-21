@@ -50,10 +50,14 @@ describe('Phase 18C — Living Continuity', () => {
             .post('/api/signal-threads')
             .send({
                 title: 'Health Recovery',
+                purpose: 'Preserve practical healing lessons over time.',
                 posture: 'practical',
                 openPressures: ['Assess forearm strength after exercises'],
             });
         const threadId = threadCreate.body.thread.id;
+        await request(app)
+            .post('/api/signal-threads/' + encodeURIComponent(threadId) + '/carry-forward')
+            .send({ content: 'Small daily gains compound.' });
         await request(app)
             .post('/api/signal-threads/' + encodeURIComponent(threadId) + '/reflections')
             .send({ content: 'Grip strength improved after the last routine.' });
@@ -66,7 +70,9 @@ describe('Phase 18C — Living Continuity', () => {
         expect(res.body.success).toBe(true);
         expect(res.body.session.continuity.threadId).toBe(threadId);
         expect(res.body.session.continuity.threadTitle).toBe('Health Recovery');
+        expect(res.body.session.continuity.threadPurpose).toContain('healing lessons');
         expect(res.body.session.continuity.openPressure).toContain('Assess forearm strength');
+        expect(res.body.session.continuity.carryForward).toContain('Small daily gains');
         expect(res.body.session.continuity.mostRecentReflection).toContain('Grip strength improved');
     });
 
@@ -76,6 +82,7 @@ describe('Phase 18C — Living Continuity', () => {
             .post('/api/signal-threads')
             .send({
                 title: 'Green Fire Development',
+                purpose: 'Refine tools and continuity practices.',
                 posture: 'practical',
                 openPressures: ['Evaluate Session workflow'],
             });
@@ -88,6 +95,7 @@ describe('Phase 18C — Living Continuity', () => {
         expect(list.status).toBe(200);
         const row = list.body.threads.find(t => t.id === threadId);
         expect(row).toBeTruthy();
+        expect(row.purpose).toBe('Refine tools and continuity practices.');
         expect(row.openPressureCount).toBe(1);
         expect(row.carryForwardCount).toBe(1);
     });

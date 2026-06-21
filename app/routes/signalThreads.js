@@ -60,7 +60,7 @@ router.get('/api/signal-threads', readLimiter, (req, res) => {
 
 router.post('/api/signal-threads', writeLimiter, (req, res) => {
     const {
-        title, posture, summary, tags, currentSituation, openPressure, openPressures, sourceNotes, sessionIds,
+        title, purpose, posture, summary, tags, currentSituation, openPressure, openPressures, sourceNotes, sessionIds,
     } = req.body || {};
     const t = String(title || '').trim();
     if (!t) return res.status(400).json({ error: 'Title is required' });
@@ -71,6 +71,7 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
     try {
         const thread = createSignalThread({
             title: t,
+            purpose: String(purpose || ''),
             posture: p,
             summary: String(summary || ''),
             currentSituation: String(currentSituation || ''),
