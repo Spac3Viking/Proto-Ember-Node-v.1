@@ -10489,8 +10489,11 @@ async function launchOllama(runtimeId) {
     function _clipSentences(text, maxSentences = 3, maxChars = 260) {
         const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
         if (!cleaned) return '';
-        const parts = cleaned.match(/[^.!?]+[.!?]?/g) || [cleaned];
-        const clipped = parts.slice(0, Math.max(1, maxSentences)).join(' ').trim();
+        const parts = cleaned
+            .split(/(?<=[.!?])\s+/)
+            .map(part => part.trim())
+            .filter(Boolean);
+        const clipped = (parts.length ? parts : [cleaned]).slice(0, Math.max(1, maxSentences)).join(' ').trim();
         return clipped.length > maxChars ? (clipped.slice(0, maxChars).trimEnd() + '…') : clipped;
     }
 
@@ -10727,7 +10730,6 @@ async function launchOllama(runtimeId) {
                 .slice()
                 .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))[0];
             const parts = [
-                ['Continue Existing Thread', ''],
                 ['Thread', thread.title || IP_UNTITLED_THREAD],
                 ['Purpose', _clipLine(thread.purpose || '', 110) || '—'],
                 ['Open Pressure', _clipLine(openPressure, 110) || '—'],
@@ -10736,9 +10738,9 @@ async function launchOllama(runtimeId) {
                 ['Last Active', lastSession ? _fmtDate(lastSession.updatedAt || lastSession.createdAt) : '—'],
             ];
             contextEl.innerHTML = '';
-            parts.forEach(([label, value], idx) => {
+            parts.forEach(([label, value]) => {
                 const row = document.createElement('div');
-                row.textContent = idx === 0 ? label : (label + ': ' + value);
+                row.textContent = label + ': ' + value;
                 contextEl.appendChild(row);
             });
         } catch {
@@ -10782,14 +10784,25 @@ async function launchOllama(runtimeId) {
                 continuityHost.innerHTML = '';
                 const continuityCard = document.createElement('div');
                 continuityCard.className = 'ip-session-card';
-                continuityCard.innerHTML = [
-                    '<div class="ip-session-card-body">',
-                    '<div class="ip-session-card-title">' + escapeHtml(mostRecent.title || IP_UNTITLED_THREAD) + '</div>',
-                    '<div class="ip-session-card-meta">Purpose: ' + escapeHtml(_clipLine(mostRecent.purpose || '', 160) || '—') + '</div>',
-                    '<div class="ip-session-card-meta">Open Pressure: ' + escapeHtml(_clipLine(openPressure, 160) || '—') + '</div>',
-                    '<div class="ip-session-card-meta">Carry Forward: ' + escapeHtml(_clipLine(latestCarryForward && latestCarryForward.content ? latestCarryForward.content : '', 160) || '—') + '</div>',
-                    '</div>',
-                ].join('');
+                const body = document.createElement('div');
+                body.className = 'ip-session-card-body';
+                const title = document.createElement('div');
+                title.className = 'ip-session-card-title';
+                title.textContent = mostRecent.title || IP_UNTITLED_THREAD;
+                const purpose = document.createElement('div');
+                purpose.className = 'ip-session-card-meta';
+                purpose.textContent = 'Purpose: ' + (_clipLine(mostRecent.purpose || '', 160) || '—');
+                const pressure = document.createElement('div');
+                pressure.className = 'ip-session-card-meta';
+                pressure.textContent = 'Open Pressure: ' + (_clipLine(openPressure, 160) || '—');
+                const carryForward = document.createElement('div');
+                carryForward.className = 'ip-session-card-meta';
+                carryForward.textContent = 'Carry Forward: ' + (_clipLine(latestCarryForward && latestCarryForward.content ? latestCarryForward.content : '', 160) || '—');
+                body.appendChild(title);
+                body.appendChild(purpose);
+                body.appendChild(pressure);
+                body.appendChild(carryForward);
+                continuityCard.appendChild(body);
                 continuityHost.appendChild(continuityCard);
             }
 
@@ -10805,13 +10818,21 @@ async function launchOllama(runtimeId) {
                 if (carryHost && latestCarryForward && String(latestCarryForward.content || '').trim()) {
                     const row = document.createElement('div');
                     row.className = 'ip-session-card';
-                    row.innerHTML = [
-                        '<div class="ip-session-card-body">',
-                        '<div class="ip-session-card-title">' + escapeHtml(t.title || IP_UNTITLED_THREAD) + '</div>',
-                        '<div class="ip-session-card-meta">“' + escapeHtml(_clipLine(latestCarryForward.content, 170)) + '”</div>',
-                        '<div class="ip-session-card-meta">Last Updated: ' + escapeHtml(t.updatedAt ? formatRelativeTime(t.updatedAt) : '—') + '</div>',
-                        '</div>',
-                    ].join('');
+                    const body = document.createElement('div');
+                    body.className = 'ip-session-card-body';
+                    const title = document.createElement('div');
+                    title.className = 'ip-session-card-title';
+                    title.textContent = t.title || IP_UNTITLED_THREAD;
+                    const carry = document.createElement('div');
+                    carry.className = 'ip-session-card-meta';
+                    carry.textContent = '“' + _clipLine(latestCarryForward.content, 170) + '”';
+                    const updated = document.createElement('div');
+                    updated.className = 'ip-session-card-meta';
+                    updated.textContent = 'Last Updated: ' + (t.updatedAt ? formatRelativeTime(t.updatedAt) : '—');
+                    body.appendChild(title);
+                    body.appendChild(carry);
+                    body.appendChild(updated);
+                    row.appendChild(body);
                     carryHost.appendChild(row);
                 }
                 if (pressureHost && String(openPressure || '').trim()) {
@@ -11085,6 +11106,10 @@ async function launchOllama(runtimeId) {
         const threadId = selectEl ? String(selectEl.value || '').trim() : '';
         const newThreadTitle = newTitleEl ? String(newTitleEl.value || '').trim() : '';
         const continuity = _readArchiveContinuityInputs();
+        if (threadId && newThreadTitle) {
+            _setArchiveMsg('Please select an existing thread OR enter a new thread title, not both.');
+            return;
+        }
         if (!threadId && !newThreadTitle) {
             _setArchiveMsg('Select a thread or enter a new thread title.');
             return;
@@ -11467,6 +11492,17 @@ async function launchOllama(runtimeId) {
     _bind('ip-list-new-btn',       'click', beginNewSession);
     _bind('ip-threads-back-btn',   'click', returnHome);
     _bind('ip-thread-detail-back-btn', 'click', reviewThreads);
+
+    const archiveThreadSelect = $ip('ip-archive-thread-select');
+    const archiveThreadTitle = $ip('ip-archive-new-thread-title');
+    if (archiveThreadSelect && archiveThreadTitle) {
+        archiveThreadSelect.addEventListener('change', () => {
+            if (String(archiveThreadSelect.value || '').trim()) archiveThreadTitle.value = '';
+        });
+        archiveThreadTitle.addEventListener('input', () => {
+            if (String(archiveThreadTitle.value || '').trim()) archiveThreadSelect.value = '';
+        });
+    }
 
     // ── Init ─────────────────────────────────────────────────────────────────
 
