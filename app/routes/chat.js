@@ -845,6 +845,8 @@ function countSummaryLayers(summaryLayersUsed) {
 }
 
 function shouldAppendDeeperDepthNudge({ depthId, answer, retrievedCount, rawChunkCount, summaryLayersUsed }) {
+    return false;
+    /* disabled: avoid repetitive templated footers */
     if (!['spark', 'ember'].includes(depthId)) return false;
     const text = String(answer || '').trim();
     if (!text) return false;
@@ -856,6 +858,46 @@ function shouldAppendDeeperDepthNudge({ depthId, answer, retrievedCount, rawChun
     if (!hasMoreDepthAvailable) return false;
     if (depthId === 'spark') return text.length <= SPARK_NUDGE_MAX_CHARS;
     return text.length <= EMBER_NUDGE_MAX_CHARS;
+}
+
+function detectQueryMode(query) {
+    const text = String(query || '').trim().toLowerCase();
+    if (!text) return 'information';
+    if (/\b(reflect|reflection|journal|feel|feeling|meaning)\b/.test(text)) return 'reflection';
+    if (/\b(summary|summarize|recap|continue|continuity|carry forward|remember)\b/.test(text)) return 'continuity';
+    if (/\b(plan|planning|approach|options|tradeoff|risk|recommend|should i|which)\b/.test(text)) return 'planning';
+    return 'information';
+}
+
+function buildQueryModeInstruction(mode) {
+    if (mode === 'planning') {
+        return [
+            '=== Query Mode: Planning ===',
+            'Prioritize: Recommendation, Options, Risks.',
+            'Keep reflection optional unless requested.',
+            '',
+        ].join('\n');
+    }
+    if (mode === 'reflection') {
+        return [
+            '=== Query Mode: Reflection ===',
+            'Reflection prompts are appropriate.',
+            'Keep guidance grounded and concise.',
+            '',
+        ].join('\n');
+    }
+    if (mode === 'continuity') {
+        return [
+            '=== Query Mode: Continuity ===',
+            'Prioritize concise summarization and carry-forward clarity.',
+            '',
+        ].join('\n');
+    }
+    return [
+        '=== Query Mode: Information ===',
+        'Answer directly first and avoid forced reflection prompts.',
+        '',
+    ].join('\n');
 }
 
 function buildResponseSelfCheckInstruction({
@@ -906,13 +948,10 @@ function formatContinuationNudge({
     if ([RETRIEVAL_STATES.PARTIAL_CONTEXT, RETRIEVAL_STATES.MISSING_SOURCE, RETRIEVAL_STATES.NO_CONTEXT, RETRIEVAL_STATES.RETRIEVAL_ERROR].includes(retrievalState)) {
         return 'A Scholar comparison may reveal missing continuity.';
     }
-    const memberId = selectedCourtMember && selectedCourtMember.id ? String(selectedCourtMember.id) : '';
-    if (memberId === 'builder') return 'These caches suggest a deeper Builder synthesis may help.';
-    if (memberId === 'scholar') return 'A Scholar comparison may reveal missing continuity.';
-    if (memberId === 'scribe') return 'A Scribe pass may tighten continuity flow.';
-    if (memberId === 'warrior') return 'A Warrior synthesis can sharpen the decision path.';
-    if (memberId === 'mystic') return 'A Mystic lens may clarify the symbolic thread.';
-    return 'Load Hearth depth for the wider weave.';
+    if (selectedCourtMember && selectedCourtMember.id) {
+        return 'A different lens may reveal additional continuity.';
+    }
+    return 'Use deeper depth only if you want a wider weave.';
 }
 
 function computeRuntimeConfidenceHints({
@@ -1158,6 +1197,10 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         const activeRoom = (requestedRoom && ['hearth', 'council', 'threshold'].includes(requestedRoom))
             ? requestedRoom
             : 'hearth';
+        const queryMode = detectQueryMode(query);
+        const lensModeEnabled = Boolean(selectedCourtMember) ||
+            activeRoom === 'council' ||
+            /\b(council|archetype|lens)\b/i.test(String(query || ''));
 
         // Determine retrieval room scope:
         // - If caller passes explicit rooms array, use that
@@ -1261,7 +1304,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             sourceTrace: sources,
             maxSummaryChars: contextBudget.maxSummaryChars,
             maxRollingBootstrapChars: contextBudget.rollingBootstrapChars,
-            includeArchetypeMemory: contextBudget.includeArchetypeMemory,
+            includeArchetypeMemory: contextBudget.includeArchetypeMemory && lensModeEnabled,
             summaryLimits: {
                 cacheSummaryLimit: contextBudget.cacheSummaryLimit,
                 documentSummaryLimit: contextBudget.documentSummaryLimit,
@@ -1320,7 +1363,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             selectedCourtMember,
             archetypeMemoryProfile,
         );
-        const archetypePart = compactArchetypePart || fallbackArchetypePart;
+        const archetypePart = lensModeEnabled ? (compactArchetypePart || fallbackArchetypePart) : '';
 
         const identityPreamble = [sentinelIdentityPart, archetypePart]
             .filter(Boolean)
@@ -1339,6 +1382,7 @@ Loadout Focus: ${loadoutFocusEnabled ? 'ON' : 'OFF'}
 ${buildDepthResponseInstruction(contextBudget)}
 
 `;
+        const queryModeInstructionBlock = buildQueryModeInstruction(queryMode);
         const runtimeProfileBlock = `=== Runtime Profile ===
 ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
 
@@ -1358,6 +1402,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
         userContent = retrievalStateBlock +
             runtimeProfileBlock +
             depthInstructionBlock +
+            queryModeInstructionBlock +
             responseSelfCheckBlock +
             retrievalRestraintBlock +
             distillationGuidanceBlock +

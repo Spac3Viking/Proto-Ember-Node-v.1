@@ -8,7 +8,7 @@
  * GET    /api/sessions/:id          — load a session
  * PUT    /api/sessions/:id          — update session (title, currentStage, entries)
  * DELETE /api/sessions/:id          — delete a session
- * POST   /api/sessions/:id/stage    — save stage notes (optionally advance)
+ * POST   /api/sessions/:id/stage    — save stage notes (optionally advance; legacy "archive" maps to "remember")
  * GET    /api/sessions/:id/export   — export session as markdown
  * POST   /api/sessions/:id/ai-assist — get AI field-assistant guidance for a stage
  */
@@ -41,6 +41,11 @@ const { OLLAMA_CHAT_URL, getSelectedModelFallback } = require('../runtimeSteward
 const router = express.Router();
 
 const AI_ASSIST_TIMEOUT_MS = 60000;
+
+function normalizeSessionStageInput(stage) {
+    const value = String(stage || '').trim().toLowerCase();
+    return value === 'archive' ? 'remember' : value;
+}
 
 // ── List sessions ─────────────────────────────────────────────────────────────
 
@@ -117,7 +122,8 @@ router.get('/api/sessions/:id', readLimiter, (req, res) => {
 router.put('/api/sessions/:id', writeLimiter, (req, res) => {
     const patch = req.body && typeof req.body === 'object' ? req.body : {};
     if (typeof patch.currentStage === 'string') {
-        if (!SESSION_STAGES.includes(patch.currentStage.trim().toLowerCase())) {
+        patch.currentStage = normalizeSessionStageInput(patch.currentStage);
+        if (!SESSION_STAGES.includes(patch.currentStage)) {
             return res.status(400).json({ error: 'Invalid stage' });
         }
     }
@@ -146,13 +152,14 @@ router.delete('/api/sessions/:id', writeLimiter, (req, res) => {
 
 router.post('/api/sessions/:id/stage', writeLimiter, (req, res) => {
     const { stage, notes, advance } = req.body || {};
-    if (!stage || !SESSION_STAGES.includes(String(stage).trim().toLowerCase())) {
+    const normalizedStage = normalizeSessionStageInput(stage);
+    if (!stage || !SESSION_STAGES.includes(normalizedStage)) {
         return res.status(400).json({ error: 'Invalid or missing stage' });
     }
     try {
         const updated = saveStageNotes(
             req.params.id,
-            String(stage),
+            normalizedStage,
             String(notes || ''),
             Boolean(advance),
         );
@@ -213,7 +220,7 @@ function _buildAssistPrompt(stage, notes, sessionTitle) {
 
 router.post('/api/sessions/:id/ai-assist', chatLimiter, async (req, res) => {
     const { stage, notes } = req.body || {};
-    const normalStage = String(stage || '').trim().toLowerCase();
+    const normalStage = normalizeSessionStageInput(stage);
 
     if (!SESSION_STAGES.includes(normalStage)) {
         return res.status(400).json({ error: 'Invalid or missing stage' });
