@@ -1,7 +1,7 @@
 /**
  * Ember Node v.ᚠ — app shell
  *
- * Covers all three rooms (Hearth / Ember Council / Threshold) with sub-tab navigation,
+ * Covers primary rooms (Session / Hearth / Threshold) with advanced council lenses,
  * file lifecycle (Waiting/Indexed/Remembered), intake discipline (Threshold airlock),
  * chat threads, source inspector, runtime registry, and startup checklist.
  * All UI logic communicates only with the local Express server.
@@ -485,8 +485,22 @@ function dismissOnboardingHint(key) {
 }
 
 function openRoomAndSubtab(roomId, subtabId) {
-    const roomTab = document.querySelector('.room-tab[data-room="' + String(roomId || '') + '"]');
+    const normalizedRoomId = String(roomId || '').trim().toLowerCase();
+    const roomTab = document.querySelector('.room-tab[data-room="' + normalizedRoomId + '"]');
     if (roomTab) roomTab.click();
+    if (!roomTab && normalizedRoomId === 'council') {
+        // Council is intentionally removed from primary nav; surface council tools from Session.
+        const sessionTab = document.querySelector('.room-tab[data-room="session"]');
+        if (sessionTab) sessionTab.click();
+        const askDetails = document.getElementById('ip-ask-council-details');
+        const lensDetails = document.getElementById('ip-advanced-lenses-details');
+        if (subtabId === 'ws-council-chat' || subtabId === 'ws-drafts') {
+            if (askDetails) askDetails.open = true;
+        }
+        if (subtabId === 'ws-archetypes' || subtabId === 'ws-caches') {
+            if (lensDetails) lensDetails.open = true;
+        }
+    }
     if (!subtabId) return;
     setTimeout(() => {
         const subtab = document.querySelector('.sub-tab[data-subtab="' + String(subtabId) + '"]');
@@ -1969,10 +1983,10 @@ function downloadPlainText(filename, content, contentType = 'text/plain') {
 }
 
 /* ================================================================
-   Room Tab Switching  (3 rooms only)
+   Room Tab Switching
    ================================================================ */
 
-let _activeRoomId = 'hearth';
+let _activeRoomId = 'session';
 
 (function initRoomTabs() {
     const tabs   = document.querySelectorAll('.room-tab');
@@ -10395,14 +10409,14 @@ async function launchOllama(runtimeId) {
 
 /* ================================================================
    Phase 18A — Instrument Panel
-   Observe → Reflect → Act → Refine → Archive
+   Observe → Reflect → Act → Refine → Remember
    ================================================================ */
 
 (function initInstrumentPanel() {
 
     // ── Constants ───────────────────────────────────────────────────────────
 
-    const IP_STAGES = ['observe', 'reflect', 'act', 'refine', 'archive'];
+    const IP_STAGES = ['observe', 'reflect', 'act', 'refine', 'remember'];
     const IP_UNTITLED_THREAD = 'Untitled Signal Thread';
 
     const IP_STAGE_LABELS = Object.freeze({
@@ -10410,7 +10424,7 @@ async function launchOllama(runtimeId) {
         reflect: 'REFLECT',
         act:     'ACT',
         refine:  'REFINE',
-        archive: 'ARCHIVE',
+        remember: 'REMEMBER',
     });
 
     const IP_STAGE_QUESTIONS = Object.freeze({
@@ -10436,7 +10450,7 @@ async function launchOllama(runtimeId) {
             'What changed?',
             'What was learned?',
         ],
-        archive: [
+        remember: [
             'What should be remembered?',
             'What remains unresolved?',
             'What is worth carrying forward?',
@@ -10630,12 +10644,12 @@ async function launchOllama(runtimeId) {
             _setStatus('Continuing: ' + (session.continuity.threadTitle || session.continuity.threadId));
         }
 
-        // Archive actions
+        // Remember actions
         const archiveActions = $ip('ip-archive-actions');
         if (archiveActions) {
-            archiveActions.style.display = stage === 'archive' ? '' : 'none';
-            if (stage === 'archive') {
-                _setArchiveMsg('Session Archived');
+            archiveActions.style.display = stage === 'remember' ? '' : 'none';
+            if (stage === 'remember') {
+                _setArchiveMsg('Session Remembered');
                 _setArchiveState({ carryForwardRecorded: false, threadUpdated: false, openPressuresUpdated: false });
                 _prepareArchiveThreadOptions();
             }
@@ -11384,22 +11398,22 @@ async function launchOllama(runtimeId) {
         }
     }
 
-    // ── Save to archive (marks archive stage complete) ───────────────────────
+    // ── Save to remember (marks remember stage complete) ───────────────────────
 
     async function saveToArchive() {
         if (!_activeSession) return;
         const notesEl = $ip('ip-stage-notes');
         const notes = notesEl ? notesEl.value : '';
-        _setArchiveMsg('Saving to archive…');
+        _setArchiveMsg('Saving to remember…');
         try {
             const data = await _apiPost(
                 '/api/sessions/' + encodeURIComponent(_activeSession.id) + '/stage',
-                { stage: 'archive', notes, advance: true },
+                { stage: 'remember', notes, advance: true },
             );
             if (data && data.success) {
                 _activeSession = data.session;
                 _renderStageBar(_activeSession.currentStage, _activeSession.entries);
-                _setArchiveMsg('Saved to archive.');
+                _setArchiveMsg('Saved to remember.');
             } else {
                 _setArchiveMsg('Save failed.');
             }
@@ -11447,6 +11461,8 @@ async function launchOllama(runtimeId) {
     _bind('ip-review-threads-btn', 'click', reviewThreads);
     _bind('ip-review-archive-btn', 'click', reviewArchive);
     _bind('ip-settings-btn',       'click', openSettings);
+    _bind('ip-open-ask-council-btn', 'click', () => openRoomAndSubtab('council', 'ws-council-chat'));
+    _bind('ip-open-advanced-lenses-btn', 'click', () => openRoomAndSubtab('council', 'ws-archetypes'));
 
     // Inline new-session form
     _bind('ip-new-session-start-btn',  'click', _submitNewSession);

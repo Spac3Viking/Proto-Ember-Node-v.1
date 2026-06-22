@@ -4,7 +4,7 @@
  * Ember Node v.ᚠ — Phase 18A: Session Service
  *
  * A Session is the primary unit of the Instrument Panel experience.
- * Sessions move through five stages: observe → reflect → act → refine → archive.
+ * Sessions move through five stages: observe → reflect → act → refine → remember.
  *
  * Storage: each session is a single JSON file in SESSIONS_DIR/<id>.json
  *
@@ -22,7 +22,7 @@ const SESSION_STAGES = Object.freeze([
     'reflect',
     'act',
     'refine',
-    'archive',
+    'remember',
 ]);
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -69,6 +69,7 @@ function _sessionPath(id) {
 
 function _normalizeStage(stage) {
     const value = String(stage || '').trim().toLowerCase();
+    if (value === 'archive') return 'remember';
     return SESSION_STAGES.includes(value) ? value : 'observe';
 }
 
@@ -245,7 +246,7 @@ function saveStageNotes(id, stage, notes, advance = false) {
         if (idx >= 0 && idx < SESSION_STAGES.length - 1) {
             existing.currentStage = SESSION_STAGES[idx + 1];
         }
-        // If already at archive (last stage), stay there
+        // If already at remember (last stage), stay there
     }
 
     existing.updatedAt = _nowIso();
@@ -272,7 +273,7 @@ const STAGE_HEADINGS = Object.freeze({
     reflect: 'Reflect',
     act:     'Act',
     refine:  'Refine',
-    archive: 'Archive',
+    remember: 'Remember',
 });
 
 const STAGE_QUESTIONS = Object.freeze({
@@ -298,7 +299,7 @@ const STAGE_QUESTIONS = Object.freeze({
         'What changed?',
         'What was learned?',
     ],
-    archive: [
+    remember: [
         'What should be remembered?',
         'What remains unresolved?',
         'What is worth carrying forward?',

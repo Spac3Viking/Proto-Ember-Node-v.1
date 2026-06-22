@@ -167,7 +167,7 @@ describe('Phase 18A — Sessions API', () => {
         expect(entry.completedAt).toBeTruthy();
     });
 
-    test('advancing through all stages lands at archive', async () => {
+    test('advancing through all stages lands at remember', async () => {
         const { app } = require('../app/server');
         const stages = ['observe', 'reflect', 'act', 'refine'];
 
@@ -181,13 +181,13 @@ describe('Phase 18A — Sessions API', () => {
             expect(res.status).toBe(200);
         }
 
-        // Save archive stage without advancing (last stage)
+        // Save remember stage without advancing (last stage)
         const final = await request(app)
             .post('/api/sessions/' + encodeURIComponent(id) + '/stage')
-            .send({ stage: 'archive', notes: 'Remember this.', advance: true });
+            .send({ stage: 'remember', notes: 'Remember this.', advance: true });
         expect(final.status).toBe(200);
-        // stays at archive since it is the last stage
-        expect(final.body.session.currentStage).toBe('archive');
+        // stays at remember since it is the last stage
+        expect(final.body.session.currentStage).toBe('remember');
     });
 
     test('POST /api/sessions/:id/stage rejects invalid stage', async () => {
@@ -199,6 +199,22 @@ describe('Phase 18A — Sessions API', () => {
             .post('/api/sessions/' + encodeURIComponent(id) + '/stage')
             .send({ stage: 'transmit', notes: 'bad stage' });
         expect(res.status).toBe(400);
+    });
+
+    test('POST /api/sessions/:id/stage accepts legacy archive alias', async () => {
+        const { app } = require('../app/server');
+        const create = await request(app).post('/api/sessions').send({ title: 'Legacy Alias' });
+        const id = create.body.session.id;
+        await request(app).post('/api/sessions/' + encodeURIComponent(id) + '/stage').send({ stage: 'observe', notes: '', advance: true });
+        await request(app).post('/api/sessions/' + encodeURIComponent(id) + '/stage').send({ stage: 'reflect', notes: '', advance: true });
+        await request(app).post('/api/sessions/' + encodeURIComponent(id) + '/stage').send({ stage: 'act', notes: '', advance: true });
+        await request(app).post('/api/sessions/' + encodeURIComponent(id) + '/stage').send({ stage: 'refine', notes: '', advance: true });
+
+        const res = await request(app)
+            .post('/api/sessions/' + encodeURIComponent(id) + '/stage')
+            .send({ stage: 'archive', notes: 'legacy alias', advance: true });
+        expect(res.status).toBe(200);
+        expect(res.body.session.currentStage).toBe('remember');
     });
 
     // ── Export ────────────────────────────────────────────────────────────────
@@ -220,7 +236,7 @@ describe('Phase 18A — Sessions API', () => {
         expect(res.text).toContain('## Observe');
         expect(res.text).toContain('Water is scarce.');
         expect(res.text).toContain('## Reflect');
-        expect(res.text).toContain('## Archive');
+        expect(res.text).toContain('## Remember');
     });
 
     test('GET /api/sessions/:id/export returns 404 for unknown id', async () => {
@@ -276,7 +292,7 @@ describe('Phase 18A — Sessions API', () => {
         expect(md).toContain('## Reflect');
         expect(md).toContain('## Act');
         expect(md).toContain('## Refine');
-        expect(md).toContain('## Archive');
+        expect(md).toContain('## Remember');
         expect(md).toContain('Testing.');
         expect(md).toContain('session_id:');
     });
