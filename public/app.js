@@ -489,16 +489,17 @@ function openRoomAndSubtab(roomId, subtabId) {
     const roomTab = document.querySelector('.room-tab[data-room="' + normalizedRoomId + '"]');
     if (roomTab) roomTab.click();
     if (!roomTab && normalizedRoomId === 'council') {
-        const panels = document.querySelectorAll('.room-panel');
-        panels.forEach(panel => {
-            panel.classList.toggle('active', panel.id === 'room-council');
-        });
-        const roomTabs = document.querySelectorAll('.room-tab');
-        roomTabs.forEach(tab => {
-            const isActive = tab.dataset.room === 'session';
-            tab.classList.toggle('active', isActive);
-            tab.setAttribute('aria-selected', String(isActive));
-        });
+        // Council is intentionally removed from primary nav; surface council tools from Session.
+        const sessionTab = document.querySelector('.room-tab[data-room="session"]');
+        if (sessionTab) sessionTab.click();
+        const askDetails = document.getElementById('ip-ask-council-details');
+        const lensDetails = document.getElementById('ip-advanced-lenses-details');
+        if (subtabId === 'ws-council-chat' || subtabId === 'ws-drafts') {
+            if (askDetails) askDetails.open = true;
+        }
+        if (subtabId === 'ws-archetypes' || subtabId === 'ws-caches') {
+            if (lensDetails) lensDetails.open = true;
+        }
     }
     if (!subtabId) return;
     setTimeout(() => {

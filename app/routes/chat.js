@@ -837,29 +837,6 @@ function buildDepthResponseInstruction(contextBudget) {
     ].join('\n');
 }
 
-function countSummaryLayers(summaryLayersUsed) {
-    if (!summaryLayersUsed || typeof summaryLayersUsed !== 'object') return 0;
-    return ['cacheSummaries', 'documentSummaries']
-        .map(key => Number.isFinite(summaryLayersUsed[key]) ? summaryLayersUsed[key] : 0)
-        .reduce((total, current) => total + current, 0);
-}
-
-function shouldAppendDeeperDepthNudge({ depthId, answer, retrievedCount, rawChunkCount, summaryLayersUsed }) {
-    return false;
-    /* disabled: avoid repetitive templated footers */
-    if (!['spark', 'ember'].includes(depthId)) return false;
-    const text = String(answer || '').trim();
-    if (!text) return false;
-    if (/load a deeper depth if you want the wider weave/i.test(text)) return false;
-    const totalRetrieved = Number.isFinite(retrievedCount) ? retrievedCount : 0;
-    const usedRawChunks = Number.isFinite(rawChunkCount) ? rawChunkCount : 0;
-    const summariesUsed = countSummaryLayers(summaryLayersUsed);
-    const hasMoreDepthAvailable = totalRetrieved > usedRawChunks || summariesUsed > 1;
-    if (!hasMoreDepthAvailable) return false;
-    if (depthId === 'spark') return text.length <= SPARK_NUDGE_MAX_CHARS;
-    return text.length <= EMBER_NUDGE_MAX_CHARS;
-}
-
 function detectQueryMode(query) {
     const text = String(query || '').trim().toLowerCase();
     if (!text) return 'information';
@@ -939,19 +916,6 @@ function buildRetrievalRestraintInstruction({
     }
     guidance.push('');
     return guidance.join('\n');
-}
-
-function formatContinuationNudge({
-    selectedCourtMember,
-    retrievalState,
-}) {
-    if ([RETRIEVAL_STATES.PARTIAL_CONTEXT, RETRIEVAL_STATES.MISSING_SOURCE, RETRIEVAL_STATES.NO_CONTEXT, RETRIEVAL_STATES.RETRIEVAL_ERROR].includes(retrievalState)) {
-        return 'A Scholar comparison may reveal missing continuity.';
-    }
-    if (selectedCourtMember && selectedCourtMember.id) {
-        return 'A different lens may reveal additional continuity.';
-    }
-    return 'Use deeper depth only if you want a wider weave.';
 }
 
 function computeRuntimeConfidenceHints({
@@ -1494,19 +1458,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
         const answer   = response.data && response.data.message
             ? response.data.message.content
             : '';
-        const continuationNudge = formatContinuationNudge({
-            selectedCourtMember,
-            retrievalState,
-        });
-        const answerWithDepthNudge = shouldAppendDeeperDepthNudge({
-            depthId: contextBudget.id,
-            answer,
-            retrievedCount: retrieved.length,
-            rawChunkCount: rawChunksForPrompt.length,
-            summaryLayersUsed: summaryFirst.summaryLayersUsed,
-        })
-            ? (String(answer || '').trimEnd() + '\n\n' + continuationNudge)
-            : answer;
+        const answerWithDepthNudge = answer;
         const uniqueSourceCount = new Set(
             (sources || []).map(s => [s.room, s.file, s.cacheId || '', s.shelf || ''].join('|')),
         ).size;
