@@ -41,7 +41,7 @@ const {
     getSelectedModelFallback,
     probeOllamaRuntime,
 } = require('./runtimeStewardship');
-const { HOST, PORT, OLLAMA_TAGS_URL, OLLAMA_HEALTH_TIMEOUT_MS } = require('./runtimeConfig');
+const { HOST, PORT, OLLAMA_TAGS_URL, OLLAMA_HEALTH_TIMEOUT_MS, BIND_ALL_INTERFACES } = require('./runtimeConfig');
 const { loadIntakeState, saveIntakeState,
         upsertIntakeFile }           = require('./intakeState');
 const { triageFile }                                   = require('./startupCheck');
@@ -156,7 +156,7 @@ if (require.main === module) {
     // AI reachability is probed afterward, non-blocking, with a short
     // timeout, and reported as a recoverable runtime state via /api/status.
     app.listen(PORT, HOST, function() {
-        const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
+        const displayHost = HOST === BIND_ALL_INTERFACES ? 'localhost' : HOST;
         console.log('Server is running on http://' + displayHost + ':' + PORT + ' (bound to ' + HOST + ':' + PORT + ')');
 
         probeOllamaRuntime().then(function(runtime) {

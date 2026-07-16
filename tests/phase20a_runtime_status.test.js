@@ -96,7 +96,7 @@ describe('GET /api/status — canonical status contract', () => {
     afterEach(() => {
         delete process.env.EMBER_NODE_DATA_ROOT;
         delete process.env.EMBER_DATA_ROOT;
-        try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* ignore */ }
+        try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* best-effort test cleanup; failure here does not affect assertions */ }
     });
 
     test('reports the Node as available with a stable shape when Ollama is unreachable', async () => {

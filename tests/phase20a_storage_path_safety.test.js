@@ -80,7 +80,7 @@ describe('Phase 20A — document and legacy thread route traversal safety', () =
     afterEach(() => {
         delete process.env.EMBER_NODE_DATA_ROOT;
         delete process.env.EMBER_DATA_ROOT;
-        try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* ignore */ }
+        try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* best-effort test cleanup; failure here does not affect assertions */ }
     });
 
     const traversalIds = [
@@ -144,7 +144,7 @@ describe('Phase 20A — document and legacy thread route traversal safety', () =
             }
             expect(fs.existsSync(canaryPath)).toBe(true);
         } finally {
-            try { fs.unlinkSync(canaryPath); } catch { /* ignore */ }
+            try { fs.unlinkSync(canaryPath); } catch { /* best-effort test cleanup; failure here does not affect assertions */ }
         }
     });
 
@@ -200,7 +200,7 @@ describe('Phase 20A — document and legacy thread route traversal safety', () =
             }
             expect(fs.existsSync(canaryPath)).toBe(true);
         } finally {
-            try { fs.unlinkSync(canaryPath); } catch { /* ignore */ }
+            try { fs.unlinkSync(canaryPath); } catch { /* best-effort test cleanup; failure here does not affect assertions */ }
         }
     });
 });

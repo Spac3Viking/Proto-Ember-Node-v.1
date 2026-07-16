@@ -46,12 +46,12 @@ function isValidStorageId(id) {
 
     // Reject null bytes outright (String.includes handles literal + most
     // encoded-then-decoded forms once Express has already decoded req.params).
-    if (id.indexOf('\0') !== -1) return false;
+    if (id.includes('\0')) return false;
 
     // Reject anything containing percent-encoding — a well-formed ID never
     // needs it, and it is the classic vector for encoded traversal attempts
     // (e.g. "%2e%2e%2f", "..%252f") slipping past a naive ".." check.
-    if (id.indexOf('%') !== -1) return false;
+    if (id.includes('%')) return false;
 
     // Reject path separators, traversal sequences, and absolute paths.
     if (id.includes('/') || id.includes('\\')) return false;

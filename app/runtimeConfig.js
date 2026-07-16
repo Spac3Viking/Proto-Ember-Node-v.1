@@ -50,6 +50,14 @@ function _parseTimeoutMs(value, fallback) {
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 3477;
 
+// Named constant for the conventional "bind to all interfaces" value.
+// v118 never uses this as a default and does not implement LAN exposure —
+// it exists only so server.js can produce an accurate log message if an
+// operator deliberately overrides EMBER_NODE_HOST to it. Exposing the Node
+// beyond loopback remains an explicit, deliberate choice (see README
+// "Runtime Configuration"), not a v118 default or recommendation.
+const BIND_ALL_INTERFACES = '0.0.0.0';
+
 const HOST = (process.env.EMBER_NODE_HOST && process.env.EMBER_NODE_HOST.trim())
     || DEFAULT_HOST;
 const PORT = _parsePort(process.env.EMBER_NODE_PORT, DEFAULT_PORT);
@@ -87,6 +95,7 @@ function getRuntimeModel() {
 module.exports = {
     HOST,
     PORT,
+    BIND_ALL_INTERFACES,
     MODEL,
     OLLAMA_BASE_URL,
     OLLAMA_CHAT_URL,
