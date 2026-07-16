@@ -41,6 +41,7 @@ const {
     getSelectedModelFallback,
     probeOllamaRuntime,
 } = require('./runtimeStewardship');
+const { HOST, PORT, OLLAMA_TAGS_URL, OLLAMA_HEALTH_TIMEOUT_MS } = require('./runtimeConfig');
 const { loadIntakeState, saveIntakeState,
         upsertIntakeFile }           = require('./intakeState');
 const { triageFile }                                   = require('./startupCheck');
@@ -75,7 +76,6 @@ const sessionsRouter       = require('./routes/sessions');
 // ── Express setup ─────────────────────────────────────────────────────────────
 
 const app  = express();
-const PORT = 3477;
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(express.json({ limit: '10mb' }));
@@ -101,7 +101,7 @@ app.use(sessionsRouter);
 
 async function checkModel() {
     try {
-        const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+        const response = await axios.get(OLLAMA_TAGS_URL, { timeout: OLLAMA_HEALTH_TIMEOUT_MS });
         const models   = (response.data.models || []).map(function(m) { return m.name; });
         const selectedModel = getSelectedModelFallback();
         if (!models.some(function(name) { return name === selectedModel || name.startsWith(selectedModel + ':'); })) {
@@ -114,9 +114,13 @@ async function checkModel() {
             console.log('Model check passed: "' + selectedModel + '" is available.');
         }
     } catch (err) {
+        // AI unavailability is a recoverable runtime state, not a server
+        // failure — the Ember Node itself remains a usable local archive
+        // and Session instrument even when Ollama is stopped.
         console.warn(
-            'WARNING: Could not reach Ollama at ' + OLLAMA_BASE_URL + '. ' +
-            'Is Ollama running? (' + err.message + ')',
+            'NOTE: Could not reach Ollama at ' + OLLAMA_BASE_URL + '. ' +
+            'Ember Node will start without AI assistance. ' +
+            'Start Ollama to enable AI features. (' + err.message + ')',
         );
     }
 }
@@ -147,18 +151,22 @@ if (require.main === module) {
         console.warn('[forge] Forge seed failed:', err.message);
     }
 
-    // Non-blocking startup runtime check
-    probeOllamaRuntime().then(function(runtime) {
-        if (!runtime.ok) {
-            console.warn('[runtime] Ollama not detected during startup.');
-        }
-    }).catch(function(err) {
-        console.warn('[runtime] Startup check failed:', err.message);
-    });
+    // The Ember Node is a local archive and Session instrument first. Start
+    // listening immediately — do not wait on Ollama or model availability.
+    // AI reachability is probed afterward, non-blocking, with a short
+    // timeout, and reported as a recoverable runtime state via /api/status.
+    app.listen(PORT, HOST, function() {
+        const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
+        console.log('Server is running on http://' + displayHost + ':' + PORT + ' (bound to ' + HOST + ':' + PORT + ')');
 
-    checkModel().then(function() {
-        app.listen(PORT, function() {
-            console.log('Server is running on http://localhost:' + PORT);
+        probeOllamaRuntime().then(function(runtime) {
+            if (!runtime.ok) {
+                console.warn('[runtime] Ollama not detected at startup. Ember Node is running without AI assistance.');
+                return;
+            }
+            checkModel();
+        }).catch(function(err) {
+            console.warn('[runtime] Startup AI probe failed:', err.message);
         });
     });
 }

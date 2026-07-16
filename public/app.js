@@ -10550,19 +10550,24 @@ async function launchOllama(runtimeId) {
     }
 
     // ── AI status indicator ───────────────────────────────────────────────────
+    // Uses the canonical /api/status endpoint (Phase 20A / build v118).
+    // AI unavailability must never make the Ember Node itself appear
+    // unavailable — a failed fetch means the Node is unreachable; a
+    // successful response with aiRuntimeReachable === false means the Node
+    // is fine but Ollama is stopped or unreachable.
 
     async function _refreshAiStatus() {
         const el = $ip('ip-ai-status');
         if (!el) return;
         try {
-            const res = await fetch('/api/system/status').catch(() => null);
-            if (!res || !res.ok) { el.textContent = 'Unavailable'; el.className = 'ip-status-val off'; return; }
+            const res = await fetch('/api/status');
+            if (!res.ok) { el.textContent = 'Node unavailable'; el.className = 'ip-status-val off'; return; }
             const data = await res.json().catch(() => ({}));
-            const ok = data && (data.ollamaRunning || data.aiAvailable || data.runtimeAvailable);
+            const ok = Boolean(data && data.aiRuntimeReachable);
             el.textContent = ok ? 'Available' : 'Unavailable';
             el.className = 'ip-status-val ' + (ok ? 'ok' : 'off');
         } catch {
-            el.textContent = 'Unavailable';
+            el.textContent = 'Node unavailable';
             el.className = 'ip-status-val off';
         }
     }

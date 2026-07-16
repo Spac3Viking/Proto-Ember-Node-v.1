@@ -33,6 +33,7 @@ const {
     probeOllamaRuntime,
     launchOllamaRuntime,
 } = require('../runtimeStewardship');
+const { OLLAMA_BASE_URL } = require('../runtimeConfig');
 const { recordCacheInteraction } = require('../cacheInteractionMemory');
 const {
     DETECT_SUPPORTED_EXTS,
@@ -1298,7 +1299,7 @@ async function buildRuntimeStewardshipView() {
                 name: 'Ollama',
                 type: 'model_host',
                 interface: 'http',
-                endpoint: 'http://localhost:11434',
+                endpoint: OLLAMA_BASE_URL,
                 status: probe.ok ? 'detected' : 'not_detected',
                 running: probe.ok,
                 trusted,
