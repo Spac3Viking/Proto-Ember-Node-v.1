@@ -6,8 +6,13 @@ const axios   = require('axios');
 const AdmZip  = require('adm-zip');
 
 const { ARCHIVE_CORE_DIR, ARCHIVE_CACHES_DIR, SYSTEM_DIR } = require('./storageConfig');
+const { ARCHIVE_BASE_URL } = require('./runtimeConfig');
 
-const GREEN_FIRE_ARCHIVE_BASE_URL = 'https://greenfire-archive.replit.app';
+// Optional hosted Green Fire Archive used for cache-package updates. Centrally
+// configured (EMBER_ARCHIVE_BASE_URL) — see app/runtimeConfig.js. This is a
+// separate concern from the local Ollama runtime and is never assumed to be
+// interchangeable with any other Green Fire domain (e.g. greenfirearchive.app).
+const GREEN_FIRE_ARCHIVE_BASE_URL = ARCHIVE_BASE_URL;
 const ARCHIVE_ENDPOINTS = {
     downloadsIndex: GREEN_FIRE_ARCHIVE_BASE_URL + '/downloads/index.json',
     signal:         GREEN_FIRE_ARCHIVE_BASE_URL + '/data/signal.json',

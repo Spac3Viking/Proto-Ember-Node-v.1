@@ -30,7 +30,7 @@ const {
     FORGE_DIR, RUNTIME_TUNING_RUNS_PATH,
     ensureDataRoot, ensureCanonicalDataFiles,
 } = require('../storageConfig');
-const { OLLAMA_BASE_URL, OLLAMA_TAGS_URL, OLLAMA_HEALTH_TIMEOUT_MS, PORT } = require('../runtimeConfig');
+const { OLLAMA_BASE_URL, OLLAMA_TAGS_URL, OLLAMA_HEALTH_TIMEOUT_MS, PORT, ARCHIVE_BASE_URL } = require('../runtimeConfig');
 const { probeOllamaRuntime } = require('../runtimeStewardship');
 const { TASK_ROUTES } = require('../modelRoles');
 const { getSelectedModel, setSelectedModel, loadAiConfig, setModelRole } = require('../aiConfig');
@@ -68,8 +68,8 @@ const {
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
 const BUNDLED_NODE_PATH = path.join(__dirname, '..', '..', 'runtime', 'node', 'node.exe');
-const ARCHIVE_UPDATE_URL = 'https://greenfire-archive.replit.app/downloads/index.json';
-const DEFAULT_UPDATE_PAGE_URL = 'https://greenfire-archive.replit.app/archive';
+const ARCHIVE_UPDATE_URL = ARCHIVE_BASE_URL + '/downloads/index.json';
+const DEFAULT_UPDATE_PAGE_URL = ARCHIVE_BASE_URL + '/archive';
 const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-core', label: 'Core Cache' },
     { packageId: 'green-fire-codices-cache', label: 'Codices Cache' },

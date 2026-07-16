@@ -1,5 +1,7 @@
 # Design Guidance for Ember Node v.ᚠ
 
+> **Historical document.** Superseded as the primary architecture reference by [`docs/PHASE_20_ARCHITECTURE.md`](PHASE_20_ARCHITECTURE.md) (Session / Hearth / Threshold). Kept for development history.
+
 ## Color Palette
 - **Primary Color:** #3498db (Blue)
 - **Secondary Color:** #2ecc71 (Green)

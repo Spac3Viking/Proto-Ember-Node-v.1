@@ -1,5 +1,7 @@
 # Ember Node Structure
 
+> **Historical document.** Superseded as the primary architecture reference by [`docs/PHASE_20_ARCHITECTURE.md`](PHASE_20_ARCHITECTURE.md) (Session / Hearth / Threshold). Kept for development history.
+
 ## Elemental Rooms
 
 - **🜂 Hearth** → Ember Prime continuity layer and remembered conversation.

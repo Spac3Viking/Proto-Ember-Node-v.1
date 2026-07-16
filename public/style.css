@@ -3,6 +3,13 @@
    ============================================================ */
 
 :root {
+  /* Local/system font stack (Phase 20A / v118 offline-first cleanup).
+     No network font requests — Cinzel/Inter are used only if already
+     installed locally, with durable system fallbacks that preserve the
+     Green Fire display/body character as closely as practical offline. */
+  --gf-font-display: 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
+  --gf-font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
   /* Void backgrounds */
   --gf-void: hsl(120, 15%, 2%);
   --gf-deep-void: hsl(120, 20%, 4%);
@@ -66,7 +73,7 @@ body {
     hsl(120, 15%, 2%) 100%
   );
   color: var(--archive-text);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--gf-font-body);
   line-height: 1.6;
   min-height: 100vh;
   overflow-x: hidden;
@@ -96,7 +103,7 @@ body {
 /* ── Typography ────────────────────────────────────────────── */
 
 h1, h2, h3 {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   color: var(--gf-wire-amber);
   text-shadow:
     -1px -1px 0 hsl(120, 20%, 2%),
@@ -163,7 +170,7 @@ button.primary {
   background: linear-gradient(135deg, var(--gf-stone-recess), var(--gf-stone-face));
   border: 1px solid hsla(140, 100%, 70%, 0.25);
   color: var(--gf-wire-amber);
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   border-radius: var(--radius-md);
   padding: 0.5rem 1.25rem;
   transition: all 0.25s ease;
@@ -186,7 +193,7 @@ input, textarea {
   color: var(--archive-text);
   border-radius: var(--radius-sm);
   padding: 0.5rem 0.75rem;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--gf-font-body);
   outline: none;
   transition: border-color 0.2s ease;
 }
@@ -228,7 +235,7 @@ input:focus, textarea:focus {
 }
 
 .header-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 1.4rem;
   color: var(--gf-wire-amber);
   text-shadow:
@@ -296,7 +303,7 @@ input:focus, textarea:focus {
 }
 
 .room-tab {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -349,7 +356,7 @@ input:focus, textarea:focus {
 }
 
 .room-heading {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 1.1rem;
   color: var(--gf-wire-amber);
   margin-bottom: 0.25rem;
@@ -521,7 +528,7 @@ input:focus, textarea:focus {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.72rem;
   line-height: 1.2;
   min-width: 8.5rem;
@@ -763,7 +770,7 @@ input:focus, textarea:focus {
 }
 
 .cache-shelf-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.8rem;
   color: var(--archive-muted);
   letter-spacing: 0.1em;
@@ -801,7 +808,7 @@ input:focus, textarea:focus {
 }
 
 .cache-item-name {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.8rem;
   color: var(--gf-wire-amber);
   margin-bottom: 0.2rem;
@@ -931,7 +938,7 @@ input:focus, textarea:focus {
 }
 
 .inspector-name {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 1rem;
   color: var(--gf-wire-amber);
   padding: 0.875rem 1rem 0;
@@ -1030,7 +1037,7 @@ input:focus, textarea:focus {
 }
 
 .system-block-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1078,7 +1085,7 @@ input:focus, textarea:focus {
 .system-val {
   color: var(--archive-text);
   font-size: 0.82rem;
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
 }
 
 .system-val.ok {
@@ -1168,7 +1175,7 @@ input:focus, textarea:focus {
 .forge-runtime-title {
   font-size: 0.82rem;
   color: var(--gf-wire-amber);
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
 }
 
 .forge-runtime-desc {
@@ -1468,7 +1475,7 @@ input:focus, textarea:focus {
 }
 
 .signal-trace-label {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.62rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1510,7 +1517,7 @@ input:focus, textarea:focus {
 
 .trace-key {
   color: hsla(140, 100%, 70%, 0.42);
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.58rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1530,7 +1537,7 @@ input:focus, textarea:focus {
 }
 
 .council-section-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.68rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1657,7 +1664,7 @@ button.secondary {
   background: transparent;
   border: 1px solid hsla(140, 100%, 70%, 0.18);
   color: var(--archive-muted);
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.68rem;
   border-radius: var(--radius-sm);
   padding: 0.25rem 0.6rem;
@@ -1827,7 +1834,7 @@ button.secondary:disabled {
 }
 
 .sub-tab {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1872,7 +1879,7 @@ button.secondary:disabled {
   align-items: center;
   padding: 0.12rem 0.55rem;
   border-radius: 999px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--gf-font-body);
   font-size: 0.62rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2109,7 +2116,7 @@ button.secondary:disabled {
 .thread-title-bar {
   padding: 0.5rem 1rem;
   border-bottom: 1px solid hsla(140, 100%, 70%, 0.08);
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.75rem;
   color: var(--archive-muted);
   letter-spacing: 0.06em;
@@ -2132,7 +2139,7 @@ button.secondary:disabled {
 }
 
 .source-card-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.82rem;
   color: var(--gf-wire-amber);
 }
@@ -2187,7 +2194,7 @@ button.secondary:disabled {
   color: var(--archive-muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   min-width: 90px;
   flex-shrink: 0;
 }
@@ -2331,7 +2338,7 @@ button.secondary:disabled {
   text-align: left;
   cursor: pointer;
   transition: background 0.15s;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--gf-font-body);
   letter-spacing: 0.03em;
 }
 
@@ -2379,7 +2386,7 @@ button.secondary:disabled {
 }
 
 .source-inspector-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.9rem;
   color: var(--gf-wire-amber);
   overflow: hidden;
@@ -3108,7 +3115,7 @@ button.secondary:disabled {
 }
 
 .insp-section-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -3163,7 +3170,7 @@ button.secondary:disabled {
 }
 
 .chat-refs-label {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -3689,7 +3696,7 @@ button.secondary:disabled {
 .threshold-collapsible-summary {
   list-style: none;
   cursor: pointer;
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.74rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3879,7 +3886,7 @@ button.secondary:disabled {
 }
 
 .scribe-sidebar-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3953,7 +3960,7 @@ button.secondary:disabled {
 
 .scribe-type-badge {
   font-size: 0.6rem;
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 0.1rem 0.35rem;
@@ -3990,7 +3997,7 @@ button.secondary:disabled {
 .scribe-title-input {
   flex: 1;
   min-width: 120px;
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.88rem;
   color: var(--gf-wire-amber);
   background: transparent;
@@ -4007,7 +4014,7 @@ button.secondary:disabled {
 }
 
 .scribe-type-select {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 0.72rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -4182,7 +4189,7 @@ button.secondary:disabled {
 }
 
 .ip-node-name {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   color: var(--gf-wire-amber);
   font-size: 0.95rem;
   font-weight: 600;
@@ -4230,7 +4237,7 @@ button.secondary:disabled {
 }
 
 .ip-home-heading {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   color: var(--gf-wire-amber);
   font-size: 1rem;
   margin-bottom: 0.5rem;
@@ -4320,7 +4327,7 @@ button.secondary:disabled {
 }
 
 .ip-stage-label {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   font-size: 1.05rem;
   color: var(--gf-wire-amber);
   letter-spacing: 0.08em;
@@ -4351,7 +4358,7 @@ button.secondary:disabled {
   border: 1px solid hsla(140, 100%, 70%, 0.14);
   border-radius: var(--radius-sm);
   color: var(--archive-text);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--gf-font-body);
   font-size: 0.88rem;
   line-height: 1.65;
   padding: 0.75rem 0.875rem;
@@ -4418,7 +4425,7 @@ button.secondary:disabled {
 }
 
 .ip-archive-actions-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   color: var(--gf-wire-green);
   font-size: 0.9rem;
   letter-spacing: 0.04em;
@@ -4457,7 +4464,7 @@ button.secondary:disabled {
 }
 
 .ip-thread-section-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   color: var(--gf-wire-amber);
   font-size: 0.84rem;
   margin-bottom: 0.55rem;
@@ -4466,7 +4473,7 @@ button.secondary:disabled {
 .ip-thread-summary {
   margin: 0;
   white-space: pre-wrap;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--gf-font-body);
   font-size: 0.8rem;
   line-height: 1.55;
   color: var(--archive-text);
@@ -4489,7 +4496,7 @@ button.secondary:disabled {
 }
 
 .ip-list-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--gf-font-display);
   color: var(--gf-wire-amber);
   font-size: 0.95rem;
   flex: 1;
@@ -4607,7 +4614,7 @@ button.secondary:disabled {
   border: 1px solid hsla(140, 100%, 70%, 0.18);
   border-radius: var(--radius-sm);
   color: var(--archive-text);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--gf-font-body);
   font-size: 0.88rem;
   padding: 0.5rem 0.75rem;
   transition: border-color 0.18s;

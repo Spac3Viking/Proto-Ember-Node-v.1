@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Ember Node v.1 project",
   "main": "app/server.js",
+  "engines": {
+    "node": ">=20.16.0 <21 || >=22.3.0"
+  },
   "scripts": {
     "start": "node app/server.js",
     "dev": "nodemon app/server.js",
