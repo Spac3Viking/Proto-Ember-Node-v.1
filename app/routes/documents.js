@@ -16,23 +16,25 @@ const fs      = require('fs');
 const path    = require('path');
 const { readLimiter, writeLimiter } = require('../rateLimiters');
 const { DOCUMENTS_DIR }             = require('../storageConfig');
+const { resolveSafeStoragePath, isValidStorageId } = require('../safeStorageId');
 
 const router = express.Router();
 
 // ── Document persistence helpers ──────────────────────────────────────────────
 
 function loadDocument(id) {
-    const file = path.join(DOCUMENTS_DIR, id + '.json');
-    if (!fs.existsSync(file)) return null;
+    const file = resolveSafeStoragePath(DOCUMENTS_DIR, id);
+    if (!file || !fs.existsSync(file)) return null;
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
 }
 
 function saveDocument(doc) {
-    fs.writeFileSync(
-        path.join(DOCUMENTS_DIR, doc.id + '.json'),
-        JSON.stringify(doc, null, 2),
-        'utf8',
-    );
+    // doc.id is always server-generated (crypto.randomUUID()-based), never
+    // taken directly from an untrusted route param, so a resolution failure
+    // here indicates a programming error rather than a hostile request.
+    const file = resolveSafeStoragePath(DOCUMENTS_DIR, doc.id);
+    if (!file) throw new Error('Invalid document id');
+    fs.writeFileSync(file, JSON.stringify(doc, null, 2), 'utf8');
 }
 
 // ── Document routes ───────────────────────────────────────────────────────────
@@ -77,6 +79,9 @@ router.post('/api/documents', writeLimiter, (req, res) => {
  * GET /api/documents/:id
  */
 router.get('/api/documents/:id', readLimiter, (req, res) => {
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid document id' });
+    }
     const doc = loadDocument(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
     res.json({ document: doc });
@@ -87,6 +92,9 @@ router.get('/api/documents/:id', readLimiter, (req, res) => {
  * Body: { title?, content?, type?, linkedSources?, projectId? }
  */
 router.put('/api/documents/:id', writeLimiter, (req, res) => {
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid document id' });
+    }
     const doc = loadDocument(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
@@ -105,8 +113,11 @@ router.put('/api/documents/:id', writeLimiter, (req, res) => {
  * DELETE /api/documents/:id
  */
 router.delete('/api/documents/:id', writeLimiter, (req, res) => {
-    const file = path.join(DOCUMENTS_DIR, req.params.id + '.json');
-    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Document not found' });
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid document id' });
+    }
+    const file = resolveSafeStoragePath(DOCUMENTS_DIR, req.params.id);
+    if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'Document not found' });
     try {
         fs.unlinkSync(file);
         res.json({ success: true });

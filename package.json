@@ -3,16 +3,15 @@
   "version": "1.0.0",
   "description": "Ember Node v.1 project",
   "main": "app/server.js",
+  "engines": {
+    "node": ">=20.16.0 <21 || >=22.3.0"
+  },
   "scripts": {
     "start": "node app/server.js",
     "dev": "nodemon app/server.js",
     "test": "jest",
     "installer:icon": "node installer/windows/generate-installer-icon.js",
     "installer:windows": "node -e \"const { execSync } = require('child_process'); const v = require('./package.json').version; execSync('npm run installer:icon', { stdio: 'inherit' }); execSync('makensis /DAPP_VERSION=' + v + ' installer/windows/Ember-Node-Installer.nsi', { stdio: 'inherit' });\""
-  },
-  "emberNode": {
-    "updatePageUrl": "https://greenfire-archive.replit.app/archive",
-    "archiveUpdateUrl": "https://greenfire-archive.replit.app/downloads/index.json"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",

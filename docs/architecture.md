@@ -1,5 +1,7 @@
 # Ember Node v.ᚠ — Architecture Rewrite
 
+> **Historical document.** Superseded as the primary architecture reference by [`docs/PHASE_20_ARCHITECTURE.md`](PHASE_20_ARCHITECTURE.md) (Session / Hearth / Threshold). Kept for development history.
+
 *Design Charter — Living Document*
 
 ---

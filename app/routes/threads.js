@@ -23,6 +23,7 @@ const path    = require('path');
 const { readLimiter, writeLimiter } = require('../rateLimiters');
 const { THREADS_DIR } = require('../storageConfig');
 const { rememberThread, deleteThreadSummary } = require('../threadMemory');
+const { resolveSafeStoragePath, isValidStorageId } = require('../safeStorageId');
 
 const router = express.Router();
 
@@ -33,17 +34,17 @@ function normalizeRoom(room) {
 // ── Thread persistence helpers ────────────────────────────────────────────────
 
 function loadThread(id) {
-    const file = path.join(THREADS_DIR, id + '.json');
-    if (!fs.existsSync(file)) return null;
+    const file = resolveSafeStoragePath(THREADS_DIR, id);
+    if (!file || !fs.existsSync(file)) return null;
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
 }
 
 function saveThread(thread) {
-    fs.writeFileSync(
-        path.join(THREADS_DIR, thread.id + '.json'),
-        JSON.stringify(thread, null, 2),
-        'utf8',
-    );
+    // thread.id is always server-generated (crypto.randomUUID()-based), never
+    // taken directly from an untrusted route param.
+    const file = resolveSafeStoragePath(THREADS_DIR, thread.id);
+    if (!file) throw new Error('Invalid thread id');
+    fs.writeFileSync(file, JSON.stringify(thread, null, 2), 'utf8');
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -99,6 +100,9 @@ router.post('/api/threads', writeLimiter, (req, res) => {
  * GET /api/threads/:id
  */
 router.get('/api/threads/:id', readLimiter, (req, res) => {
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid thread id' });
+    }
     const thread = loadThread(req.params.id);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
     res.json({ thread });
@@ -109,6 +113,9 @@ router.get('/api/threads/:id', readLimiter, (req, res) => {
  * Body: { role, content }
  */
 router.post('/api/threads/:id/messages', writeLimiter, (req, res) => {
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid thread id' });
+    }
     const thread = loadThread(req.params.id);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
     const { role, content } = req.body || {};
@@ -125,6 +132,9 @@ router.post('/api/threads/:id/messages', writeLimiter, (req, res) => {
  * Body: { title? }
  */
 router.put('/api/threads/:id', writeLimiter, (req, res) => {
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid thread id' });
+    }
     const thread = loadThread(req.params.id);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
     const { title } = req.body || {};
@@ -141,6 +151,9 @@ router.put('/api/threads/:id', writeLimiter, (req, res) => {
  * Moves a thread to 'archived' status.
  */
 router.post('/api/threads/:id/archive', writeLimiter, (req, res) => {
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid thread id' });
+    }
     const thread = loadThread(req.params.id);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
     thread.status    = 'archived';
@@ -157,6 +170,9 @@ router.post('/api/threads/:id/archive', writeLimiter, (req, res) => {
  * Response: { success, thread, summary }
  */
 router.post('/api/threads/:id/remember', writeLimiter, (req, res) => {
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid thread id' });
+    }
     const thread = loadThread(req.params.id);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
 
@@ -179,8 +195,11 @@ router.post('/api/threads/:id/remember', writeLimiter, (req, res) => {
  * Permanently deletes a thread and its memory summary if present.
  */
 router.delete('/api/threads/:id', writeLimiter, (req, res) => {
-    const file = path.join(THREADS_DIR, req.params.id + '.json');
-    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Thread not found' });
+    if (!isValidStorageId(req.params.id)) {
+        return res.status(400).json({ error: 'Invalid thread id' });
+    }
+    const file = resolveSafeStoragePath(THREADS_DIR, req.params.id);
+    if (!file || !fs.existsSync(file)) return res.status(404).json({ error: 'Thread not found' });
 
     try {
         fs.unlinkSync(file);

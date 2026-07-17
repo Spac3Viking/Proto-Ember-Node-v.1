@@ -2,12 +2,15 @@
 
 const axios = require('axios');
 const { spawn } = require('child_process');
-const { DEFAULT_OLLAMA_MODEL, getSelectedModel } = require('./aiConfig');
+const { getSelectedModel } = require('./aiConfig');
 const { resolveModelRuntimeForRequest } = require('./modelRoles');
-
-const MODEL = DEFAULT_OLLAMA_MODEL;
-const OLLAMA_BASE_URL = 'http://localhost:11434';
-const OLLAMA_CHAT_URL = `${OLLAMA_BASE_URL}/api/chat`;
+const {
+    MODEL,
+    OLLAMA_BASE_URL,
+    OLLAMA_CHAT_URL,
+    OLLAMA_TAGS_URL,
+    OLLAMA_HEALTH_TIMEOUT_MS,
+} = require('./runtimeConfig');
 
 function getSelectedModelFallback() {
     return getSelectedModel();
@@ -64,7 +67,7 @@ async function resolveEmberPrimeRuntime(request = null) {
 
 async function probeOllamaRuntime() {
     try {
-        const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+        const response = await axios.get(OLLAMA_TAGS_URL, { timeout: OLLAMA_HEALTH_TIMEOUT_MS });
         const models = Array.isArray(response.data && response.data.models) ? response.data.models : [];
         return {
             ok: true,

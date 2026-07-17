@@ -16,8 +16,7 @@
 'use strict';
 
 const axios = require('axios');
-
-const OLLAMA_BASE_URL  = process.env.OLLAMA_BASE_URL   || 'http://localhost:11434';
+const { OLLAMA_BASE_URL } = require('./runtimeConfig');
 const EMBEDDING_MODEL  = process.env.EMBER_EMBEDDING_MODEL || 'nomic-embed-text';
 
 // ── Endpoint definitions ──────────────────────────────────────────────────────

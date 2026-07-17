@@ -30,7 +30,8 @@ const {
     FORGE_DIR, RUNTIME_TUNING_RUNS_PATH,
     ensureDataRoot, ensureCanonicalDataFiles,
 } = require('../storageConfig');
-const { OLLAMA_BASE_URL } = require('../runtimeStewardship');
+const { OLLAMA_BASE_URL, OLLAMA_TAGS_URL, OLLAMA_HEALTH_TIMEOUT_MS, PORT, ARCHIVE_BASE_URL } = require('../runtimeConfig');
+const { probeOllamaRuntime } = require('../runtimeStewardship');
 const { TASK_ROUTES } = require('../modelRoles');
 const { getSelectedModel, setSelectedModel, loadAiConfig, setModelRole } = require('../aiConfig');
 const { loadChunks, loadEmbeddings, loadManifests } = require('../indexStore');
@@ -67,8 +68,8 @@ const {
 const FORGE_CORE_PATH = path.join(FORGE_DIR, 'forge-core.json');
 const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
 const BUNDLED_NODE_PATH = path.join(__dirname, '..', '..', 'runtime', 'node', 'node.exe');
-const ARCHIVE_UPDATE_URL = 'https://greenfire-archive.replit.app/downloads/index.json';
-const DEFAULT_UPDATE_PAGE_URL = 'https://greenfire-archive.replit.app/archive';
+const ARCHIVE_UPDATE_URL = ARCHIVE_BASE_URL + '/downloads/index.json';
+const DEFAULT_UPDATE_PAGE_URL = ARCHIVE_BASE_URL + '/archive';
 const CACHE_STATUS_ORDER = [
     { packageId: 'green-fire-core', label: 'Core Cache' },
     { packageId: 'green-fire-codices-cache', label: 'Codices Cache' },
@@ -240,9 +241,12 @@ function _sanitizeRuntimeTuningRun(payload) {
 async function _buildNodeStatusPayload() {
     const packageConfig = _loadPackageConfig();
     const currentAppVersion = _normalizeVersionString(packageConfig.version) || '0.0.0';
-    const emberNodeConfig = packageConfig.emberNode || {};
-    const updatePageUrl = emberNodeConfig.updatePageUrl || DEFAULT_UPDATE_PAGE_URL;
-    const archiveUpdateUrl = emberNodeConfig.archiveUpdateUrl || ARCHIVE_UPDATE_URL;
+    // Canonical runtime configuration (EMBER_ARCHIVE_BASE_URL / runtimeConfig)
+    // is always authoritative here. Legacy package.json emberNode.* fields
+    // are no longer consulted so a stale checked-in value can never override
+    // the operator's configured Archive base URL.
+    const updatePageUrl = DEFAULT_UPDATE_PAGE_URL;
+    const archiveUpdateUrl = ARCHIVE_UPDATE_URL;
     const checkedAt = new Date().toISOString();
 
     let comparison = [];
@@ -307,7 +311,7 @@ function createSystemRouter({ migrationResult }) {
     /**
      * GET /api/status
      */
-    router.get('/api/status', readLimiter, (req, res) => {
+    router.get('/api/status', readLimiter, async (req, res) => {
         const embStatus  = getEmbeddingStatus();
         const chunks     = loadChunks();
         const embeddings = loadEmbeddings();
@@ -330,10 +334,23 @@ function createSystemRouter({ migrationResult }) {
         const loadedCaches = listLoadedCaches();
         const memoryCompression = getMemoryCompressionStatus();
 
+        // Canonical AI availability check. AI being unavailable is a
+        // recoverable runtime state — it must never make the Ember Node
+        // server itself appear unavailable (the fact that this request
+        // completed already proves the server is up).
+        const configuredModel = getSelectedModel();
+        const ollamaProbe = await probeOllamaRuntime();
+        const modelAvailable = ollamaProbe.ok && ollamaProbe.models.some(
+            name => name === configuredModel || name.startsWith(configuredModel + ':'),
+        );
+
         res.json({
-            model:             getSelectedModel(),
+            // Ember Node server: this response existing means the server
+            // itself is available, independent of AI reachability.
+            serverAvailable:   true,
+            model:             configuredModel,
             ollamaBaseUrl:     OLLAMA_BASE_URL,
-            port:              3477,
+            port:              PORT,
             cacheCount:    bundledCacheCount,
             caches: {
                 bundled:       bundledCacheCount,
@@ -354,6 +371,16 @@ function createSystemRouter({ migrationResult }) {
             storageRootSource: process.env.EMBER_NODE_DATA_ROOT ? 'EMBER_NODE_DATA_ROOT'
                              : process.env.EMBER_DATA_ROOT      ? 'EMBER_DATA_ROOT'
                              : 'default',
+            // Canonical AI runtime status — distinguishes Node availability
+            // from AI reachability and model readiness (Phase 20A).
+            ai: {
+                runtimeReachable: ollamaProbe.ok,
+                configuredModel,
+                modelAvailable,
+            },
+            // Convenience flat fields for simple frontend indicators.
+            aiRuntimeReachable: ollamaProbe.ok,
+            aiModelAvailable:   modelAvailable,
             // Runtime bootstrap + loadout status
             forgeLoaded,
             bootstrapStatus,
@@ -376,7 +403,7 @@ function createSystemRouter({ migrationResult }) {
      */
     router.get('/api/ollama-status', async (req, res) => {
         try {
-            await axios.get(OLLAMA_BASE_URL + '/api/tags');
+            await axios.get(OLLAMA_TAGS_URL, { timeout: OLLAMA_HEALTH_TIMEOUT_MS });
             res.json({ status: 'reachable' });
         } catch {
             res.status(503).json({ status: 'unreachable' });
@@ -389,7 +416,7 @@ function createSystemRouter({ migrationResult }) {
     router.get('/api/ai/models', readLimiter, async (req, res) => {
         const payloadExtras = buildAiRolePayload(loadAiConfig());
         try {
-            const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+            const response = await axios.get(OLLAMA_TAGS_URL, { timeout: OLLAMA_HEALTH_TIMEOUT_MS });
             const models = Array.isArray(response.data && response.data.models)
                 ? response.data.models
                 : [];
@@ -434,7 +461,7 @@ function createSystemRouter({ migrationResult }) {
         }
 
         try {
-            const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+            const response = await axios.get(OLLAMA_TAGS_URL, { timeout: OLLAMA_HEALTH_TIMEOUT_MS });
             const models = Array.isArray(response.data && response.data.models)
                 ? response.data.models
                 : [];
@@ -490,7 +517,7 @@ function createSystemRouter({ migrationResult }) {
         }
 
         try {
-            const response = await axios.get(OLLAMA_BASE_URL + '/api/tags');
+            const response = await axios.get(OLLAMA_TAGS_URL, { timeout: OLLAMA_HEALTH_TIMEOUT_MS });
             const models = Array.isArray(response.data && response.data.models)
                 ? response.data.models
                 : [];

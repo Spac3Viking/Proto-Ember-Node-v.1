@@ -1,19 +1,48 @@
 # Ember Node v.ᚠ
 
-A local-first sovereign AI console descended from the Green Fire Archive.
+A local-first human continuity instrument descended from the Green Fire Archive.
 
-Ember Node is now a **markdown-first continuity terminal**: active continuity exchange is centered on `.md`, `.txt`, copy/paste dialogue, bootstrap files, cache manifests, and README-driven handoffs.
+Ember Node's purpose is to help a person become more capable through
+participation in reality — not more dependent on AI. AI is a companion and
+instrument inside the Node, never its authority.
 
-## Current Architecture
+## Primary Architecture (Phase 20)
+
+The Node's permanent primary architecture is three spaces:
+
+- **SESSION** — What am I working on? (active work)
+- **HEARTH** — What do I already have? (durable continuity)
+- **THRESHOLD** — What is entering or leaving the Node? (intentional exchange)
+
+Work inside Session follows a human cycle: **Observe → Reflect → Act →
+Refine → Remember**. Compression is preferable to expansion: when a choice
+exists between adding a new surface and folding a capability into an
+existing one, folding wins.
+
+See [`docs/PHASE_20_ARCHITECTURE.md`](docs/PHASE_20_ARCHITECTURE.md) for
+the full architecture contract, including the future continuity
+relationship (Session → Thread → Hearth) and the current build's explicit
+non-goals.
+
+## Historical / Advanced Systems
+
+Council, archetypes, caches, model roles, runtime tuning, Prompt Bridges,
+Forge, and Signal Threads remain available as contextual tools reached
+from within Session, Hearth, or Threshold — not additional primary
+destinations. The list below documents the terminology from earlier
+phases; it is historical context, not the primary map of the application:
 
 - **🜂 Hearth** — Ember Prime continuity and remembered signal.
 - **🜁 Ember Council** — Sentinel Archetypes and active refinement.
 - **🜃 Archive** — installed memory and Reader surface.
 - **🜄 Threshold** — intake, inspection, and runtime stewardship.
-- **🜔 Signal Threads** — future saved thought lines (groundwork only).
+- **🜔 Signal Threads** — saved thought lines (to be consolidated with
+  legacy chat threads in a later Phase 20 stage — not v118).
 - **Caches** — portable memory bundles.
 - **Rolling Bootstrap** — unfolding continuity summary.
 - **Fractal Memory Compression** — cache/document/archetype summary geometry.
+
+Ember Node is also a **markdown-first continuity terminal**: active continuity exchange is centered on `.md`, `.txt`, copy/paste dialogue, bootstrap files, cache manifests, and README-driven handoffs.
 
 Canonical terminology and paths are enforced: `council`, `documents/`, and manifest `documents[]`.
 
@@ -48,8 +77,12 @@ Open `http://localhost:3477`.
 
 ## Requirements
 
-- Node.js 18+
-- Ollama running locally
+- Node.js 20.16+ (or 22.3+) — matches the `pdf-parse`/`pdfjs-dist` dependency's
+  locked engine requirement; Node 18 is no longer sufficient. See `engines`
+  in `package.json`.
+- Ollama running locally (optional — the Ember Node starts and remains usable
+  as a local archive and Session instrument without it; AI features simply
+  report as unavailable until Ollama is running)
 - Recommended model: `ollama pull gemma3:4b`
 
 ## Core Runtime Surfaces
@@ -73,6 +106,36 @@ Default path:
 - Linux/macOS: `~/.ember-node`
 
 Set `EMBER_NODE_DATA_ROOT` to override.
+
+## Runtime Configuration
+
+Canonical runtime configuration lives in `app/runtimeConfig.js`. Supported
+environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `EMBER_NODE_HOST` | `127.0.0.1` | Web server bind host. Loopback by default — v118 is explicitly local, not LAN-ready. |
+| `EMBER_NODE_PORT` | `3477` | Web server bind port. |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Base URL for the local Ollama runtime. Shared by runtime stewardship, embeddings, chat, and status reporting. |
+| `EMBER_OLLAMA_TIMEOUT_MS` | `2000` | Timeout applied to Ollama model-health/tags requests, so a stopped Ollama never blocks the Node. |
+| `EMBER_ARCHIVE_BASE_URL` | `https://greenfire-archive.replit.app` | Base URL for the optional hosted Green Fire Archive used for cache-package updates. A separate concern from Ollama; never assumed interchangeable with any other Green Fire domain. |
+| `EMBER_NODE_DATA_ROOT` / `EMBER_DATA_ROOT` | platform default (see Data Root) | User data root. |
+
+The Ember Node starts and remains usable as a local archive and Session
+instrument even when Ollama is stopped or unreachable. `GET /api/status` is
+the canonical status endpoint and distinguishes Ember Node server
+availability from AI runtime reachability and model availability:
+
+```json
+{
+  "serverAvailable": true,
+  "model": "gemma3:4b",
+  "ollamaBaseUrl": "http://localhost:11434",
+  "ai": { "runtimeReachable": false, "configuredModel": "gemma3:4b", "modelAvailable": false },
+  "aiRuntimeReachable": false,
+  "aiModelAvailable": false
+}
+```
 
 ## Cache Draft Manifest (Normalized)
 
@@ -107,3 +170,13 @@ Threshold cache drafts use this normalized manifest structure:
   "license": "unknown"
 }
 ```
+
+## Bundled Green Fire Core Cache — Content-Version Note
+
+The Green Fire Core Cache bundled at `app/bundled-caches/green-fire-core-cache.zip`
+is currently manifest version **1.4** (`green-fire-core/manifest.json`). No
+v1.6 bundle is packaged in this build. Runtime and documentation claims are
+kept in agreement with the files actually bundled — this note exists so a
+future build does not silently relabel v1.4 content as v1.6. If a v1.6
+bundle becomes available it should replace this file and this note should
+be updated or removed.

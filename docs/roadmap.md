@@ -1,5 +1,7 @@
 # Ember Node v.ᚠ — Development Roadmap
 
+> **Historical document.** Superseded as the primary architecture reference by [`docs/PHASE_20_ARCHITECTURE.md`](PHASE_20_ARCHITECTURE.md) (Session / Hearth / Threshold). Kept for development history.
+
 ## Phase 1 ✓ — Local Node Foundation
 - Local Node/Express server
 - Ollama chat integration (gemma3:4b)

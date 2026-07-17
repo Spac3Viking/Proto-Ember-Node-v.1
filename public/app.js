@@ -2015,13 +2015,14 @@ let _activeRoomId = 'session';
             loadThresholdCacheDrafts();
         }
         if (roomId === 'hearth') {
+            // Local-data reads only. Hosted Archive package/signal requests
+            // and Advanced System status are loaded lazily when the user
+            // opens the relevant hearth-archive / hearth-system sub-tab
+            // (see initSubTabs below) — not merely from opening Hearth.
             loadHearthThreads();
             loadHearthArchive();
             loadHearthTrustedArchive();
             loadHearthRememberedThreads();
-            loadArchiveCacheManager();
-            loadArchiveSignalPanel();
-            refreshSystemStatus();
         }
     }
 
@@ -7594,6 +7595,8 @@ async function deleteThresholdCacheDraft(draftId) {
 
 async function refreshSystemStatus() {
     const ollamaEl  = document.getElementById('sys-ollama-status');
+    const ollamaEndpointEl = document.getElementById('sys-ollama-endpoint');
+    const portEl    = document.getElementById('sys-port');
     const modelEl   = document.getElementById('sys-model');
     const modelSelectEl = document.getElementById('sys-model-select');
     const modelSaveBtnEl = document.getElementById('sys-model-save-btn');
@@ -7609,6 +7612,14 @@ async function refreshSystemStatus() {
         if (chunksEl)  chunksEl.textContent  = String(data.indexedChunks  ?? 0);
         if (sourcesEl) sourcesEl.textContent = String(data.indexedSources ?? 0);
         updateSystemCacheCount(data.cacheCount ?? 0);
+        if (ollamaEndpointEl) {
+            ollamaEndpointEl.textContent = data.ollamaBaseUrl
+                ? String(data.ollamaBaseUrl).replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
+                : '—';
+        }
+        if (portEl) {
+            portEl.textContent = data.port != null ? String(data.port) : '—';
+        }
         if (nodeRuntimeStatusEl) {
             nodeRuntimeStatusEl.textContent = data.nodeRuntimeStatus || 'Missing';
             if (data.nodeRuntimeSource === 'bundled') {
@@ -10279,13 +10290,14 @@ async function launchOllama(runtimeId) {
 
 (function init() {
     updateHeaderStatus();
-    refreshSystemStatus();
+    // Local-data reads only on ordinary startup. Hosted Archive package
+    // index / cache-update / signal requests and the Node update-check are
+    // intentionally not triggered here — see initSubTabs (hearth-archive,
+    // hearth-system) and the explicit refresh buttons.
     loadHearthThreads();
     loadHearthArchive();
     loadHearthTrustedArchive();
     loadHearthRememberedThreads();
-    loadArchiveCacheManager();
-    loadArchiveSignalPanel();
     loadStartupCheck();
     updateCouncilChatActiveArchetype();
     loadSentinelTrials();
@@ -10550,19 +10562,34 @@ async function launchOllama(runtimeId) {
     }
 
     // ── AI status indicator ───────────────────────────────────────────────────
+    // Uses the canonical /api/status endpoint (Phase 20A / build v118).
+    // AI unavailability must never make the Ember Node itself appear
+    // unavailable — a failed fetch or non-OK response means the Node is
+    // unreachable. A successful response is further distinguished by both
+    // aiRuntimeReachable and aiModelAvailable so "Ollama running but wrong
+    // model" is never conflated with "Ollama not running at all".
 
     async function _refreshAiStatus() {
         const el = $ip('ip-ai-status');
         if (!el) return;
         try {
-            const res = await fetch('/api/system/status').catch(() => null);
-            if (!res || !res.ok) { el.textContent = 'Unavailable'; el.className = 'ip-status-val off'; return; }
+            const res = await fetch('/api/status');
+            if (!res.ok) { el.textContent = 'Node unavailable'; el.className = 'ip-status-val off'; return; }
             const data = await res.json().catch(() => ({}));
-            const ok = data && (data.ollamaRunning || data.aiAvailable || data.runtimeAvailable);
-            el.textContent = ok ? 'Available' : 'Unavailable';
-            el.className = 'ip-status-val ' + (ok ? 'ok' : 'off');
+            const runtimeReachable = Boolean(data && data.aiRuntimeReachable);
+            const modelAvailable   = Boolean(data && data.aiModelAvailable);
+            if (!runtimeReachable) {
+                el.textContent = 'AI offline';
+                el.className = 'ip-status-val off';
+            } else if (!modelAvailable) {
+                el.textContent = 'Model missing';
+                el.className = 'ip-status-val warn';
+            } else {
+                el.textContent = 'Ready';
+                el.className = 'ip-status-val ok';
+            }
         } catch {
-            el.textContent = 'Unavailable';
+            el.textContent = 'Node unavailable';
             el.className = 'ip-status-val off';
         }
     }
