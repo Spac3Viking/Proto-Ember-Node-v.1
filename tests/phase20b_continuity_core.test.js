@@ -72,4 +72,50 @@ describe('Phase 20B — Continuity Core', () => {
         expect(context).not.toContain('Stale title');
         expect(context).not.toContain('Stale text');
     });
+
+    test('canonical membership cannot be changed through generic routes and deletion preserves links', async () => {
+        const { app } = require('../app/server');
+        const session = await request(app).post('/api/sessions').send({ title: 'Work' });
+        const thread = await request(app).post('/api/signal-threads').send({ title: 'Fence', posture: 'practical' });
+        const sessionId = session.body.session.id;
+        const threadId = thread.body.thread.id;
+        await request(app).put('/api/sessions/' + sessionId)
+            .send({ continuity: { threadId } }).expect(409);
+        await request(app).put('/api/signal-threads/' + threadId)
+            .send({ sessionIds: [sessionId] }).expect(409);
+        await request(app).post('/api/signal-threads/' + threadId + '/sessions')
+            .send({ sessionId }).expect(200);
+        await request(app).delete('/api/signal-threads/' + threadId).expect(409);
+        await request(app).delete('/api/sessions/' + sessionId).expect(200);
+        const remaining = await request(app).get('/api/signal-threads/' + threadId);
+        expect(remaining.body.thread.sessionIds).toEqual([]);
+    });
+
+    test('archive-thread rejects an already-linked Session before creating a Thread', async () => {
+        const { app } = require('../app/server');
+        const session = await request(app).post('/api/sessions').send({ title: 'Work' });
+        const thread = await request(app).post('/api/signal-threads').send({ title: 'Fence', posture: 'practical' });
+        await request(app).post('/api/signal-threads/' + thread.body.thread.id + '/sessions')
+            .send({ sessionId: session.body.session.id }).expect(200);
+        await request(app).post('/api/sessions/' + session.body.session.id + '/archive-thread')
+            .send({ newThreadTitle: 'Must not exist' }).expect(409);
+        const threads = await request(app).get('/api/signal-threads');
+        expect(threads.body.threads).toHaveLength(1);
+    });
+
+    test('continuity and shared AI request contexts have deterministic limits and opt-in lenses', () => {
+        const { LIMITS, buildContinuityContext } = require('../app/continuityContext');
+        const { buildAiRequest, NATURAL_RESPONSE_DISCIPLINE } = require('../app/aiRequestContext');
+        const context = buildContinuityContext(
+            { id: 'current', title: 'x'.repeat(500), entries: Array(8).fill({ notes: 'n'.repeat(2000) }) },
+            { title: 'Thread', openPressures: Array(10).fill('p'.repeat(1000)), carryForwardEntries: [], observations: [], reflections: [] },
+            'q'.repeat(8000),
+            Array(10).fill(null).map((_, index) => ({ id: 'old-' + index, title: 't'.repeat(500), updatedAt: '2026-01-01' })),
+        );
+        expect(context.length).toBeLessThanOrEqual(LIMITS.block + 1);
+        const request = buildAiRequest({ continuityContext: 'current', retrievalContext: 'retrieval', userContent: 'question' });
+        expect(request.messages[0].content).toContain(NATURAL_RESPONSE_DISCIPLINE);
+        expect(request.messages[1].content).toBe('current\n\nretrieval\n\nquestion');
+        expect(request.messages[1].content).not.toMatch(/archetype|council/i);
+    });
 });

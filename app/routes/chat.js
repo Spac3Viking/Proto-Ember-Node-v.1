@@ -41,6 +41,7 @@ const {
 } = require('../runtime/cognitionProfiles');
 const { resolveSessionContinuity } = require('../continuityContext');
 const { requestLocalCompletion } = require('../aiGateway');
+const { buildAiRequest } = require('../aiRequestContext');
 
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
@@ -1306,12 +1307,13 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             ? summaryFirst.block + groundedPromptText
             : groundedPromptText;
         let sessionContinuity = null;
+        let continuityContext = '';
         if (sessionId !== null && sessionId !== undefined && String(sessionId).trim()) {
             sessionContinuity = resolveSessionContinuity(String(sessionId), query);
             if (sessionContinuity.error) {
                 return res.status(sessionContinuity.status).json({ error: sessionContinuity.error });
             }
-            userContent = sessionContinuity.context + '\n\n' + userContent;
+            continuityContext = sessionContinuity.context;
         }
         console.log(
             '[/api/chat] retrieval=' +
@@ -1392,13 +1394,15 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             taskType,
         });
 
+        const aiRequest = buildAiRequest({
+            systemPrompt,
+            continuityContext,
+            userContent,
+        });
         const payload = {
             model:    heart.model,
             stream:   false,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user',   content: userContent },
-            ],
+            messages: aiRequest.messages,
         };
         if (isOllamaRuntime(heart) && runtimeGenerationProfile) {
             payload.options = {

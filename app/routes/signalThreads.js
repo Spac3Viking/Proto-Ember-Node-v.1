@@ -74,6 +74,9 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
     if (!p || !SIGNAL_THREAD_POSTURES.includes(p)) {
         return res.status(400).json({ error: 'Invalid posture' });
     }
+    if (Array.isArray(sessionIds) && sessionIds.length) {
+        return res.status(409).json({ error: 'Use the canonical Thread link operation to add sessionIds' });
+    }
     try {
         const thread = createSignalThread({
             title: t,
@@ -101,6 +104,9 @@ router.get('/api/signal-threads/:id', readLimiter, (req, res) => {
 
 router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
     const patch = req.body && typeof req.body === 'object' ? req.body : {};
+    if (Object.prototype.hasOwnProperty.call(patch, 'sessionIds')) {
+        return res.status(409).json({ error: 'Use the canonical Thread link operation to change sessionIds' });
+    }
     if (typeof patch.posture === 'string') {
         const p = patch.posture.trim().toLowerCase();
         if (p && !SIGNAL_THREAD_POSTURES.includes(p)) {
@@ -120,6 +126,10 @@ router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
 });
 
 router.delete('/api/signal-threads/:id', writeLimiter, (req, res) => {
+    const thread = loadSignalThread(req.params.id);
+    if (thread && Array.isArray(thread.sessionIds) && thread.sessionIds.length) {
+        return res.status(409).json({ error: 'Detach linked Sessions before deleting this Thread' });
+    }
     const ok = deleteSignalThread(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Signal Thread not found' });
     res.json({ success: true });

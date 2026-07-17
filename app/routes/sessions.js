@@ -25,18 +25,19 @@ const {
     createSession,
     updateSession,
     saveStageNotes,
-    deleteSession,
     exportSessionMarkdown,
 } = require('../sessions');
 const {
     createSignalThread,
+    deleteSignalThread,
     addOpenPressure,
     addCarryForwardEntry,
     loadSignalThread,
 } = require('../signalThreads');
 const { isValidStorageId } = require('../safeStorageId');
-const { linkSessionToThread, resolveSessionContinuity } = require('../continuityContext');
+const { linkSessionToThread, resolveSessionContinuity, deleteSessionWithDetach } = require('../continuityContext');
 const { requestLocalCompletion } = require('../aiGateway');
+const { buildAiRequest } = require('../aiRequestContext');
 
 const router = express.Router();
 
@@ -95,6 +96,9 @@ router.get('/api/sessions/:id', readLimiter, (req, res) => {
 
 router.put('/api/sessions/:id', writeLimiter, (req, res) => {
     const patch = req.body && typeof req.body === 'object' ? req.body : {};
+    if (patch.continuity && Object.prototype.hasOwnProperty.call(patch.continuity, 'threadId')) {
+        return res.status(409).json({ error: 'Use the canonical Thread link operation to change continuity.threadId' });
+    }
     if (typeof patch.currentStage === 'string') {
         patch.currentStage = normalizeSessionStageInput(patch.currentStage);
         if (!SESSION_STAGES.includes(patch.currentStage)) {
@@ -114,8 +118,8 @@ router.put('/api/sessions/:id', writeLimiter, (req, res) => {
 
 router.delete('/api/sessions/:id', writeLimiter, (req, res) => {
     try {
-        const deleted = deleteSession(req.params.id);
-        if (!deleted) return res.status(404).json({ error: 'Session not found' });
+        const result = deleteSessionWithDetach(req.params.id);
+        if (result.error) return res.status(result.status).json({ error: result.error });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -199,13 +203,15 @@ router.post('/api/sessions/:id/ai-assist', chatLimiter, async (req, res) => {
     const { systemPrompt, userContent } = _buildAssistPrompt(normalStage, notes);
 
     try {
+        const aiRequest = buildAiRequest({
+            systemPrompt,
+            continuityContext: resolved.context,
+            userContent,
+        });
         const completion = await requestLocalCompletion({
             request: { query: userContent },
             timeout: 60000,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: resolved.context + '\n\n' + userContent },
-            ],
+            messages: aiRequest.messages,
         });
         const content = completion.content;
         res.json({ success: true, content });
@@ -235,6 +241,9 @@ router.post('/api/sessions/:id/archive-thread', writeLimiter, (req, res) => {
     if (!threadId && !newThreadTitle) {
         return res.status(400).json({ error: 'threadId or newThreadTitle is required' });
     }
+    if (!threadId && session.continuity && session.continuity.threadId) {
+        return res.status(409).json({ error: 'Session is already linked to another Thread' });
+    }
 
     try {
         let thread = null;
@@ -251,6 +260,10 @@ router.post('/api/sessions/:id/archive-thread', writeLimiter, (req, res) => {
                 sessionIds: [],
             });
             const linked = linkSessionToThread(session.id, created.id);
+            if (linked.error) {
+                deleteSignalThread(created.id);
+                return res.status(linked.status).json({ error: linked.error });
+            }
             thread = linked.thread;
         }
         if (openPressure) {

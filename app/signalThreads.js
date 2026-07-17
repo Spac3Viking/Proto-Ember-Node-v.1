@@ -267,8 +267,6 @@ function updateSignalThread(id, patch) {
     if (typeof data.sourceNotes === 'string') existing.sourceNotes = data.sourceNotes;
     if (typeof data.compression === 'string') existing.compression = data.compression;
     if (Array.isArray(data.tags)) existing.tags = _normalizeTags(data.tags);
-    if (Array.isArray(data.sessionIds)) existing.sessionIds = _normalizeSessionIds(data.sessionIds);
-
     existing.updatedAt = _nowIso();
     return saveSignalThread(existing);
 }

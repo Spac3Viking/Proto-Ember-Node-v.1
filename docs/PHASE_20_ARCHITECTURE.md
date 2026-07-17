@@ -127,17 +127,15 @@ provide. Records may be incomplete, outdated, biased, or contradictory.
 AI helps compare information, identify inconsistencies, test explanations,
 and prepare questions; it never replaces human judgment.
 
-## What build v118 does and does not do
+## Build v119 status
 
-v118 is a stabilization build. It corrects confirmed defects, establishes
-a local trust boundary, centralizes runtime configuration, and aligns
-primary documentation with this contract. It does **not**:
+v119 implements the canonical Session → Thread → Hearth continuity path.
+Historical Signal Thread records remain the storage/API implementation of
+canonical Threads; `/api/threads` remains a readable legacy conversation
+compatibility surface. The build does not migrate or delete legacy thread
+data, redesign Session, Hearth, or Threshold, change the five-stage Session
+model, or implement Universal Host / LAN pairing (deferred to v121).
 
-- redesign Session, Hearth, or Threshold,
-- consolidate chat threads and Signal Threads,
-- migrate or delete legacy thread data,
-- change the five-stage Session data model,
-- implement Universal Host / LAN pairing (deferred to v121).
-
-See the v118 pull request description for the full list of items deferred
-to v119, v120, and v121.
+Canonical membership is changed only through the link operation. Deleting a
+Session first detaches it from its Thread; deleting a Thread with linked
+Sessions is refused until those links are detached.
