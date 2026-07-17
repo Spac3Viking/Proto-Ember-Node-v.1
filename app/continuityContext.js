@@ -80,8 +80,8 @@ function linkSessionToThread(sessionId, threadId, { allowSwitch = false } = {}) 
         .map(id => loadSession(id)).filter(Boolean)
         .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     const updatedSession = updateSession(session.id, {
-        // These values preserve the v118 display schema only. Context always
-        // resolves live Thread state above, so they are never authoritative.
+        // These values preserve the v118 display schema only. The context
+        // builders resolve live Thread state, so they are never authoritative.
         continuity: {
             ...(session.continuity || {}),
             threadId: thread.id,
