@@ -72,6 +72,16 @@ describe('app/runtimeConfig — canonical runtime configuration', () => {
         expect(cfg.OLLAMA_HEALTH_TIMEOUT_MS).toBeGreaterThan(0);
     });
 
+    test('normalizes a trailing slash on configured base URLs to avoid accidental double slashes', () => {
+        process.env.OLLAMA_BASE_URL = 'http://127.0.0.1:22222/';
+        process.env.EMBER_ARCHIVE_BASE_URL = 'https://example.test/archive/';
+
+        const cfg = require('../app/runtimeConfig');
+        expect(cfg.OLLAMA_BASE_URL).toBe('http://127.0.0.1:22222');
+        expect(cfg.OLLAMA_CHAT_URL).toBe('http://127.0.0.1:22222/api/chat');
+        expect(cfg.ARCHIVE_BASE_URL).toBe('https://example.test/archive');
+    });
+
     test('runtimeStewardship and embeddings agree with the canonical Ollama base URL', () => {
         process.env.OLLAMA_BASE_URL = 'http://127.0.0.1:33333';
         const cfg = require('../app/runtimeConfig');
@@ -133,6 +143,23 @@ describe('GET /api/status — canonical status contract', () => {
         expect(res.body.ai.modelAvailable).toBe(true);
     });
 
+    test('distinguishes "runtime reachable, model missing" from full readiness', async () => {
+        const axiosMock = require('axios');
+        // Ollama runtime is up and returns a model list, but it does not
+        // contain the currently configured model — this must be reported
+        // distinctly from both full readiness and "AI offline".
+        axiosMock.get.mockResolvedValue({ data: { models: [{ name: 'some-other-model:8b' }] } });
+        const { app } = require('../app/server');
+
+        const res = await request(app).get('/api/status');
+        expect(res.status).toBe(200);
+        expect(res.body.serverAvailable).toBe(true);
+        expect(res.body.aiRuntimeReachable).toBe(true);
+        expect(res.body.aiModelAvailable).toBe(false);
+        expect(res.body.ai.runtimeReachable).toBe(true);
+        expect(res.body.ai.modelAvailable).toBe(false);
+    });
+
     test('Ollama probe requests use an explicit timeout', async () => {
         const axiosMock = require('axios');
         axiosMock.get.mockResolvedValue({ data: { models: [] } });
@@ -143,5 +170,52 @@ describe('GET /api/status — canonical status contract', () => {
             expect.stringContaining('/api/tags'),
             expect.objectContaining({ timeout: expect.any(Number) }),
         );
+    });
+});
+
+describe('GET /api/system/node-status-updates — canonical Archive base URL', () => {
+    const ENV_KEYS = ['EMBER_ARCHIVE_BASE_URL', 'EMBER_NODE_DATA_ROOT', 'EMBER_DATA_ROOT'];
+    let savedEnv;
+    let dataRoot;
+
+    beforeEach(() => {
+        jest.resetModules();
+        jest.clearAllMocks();
+        savedEnv = {};
+        ENV_KEYS.forEach(key => { savedEnv[key] = process.env[key]; delete process.env[key]; });
+        dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ember-phase20a-archive-url-'));
+        process.env.EMBER_NODE_DATA_ROOT = dataRoot;
+    });
+
+    afterEach(() => {
+        ENV_KEYS.forEach(key => {
+            if (savedEnv[key] === undefined) delete process.env[key];
+            else process.env[key] = savedEnv[key];
+        });
+        try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* best-effort test cleanup; failure here does not affect assertions */ }
+    });
+
+    test('EMBER_ARCHIVE_BASE_URL is reflected in the returned Archive/update URLs', async () => {
+        process.env.EMBER_ARCHIVE_BASE_URL = 'https://custom-archive.example.test';
+        const axiosMock = require('axios');
+        axiosMock.get.mockResolvedValue({ data: {} });
+        const { app } = require('../app/server');
+
+        const res = await request(app).get('/api/system/node-status-updates');
+        expect(res.status).toBe(200);
+        expect(res.body.archiveUpdateUrl).toBe('https://custom-archive.example.test/downloads/index.json');
+        expect(res.body.updatePageUrl).toBe('https://custom-archive.example.test/archive');
+    });
+
+    test('a trailing slash on EMBER_ARCHIVE_BASE_URL never produces a double slash', async () => {
+        process.env.EMBER_ARCHIVE_BASE_URL = 'https://custom-archive.example.test/';
+        const axiosMock = require('axios');
+        axiosMock.get.mockResolvedValue({ data: {} });
+        const { app } = require('../app/server');
+
+        const res = await request(app).get('/api/system/node-status-updates');
+        expect(res.status).toBe(200);
+        expect(res.body.archiveUpdateUrl).toBe('https://custom-archive.example.test/downloads/index.json');
+        expect(res.body.archiveUpdateUrl).not.toMatch(/\/\/downloads/);
     });
 });

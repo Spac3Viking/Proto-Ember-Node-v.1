@@ -45,6 +45,13 @@ function _parseTimeoutMs(value, fallback) {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+// Strips any trailing slash(es) so callers can safely concatenate
+// `BASE_URL + '/some/path'` without producing accidental double slashes
+// when an operator's configured base URL already ends in '/'.
+function _stripTrailingSlash(value) {
+    return String(value || '').replace(/\/+$/, '');
+}
+
 // ── Local server binding ──────────────────────────────────────────────────────
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -65,8 +72,10 @@ const PORT = _parsePort(process.env.EMBER_NODE_PORT, DEFAULT_PORT);
 // ── Ollama runtime location ───────────────────────────────────────────────────
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
-const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL && process.env.OLLAMA_BASE_URL.trim())
-    || DEFAULT_OLLAMA_BASE_URL;
+const OLLAMA_BASE_URL = _stripTrailingSlash(
+    (process.env.OLLAMA_BASE_URL && process.env.OLLAMA_BASE_URL.trim())
+        || DEFAULT_OLLAMA_BASE_URL,
+);
 const OLLAMA_CHAT_URL = OLLAMA_BASE_URL + '/api/chat';
 const OLLAMA_TAGS_URL = OLLAMA_BASE_URL + '/api/tags';
 
@@ -81,8 +90,10 @@ const OLLAMA_HEALTH_TIMEOUT_MS = _parseTimeoutMs(
 // ── Optional hosted Green Fire Archive (cache-package updates) ────────────────
 
 const DEFAULT_ARCHIVE_BASE_URL = 'https://greenfire-archive.replit.app';
-const ARCHIVE_BASE_URL = (process.env.EMBER_ARCHIVE_BASE_URL && process.env.EMBER_ARCHIVE_BASE_URL.trim())
-    || DEFAULT_ARCHIVE_BASE_URL;
+const ARCHIVE_BASE_URL = _stripTrailingSlash(
+    (process.env.EMBER_ARCHIVE_BASE_URL && process.env.EMBER_ARCHIVE_BASE_URL.trim())
+        || DEFAULT_ARCHIVE_BASE_URL,
+);
 
 // ── Model selection ───────────────────────────────────────────────────────────
 

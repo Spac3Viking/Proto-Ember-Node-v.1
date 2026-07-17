@@ -241,9 +241,12 @@ function _sanitizeRuntimeTuningRun(payload) {
 async function _buildNodeStatusPayload() {
     const packageConfig = _loadPackageConfig();
     const currentAppVersion = _normalizeVersionString(packageConfig.version) || '0.0.0';
-    const emberNodeConfig = packageConfig.emberNode || {};
-    const updatePageUrl = emberNodeConfig.updatePageUrl || DEFAULT_UPDATE_PAGE_URL;
-    const archiveUpdateUrl = emberNodeConfig.archiveUpdateUrl || ARCHIVE_UPDATE_URL;
+    // Canonical runtime configuration (EMBER_ARCHIVE_BASE_URL / runtimeConfig)
+    // is always authoritative here. Legacy package.json emberNode.* fields
+    // are no longer consulted so a stale checked-in value can never override
+    // the operator's configured Archive base URL.
+    const updatePageUrl = DEFAULT_UPDATE_PAGE_URL;
+    const archiveUpdateUrl = ARCHIVE_UPDATE_URL;
     const checkedAt = new Date().toISOString();
 
     let comparison = [];

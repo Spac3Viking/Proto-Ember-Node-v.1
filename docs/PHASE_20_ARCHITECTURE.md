@@ -26,10 +26,13 @@ never its authority.
    Node's accumulated understanding of itself and its user.
 
 3. **THRESHOLD** — *What is entering or leaving the Node?*
-   Intentional exchange: intake, inspection, export, and anything crossing
-   the Node's boundary with the outside world. Threshold governs all
-   material crossing that boundary — nothing enters Hearth or Session
-   without passing through it.
+   Deliberate exchange: intake, inspection, export, and any material that
+   is explicitly imported into or exported out of the Node — the crossing
+   of its boundary with the outside world. Threshold governs that
+   deliberate, externally-exchanged material; it is not a workflow a
+   person must pass through merely to observe, write, or participate
+   directly inside Session — direct human observation and authorship in
+   Session require no separate Threshold step.
 
 These three spaces are the permanent destinations of the Node. Everything
 else exists to serve them.
@@ -80,12 +83,22 @@ its simplicity being legible, not from the number of features it exposes.
 The intended long-term shape of continuity, to be built out in later
 Phase 20 stages (not v118):
 
-**Session → Thread → Hearth**
+**Session ↔ Thread → Hearth**
 
-A Session produces a Thread (a saved line of thought/work); a Thread that
-proves durable is remembered into Hearth. This replaces today's parallel
-legacy-thread and Signal-Thread mechanics with a single continuity path —
-that consolidation is explicitly deferred (see Non-Goals below).
+A Thread carries a concern, project, lesson, or open pressure across
+multiple Sessions. A Session may begin, continue, or refine a Thread —
+a Thread is not merely produced once and set aside. Durable Session
+outcomes and Thread continuity are remembered into Hearth. This replaces
+today's parallel legacy-thread and Signal-Thread mechanics with a single
+continuity path — that consolidation is explicitly deferred (see
+Non-Goals below).
+
+## Epistemic boundaries
+
+The Node knows only what a person enters or what functioning instruments
+provide. Records may be incomplete, outdated, biased, or contradictory.
+AI helps compare information, identify inconsistencies, test explanations,
+and prepare questions; it never replaces human judgment.
 
 ## What build v118 does and does not do
 
