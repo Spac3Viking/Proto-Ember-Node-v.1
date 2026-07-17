@@ -83,7 +83,6 @@ function linkSessionToThread(sessionId, threadId, { allowSwitch = false } = {}) 
         // These values preserve the v118 display schema only. The context
         // builders resolve live Thread state, so they are never authoritative.
         continuity: {
-            ...(session.continuity || {}),
             threadId: thread.id,
             threadTitle: thread.title,
             threadPurpose: thread.purpose,
