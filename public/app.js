@@ -7614,7 +7614,7 @@ async function refreshSystemStatus() {
         updateSystemCacheCount(data.cacheCount ?? 0);
         if (ollamaEndpointEl) {
             ollamaEndpointEl.textContent = data.ollamaBaseUrl
-                ? String(data.ollamaBaseUrl).replace(/^[a-z]+:\/\//i, '')
+                ? String(data.ollamaBaseUrl).replace(/^[a-zA-Z]+:\/\//, '')
                 : '—';
         }
         if (portEl) {

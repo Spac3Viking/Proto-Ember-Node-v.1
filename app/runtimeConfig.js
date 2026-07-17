@@ -49,7 +49,7 @@ function _parseTimeoutMs(value, fallback) {
 // `BASE_URL + '/some/path'` without producing accidental double slashes
 // when an operator's configured base URL already ends in '/'.
 function _stripTrailingSlash(value) {
-    return String(value || '').replace(/\/+$/, '');
+    return String(value ?? '').replace(/\/+$/, '');
 }
 
 // ── Local server binding ──────────────────────────────────────────────────────
