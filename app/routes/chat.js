@@ -1428,6 +1428,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
         };
 
         const modelRequestStartedAt = Date.now();
+        let answer = '';
         try {
             const completion = await requestLocalCompletion({
                 runtime: heart,
@@ -1436,7 +1437,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                 signal: abortController.signal,
                 timeout: CHAT_REQUEST_TIMEOUT_MS,
             });
-            var answer = completion.content;
+            answer = completion.content;
         } catch (err) {
             const isCanceled = err && (err.code === 'ERR_CANCELED' || abortController.signal.aborted);
             if (isCanceled) {

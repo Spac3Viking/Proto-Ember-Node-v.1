@@ -163,7 +163,7 @@ router.get('/api/sessions/:id/export', readLimiter, (req, res) => {
 
 // ── AI Assist ─────────────────────────────────────────────────────────────────
 
-function _buildAssistPrompt(stage, notes, continuityContext) {
+function _buildAssistPrompt(stage, notes) {
     const heading   = STAGE_HEADINGS[stage] || stage;
     const questions = (STAGE_QUESTIONS[stage] || []).join('\n- ');
     const notesSafe = String(notes || '').trim();
@@ -196,7 +196,7 @@ router.post('/api/sessions/:id/ai-assist', chatLimiter, async (req, res) => {
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
     const resolved = resolveSessionContinuity(session.id, String(notes || ''));
-    const { systemPrompt, userContent } = _buildAssistPrompt(normalStage, notes, resolved.context);
+    const { systemPrompt, userContent } = _buildAssistPrompt(normalStage, notes);
 
     try {
         const completion = await requestLocalCompletion({
