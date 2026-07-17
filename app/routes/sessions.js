@@ -14,7 +14,6 @@
  */
 
 const express = require('express');
-const axios   = require('axios');
 
 const { readLimiter, writeLimiter, chatLimiter } = require('../rateLimiters');
 const {
@@ -31,21 +30,25 @@ const {
 } = require('../sessions');
 const {
     createSignalThread,
-    addSessionToSignalThread,
     addOpenPressure,
     addCarryForwardEntry,
     loadSignalThread,
 } = require('../signalThreads');
-const { OLLAMA_CHAT_URL, getSelectedModelFallback } = require('../runtimeStewardship');
+const { isValidStorageId } = require('../safeStorageId');
+const { linkSessionToThread, resolveSessionContinuity } = require('../continuityContext');
+const { requestLocalCompletion } = require('../aiGateway');
 
 const router = express.Router();
-
-const AI_ASSIST_TIMEOUT_MS = 60000;
 
 function normalizeSessionStageInput(stage) {
     const value = String(stage || '').trim().toLowerCase();
     return value === 'archive' ? 'remember' : value;
 }
+
+router.param('id', (req, res, next, id) => {
+    if (!isValidStorageId(id)) return res.status(400).json({ error: 'Invalid session id' });
+    next();
+});
 
 // ── List sessions ─────────────────────────────────────────────────────────────
 
@@ -63,46 +66,17 @@ router.get('/api/sessions', readLimiter, (req, res) => {
 router.post('/api/sessions', writeLimiter, (req, res) => {
     try {
         const { title, continueThreadId } = req.body || {};
-        let continuity = null;
         const threadId = String(continueThreadId || '').trim();
         if (threadId) {
-            const thread = loadSignalThread(threadId);
-            if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
-            const latestReflection = Array.isArray(thread.reflections)
-                ? thread.reflections.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
-                : null;
-            const latestCarryForward = Array.isArray(thread.carryForwardEntries)
-                ? thread.carryForwardEntries
-                    .slice()
-                    .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0]
-                : null;
-            continuity = {
-                threadId: thread.id,
-                threadTitle: thread.title,
-                threadPurpose: String(thread.purpose || ''),
-                openPressure: Array.isArray(thread.openPressures) && thread.openPressures.length
-                    ? String(thread.openPressures[0])
-                    : String(thread.openPressure || ''),
-                carryForward: latestCarryForward && latestCarryForward.content
-                    ? String(latestCarryForward.content)
-                    : '',
-                mostRecentReflection: latestReflection && latestReflection.content
-                    ? String(latestReflection.content)
-                    : '',
-                lastSessionDate: '',
-            };
-
-            const linkedIds = Array.isArray(thread.sessionIds) ? thread.sessionIds : [];
-            const linkedSessions = linkedIds.map(id => loadSession(id)).filter(Boolean);
-            if (linkedSessions.length) {
-                const latestSession = linkedSessions
-                    .slice()
-                    .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))[0];
-                continuity.lastSessionDate = String(latestSession.updatedAt || latestSession.createdAt || '');
-            }
+            if (!isValidStorageId(threadId)) return res.status(400).json({ error: 'Invalid thread id' });
+            if (!loadSignalThread(threadId)) return res.status(404).json({ error: 'Thread not found' });
         }
-
-        const session = createSession({ title: String(title || ''), continuity });
+        let session = createSession({ title: String(title || '') });
+        if (threadId) {
+            const linked = linkSessionToThread(session.id, threadId);
+            if (linked.error) return res.status(linked.status).json({ error: linked.error });
+            session = linked.session;
+        }
         res.json({ success: true, session });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -189,26 +163,18 @@ router.get('/api/sessions/:id/export', readLimiter, (req, res) => {
 
 // ── AI Assist ─────────────────────────────────────────────────────────────────
 
-/**
- * Build a focused field-assistant prompt for the given stage.
- * The assistant asks clarifying questions, summarizes notes, and suggests next steps.
- * It deliberately avoids large essays and stays brief.
- */
-function _buildAssistPrompt(stage, notes, sessionTitle) {
+function _buildAssistPrompt(stage, notes, continuityContext) {
     const heading   = STAGE_HEADINGS[stage] || stage;
     const questions = (STAGE_QUESTIONS[stage] || []).join('\n- ');
     const notesSafe = String(notes || '').trim();
 
     const systemPrompt = [
-        'You are a quiet field assistant helping a person work through a structured reflection session.',
-        'Ask short, clarifying questions first. Keep a reflective, steady tone.',
-        'Respond in 3–6 sentences, mostly as questions.',
-        'Support continuity across sessions: unresolved pressure, carry forward, and next meaningful attention.',
-        'Avoid conclusions, avoid long explanations, and avoid certainty language.',
-        'Use prompts like: "What still matters from previous sessions?", "What remains unresolved?", and "What should be carried forward?".',
-        'Do not over-explain or narrate; stay practical and compact.',
+        'You are a fallible local companion supporting observation, clarification, practical judgment, and continuity.',
+        'Answer the person naturally, clearly, and practically. Distinguish observation, inference, and uncertainty when useful.',
+        'Suggest a next action or ask a question only when it genuinely helps. Do not force headings, worksheets, or reflection prompts.',
+        'The person remains the final authority. Records may be incomplete, outdated, biased, or contradictory.',
         'Stage: ' + heading,
-        'Stage questions:\n- ' + questions,
+        'Stage considerations:\n- ' + questions,
     ].join('\n');
 
     const userContent = notesSafe
@@ -229,32 +195,23 @@ router.post('/api/sessions/:id/ai-assist', chatLimiter, async (req, res) => {
     const session = loadSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    const model = getSelectedModelFallback();
-    const { systemPrompt, userContent } = _buildAssistPrompt(normalStage, notes, session.title);
+    const resolved = resolveSessionContinuity(session.id, String(notes || ''));
+    const { systemPrompt, userContent } = _buildAssistPrompt(normalStage, notes, resolved.context);
 
     try {
-        const response = await axios.post(
-            OLLAMA_CHAT_URL,
-            {
-                model,
-                stream: false,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user',   content: userContent },
-                ],
-            },
-            { timeout: AI_ASSIST_TIMEOUT_MS },
-        );
-        const content = response.data &&
-            response.data.message &&
-            response.data.message.content
-            ? response.data.message.content
-            : '';
+        const completion = await requestLocalCompletion({
+            request: { query: userContent },
+            timeout: 60000,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: resolved.context + '\n\n' + userContent },
+            ],
+        });
+        const content = completion.content;
         res.json({ success: true, content });
     } catch (err) {
         // AI unavailable — return a graceful offline response
-        if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' ||
-            (err.response && err.response.status >= 500)) {
+        if (err.offline) {
             return res.status(503).json({
                 error: 'AI unavailable',
                 offline: true,
@@ -282,17 +239,19 @@ router.post('/api/sessions/:id/archive-thread', writeLimiter, (req, res) => {
     try {
         let thread = null;
         if (threadId) {
-            thread = addSessionToSignalThread(threadId, session.id);
-            if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+            const linked = linkSessionToThread(session.id, threadId);
+            if (linked.error) return res.status(linked.status).json({ error: linked.error });
+            thread = linked.thread;
         } else {
             const created = createSignalThread({
                 title: newThreadTitle,
                 posture: 'practical',
                 summary: '',
                 tags: [],
-                sessionIds: [session.id],
+                sessionIds: [],
             });
-            thread = loadSignalThread(created.id);
+            const linked = linkSessionToThread(session.id, created.id);
+            thread = linked.thread;
         }
         if (openPressure) {
             thread = addOpenPressure(thread.id, openPressure) || thread;
@@ -301,7 +260,7 @@ router.post('/api/sessions/:id/archive-thread', writeLimiter, (req, res) => {
             addCarryForwardEntry(thread.id, carryForward, session.id);
             thread = loadSignalThread(thread.id) || thread;
         }
-        res.json({ success: true, session, thread });
+        res.json({ success: true, session: loadSession(session.id), thread });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }

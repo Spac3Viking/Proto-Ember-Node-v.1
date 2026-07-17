@@ -356,11 +356,17 @@ function addCarryForwardEntry(threadId, content, sessionId) {
     const text = String(content || '').trim();
     if (!text) return null;
     if (!Array.isArray(thread.carryForwardEntries)) thread.carryForwardEntries = [];
+    const normalizedSessionId = String(sessionId || '').trim();
+    const existing = thread.carryForwardEntries.find(entry =>
+        String(entry.sessionId || '') === normalizedSessionId &&
+        String(entry.content || '').trim() === text,
+    );
+    if (existing) return existing;
     const entry = {
         id: 'carry-forward-' + crypto.randomUUID(),
         timestamp: _nowIso(),
         content: text,
-        sessionId: String(sessionId || '').trim(),
+        sessionId: normalizedSessionId,
     };
     thread.carryForwardEntries.push(entry);
     thread.updatedAt = entry.timestamp;

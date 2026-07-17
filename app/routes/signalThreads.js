@@ -31,7 +31,6 @@ const {
     addReflection,
     addObservation,
     setCompression,
-    addSessionToSignalThread,
     addOpenPressure,
     addCarryForwardEntry,
     saveSagaCycle,
@@ -39,9 +38,16 @@ const {
     exportSignalThreadBrief,
 } = require('../signalThreads');
 const { loadSession } = require('../sessions');
+const { isValidStorageId } = require('../safeStorageId');
+const { linkSessionToThread } = require('../continuityContext');
 
 const router = express.Router();
 const SUMMARY_PROGRESS_PATTERN = /done|improv|progress|worked|learned|completed|resolved/i;
+
+router.param('id', (req, res, next, id) => {
+    if (!isValidStorageId(id)) return res.status(400).json({ error: 'Invalid thread id' });
+    next();
+});
 
 function _safeFilenameTitle(title) {
     const base = String(title || 'signal-thread')
@@ -148,15 +154,9 @@ router.put('/api/signal-threads/:id/compression', writeLimiter, (req, res) => {
 router.post('/api/signal-threads/:id/sessions', writeLimiter, (req, res) => {
     const sessionId = req.body && req.body.sessionId ? String(req.body.sessionId) : '';
     if (!sessionId.trim()) return res.status(400).json({ error: 'sessionId is required' });
-    const session = loadSession(sessionId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    try {
-        const thread = addSessionToSignalThread(req.params.id, sessionId);
-        if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
-        res.json({ success: true, thread });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+    const linked = linkSessionToThread(sessionId, req.params.id);
+    if (linked.error) return res.status(linked.status).json({ error: linked.error });
+    res.json({ success: true, thread: linked.thread, session: linked.session });
 });
 
 router.get('/api/signal-threads/:id/linked-sessions', readLimiter, (req, res) => {

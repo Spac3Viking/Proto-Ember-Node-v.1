@@ -1,6 +1,6 @@
 # Phase 20 Architecture Contract
 
-_Status: primary architecture reference, effective build v118._
+_Status: primary architecture reference, implemented through build v119._
 
 This document establishes the primary architecture the Ember Node is
 converging toward. It does not redesign or migrate anything by itself — it
@@ -78,20 +78,45 @@ its simplicity being legible, not from the number of features it exposes.
   AI unavailability is a recoverable runtime state, never a reason for the
   Node itself to be considered unavailable.
 
-## The future continuity relationship
-
-The intended long-term shape of continuity, to be built out in later
-Phase 20 stages (not v118):
+## Canonical continuity relationship
 
 **Session ↔ Thread → Hearth**
 
 A Thread carries a concern, project, lesson, or open pressure across
 multiple Sessions. A Session may begin, continue, or refine a Thread —
 a Thread is not merely produced once and set aside. Durable Session
-outcomes and Thread continuity are remembered into Hearth. This replaces
-today's parallel legacy-thread and Signal-Thread mechanics with a single
-continuity path — that consolidation is explicitly deferred (see
-Non-Goals below).
+outcomes and Thread continuity are remembered into Hearth only through a
+person's deliberate confirmation.
+
+The existing Signal Thread record is the authoritative implementation of a
+canonical **Thread**. Its historical storage path and `/api/signal-threads`
+routes remain for data and route compatibility. A Session stores a durable
+canonical Thread ID; the Thread stores linked Session IDs. Linking is
+bidirectional and idempotent. The copied v118 `continuity` fields on old
+Session records remain readable display compatibility data, never a source
+of truth: live context is resolved from the Thread.
+
+`/api/threads` remains a compatibility API for legacy chat conversations.
+Those records are not canonical Threads, are not promoted automatically, and
+their remembered summaries remain secondary legacy Hearth artifacts. Rolling
+Bootstrap is likewise a bounded, rebuildable secondary summary; it cannot
+override an active Session or Thread.
+
+## AI context and human-controlled memory
+
+Both grounded chat and Session assistance use the same local Ollama gateway.
+When a validated `sessionId` is supplied, the server resolves Session and
+Thread records itself and assembles compact context in this order: instrument
+posture, current Session, live linked Thread, relevant local Hearth
+retrieval, then bounded conversation history. Current Thread state takes
+precedence over stale Session snapshots. Council, archetype, symbolic, and
+distillation lenses are optional controls, not normal prompt layers.
+
+AI may help a person formulate carry-forward material or an unresolved
+pressure, but it never writes durable memory silently. Remember preserves the
+original Session, may leave it standalone, or may deliberately create,
+update, or attach a Thread. The Node remains fully usable for Session,
+Thread, Hearth, and Threshold work when Ollama is unavailable.
 
 ## Epistemic boundaries
 
