@@ -95,12 +95,12 @@ Non-Goals below).
 
 ## Epistemic boundaries
 
-Because Session, Thread, and Hearth continuity all depend on what is
-recorded there, it matters what the Node can and cannot know: the Node
-knows only what a person enters or what functioning instruments provide.
-Records may be incomplete, outdated, biased, or contradictory. AI helps
-compare information, identify inconsistencies, test explanations, and
-prepare questions; it never replaces human judgment.
+Because Session, Thread, and Hearth continuity all depend on recorded
+information, understanding the Node's knowledge boundaries is essential:
+the Node knows only what a person enters or what functioning instruments
+provide. Records may be incomplete, outdated, biased, or contradictory.
+AI helps compare information, identify inconsistencies, test explanations,
+and prepare questions; it never replaces human judgment.
 
 ## What build v118 does and does not do
 

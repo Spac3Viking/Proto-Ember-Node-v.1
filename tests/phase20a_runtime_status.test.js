@@ -215,7 +215,8 @@ describe('GET /api/system/node-status-updates — canonical Archive base URL', (
 
         const res = await request(app).get('/api/system/node-status-updates');
         expect(res.status).toBe(200);
+        // Exact-match assertion already proves there is no accidental
+        // double slash between the base URL and the path.
         expect(res.body.archiveUpdateUrl).toBe('https://custom-archive.example.test/downloads/index.json');
-        expect(res.body.archiveUpdateUrl).not.toMatch(/\/\/downloads/);
     });
 });
