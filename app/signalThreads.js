@@ -267,8 +267,6 @@ function updateSignalThread(id, patch) {
     if (typeof data.sourceNotes === 'string') existing.sourceNotes = data.sourceNotes;
     if (typeof data.compression === 'string') existing.compression = data.compression;
     if (Array.isArray(data.tags)) existing.tags = _normalizeTags(data.tags);
-    if (Array.isArray(data.sessionIds)) existing.sessionIds = _normalizeSessionIds(data.sessionIds);
-
     existing.updatedAt = _nowIso();
     return saveSignalThread(existing);
 }
@@ -356,11 +354,17 @@ function addCarryForwardEntry(threadId, content, sessionId) {
     const text = String(content || '').trim();
     if (!text) return null;
     if (!Array.isArray(thread.carryForwardEntries)) thread.carryForwardEntries = [];
+    const normalizedSessionId = String(sessionId || '').trim();
+    const existing = thread.carryForwardEntries.find(entry =>
+        String(entry.sessionId || '') === normalizedSessionId &&
+        String(entry.content || '').trim() === text,
+    );
+    if (existing) return existing;
     const entry = {
         id: 'carry-forward-' + crypto.randomUUID(),
         timestamp: _nowIso(),
         content: text,
-        sessionId: String(sessionId || '').trim(),
+        sessionId: normalizedSessionId,
     };
     thread.carryForwardEntries.push(entry);
     thread.updatedAt = entry.timestamp;

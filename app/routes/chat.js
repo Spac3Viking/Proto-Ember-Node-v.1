@@ -39,6 +39,9 @@ const {
     buildCognitionProfilePromptSummary,
     applyCognitionProfileInfluence,
 } = require('../runtime/cognitionProfiles');
+const { resolveSessionContinuity } = require('../continuityContext');
+const { requestLocalCompletion } = require('../aiGateway');
+const { buildAiRequest } = require('../aiRequestContext');
 
 const router = express.Router();
 const PARTIAL_CONTEXT_CHUNK_THRESHOLD = 2;
@@ -1064,7 +1067,7 @@ router.post('/chat', async (req, res) => {
 
 /**
  * POST /api/chat
- * Body: { query, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history?, responseDepth?, distillationGuidance? }
+ * Body: { query, sessionId?, room?, rooms?, cacheId?, sourceIds?, archetype?, courtMember?, history?, responseDepth?, distillationGuidance? }
  * Response: { answer, sources, grounded }
  *
  * room (optional)      — active room for context-bounded chat ('hearth' | 'council' [Ember Council] | 'threshold')
@@ -1095,6 +1098,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             runtimeProfile = null,
             distillationGuidance = false,
             requestId = null,
+            sessionId = null,
         } = req.body;
         if (!query || typeof query !== 'string') {
             return res.status(400).json({ error: 'query is required' });
@@ -1117,7 +1121,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
             : (typeof archetype === 'string' ? archetype : null);
         const activeArchetypeForMemory = selectedCourtMember
             ? selectedCourtMember.id
-            : (activeArchetypeId || 'ember_prime');
+            : activeArchetypeId;
         const archetypeMemoryProfile = getArchetypeMemoryProfile(activeArchetypeForMemory);
         // Backward-compatible aliases (highest to lowest precedence):
         // responseDepth (UI-friendly), contextBudgetProfile/depthProfile (transition), depth (legacy).
@@ -1299,9 +1303,17 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         const groundedPromptMetrics = hasGroundedPromptObject
             ? groundedPrompt.metrics
             : null;
-        let userContent = groundedPromptText;
-        if (summaryFirst.block) {
-            userContent = summaryFirst.block + userContent;
+        let userContent = summaryFirst.block
+            ? summaryFirst.block + groundedPromptText
+            : groundedPromptText;
+        let sessionContinuity = null;
+        let continuityContext = '';
+        if (sessionId !== null && sessionId !== undefined && String(sessionId).trim()) {
+            sessionContinuity = resolveSessionContinuity(String(sessionId), query);
+            if (sessionContinuity.error) {
+                return res.status(sessionContinuity.status).json({ error: sessionContinuity.error });
+            }
+            continuityContext = sessionContinuity.context;
         }
         console.log(
             '[/api/chat] retrieval=' +
@@ -1382,13 +1394,15 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             taskType,
         });
 
+        const aiRequest = buildAiRequest({
+            systemPrompt,
+            continuityContext,
+            userContent,
+        });
         const payload = {
             model:    heart.model,
             stream:   false,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user',   content: userContent },
-            ],
+            messages: aiRequest.messages,
         };
         if (isOllamaRuntime(heart) && runtimeGenerationProfile) {
             payload.options = {
@@ -1417,13 +1431,17 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             ),
         };
 
-        let response;
         const modelRequestStartedAt = Date.now();
+        let answer = '';
         try {
-            response = await axios.post(heart.chatUrl, payload, {
+            const completion = await requestLocalCompletion({
+                runtime: heart,
+                messages: payload.messages,
+                options: payload.options,
                 signal: abortController.signal,
                 timeout: CHAT_REQUEST_TIMEOUT_MS,
             });
+            answer = completion.content;
         } catch (err) {
             const isCanceled = err && (err.code === 'ERR_CANCELED' || abortController.signal.aborted);
             if (isCanceled) {
@@ -1442,6 +1460,14 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
                     message: roleLabel + ' model is taking longer than usual. You may wait or still the signal.',
                 });
             }
+            if (err && err.offline) {
+                return res.status(503).json({
+                    error: 'AI unavailable',
+                    offline: true,
+                    hint: 'The Node remains available for Session and Thread work.',
+                    requestId: normalizedRequestId,
+                });
+            }
             throw err;
         }
         const modelResponseTimeMs = Date.now() - modelRequestStartedAt;
@@ -1455,9 +1481,6 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             ' final=' + promptAudit.finalPromptLength +
             ' responseMs=' + modelResponseTimeMs,
         );
-        const answer   = response.data && response.data.message
-            ? response.data.message.content
-            : '';
         const answerWithDepthNudge = answer;
         const uniqueSourceCount = new Set(
             (sources || []).map(s => [s.room, s.file, s.cacheId || '', s.shelf || ''].join('|')),

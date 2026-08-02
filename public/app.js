@@ -1157,7 +1157,7 @@ function renderSignalThreadsList(host, threads) {
     host.innerHTML = '';
     const list = Array.isArray(threads) ? threads : [];
     if (list.length === 0) {
-        host.innerHTML = '<span class="message-system">No Signal Threads yet.</span>';
+        host.innerHTML = '<span class="message-system">No Threads yet.</span>';
         return;
     }
 
@@ -1167,7 +1167,7 @@ function renderSignalThreadsList(host, threads) {
         row.addEventListener('click', async () => {
             const thread = await fetchSignalThread(t.id);
             if (!thread) {
-                showFlashMessage('Could not load Signal Thread.');
+                showFlashMessage('Could not load Thread.');
                 return;
             }
             fillSignalThreadEditor(thread, { createMode: false });
@@ -1204,10 +1204,10 @@ async function loadSignalThreadsSummary() {
     const statusEl = document.getElementById('sys-signal-threads-status');
     const sagaStatusEl = document.getElementById('sys-saga-smith-status');
     if (countEl) countEl.textContent = threads ? String(threads.length) : '—';
-    if (statusEl) statusEl.textContent = threads ? 'Meaning continuity available.' : 'Signal Threads unavailable.';
+    if (statusEl) statusEl.textContent = threads ? 'Meaning continuity available.' : 'Threads unavailable.';
     if (sagaStatusEl) {
         if (!threads) sagaStatusEl.textContent = 'Saga Smith unavailable.';
-        else sagaStatusEl.textContent = threads.length > 0 ? 'Ready for a continuity cycle.' : 'Create a Signal Thread to begin.';
+        else sagaStatusEl.textContent = threads.length > 0 ? 'Ready for a continuity cycle.' : 'Create a Thread to begin.';
     }
 }
 
@@ -1276,7 +1276,7 @@ async function saveActiveSignalThread() {
                 return;
             }
             _activeSignalThreadId = data.thread.id;
-            showFlashMessage('Signal Thread created.');
+            showFlashMessage('Thread created.');
             if (compression) await persistActiveSignalThreadFromEditor();
             await refreshSignalThreadsOverlay({ createNew: false });
             return;
@@ -1292,7 +1292,7 @@ async function saveActiveSignalThread() {
             showFlashMessage(data && data.error ? data.error : 'Could not save thread.');
             return;
         }
-        showFlashMessage('Signal Thread saved.');
+        showFlashMessage('Thread saved.');
         await refreshSignalThreadsOverlay({ createNew: false });
     } catch {
         showFlashMessage('Could not reach server.');
@@ -1301,7 +1301,7 @@ async function saveActiveSignalThread() {
 
 async function deleteActiveSignalThread() {
     if (!_activeSignalThreadId) return;
-    if (!confirm('Delete this Signal Thread? This cannot be undone.')) return;
+    if (!confirm('Delete this Thread? This cannot be undone.')) return;
     try {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), { method: 'DELETE' });
         const data = await res.json().catch(() => ({}));
@@ -1309,7 +1309,7 @@ async function deleteActiveSignalThread() {
             showFlashMessage(data && data.error ? data.error : 'Could not delete thread.');
             return;
         }
-        showFlashMessage('Signal Thread deleted.');
+        showFlashMessage('Thread deleted.');
         _activeSignalThreadId = null;
         await refreshSignalThreadsOverlay({ createNew: false });
     } catch {
@@ -1487,7 +1487,7 @@ function _renderSagaSmithThreadOptions(selectEl, threads) {
     if (list.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
-        opt.textContent = 'No Signal Threads yet';
+        opt.textContent = 'No Threads yet';
         selectEl.appendChild(opt);
         selectEl.disabled = true;
         return;
@@ -1512,7 +1512,7 @@ async function setSagaSmithActiveThread(threadId) {
     if (!id) return;
     const thread = await fetchSignalThread(id);
     if (!thread) {
-        _setSagaSmithStatus('Could not load Signal Thread.');
+        _setSagaSmithStatus('Could not load Thread.');
         return;
     }
     _sagaSmithThread = thread;
@@ -1537,7 +1537,7 @@ async function refreshSagaSmithOverlay() {
     if (saveBtn) saveBtn.disabled = threads.length === 0;
 
     if (threads.length === 0) {
-        _setSagaSmithStatus('Create a Signal Thread to begin.');
+        _setSagaSmithStatus('Create a Thread to begin.');
         return;
     }
 
@@ -1560,7 +1560,7 @@ async function saveSagaSmithCycle() {
 
     const threadId = selectEl ? String(selectEl.value || '').trim() : '';
     if (!threadId) {
-        _setSagaSmithStatus('Select or create a Signal Thread first.');
+        _setSagaSmithStatus('Select or create a Thread first.');
         return;
     }
 
@@ -1593,7 +1593,7 @@ async function saveSagaSmithCycle() {
         _sagaSmithThreadId = data.thread.id;
         if (compressionEl) compressionEl.value = typeof data.thread.compression === 'string' ? data.thread.compression : '';
         _setSagaSmithStatus('Saved to thread.');
-        showFlashMessage('Cycle saved to Signal Thread.');
+        showFlashMessage('Cycle saved to Thread.');
         loadSignalThreadsSummary();
     } catch {
         _setSagaSmithStatus('Could not reach server.');
@@ -10429,7 +10429,7 @@ async function launchOllama(runtimeId) {
     // ── Constants ───────────────────────────────────────────────────────────
 
     const IP_STAGES = ['observe', 'reflect', 'act', 'refine', 'remember'];
-    const IP_UNTITLED_THREAD = 'Untitled Signal Thread';
+    const IP_UNTITLED_THREAD = 'Untitled Thread';
 
     const IP_STAGE_LABELS = Object.freeze({
         observe: 'OBSERVE',
@@ -10807,7 +10807,7 @@ async function launchOllama(runtimeId) {
                 .filter(Boolean);
             if (!detailedThreads.length) {
                 if (continuityHost) continuityHost.innerHTML = '<span class="message-system">No recent thread yet.</span>';
-                if (carryHost) carryHost.innerHTML = '<span class="message-system">No recently active Signal Threads.</span>';
+                if (carryHost) carryHost.innerHTML = '<span class="message-system">No recently active Threads.</span>';
                 if (pressureHost) pressureHost.innerHTML = '<span class="message-system">No active open pressures.</span>';
                 return;
             }

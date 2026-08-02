@@ -19,15 +19,14 @@ Refine → Remember**. Compression is preferable to expansion: when a choice
 exists between adding a new surface and folding a capability into an
 existing one, folding wins.
 
-See [`docs/PHASE_20_ARCHITECTURE.md`](docs/PHASE_20_ARCHITECTURE.md) for
-the full architecture contract, including the future continuity
-relationship (Session → Thread → Hearth) and the current build's explicit
-non-goals.
+Session → Thread → Hearth continuity is implemented. See
+[`docs/PHASE_20_ARCHITECTURE.md`](docs/PHASE_20_ARCHITECTURE.md) for the
+full architecture contract and compatibility boundaries.
 
 ## Historical / Advanced Systems
 
 Council, archetypes, caches, model roles, runtime tuning, Prompt Bridges,
-Forge, and Signal Threads remain available as contextual tools reached
+Forge, and Threads remain available as contextual tools reached
 from within Session, Hearth, or Threshold — not additional primary
 destinations. The list below documents the terminology from earlier
 phases; it is historical context, not the primary map of the application:
@@ -36,8 +35,9 @@ phases; it is historical context, not the primary map of the application:
 - **🜁 Ember Council** — Sentinel Archetypes and active refinement.
 - **🜃 Archive** — installed memory and Reader surface.
 - **🜄 Threshold** — intake, inspection, and runtime stewardship.
-- **🜔 Signal Threads** — saved thought lines (to be consolidated with
-  legacy chat threads in a later Phase 20 stage — not v118).
+- **🜔 Threads** — canonical saved continuity lines. “Signal Thread” is the
+  historical storage and API name; `/api/threads` remains legacy conversation
+  compatibility.
 - **Caches** — portable memory bundles.
 - **Rolling Bootstrap** — unfolding continuity summary.
 - **Fractal Memory Compression** — cache/document/archetype summary geometry.

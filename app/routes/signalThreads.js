@@ -31,7 +31,6 @@ const {
     addReflection,
     addObservation,
     setCompression,
-    addSessionToSignalThread,
     addOpenPressure,
     addCarryForwardEntry,
     saveSagaCycle,
@@ -39,9 +38,16 @@ const {
     exportSignalThreadBrief,
 } = require('../signalThreads');
 const { loadSession } = require('../sessions');
+const { isValidStorageId } = require('../safeStorageId');
+const { linkSessionToThread } = require('../continuityContext');
 
 const router = express.Router();
 const SUMMARY_PROGRESS_PATTERN = /done|improv|progress|worked|learned|completed|resolved/i;
+
+router.param('id', (req, res, next, id) => {
+    if (!isValidStorageId(id)) return res.status(400).json({ error: 'Invalid thread id' });
+    next();
+});
 
 function _safeFilenameTitle(title) {
     const base = String(title || 'signal-thread')
@@ -67,6 +73,9 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
     const p = String(posture || '').trim().toLowerCase();
     if (!p || !SIGNAL_THREAD_POSTURES.includes(p)) {
         return res.status(400).json({ error: 'Invalid posture' });
+    }
+    if (Array.isArray(sessionIds) && sessionIds.length) {
+        return res.status(409).json({ error: 'Use the canonical Thread link operation to add sessionIds' });
     }
     try {
         const thread = createSignalThread({
@@ -95,6 +104,9 @@ router.get('/api/signal-threads/:id', readLimiter, (req, res) => {
 
 router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
     const patch = req.body && typeof req.body === 'object' ? req.body : {};
+    if (Object.prototype.hasOwnProperty.call(patch, 'sessionIds')) {
+        return res.status(409).json({ error: 'Use the canonical Thread link operation to change sessionIds' });
+    }
     if (typeof patch.posture === 'string') {
         const p = patch.posture.trim().toLowerCase();
         if (p && !SIGNAL_THREAD_POSTURES.includes(p)) {
@@ -114,6 +126,10 @@ router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
 });
 
 router.delete('/api/signal-threads/:id', writeLimiter, (req, res) => {
+    const thread = loadSignalThread(req.params.id);
+    if (thread && Array.isArray(thread.sessionIds) && thread.sessionIds.length) {
+        return res.status(409).json({ error: 'Detach linked Sessions before deleting this Thread' });
+    }
     const ok = deleteSignalThread(req.params.id);
     if (!ok) return res.status(404).json({ error: 'Signal Thread not found' });
     res.json({ success: true });
@@ -148,15 +164,9 @@ router.put('/api/signal-threads/:id/compression', writeLimiter, (req, res) => {
 router.post('/api/signal-threads/:id/sessions', writeLimiter, (req, res) => {
     const sessionId = req.body && req.body.sessionId ? String(req.body.sessionId) : '';
     if (!sessionId.trim()) return res.status(400).json({ error: 'sessionId is required' });
-    const session = loadSession(sessionId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    try {
-        const thread = addSessionToSignalThread(req.params.id, sessionId);
-        if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
-        res.json({ success: true, thread });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+    const linked = linkSessionToThread(sessionId, req.params.id);
+    if (linked.error) return res.status(linked.status).json({ error: linked.error });
+    res.json({ success: true, thread: linked.thread, session: linked.session });
 });
 
 router.get('/api/signal-threads/:id/linked-sessions', readLimiter, (req, res) => {
