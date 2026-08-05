@@ -127,7 +127,10 @@ router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
 
 router.delete('/api/signal-threads/:id', writeLimiter, (req, res) => {
     const thread = loadSignalThread(req.params.id);
-    if (thread && (Array.isArray(thread.sessionIds) && thread.sessionIds.length || threadHasLinkedSessions(thread.id))) {
+    if (thread && (
+        (Array.isArray(thread.sessionIds) && thread.sessionIds.length) ||
+        threadHasLinkedSessions(thread.id)
+    )) {
         return res.status(409).json({ error: 'Detach linked Sessions before deleting this Thread' });
     }
     const ok = deleteSignalThread(req.params.id);

@@ -17,9 +17,9 @@ function buildAiRequest({ systemPrompt = '', continuityContext = '', userContent
     const systemContent = [NATURAL_RESPONSE_DISCIPLINE, systemPrompt].filter(Boolean).join('\n\n');
     const continuity = String(continuityContext || '');
     let user = String(userContent || '');
-    const separators = continuity && user ? 2 : 0;
     if (Number.isFinite(maxPromptLength) && maxPromptLength > 0) {
-        const remaining = Math.max(0, Math.floor(maxPromptLength) - systemContent.length - continuity.length - separators);
+        const available = Math.max(0, Math.floor(maxPromptLength) - systemContent.length - continuity.length);
+        const remaining = continuity && user ? Math.max(0, available - 2) : available;
         user = clipLeadingContent(user, remaining);
     }
     return {
