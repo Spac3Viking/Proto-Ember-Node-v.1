@@ -278,6 +278,17 @@ function deleteSignalThread(id) {
     return true;
 }
 
+function findSignalThreadsBySessionId(sessionId) {
+    const target = String(sessionId || '');
+    if (!target) return [];
+    _ensureDir();
+    return fs.readdirSync(SIGNAL_THREADS_DIR)
+        .filter(file => file.endsWith('.json'))
+        .map(file => _safeReadJson(path.join(SIGNAL_THREADS_DIR, file)))
+        .map(thread => thread ? normalizeSignalThread(thread) : null)
+        .filter(thread => thread && thread.sessionIds.includes(target));
+}
+
 function addReflection(threadId, content) {
     const thread = loadSignalThread(threadId);
     if (!thread) return null;
@@ -318,20 +329,6 @@ function setCompression(threadId, compression) {
     thread.compression = String(compression || '');
     thread.updatedAt = _nowIso();
     return saveSignalThread(thread);
-}
-
-function addSessionToSignalThread(threadId, sessionId) {
-    const thread = loadSignalThread(threadId);
-    if (!thread) return null;
-    const normalized = _normalizeSessionIds([sessionId]);
-    if (normalized.length === 0) throw new Error('Session id is required');
-    if (!Array.isArray(thread.sessionIds)) thread.sessionIds = [];
-    if (!thread.sessionIds.includes(normalized[0])) {
-        thread.sessionIds.push(normalized[0]);
-        thread.updatedAt = _nowIso();
-        saveSignalThread(thread);
-    }
-    return thread;
 }
 
 function addOpenPressure(threadId, openPressure) {
@@ -767,10 +764,10 @@ module.exports = {
     createSignalThread,
     updateSignalThread,
     deleteSignalThread,
+    findSignalThreadsBySessionId,
     addReflection,
     addObservation,
     setCompression,
-    addSessionToSignalThread,
     addOpenPressure,
     addCarryForwardEntry,
     saveSagaCycle,

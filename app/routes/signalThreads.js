@@ -39,7 +39,7 @@ const {
 } = require('../signalThreads');
 const { loadSession } = require('../sessions');
 const { isValidStorageId } = require('../safeStorageId');
-const { linkSessionToThread } = require('../continuityContext');
+const { linkSessionToThread, threadHasLinkedSessions } = require('../continuityContext');
 
 const router = express.Router();
 const SUMMARY_PROGRESS_PATTERN = /done|improv|progress|worked|learned|completed|resolved/i;
@@ -127,7 +127,7 @@ router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
 
 router.delete('/api/signal-threads/:id', writeLimiter, (req, res) => {
     const thread = loadSignalThread(req.params.id);
-    if (thread && Array.isArray(thread.sessionIds) && thread.sessionIds.length) {
+    if (thread && (Array.isArray(thread.sessionIds) && thread.sessionIds.length || threadHasLinkedSessions(thread.id))) {
         return res.status(409).json({ error: 'Detach linked Sessions before deleting this Thread' });
     }
     const ok = deleteSignalThread(req.params.id);
