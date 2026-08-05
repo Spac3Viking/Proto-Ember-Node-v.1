@@ -96,8 +96,8 @@ router.get('/api/sessions/:id', readLimiter, (req, res) => {
 
 router.put('/api/sessions/:id', writeLimiter, (req, res) => {
     const patch = req.body && typeof req.body === 'object' ? req.body : {};
-    if (patch.continuity && Object.prototype.hasOwnProperty.call(patch.continuity, 'threadId')) {
-        return res.status(409).json({ error: 'Use the canonical Thread link operation to change continuity.threadId' });
+    if (Object.prototype.hasOwnProperty.call(patch, 'continuity')) {
+        return res.status(409).json({ error: 'Use the canonical Thread link operation to change continuity' });
     }
     if (typeof patch.currentStage === 'string') {
         patch.currentStage = normalizeSessionStageInput(patch.currentStage);
@@ -199,7 +199,8 @@ router.post('/api/sessions/:id/ai-assist', chatLimiter, async (req, res) => {
     const session = loadSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    const resolved = resolveSessionContinuity(session.id, String(notes || ''));
+    const resolved = resolveSessionContinuity(session.id);
+    if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
     const { systemPrompt, userContent } = _buildAssistPrompt(normalStage, notes);
 
     try {
@@ -217,6 +218,13 @@ router.post('/api/sessions/:id/ai-assist', chatLimiter, async (req, res) => {
         res.json({ success: true, content });
     } catch (err) {
         // AI unavailable — return a graceful offline response
+        if (err.code === 'ECONNABORTED') {
+            return res.status(504).json({
+                error: 'Generation timed out',
+                timeout: true,
+                message: 'The local model is taking longer than usual. You may wait or continue the session without AI assistance.',
+            });
+        }
         if (err.offline) {
             return res.status(503).json({
                 error: 'AI unavailable',

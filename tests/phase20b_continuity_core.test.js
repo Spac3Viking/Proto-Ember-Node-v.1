@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const request = require('supertest');
+jest.mock('axios');
 
 describe('Phase 20B — Continuity Core', () => {
     let dataRoot;
@@ -66,7 +67,7 @@ describe('Phase 20B — Continuity Core', () => {
             carryForwardEntries: [{ timestamp: '2026-01-01T00:00:00Z', content: 'Live carry-forward' }],
             observations: [],
             reflections: [],
-        }, 'What now?');
+        });
         expect(context).toContain('Live Thread');
         expect(context).toContain('Live carry-forward');
         expect(context).not.toContain('Stale title');
@@ -91,6 +92,73 @@ describe('Phase 20B — Continuity Core', () => {
         expect(remaining.body.thread.sessionIds).toEqual([]);
     });
 
+    test('generic Session updates reject all continuity patches without corrupting membership', async () => {
+        const { app } = require('../app/server');
+        const session = await request(app).post('/api/sessions').send({ title: 'Work' });
+        const thread = await request(app).post('/api/signal-threads').send({ title: 'Fence', posture: 'practical' });
+        const sessionId = session.body.session.id;
+        const threadId = thread.body.thread.id;
+        await request(app).post('/api/signal-threads/' + threadId + '/sessions').send({ sessionId }).expect(200);
+        await request(app).put('/api/sessions/' + sessionId)
+            .send({ continuity: { threadTitle: 'Cosmetic edit' } }).expect(409);
+        await request(app).put('/api/sessions/' + sessionId)
+            .send({ title: 'Updated', currentStage: 'reflect', entries: [] }).expect(200);
+        const stored = await request(app).get('/api/sessions/' + sessionId).expect(200);
+        expect(stored.body.session.continuity.threadId).toBe(threadId);
+        expect(stored.body.session.title).toBe('Updated');
+    });
+
+    test('Session deletion removes stale one-sided Thread references', async () => {
+        const { app } = require('../app/server');
+        const { saveSignalThread } = require('../app/signalThreads');
+        const session = await request(app).post('/api/sessions').send({ title: 'Work' });
+        const first = await request(app).post('/api/signal-threads').send({ title: 'First', posture: 'practical' });
+        const second = await request(app).post('/api/signal-threads').send({ title: 'Second', posture: 'practical' });
+        const sessionId = session.body.session.id;
+        await request(app).post('/api/signal-threads/' + first.body.thread.id + '/sessions').send({ sessionId }).expect(200);
+        saveSignalThread({ ...second.body.thread, sessionIds: [sessionId] });
+        await request(app).delete('/api/sessions/' + sessionId).expect(200);
+        expect((await request(app).get('/api/signal-threads/' + first.body.thread.id)).body.thread.sessionIds).toEqual([]);
+        expect((await request(app).get('/api/signal-threads/' + second.body.thread.id)).body.thread.sessionIds).toEqual([]);
+    });
+
+    test('Thread deletion refuses a one-sided Session continuity relationship', async () => {
+        const { app } = require('../app/server');
+        const { saveSignalThread } = require('../app/signalThreads');
+        const session = await request(app).post('/api/sessions').send({ title: 'Work' });
+        const thread = await request(app).post('/api/signal-threads').send({ title: 'Fence', posture: 'practical' });
+        await request(app).post('/api/signal-threads/' + thread.body.thread.id + '/sessions')
+            .send({ sessionId: session.body.session.id }).expect(200);
+        saveSignalThread({ ...thread.body.thread, sessionIds: [] });
+        await request(app).delete('/api/signal-threads/' + thread.body.thread.id).expect(409);
+    });
+
+    test('Session AI rejects missing canonical Threads before invoking the AI gateway', async () => {
+        const { app } = require('../app/server');
+        const { updateSessionContinuity } = require('../app/sessions');
+        const axios = require('axios');
+        const session = await request(app).post('/api/sessions').send({ title: 'Work' });
+        updateSessionContinuity(session.body.session.id, { threadId: 'thread-missing' });
+        axios.post.mockClear();
+        await request(app).post('/api/sessions/' + session.body.session.id + '/ai-assist')
+            .send({ stage: 'observe', notes: 'What now?' }).expect(409);
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
+    test('Session AI distinguishes unavailable and timed-out local generation', async () => {
+        const { app } = require('../app/server');
+        const axios = require('axios');
+        const session = await request(app).post('/api/sessions').send({ title: 'Work' });
+        axios.get.mockResolvedValue({ data: { models: [{ name: 'gemma3:4b' }] } });
+        axios.post.mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
+        const offline = await request(app).post('/api/sessions/' + session.body.session.id + '/ai-assist')
+            .send({ stage: 'observe', notes: 'What now?' });
+        expect(offline.status).toBe(503);
+        axios.post.mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }));
+        await request(app).post('/api/sessions/' + session.body.session.id + '/ai-assist')
+            .send({ stage: 'observe', notes: 'What now?' }).expect(504);
+    });
+
     test('archive-thread rejects an already-linked Session before creating a Thread', async () => {
         const { app } = require('../app/server');
         const session = await request(app).post('/api/sessions').send({ title: 'Work' });
@@ -109,13 +177,25 @@ describe('Phase 20B — Continuity Core', () => {
         const context = buildContinuityContext(
             { id: 'current', title: 'x'.repeat(500), entries: Array(8).fill({ notes: 'n'.repeat(2000) }) },
             { title: 'Thread', openPressures: Array(10).fill('p'.repeat(1000)), carryForwardEntries: [], observations: [], reflections: [] },
-            'q'.repeat(8000),
             Array(10).fill(null).map((_, index) => ({ id: 'old-' + index, title: 't'.repeat(500), updatedAt: '2026-01-01' })),
         );
         expect(context.length).toBeLessThanOrEqual(LIMITS.block + 1);
-        const request = buildAiRequest({ continuityContext: 'current', retrievalContext: 'retrieval', userContent: 'question' });
+        const request = buildAiRequest({ continuityContext: 'current', userContent: 'question' });
         expect(request.messages[0].content).toContain(NATURAL_RESPONSE_DISCIPLINE);
-        expect(request.messages[1].content).toBe('current\n\nretrieval\n\nquestion');
+        expect(request.messages[1].content).toBe('current\n\nquestion');
         expect(request.messages[1].content).not.toMatch(/archetype|council/i);
+    });
+
+    test('bounded AI requests preserve continuity and the current question while trimming earlier context', () => {
+        const { buildAiRequest } = require('../app/aiRequestContext');
+        const request = buildAiRequest({
+            systemPrompt: 'posture',
+            continuityContext: 'current continuity',
+            userContent: 'retrieval '.repeat(100) + 'current question',
+            maxPromptLength: 400,
+        });
+        expect(request.messages[1].content).toContain('current continuity');
+        expect(request.messages[1].content).toContain('current question');
+        expect(request.messages.reduce((total, message) => total + message.content.length, 0)).toBeLessThanOrEqual(400);
     });
 });

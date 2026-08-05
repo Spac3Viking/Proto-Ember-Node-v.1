@@ -183,7 +183,7 @@ function createSession({ title = '', continuity = null } = {}) {
  * Update an existing session.  Only provided fields are changed.
  * Advances currentStage to next when an entry for the current stage is completed.
  *
- * Accepted patch fields: title, currentStage, entries (full replacement), continuity.
+ * Accepted patch fields: title, currentStage, entries (full replacement).
  *
  * @param {string} id
  * @param {object} patch
@@ -205,12 +205,26 @@ function updateSession(id, patch) {
     if (Array.isArray(p.entries)) {
         existing.entries = p.entries.map(_normalizeEntry);
     }
-    if (p.continuity && typeof p.continuity === 'object') {
-        existing.continuity = _normalizeContinuity(p.continuity);
-    }
-
     existing.updatedAt = _nowIso();
 
+    fs.writeFileSync(_sessionPath(id), JSON.stringify(existing, null, 2), 'utf8');
+    return existing;
+}
+
+/**
+ * Replace continuity from the canonical continuity service only.
+ * @param {string} id
+ * @param {object} continuity
+ * @returns {object|null}
+ */
+function updateSessionContinuity(id, continuity) {
+    _ensureDir();
+    const existing = loadSession(id);
+    if (!existing) return null;
+    const next = _normalizeContinuity(continuity);
+    if (!next.threadId) throw new Error('Canonical continuity requires a Thread id');
+    existing.continuity = next;
+    existing.updatedAt = _nowIso();
     fs.writeFileSync(_sessionPath(id), JSON.stringify(existing, null, 2), 'utf8');
     return existing;
 }
@@ -377,6 +391,7 @@ module.exports = {
     loadSession,
     createSession,
     updateSession,
+    updateSessionContinuity,
     saveStageNotes,
     deleteSession,
     exportSessionMarkdown,

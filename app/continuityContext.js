@@ -1,8 +1,8 @@
 'use strict';
 
 const { isValidStorageId } = require('./safeStorageId');
-const { loadSession, updateSession, deleteSession } = require('./sessions');
-const { loadSignalThread, saveSignalThread } = require('./signalThreads');
+const { loadSession, listSessions, updateSessionContinuity, deleteSession } = require('./sessions');
+const { loadSignalThread, saveSignalThread, findSignalThreadsBySessionId } = require('./signalThreads');
 
 const LIMITS = Object.freeze({
     sessionNote: 600,
@@ -30,7 +30,7 @@ function recent(entries, count, max = LIMITS.carryForward) {
         .filter(Boolean);
 }
 
-function buildContinuityContext(session, thread, question = '', linkedSessions = []) {
+function buildContinuityContext(session, thread, linkedSessions = []) {
     const current = session && typeof session === 'object' ? session : {};
     const linked = thread && typeof thread === 'object' ? thread : null;
     const lines = [
@@ -61,11 +61,10 @@ function buildContinuityContext(session, thread, question = '', linkedSessions =
             .map(other => clip(other.title, 160) + ' — ' + clip(other.updatedAt || other.createdAt, 40));
         if (prior.length) lines.push('Prior linked Sessions:\n- ' + prior.join('\n- '));
     }
-    if (question) lines.push('', 'Current question: ' + clip(question, 4000));
     return clip(lines.join('\n'), LIMITS.block);
 }
 
-function resolveSessionContinuity(sessionId, question = '') {
+function resolveSessionContinuity(sessionId) {
     if (!isValidStorageId(sessionId)) return { error: 'Invalid session id', status: 400 };
     const session = loadSession(sessionId);
     if (!session) return { error: 'Session not found', status: 404 };
@@ -78,7 +77,7 @@ function resolveSessionContinuity(sessionId, question = '') {
         ? (thread.sessionIds || []).map(loadSession).filter(Boolean)
             .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
         : [];
-    return { session, thread, context: buildContinuityContext(session, thread, question, linkedSessions) };
+    return { session, thread, context: buildContinuityContext(session, thread, linkedSessions) };
 }
 
 function linkSessionToThread(sessionId, threadId) {
@@ -116,7 +115,7 @@ function linkSessionToThread(sessionId, threadId) {
     };
     try {
         saveSignalThread(updatedThread);
-        const updatedSession = updateSession(session.id, sessionPatch);
+        const updatedSession = updateSessionContinuity(session.id, sessionPatch.continuity);
         if (!updatedSession) throw new Error('Session disappeared while linking');
         return { session: updatedSession, thread: updatedThread };
     } catch (error) {
@@ -128,21 +127,28 @@ function linkSessionToThread(sessionId, threadId) {
 function deleteSessionWithDetach(sessionId) {
     const session = loadSession(sessionId);
     if (!session) return { error: 'Session not found', status: 404 };
-    const threadId = session.continuity && session.continuity.threadId;
-    const thread = threadId ? loadSignalThread(threadId) : null;
-    if (threadId && !thread) {
-        return { error: 'Session references a missing canonical Thread', status: 409 };
-    }
-    if (!thread) return deleteSession(sessionId) ? { deleted: true } : { error: 'Session not found', status: 404 };
-    const detached = { ...thread, sessionIds: (thread.sessionIds || []).filter(id => id !== session.id), updatedAt: new Date().toISOString() };
+    const threads = findSignalThreadsBySessionId(session.id);
+    const originals = threads.map(thread => ({ ...thread }));
+    const detached = threads.map(thread => ({
+        ...thread,
+        sessionIds: (thread.sessionIds || []).filter(id => id !== session.id),
+        updatedAt: new Date().toISOString(),
+    }));
     try {
-        saveSignalThread(detached);
+        detached.forEach(saveSignalThread);
         if (!deleteSession(session.id)) throw new Error('Unable to delete Session');
         return { deleted: true };
     } catch (error) {
-        try { saveSignalThread(thread); } catch (_) { /* preserve original error */ }
+        originals.forEach(thread => {
+            try { saveSignalThread(thread); } catch (_) { /* preserve original error */ }
+        });
         return { error: 'Unable to delete Session safely', status: 500 };
     }
+}
+
+function threadHasLinkedSessions(threadId) {
+    if (!isValidStorageId(threadId)) return false;
+    return listSessions().some(session => session.continuity && session.continuity.threadId === threadId);
 }
 
 module.exports = {
@@ -151,4 +157,5 @@ module.exports = {
     resolveSessionContinuity,
     linkSessionToThread,
     deleteSessionWithDetach,
+    threadHasLinkedSessions,
 };

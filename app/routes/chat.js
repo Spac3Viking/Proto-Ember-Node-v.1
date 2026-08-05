@@ -51,6 +51,8 @@ const MAX_CHAT_CONTEXT_CHUNKS = 8;
 const MAX_CHAT_CONTEXT_CHARS = 16000;
 const MAX_CHAT_CHUNK_CHARS = 2200;
 const MAX_CHAT_HISTORY_CHARS = 4000;
+// Covers the shared request discipline and message separator outside room prompts.
+const REQUEST_ENVELOPE_OVERHEAD_CHARS = 256;
 const MAX_CHAT_HISTORY_TURNS = 8;
 // Tuning target: compact Signal Trace routing/context lists.
 const MAX_SIGNAL_TRACE_SOURCES = 5;
@@ -1309,7 +1311,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
         let sessionContinuity = null;
         let continuityContext = '';
         if (sessionId !== null && sessionId !== undefined && String(sessionId).trim()) {
-            sessionContinuity = resolveSessionContinuity(String(sessionId), query);
+            sessionContinuity = resolveSessionContinuity(String(sessionId));
             if (sessionContinuity.error) {
                 return res.status(sessionContinuity.status).json({ error: sessionContinuity.error });
             }
@@ -1398,6 +1400,12 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             systemPrompt,
             continuityContext,
             userContent,
+            maxPromptLength: (
+                (contextBudget.maxContextChars || MAX_CHAT_CONTEXT_CHARS) +
+                continuityContext.length +
+                systemPrompt.length +
+                REQUEST_ENVELOPE_OVERHEAD_CHARS
+            ),
         });
         const payload = {
             model:    heart.model,
@@ -1425,10 +1433,8 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             rawChunkContextLength: groundedPromptMetrics ? groundedPromptMetrics.rawContextChars : 0,
             chatHistoryLength: groundedPromptMetrics ? groundedPromptMetrics.historyChars : 0,
             chatHistoryTurns: groundedPromptMetrics ? groundedPromptMetrics.historyTurns : 0,
-            finalPromptLength: (
-                systemPrompt.length +
-                userContent.length
-            ),
+            continuityContextLength: continuityContext.length,
+            finalPromptLength: aiRequest.messages.reduce((total, message) => total + message.content.length, 0),
         };
 
         const modelRequestStartedAt = Date.now();
@@ -1478,6 +1484,7 @@ ${buildCognitionProfilePromptSummary(selectedCognitionProfile)}
             ' summaries=' + promptAudit.summaryContextLength +
             ' raw=' + promptAudit.rawChunkContextLength +
             ' history=' + promptAudit.chatHistoryLength + '/' + promptAudit.chatHistoryTurns +
+            ' continuity=' + promptAudit.continuityContextLength +
             ' final=' + promptAudit.finalPromptLength +
             ' responseMs=' + modelResponseTimeMs,
         );
