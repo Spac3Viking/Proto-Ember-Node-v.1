@@ -202,6 +202,7 @@ const ARCHIVE_CORE_DIRS = {
  * Use the term "cache" / "caches" — not "pack" / "packs".
  */
 const ARCHIVE_CACHES_DIR      = path.join(ARCHIVE_DIR, 'caches');
+const ARCHIVE_PACKAGES_DIR    = path.join(ARCHIVE_DIR, 'packages');
 
 /**
  * Modular functional/content caches.
@@ -389,6 +390,7 @@ function ensureDataRoot() {
         // Phase 11.7: Core Archive + Cache Structure
         ARCHIVE_CORE_DIR,
         ARCHIVE_CACHES_DIR,
+        ARCHIVE_PACKAGES_DIR,
         SYSTEM_CONFIG_DIR,
         SYSTEM_PROMPTS_DIR,
         THREADS_ROOM_DIRS.hearth,
@@ -602,6 +604,7 @@ module.exports = {
     ARCHIVE_CORE_DIR,
     ARCHIVE_CORE_DIRS,
     ARCHIVE_CACHES_DIR,
+    ARCHIVE_PACKAGES_DIR,
     SYSTEM_CONFIG_DIR,
     SYSTEM_PROMPTS_DIR,
     THREADS_ROOM_DIRS,

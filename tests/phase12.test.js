@@ -19,12 +19,7 @@ const {
     ARCHIVE_ENDPOINTS,
     ARCHIVE_CACHE_INDEX_FILE,
     ARCHIVE_CACHE_REGISTRY_FILE,
-    BUNDLED_CORE_CACHE_FILE,
-    installBundledCoreCache,
 } = require('../app/archiveCacheService');
-
-const BUNDLED_CORE_CACHE_DIR = path.dirname(BUNDLED_CORE_CACHE_FILE);
-let originalBundledCoreCache = null;
 
 afterAll(() => {
     delete process.env.EMBER_NODE_DATA_ROOT;
@@ -36,18 +31,6 @@ beforeEach(() => {
     axios.get.mockReset();
     axios.post.mockReset();
     axios.post.mockRejectedValue(new Error('offline'));
-    fs.mkdirSync(BUNDLED_CORE_CACHE_DIR, { recursive: true });
-    if (originalBundledCoreCache === null && fs.existsSync(BUNDLED_CORE_CACHE_FILE)) {
-        originalBundledCoreCache = fs.readFileSync(BUNDLED_CORE_CACHE_FILE);
-    }
-});
-
-afterEach(() => {
-    if (originalBundledCoreCache) {
-        fs.writeFileSync(BUNDLED_CORE_CACHE_FILE, originalBundledCoreCache);
-        return;
-    }
-    try { fs.rmSync(BUNDLED_CORE_CACHE_FILE, { force: true }); } catch { /* File may not exist */ }
 });
 
 describe('Phase 12 — Green Fire Archive cache integration', () => {
@@ -291,48 +274,4 @@ describe('Phase 12 — Green Fire Archive cache integration', () => {
         expect(resourceRes.body.endpoints.mythicSeedMd).toBe(ARCHIVE_ENDPOINTS.mythicSeedMd);
     });
 
-    test('installBundledCoreCache installs local bundled core zip without network', () => {
-        fs.rmSync(sc.ARCHIVE_CORE_DIR, { recursive: true, force: true });
-
-        const bundledZip = new AdmZip();
-        bundledZip.addFile('archive/core/manifest.json', Buffer.from(JSON.stringify({
-            id: 'green-fire-core',
-            version: '1.2.0',
-            type: 'core-archive',
-            title: 'Green Fire Core Archive',
-        })));
-        bundledZip.addFile('archive/core/codices/first-flame.md', Buffer.from('# First Flame'));
-        fs.writeFileSync(BUNDLED_CORE_CACHE_FILE, bundledZip.toBuffer());
-
-        const result = installBundledCoreCache();
-        expect(result.installed).toBe(true);
-        expect(result.source).toBe('bundled');
-        expect(result.installedVersion).toBe('1.2.0');
-        expect(fs.existsSync(path.join(sc.ARCHIVE_CORE_DIR, 'codices', 'first-flame.md'))).toBe(true);
-        expect(axios.get).not.toHaveBeenCalled();
-    });
-
-    test('installBundledCoreCache skips install when archive/core has user content', () => {
-        fs.rmSync(sc.ARCHIVE_CORE_DIR, { recursive: true, force: true });
-
-        const bundledZip = new AdmZip();
-        bundledZip.addFile('archive/core/manifest.json', Buffer.from(JSON.stringify({
-            id: 'green-fire-core',
-            version: '1.2.0',
-            type: 'core-archive',
-        })));
-        bundledZip.addFile('archive/core/codices/bundled.md', Buffer.from('# Bundled'));
-        fs.writeFileSync(BUNDLED_CORE_CACHE_FILE, bundledZip.toBuffer());
-
-        fs.mkdirSync(sc.ARCHIVE_CORE_DIR, { recursive: true });
-        const userFile = path.join(sc.ARCHIVE_CORE_DIR, 'codices', 'user-note.md');
-        fs.mkdirSync(path.dirname(userFile), { recursive: true });
-        fs.writeFileSync(userFile, '# User content', 'utf8');
-
-        const result = installBundledCoreCache();
-        expect(result.installed).toBe(false);
-        expect(result.skipped).toBe(true);
-        expect(result.reason).toBe('core-has-user-content');
-        expect(fs.readFileSync(userFile, 'utf8')).toBe('# User content');
-    });
 });

@@ -29,7 +29,7 @@ const axios   = require('axios');
 const {
     ensureDataRoot, ensureCanonicalDataFiles, migrateLegacyData, seedDataRoot,
 } = require('./storageConfig');
-const { installBundledCoreCache } = require('./archiveCacheService');
+const { installBundledCanonicalPackages } = require('./archiveCacheService');
 const { ensureUserConceptIndex } = require('./conceptIndex');
 const { ensureCourtConfig } = require('./courtConfig');
 const { runLegacyCleanupPass } = require('./system/nodeMaintenance');
@@ -52,7 +52,7 @@ const { triageFile }                                   = require('./startupCheck
 ensureDataRoot();
 const MIGRATION_RESULT = migrateLegacyData();
 seedDataRoot();
-installBundledCoreCache();
+installBundledCanonicalPackages();
 ensureCanonicalDataFiles();
 ensureCourtConfig();
 ensureUserConceptIndex();
