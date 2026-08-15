@@ -5,7 +5,7 @@ const path    = require('path');
 const axios   = require('axios');
 const AdmZip  = require('adm-zip');
 
-const { ARCHIVE_CORE_DIR, ARCHIVE_CACHES_DIR, SYSTEM_DIR } = require('./storageConfig');
+const { ARCHIVE_CORE_DIR, ARCHIVE_CACHES_DIR, ARCHIVE_PACKAGES_DIR, SYSTEM_DIR } = require('./storageConfig');
 const { ARCHIVE_BASE_URL } = require('./runtimeConfig');
 
 // Optional hosted Green Fire Archive used for cache-package updates. Centrally
@@ -71,8 +71,17 @@ const CANONICAL_ARTIFACT_HINTS = new Set([
 const ARCHIVE_CACHE_INDEX_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-upstream-index.json');
 const ARCHIVE_CACHE_REGISTRY_FILE = path.join(SYSTEM_DIR, 'archive-cache-registry.json');
 const ARCHIVE_SIGNAL_CACHE_FILE = path.join(ARCHIVE_CACHES_DIR, '_green-fire-signal.json');
-const BUNDLED_CACHES_DIR = path.join(__dirname, 'bundled-caches');
-const BUNDLED_CORE_CACHE_FILE = path.join(BUNDLED_CACHES_DIR, 'green-fire-core-cache.zip');
+const APPLICATION_ROOT = path.resolve(__dirname, '..');
+const CANONICAL_BUNDLED_PACKAGES = {
+    'green-fire-core-cache': {
+        zipPath: path.join(APPLICATION_ROOT, 'green-fire-core-cache.zip'),
+        packageRole: 'node-core',
+    },
+    'green-fire-library': {
+        zipPath: path.join(APPLICATION_ROOT, 'green-fire-library.zip'),
+        packageRole: 'knowledge-library',
+    },
+};
 const CANONICAL_PACKAGE_DOWNLOAD_URLS = Object.fromEntries(
     CANONICAL_CACHE_PACKAGE_IDS.map(id => [id, GREEN_FIRE_ARCHIVE_BASE_URL + '/downloads/' + id + '.zip']),
 );
@@ -588,79 +597,136 @@ async function installArchiveCachePackage({ packageId }) {
     };
 }
 
-function installBundledCoreCache(options = {}) {
-    const now = new Date().toISOString();
-    const force = options.force === true;
-    const hasUserContent = _coreDirHasUserContent(ARCHIVE_CORE_DIR);
+function _packageInstallPath(packageId) {
+    return path.join(ARCHIVE_PACKAGES_DIR, packageId);
+}
 
-    if (!fs.existsSync(BUNDLED_CORE_CACHE_FILE)) {
-        return {
-            packageId: 'green-fire-core',
-            installed: false,
-            skipped: true,
-            reason: 'bundled-core-cache-missing',
-            bundledPath: BUNDLED_CORE_CACHE_FILE,
-            installPath: ARCHIVE_CORE_DIR,
-        };
+function _safePackageEntryPath(entryName, packageId) {
+    const raw = String(entryName || '').replace(/\\/g, '/');
+    if (!raw || raw.startsWith('/') || /^[a-zA-Z]:/.test(raw)) {
+        throw new Error('Unsafe ZIP path: ' + entryName);
     }
-
-    if (!force && hasUserContent) {
-        return {
-            packageId: 'green-fire-core',
-            installed: false,
-            skipped: true,
-            reason: 'core-has-user-content',
-            bundledPath: BUNDLED_CORE_CACHE_FILE,
-            installPath: ARCHIVE_CORE_DIR,
-        };
+    const normalized = path.posix.normalize(raw);
+    if (normalized === '..' || normalized.startsWith('../') || normalized.includes('/../')) {
+        throw new Error('Unsafe ZIP path: ' + entryName);
     }
-
-    fs.mkdirSync(ARCHIVE_CORE_DIR, { recursive: true });
-    let zipBuffer;
-    try {
-        zipBuffer = fs.readFileSync(BUNDLED_CORE_CACHE_FILE);
-    } catch (err) {
-        throw new Error('Could not read bundled core cache file: ' + err.message);
+    const parts = normalized.split('/');
+    if (parts[0] !== packageId || parts.length < 2) {
+        throw new Error('ZIP must contain exactly one package root: ' + packageId);
     }
-    // For first-run polish we treat bundled core as additive seed memory:
-    // preserve user-authored files unless a forced reinstall is explicitly requested.
-    // overwrite=true only for explicit force installs or when no user-authored files exist.
-    _writeZipToTarget(zipBuffer, 'green-fire-core', ARCHIVE_CORE_DIR, {
-        overwrite: force || !hasUserContent,
-    });
+    return parts.slice(1).join('/');
+}
 
-    const manifestPath = _findManifestPath(ARCHIVE_CORE_DIR);
+function _isZipSymlink(entry) {
+    const attrs = entry.header && Number.isInteger(entry.header.attr) ? entry.header.attr : 0;
+    return ((attrs >>> 16) & 0o170000) === 0o120000;
+}
+
+function _validatePackageDirectory(packageDir, packageId, packageRole) {
+    const manifestPath = path.join(packageDir, 'manifest.json');
     const manifest = _readManifestIfPresent(manifestPath);
-    const installedVersion = manifest && manifest.version ? String(manifest.version) : null;
+    if (!manifest || manifest.id !== packageId || manifest.schema_version !== '2.0' ||
+        manifest.package_role !== packageRole || manifest.index_by_default !== true) {
+        throw new Error('Invalid manifest for package: ' + packageId);
+    }
+    for (const declaredPath of [...(manifest.documents || []), ...(manifest.artifacts || [])]) {
+        const rawPath = String(declaredPath || '').replace(/\\/g, '/');
+        if (rawPath.startsWith('/') || /^[a-zA-Z]:/.test(rawPath)) {
+            throw new Error('Unsafe manifest path: ' + declaredPath);
+        }
+        const safePath = _safeRel(rawPath);
+        if (!safePath) throw new Error('Unsafe manifest path: ' + declaredPath);
+        const candidate = path.resolve(packageDir, safePath);
+        if (!candidate.startsWith(packageDir + path.sep) || !fs.existsSync(candidate) ||
+            !fs.lstatSync(candidate).isFile()) {
+            throw new Error('Missing declared package file: ' + declaredPath);
+        }
+    }
+    return manifest;
+}
 
-    const registry = _loadArchiveCacheRegistry();
-    const existing = registry.caches['green-fire-core'] || {};
-    registry.caches['green-fire-core'] = {
-        packageId: 'green-fire-core',
-        title: manifest && manifest.title ? manifest.title : 'Green Fire Core Archive',
-        installPath: ARCHIVE_CORE_DIR,
-        destination: 'archive/core',
-        installedVersion,
-        installedAt: existing.installedAt || now,
-        lastUpdated: now,
-        source: 'bundled',
-        bundledPath: BUNDLED_CORE_CACHE_FILE,
-    };
-    registry.updatedAt = now;
-    _saveArchiveCacheRegistry(registry);
+function _extractCanonicalPackage(zipPath, packageId, packageRole, stagingDir) {
+    const zip = new AdmZip(zipPath);
+    const entries = zip.getEntries();
+    const roots = new Set();
+    for (const entry of entries) {
+        if (_isZipSymlink(entry)) throw new Error('ZIP symlinks are not allowed: ' + entry.entryName);
+        const raw = String(entry.entryName || '').replace(/\\/g, '/');
+        if (!raw || raw.startsWith('/') || /^[a-zA-Z]:/.test(raw)) {
+            throw new Error('Unsafe ZIP path: ' + entry.entryName);
+        }
+        const normalized = path.posix.normalize(raw);
+        if (normalized === '..' || normalized.startsWith('../') || normalized.includes('/../')) {
+            throw new Error('Unsafe ZIP path: ' + entry.entryName);
+        }
+        roots.add(normalized.split('/')[0]);
+        const rel = _safePackageEntryPath(entry.entryName, packageId);
+        if (!rel) continue;
+        const destination = path.resolve(stagingDir, rel);
+        if (!destination.startsWith(stagingDir + path.sep)) throw new Error('Unsafe ZIP path: ' + entry.entryName);
+        if (entry.isDirectory) {
+            fs.mkdirSync(destination, { recursive: true });
+        } else {
+            fs.mkdirSync(path.dirname(destination), { recursive: true });
+            fs.writeFileSync(destination, entry.getData());
+        }
+    }
+    if (roots.size !== 1 || !roots.has(packageId)) {
+        throw new Error('ZIP must contain exactly one package root: ' + packageId);
+    }
+    return _validatePackageDirectory(stagingDir, packageId, packageRole);
+}
 
-    return {
-        packageId: 'green-fire-core',
-        installed: true,
-        skipped: false,
-        source: 'bundled',
-        bundledPath: BUNDLED_CORE_CACHE_FILE,
-        installPath: ARCHIVE_CORE_DIR,
-        manifestPath,
-        manifest,
-        installedVersion,
-        registry: registry.caches['green-fire-core'],
-    };
+function validateBundledPackage(zipPath, packageId) {
+    const definition = CANONICAL_BUNDLED_PACKAGES[packageId];
+    if (!definition) throw new Error('Unknown canonical package: ' + packageId);
+    fs.mkdirSync(ARCHIVE_PACKAGES_DIR, { recursive: true });
+    const stagingDir = fs.mkdtempSync(path.join(ARCHIVE_PACKAGES_DIR, '.' + packageId + '-validate-'));
+    try {
+        return _extractCanonicalPackage(zipPath, packageId, definition.packageRole, stagingDir);
+    } finally {
+        fs.rmSync(stagingDir, { recursive: true, force: true });
+    }
+}
+
+function installBundledCanonicalPackages(options = {}) {
+    const packages = options.packages || CANONICAL_BUNDLED_PACKAGES;
+    const force = options.force === true;
+    fs.mkdirSync(ARCHIVE_PACKAGES_DIR, { recursive: true });
+    return Object.entries(packages).map(([packageId, definition]) => {
+        const targetDir = _packageInstallPath(packageId);
+        if (!force) {
+            try {
+                const manifest = _validatePackageDirectory(targetDir, packageId, definition.packageRole);
+                return { packageId, installed: false, skipped: true, reason: 'valid-package-present', installPath: targetDir, manifest };
+            } catch {
+                // A missing or invalid package is replaced only after its staged replacement validates.
+            }
+        }
+
+        const stagingDir = fs.mkdtempSync(path.join(ARCHIVE_PACKAGES_DIR, '.' + packageId + '-staging-'));
+        let previousDir = null;
+        try {
+            const manifest = _extractCanonicalPackage(definition.zipPath, packageId, definition.packageRole, stagingDir);
+            if (fs.existsSync(targetDir)) {
+                previousDir = path.join(ARCHIVE_PACKAGES_DIR, '.' + packageId + '-previous-' + Date.now());
+                fs.renameSync(targetDir, previousDir);
+            }
+            fs.renameSync(stagingDir, targetDir);
+            if (previousDir) fs.rmSync(previousDir, { recursive: true, force: true });
+            return { packageId, installed: true, skipped: false, source: 'bundled', bundledPath: definition.zipPath, installPath: targetDir, manifest };
+        } catch (err) {
+            if (previousDir && !fs.existsSync(targetDir) && fs.existsSync(previousDir)) {
+                fs.renameSync(previousDir, targetDir);
+            }
+            throw err;
+        } finally {
+            fs.rmSync(stagingDir, { recursive: true, force: true });
+            if (previousDir && fs.existsSync(previousDir) && fs.existsSync(targetDir)) {
+                fs.rmSync(previousDir, { recursive: true, force: true });
+            }
+        }
+    });
 }
 
 async function fetchArchiveSignal() {
@@ -711,8 +777,8 @@ module.exports = {
     ARCHIVE_CACHE_INDEX_FILE,
     ARCHIVE_CACHE_REGISTRY_FILE,
     ARCHIVE_SIGNAL_CACHE_FILE,
-    BUNDLED_CACHES_DIR,
-    BUNDLED_CORE_CACHE_FILE,
+    APPLICATION_ROOT,
+    CANONICAL_BUNDLED_PACKAGES,
     CANONICAL_CACHE_PACKAGE_IDS,
     CANONICAL_CACHE_DOCUMENTS_DIR,
     CANONICAL_CACHE_ARTIFACTS_DIR,
@@ -725,5 +791,6 @@ module.exports = {
     listInstalledArchiveCaches,
     compareInstalledWithUpstream,
     installArchiveCachePackage,
-    installBundledCoreCache,
+    validateBundledPackage,
+    installBundledCanonicalPackages,
 };
