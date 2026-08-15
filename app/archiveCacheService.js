@@ -749,43 +749,50 @@ function installBundledCanonicalPackages(options = {}) {
  *
  * @returns {Array<{packageId: string, title: string, version: string, packageRole: string, purposeSummary: string, documents: Array}>}
  */
-function listInstalledBundledReaderPackages() {
-    return CANONICAL_BUNDLED_PACKAGE_IDS.flatMap(packageId => {
-        const definition = CANONICAL_BUNDLED_PACKAGES[packageId];
-        const packageDir = _packageInstallPath(packageId);
-        let manifest;
+function _readInstalledBundledReaderPackage(packageId) {
+    const definition = CANONICAL_BUNDLED_PACKAGES[packageId];
+    if (!definition) return null;
+
+    const packageDir = _packageInstallPath(packageId);
+    let manifest;
+    try {
+        manifest = _validatePackageDirectory(packageDir, packageId, definition.packageRole);
+    } catch {
+        return null;
+    }
+
+    const documents = [...new Set(manifest.documents || [])].flatMap(declaredPath => {
+        const relPath = _safeRel(String(declaredPath || ''));
+        if (!relPath || path.extname(relPath).toLowerCase() !== '.md') return [];
+        const absolutePath = path.resolve(packageDir, relPath);
+        if (!_isPathInside(packageDir, absolutePath)) return [];
         try {
-            manifest = _validatePackageDirectory(packageDir, packageId, definition.packageRole);
+            const stat = fs.lstatSync(absolutePath);
+            if (!stat.isFile()) return [];
+            return [{
+                relativePath: relPath,
+                size: stat.size,
+                updatedAt: stat.mtime.toISOString(),
+            }];
         } catch {
             return [];
         }
+    });
 
-        const documents = [...new Set(manifest.documents || [])].flatMap(declaredPath => {
-            const relPath = _safeRel(String(declaredPath || ''));
-            if (!relPath || path.extname(relPath).toLowerCase() !== '.md') return [];
-            const absolutePath = path.resolve(packageDir, relPath);
-            if (!_isPathInside(packageDir, absolutePath)) return [];
-            try {
-                const stat = fs.lstatSync(absolutePath);
-                if (!stat.isFile()) return [];
-                return [{
-                    relativePath: relPath,
-                    size: stat.size,
-                    updatedAt: stat.mtime.toISOString(),
-                }];
-            } catch {
-                return [];
-            }
-        });
+    return {
+        packageId,
+        title: String(manifest.title || packageId),
+        version: String(manifest.version || ''),
+        packageRole: definition.packageRole,
+        purposeSummary: typeof manifest.purpose_summary === 'string' ? manifest.purpose_summary : '',
+        documents,
+    };
+}
 
-        return [{
-            packageId,
-            title: String(manifest.title || packageId),
-            version: String(manifest.version || ''),
-            packageRole: definition.packageRole,
-            purposeSummary: typeof manifest.purpose_summary === 'string' ? manifest.purpose_summary : '',
-            documents,
-        }];
+function listInstalledBundledReaderPackages() {
+    return CANONICAL_BUNDLED_PACKAGE_IDS.flatMap(packageId => {
+        const installedPackage = _readInstalledBundledReaderPackage(packageId);
+        return installedPackage ? [installedPackage] : [];
     });
 }
 
@@ -798,8 +805,7 @@ function listInstalledBundledReaderPackages() {
  * @returns {{ absolutePath: string, packageId: string, title: string }|null}
  */
 function resolveInstalledBundledReaderDocument(packageId, relativePath) {
-    const installedPackage = listInstalledBundledReaderPackages()
-        .find(candidate => candidate.packageId === packageId);
+    const installedPackage = _readInstalledBundledReaderPackage(packageId);
     if (!installedPackage) return null;
 
     const normalizedPath = _safeRel(String(relativePath || ''));

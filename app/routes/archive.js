@@ -349,7 +349,7 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
             },
             {
                 id: 'archive-packages',
-                title: 'archive/packages',
+                title: 'Installed Packages',
                 sourcePath: 'archive/packages',
                 packages: packageGroups,
             },
