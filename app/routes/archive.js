@@ -41,6 +41,8 @@ const {
     listInstalledArchiveCaches,
     compareInstalledWithUpstream,
     installArchiveCachePackage,
+    listInstalledBundledReaderPackages,
+    resolveInstalledBundledReaderDocument,
 }                                                  = require('../archiveCacheService');
 const {
     buildSourceAbstract,
@@ -184,6 +186,18 @@ function resolveReaderEntry(entryId) {
         };
     }
 
+    if (rootKey.startsWith('archive-package/')) {
+        const packageId = rootKey.slice('archive-package/'.length);
+        if (!CACHE_ID_PATTERN.test(packageId)) return null;
+        const document = resolveInstalledBundledReaderDocument(packageId, relativePath);
+        if (!document) return null;
+        return {
+            absolutePath: document.absolutePath,
+            sourcePath: 'archive/packages/' + packageId + '/' + relativePath,
+            sourceLabel: document.title,
+        };
+    }
+
     return null;
 }
 
@@ -297,6 +311,26 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
                 };
             })
         : [];
+    const packageGroups = listInstalledBundledReaderPackages().map(packageInfo => ({
+        packageId: packageInfo.packageId,
+        title: packageInfo.title,
+        version: packageInfo.version,
+        packageRole: packageInfo.packageRole,
+        purposeSummary: packageInfo.purposeSummary,
+        sourcePath: 'archive/packages/' + packageInfo.packageId,
+        files: packageInfo.documents.map(document => ({
+            entryId: Buffer.from(
+                'archive-package/' + packageInfo.packageId + '|' + document.relativePath,
+                'utf8',
+            ).toString('base64url'),
+            title: path.basename(document.relativePath, path.extname(document.relativePath)),
+            sourcePath: 'archive/packages/' + packageInfo.packageId + '/' + document.relativePath,
+            sourceLabel: packageInfo.title,
+            relativePath: document.relativePath,
+            size: document.size,
+            updatedAt: document.updatedAt,
+        })),
+    }));
 
     res.json({
         success: true,
@@ -312,6 +346,12 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
                 title: 'archive/caches',
                 sourcePath: 'archive/caches',
                 caches: cacheGroups,
+            },
+            {
+                id: 'archive-packages',
+                title: 'archive/packages',
+                sourcePath: 'archive/packages',
+                packages: packageGroups,
             },
         ],
     });
