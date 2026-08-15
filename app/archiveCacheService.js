@@ -637,7 +637,7 @@ function _validatePackageDirectory(packageDir, packageId, packageRole) {
         const safePath = _safeRel(rawPath);
         if (!safePath) throw new Error('Unsafe manifest path: ' + declaredPath);
         const candidate = path.resolve(packageDir, safePath);
-        if (!candidate.startsWith(packageDir + path.sep) || !fs.existsSync(candidate) ||
+        if (path.relative(packageDir, candidate).startsWith('..' + path.sep) || !fs.existsSync(candidate) ||
             !fs.lstatSync(candidate).isFile()) {
             throw new Error('Missing declared package file: ' + declaredPath);
         }
@@ -663,7 +663,9 @@ function _extractCanonicalPackage(zipPath, packageId, packageRole, stagingDir) {
         const rel = _safePackageEntryPath(entry.entryName, packageId);
         if (!rel) continue;
         const destination = path.resolve(stagingDir, rel);
-        if (!destination.startsWith(stagingDir + path.sep)) throw new Error('Unsafe ZIP path: ' + entry.entryName);
+        if (path.relative(stagingDir, destination).startsWith('..' + path.sep)) {
+            throw new Error('Unsafe ZIP path: ' + entry.entryName);
+        }
         if (entry.isDirectory) {
             fs.mkdirSync(destination, { recursive: true });
         } else {
@@ -717,7 +719,11 @@ function installBundledCanonicalPackages(options = {}) {
             return { packageId, installed: true, skipped: false, source: 'bundled', bundledPath: definition.zipPath, installPath: targetDir, manifest };
         } catch (err) {
             if (previousDir && !fs.existsSync(targetDir) && fs.existsSync(previousDir)) {
-                fs.renameSync(previousDir, targetDir);
+                try {
+                    fs.renameSync(previousDir, targetDir);
+                } catch {
+                    // Preserve the original installation failure if rollback also fails.
+                }
             }
             throw err;
         } finally {
