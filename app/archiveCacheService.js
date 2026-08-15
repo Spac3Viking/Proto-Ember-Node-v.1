@@ -768,8 +768,9 @@ function _readInstalledBundledReaderPackage(packageId) {
 
     const documents = [...new Set(manifest.documents || [])].flatMap(declaredPath => {
         const relPath = _safeRel(String(declaredPath || ''));
+        if (!relPath) return [];
         const extension = path.extname(relPath).toLowerCase();
-        if (!relPath || (extension !== '.md' && extension !== '.txt')) return [];
+        if (extension !== '.md' && extension !== '.txt') return [];
         const absolutePath = path.resolve(packageDir, relPath);
         if (!_isPathInside(packageDir, absolutePath)) return [];
         try {
