@@ -70,6 +70,8 @@ Section "Install Ember Node" SEC_MAIN
     File "..\..\package-lock.json"
     File "..\..\README.md"
     File "..\..\LICENSE"
+    File "..\..\green-fire-core-cache.zip"
+    File "..\..\green-fire-library.zip"
     File /oname=Awaken-Ember-Node.bat "Awaken-Ember-Node-Installed.bat"
 
     ; Desktop + Start Menu launcher
