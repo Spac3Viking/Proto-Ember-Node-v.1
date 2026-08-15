@@ -82,6 +82,7 @@ const CANONICAL_BUNDLED_PACKAGES = {
         packageRole: 'knowledge-library',
     },
 };
+const CANONICAL_BUNDLED_PACKAGE_IDS = Object.freeze(Object.keys(CANONICAL_BUNDLED_PACKAGES));
 const CANONICAL_PACKAGE_DOWNLOAD_URLS = Object.fromEntries(
     CANONICAL_CACHE_PACKAGE_IDS.map(id => [id, GREEN_FIRE_ARCHIVE_BASE_URL + '/downloads/' + id + '.zip']),
 );
@@ -601,6 +602,11 @@ function _packageInstallPath(packageId) {
     return path.join(ARCHIVE_PACKAGES_DIR, packageId);
 }
 
+function _isPathInside(baseDir, targetPath) {
+    const relative = path.relative(baseDir, targetPath);
+    return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
+}
+
 function _safePackageEntryPath(entryName, packageId) {
     const raw = String(entryName || '').replace(/\\/g, '/');
     if (!raw || raw.startsWith('/') || /^[a-zA-Z]:/.test(raw)) {
@@ -704,6 +710,7 @@ function installBundledCanonicalPackages(options = {}) {
             } catch {
                 // A missing or invalid package is replaced only after its staged replacement validates.
             }
+
         }
 
         const stagingDir = fs.mkdtempSync(path.join(ARCHIVE_PACKAGES_DIR, '.' + packageId + '-staging-'));
@@ -733,6 +740,82 @@ function installBundledCanonicalPackages(options = {}) {
             }
         }
     });
+}
+
+/**
+ * Return the installed canonical packages which remain valid according to
+ * their package manifests. Only declared Markdown documents are exposed to
+ * the reader; package artifacts and metadata stay outside the reader path.
+ *
+ * @returns {Array<{packageId: string, title: string, version: string, packageRole: string, purposeSummary: string, documents: Array}>}
+ */
+function _readInstalledBundledReaderPackage(packageId) {
+    const definition = CANONICAL_BUNDLED_PACKAGES[packageId];
+    if (!definition) return null;
+
+    const packageDir = _packageInstallPath(packageId);
+    let manifest;
+    try {
+        manifest = _validatePackageDirectory(packageDir, packageId, definition.packageRole);
+    } catch {
+        return null;
+    }
+
+    const documents = [...new Set(manifest.documents || [])].flatMap(declaredPath => {
+        const relPath = _safeRel(String(declaredPath || ''));
+        if (!relPath || path.extname(relPath).toLowerCase() !== '.md') return [];
+        const absolutePath = path.resolve(packageDir, relPath);
+        if (!_isPathInside(packageDir, absolutePath)) return [];
+        try {
+            const stat = fs.lstatSync(absolutePath);
+            if (!stat.isFile()) return [];
+            return [{
+                relativePath: relPath,
+                size: stat.size,
+                updatedAt: stat.mtime.toISOString(),
+            }];
+        } catch {
+            return [];
+        }
+    });
+
+    return {
+        packageId,
+        title: String(manifest.title || packageId),
+        version: String(manifest.version || ''),
+        packageRole: definition.packageRole,
+        purposeSummary: typeof manifest.purpose_summary === 'string' ? manifest.purpose_summary : '',
+        documents,
+    };
+}
+
+function listInstalledBundledReaderPackages() {
+    return CANONICAL_BUNDLED_PACKAGE_IDS.flatMap(packageId => {
+        const installedPackage = _readInstalledBundledReaderPackage(packageId);
+        return installedPackage ? [installedPackage] : [];
+    });
+}
+
+/**
+ * Resolve a reader document only when it is a Markdown file explicitly
+ * declared by a currently valid canonical package manifest.
+ *
+ * @param {string} packageId
+ * @param {string} relativePath
+ * @returns {{ absolutePath: string, packageId: string, title: string }|null}
+ */
+function resolveInstalledBundledReaderDocument(packageId, relativePath) {
+    const installedPackage = _readInstalledBundledReaderPackage(packageId);
+    if (!installedPackage) return null;
+
+    const normalizedPath = _safeRel(String(relativePath || ''));
+    if (!normalizedPath || !installedPackage.documents.some(document => document.relativePath === normalizedPath)) {
+        return null;
+    }
+
+    const absolutePath = path.resolve(_packageInstallPath(packageId), normalizedPath);
+    if (!_isPathInside(_packageInstallPath(packageId), absolutePath)) return null;
+    return { absolutePath, packageId, title: installedPackage.title };
 }
 
 async function fetchArchiveSignal() {
@@ -785,6 +868,7 @@ module.exports = {
     ARCHIVE_SIGNAL_CACHE_FILE,
     APPLICATION_ROOT,
     CANONICAL_BUNDLED_PACKAGES,
+    CANONICAL_BUNDLED_PACKAGE_IDS,
     CANONICAL_CACHE_PACKAGE_IDS,
     CANONICAL_CACHE_DOCUMENTS_DIR,
     CANONICAL_CACHE_ARTIFACTS_DIR,
@@ -799,4 +883,6 @@ module.exports = {
     installArchiveCachePackage,
     validateBundledPackage,
     installBundledCanonicalPackages,
+    listInstalledBundledReaderPackages,
+    resolveInstalledBundledReaderDocument,
 };
