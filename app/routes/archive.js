@@ -42,6 +42,7 @@ const {
     compareInstalledWithUpstream,
     installArchiveCachePackage,
     listInstalledBundledReaderPackages,
+    listInstalledBundledPackageMetadata,
     resolveInstalledBundledReaderDocument,
 }                                                  = require('../archiveCacheService');
 const {
@@ -95,6 +96,13 @@ function isPathInside(baseDir, targetPath) {
     return target === root || target.startsWith(root + path.sep);
 }
 
+function isSafeReaderRelativePath(relativePath) {
+    return typeof relativePath === 'string' && Boolean(relativePath) &&
+        !relativePath.startsWith('/') && !relativePath.startsWith('\\') &&
+        !/^[a-zA-Z]:/.test(relativePath) &&
+        !/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(relativePath);
+}
+
 function listMarkdownFilesRecursive(baseDir, entryRootKey, sourcePrefix, sourceLabel, summaryContext = null) {
     if (!fs.existsSync(baseDir)) return [];
     const out = [];
@@ -146,9 +154,10 @@ function resolveReaderEntry(entryId) {
     const delim = decoded.indexOf('|');
     if (delim <= 0) return null;
     const rootKey = decoded.slice(0, delim);
-    const relativePath = decoded.slice(delim + 1).replace(/\\/g, '/');
-    if (!relativePath || relativePath.includes('..')) return null;
-    if (!relativePath.toLowerCase().endsWith('.md')) return null;
+    const requestedPath = decoded.slice(delim + 1);
+    if (!isSafeReaderRelativePath(requestedPath)) return null;
+    const relativePath = requestedPath.replace(/\\/g, '/');
+    if (!relativePath.toLowerCase().endsWith('.md') && !relativePath.toLowerCase().endsWith('.txt')) return null;
 
     if (rootKey === 'archive-core') {
         const abs = path.resolve(ARCHIVE_CORE_DIR, relativePath);
@@ -357,9 +366,13 @@ router.get('/api/archive/reader/catalog', readLimiter, (req, res) => {
     });
 });
 
+router.get('/api/archive/packages/installed', readLimiter, (req, res) => {
+    res.json({ packages: listInstalledBundledPackageMetadata() });
+});
+
 /**
  * GET /api/archive/reader/document/:entryId
- * Return frontmatter-stripped markdown content for a catalog entry.
+ * Return content for a catalog entry.
  */
 router.get('/api/archive/reader/document/:entryId', readLimiter, (req, res) => {
     const resolved = resolveReaderEntry(req.params.entryId);
@@ -370,15 +383,16 @@ router.get('/api/archive/reader/document/:entryId', readLimiter, (req, res) => {
         return res.status(404).json({ error: 'Reader entry not found.' });
     }
     const raw = fs.readFileSync(resolved.absolutePath, 'utf8');
-    const content = stripMarkdownFrontmatter(raw);
-    const fallbackTitle = path.basename(resolved.absolutePath, '.md');
+    const isMarkdown = path.extname(resolved.absolutePath).toLowerCase() === '.md';
+    const content = isMarkdown ? stripMarkdownFrontmatter(raw) : raw;
+    const fallbackTitle = path.basename(resolved.absolutePath, path.extname(resolved.absolutePath));
     res.json({
         success: true,
         entryId: req.params.entryId,
         sourcePath: resolved.sourcePath,
         sourceLabel: resolved.sourceLabel || 'Archive Cache',
-        title: extractMarkdownDisplayTitle(content, fallbackTitle),
-        contentType: 'text/markdown',
+        title: isMarkdown ? extractMarkdownDisplayTitle(content, fallbackTitle) : fallbackTitle,
+        contentType: isMarkdown ? 'text/markdown' : 'text/plain',
         content,
     });
 });

@@ -332,7 +332,12 @@ function _coreDirHasUserContent(dir) {
 }
 
 function _safeRel(rel) {
-    const clean = rel.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (typeof rel !== 'string' || !rel ||
+        rel.startsWith('/') || rel.startsWith('\\') || /^[a-zA-Z]:/.test(rel) ||
+        /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(rel)) {
+        return null;
+    }
+    const clean = rel.replace(/\\/g, '/');
     if (!clean || clean === '.' || clean === '..') return null;
     const normalized = path.posix.normalize(clean);
     if (normalized.startsWith('../') || normalized.includes('/../') || normalized === '..') return null;
@@ -744,7 +749,7 @@ function installBundledCanonicalPackages(options = {}) {
 
 /**
  * Return the installed canonical packages which remain valid according to
- * their package manifests. Only declared Markdown documents are exposed to
+ * their package manifests. Only declared Markdown and plaintext documents are exposed to
  * the reader; package artifacts and metadata stay outside the reader path.
  *
  * @returns {Array<{packageId: string, title: string, version: string, packageRole: string, purposeSummary: string, documents: Array}>}
@@ -763,7 +768,9 @@ function _readInstalledBundledReaderPackage(packageId) {
 
     const documents = [...new Set(manifest.documents || [])].flatMap(declaredPath => {
         const relPath = _safeRel(String(declaredPath || ''));
-        if (!relPath || path.extname(relPath).toLowerCase() !== '.md') return [];
+        if (!relPath) return [];
+        const extension = path.extname(relPath).toLowerCase();
+        if (extension !== '.md' && extension !== '.txt') return [];
         const absolutePath = path.resolve(packageDir, relPath);
         if (!_isPathInside(packageDir, absolutePath)) return [];
         try {
@@ -785,6 +792,8 @@ function _readInstalledBundledReaderPackage(packageId) {
         version: String(manifest.version || ''),
         packageRole: definition.packageRole,
         purposeSummary: typeof manifest.purpose_summary === 'string' ? manifest.purpose_summary : '',
+        indexByDefault: manifest.index_by_default === true,
+        artifactCount: Array.isArray(manifest.artifacts) ? manifest.artifacts.length : 0,
         documents,
     };
 }
@@ -796,8 +805,21 @@ function listInstalledBundledReaderPackages() {
     });
 }
 
+function listInstalledBundledPackageMetadata() {
+    return listInstalledBundledReaderPackages().map(packageInfo => ({
+        id: packageInfo.packageId,
+        title: packageInfo.title,
+        version: packageInfo.version,
+        role: packageInfo.packageRole,
+        indexByDefault: packageInfo.indexByDefault,
+        documentCount: packageInfo.documents.length,
+        artifactCount: packageInfo.artifactCount,
+        installed: true,
+    }));
+}
+
 /**
- * Resolve a reader document only when it is a Markdown file explicitly
+ * Resolve a reader document only when it is a Markdown or plaintext file explicitly
  * declared by a currently valid canonical package manifest.
  *
  * @param {string} packageId
@@ -884,5 +906,6 @@ module.exports = {
     validateBundledPackage,
     installBundledCanonicalPackages,
     listInstalledBundledReaderPackages,
+    listInstalledBundledPackageMetadata,
     resolveInstalledBundledReaderDocument,
 };
