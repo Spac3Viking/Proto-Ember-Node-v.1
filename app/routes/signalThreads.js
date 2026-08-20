@@ -123,11 +123,11 @@ router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
         if (s && !SIGNAL_THREAD_STATUSES.includes(s)) {
             return res.status(400).json({ error: 'Invalid status' });
         }
-        if (typeof patch.currentStage === 'string') {
-            const stage = patch.currentStage.trim().toLowerCase();
-            if (!SIGNAL_THREAD_STAGES.includes(stage)) {
-                return res.status(400).json({ error: 'Invalid spiral stage' });
-            }
+    }
+    if (typeof patch.currentStage === 'string') {
+        const stage = patch.currentStage.trim().toLowerCase();
+        if (!SIGNAL_THREAD_STAGES.includes(stage)) {
+            return res.status(400).json({ error: 'Invalid spiral stage' });
         }
     }
 
