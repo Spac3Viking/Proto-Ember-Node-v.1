@@ -157,9 +157,8 @@ function resolveReaderEntry(entryId) {
     const requestedPath = decoded.slice(delim + 1);
     if (!isSafeReaderRelativePath(requestedPath)) return null;
     const relativePath = requestedPath.replace(/\\/g, '/');
-    if (!relativePath.toLowerCase().endsWith('.md') && !relativePath.toLowerCase().endsWith('.txt')) return null;
-
     if (rootKey === 'archive-core') {
+        if (!relativePath.toLowerCase().endsWith('.md')) return null;
         const abs = path.resolve(ARCHIVE_CORE_DIR, relativePath);
         if (!isPathInside(ARCHIVE_CORE_DIR, abs)) return null;
         return {
@@ -170,6 +169,7 @@ function resolveReaderEntry(entryId) {
     }
 
     if (rootKey.startsWith('archive-cache/')) {
+        if (!relativePath.toLowerCase().endsWith('.md')) return null;
         const cacheId = rootKey.slice('archive-cache/'.length);
         if (!CACHE_ID_PATTERN.test(cacheId)) return null;
         const cacheRoot = path.join(ARCHIVE_CACHES_DIR, cacheId);
@@ -183,6 +183,7 @@ function resolveReaderEntry(entryId) {
     }
 
     if (rootKey.startsWith('archive-cache-artifact/')) {
+        if (!relativePath.toLowerCase().endsWith('.md')) return null;
         const cacheId = rootKey.slice('archive-cache-artifact/'.length);
         if (!CACHE_ID_PATTERN.test(cacheId)) return null;
         const artifactsRoot = path.join(ARCHIVE_CACHES_DIR, cacheId, 'artifacts');

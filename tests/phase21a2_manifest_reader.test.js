@@ -183,6 +183,21 @@ describe('Phase 21A.2 manifest-driven archive reader bridge', () => {
         }
     });
 
+    test('rejects directly constructed legacy plaintext Reader entries', async () => {
+        const textPath = path.join(DATA_ROOT, 'archive', 'core', 'legacy-reader.txt');
+        fs.writeFileSync(textPath, 'Legacy plaintext must not be directly readable.', 'utf8');
+        try {
+            const rejected = await request(app)
+                .get('/api/archive/reader/document/' + encodeURIComponent(
+                    Buffer.from('archive-core|legacy-reader.txt', 'utf8').toString('base64url'),
+                ));
+            expect(rejected.status).toBe(400);
+            expect(rejected.body.error).toBe('Invalid reader entry.');
+        } finally {
+            fs.rmSync(textPath, { force: true });
+        }
+    });
+
     test('preserves both canonical ZIP hashes', () => {
         const root = path.resolve(__dirname, '..');
         expect(sha256(path.join(root, 'green-fire-core-cache.zip'))).toBe(

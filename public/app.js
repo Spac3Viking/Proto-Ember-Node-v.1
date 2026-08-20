@@ -5955,31 +5955,34 @@ function buildArchiveReaderFileButton(entry) {
 async function loadArchiveReaderCatalog() {
     const listEl = document.getElementById('archive-reader-catalog');
     if (!listEl) return;
-    listEl.innerHTML = '<span class="message-system">Loading archive markdown…</span>';
+    listEl.innerHTML = '<span class="message-system">Loading Reader documents…</span>';
     try {
         const res = await fetch('/api/archive/reader/catalog');
         const data = await res.json();
         if (!res.ok || !data.success) {
-            listEl.innerHTML = '<span class="message-system">Could not load archive markdown.</span>';
+            listEl.innerHTML = '<span class="message-system">Could not load Reader documents.</span>';
             return;
         }
 
         const roots = Array.isArray(data.roots) ? data.roots : [];
+        const packagesRoot = roots.find(r => r && r.id === 'archive-packages') || { packages: [] };
         const coreRoot = roots.find(r => r && r.id === 'archive-core') || { files: [] };
         const cachesRoot = roots.find(r => r && r.id === 'archive-caches') || { caches: [] };
+        const packageGroups = Array.isArray(packagesRoot.packages) ? packagesRoot.packages : [];
         const coreFiles = Array.isArray(coreRoot.files) ? coreRoot.files : [];
-        const cacheGroups = Array.isArray(cachesRoot.caches) ? cachesRoot.caches : [];
+        const cacheGroups = (Array.isArray(cachesRoot.caches) ? cachesRoot.caches : [])
+            .filter(group => Array.isArray(group.files) && group.files.length > 0);
+        const hasCanonicalDocuments = packageGroups.some(group =>
+            Array.isArray(group.files) && group.files.length > 0,
+        );
+        const hasLegacyDocuments = coreFiles.length > 0 || cacheGroups.length > 0;
 
-        if (
-            coreFiles.length === 0 &&
-            (cacheGroups.length === 0 || cacheGroups.every(group => !group.files || group.files.length === 0))
-        ) {
-            listEl.innerHTML = '<span class="message-system">No archive markdown is ready in Reader yet.</span>';
+        if (!hasCanonicalDocuments && !hasLegacyDocuments) {
+            listEl.innerHTML = '<span class="message-system">No canonical or legacy archive documents are ready in Reader.</span>';
             const hint = buildOnboardingHint({
                 key: 'archive-reader-empty',
-                text: 'Loaded Caches shape the continuity available to the Node. Inspect, load, then explore in Reader.',
+                text: 'Guided Orientation can help establish the Reader context.',
                 actions: [
-                    { label: 'Load into Cache Loadout', onClick: () => openRoomAndSubtab('threshold', 'th-imports') },
                     { label: 'Guided Orientation', onClick: openFirstEmberOverlay },
                 ],
             });
@@ -5989,30 +5992,53 @@ async function loadArchiveReaderCatalog() {
 
         listEl.innerHTML = '';
 
-        const coreTitle = document.createElement('div');
-        coreTitle.className = 'archive-reader-group-title';
-        coreTitle.textContent = 'archive/core';
-        listEl.appendChild(coreTitle);
-        if (coreFiles.length === 0) {
-            const none = document.createElement('span');
-            none.className = 'message-system';
-            none.textContent = 'No core markdown files.';
-            listEl.appendChild(none);
-        } else {
-            coreFiles.forEach(entry => listEl.appendChild(buildArchiveReaderFileButton(entry)));
+        if (hasCanonicalDocuments) {
+            const canonicalTitle = document.createElement('div');
+            canonicalTitle.className = 'archive-reader-group-title';
+            canonicalTitle.textContent = 'Canonical Offline Library';
+            listEl.appendChild(canonicalTitle);
+
+            packageGroups.forEach(group => {
+                const files = Array.isArray(group.files) ? group.files : [];
+                if (files.length === 0) return;
+                const details = document.createElement('details');
+                details.className = 'archive-reader-cache';
+                const summary = document.createElement('summary');
+                summary.textContent = (group.title || group.packageId || 'package') +
+                    ' (' + files.length + ' Reader documents)';
+                details.appendChild(summary);
+                const metadata = [
+                    group.version ? 'Version ' + group.version : '',
+                    group.packageRole ? 'Role: ' + group.packageRole : '',
+                    group.purposeSummary || '',
+                ].filter(Boolean);
+                if (metadata.length > 0) {
+                    const packageMeta = document.createElement('div');
+                    packageMeta.className = 'archive-reader-file-path';
+                    packageMeta.textContent = metadata.join(' · ');
+                    details.appendChild(packageMeta);
+                }
+                const filesWrap = document.createElement('div');
+                filesWrap.className = 'archive-reader-files';
+                files.forEach(entry => filesWrap.appendChild(buildArchiveReaderFileButton(entry)));
+                details.appendChild(filesWrap);
+                listEl.appendChild(details);
+            });
         }
 
-        const cacheTitle = document.createElement('div');
-        cacheTitle.className = 'archive-reader-group-title';
-        cacheTitle.textContent = 'archive/caches';
-        listEl.appendChild(cacheTitle);
+        if (!hasLegacyDocuments) return;
 
-        if (cacheGroups.length === 0) {
-            const none = document.createElement('span');
-            none.className = 'message-system';
-            none.textContent = 'No installed archive caches.';
-            listEl.appendChild(none);
-            return;
+        const legacyTitle = document.createElement('div');
+        legacyTitle.className = 'archive-reader-group-title';
+        legacyTitle.textContent = 'Legacy Archive Data';
+        listEl.appendChild(legacyTitle);
+
+        if (coreFiles.length > 0) {
+            const coreTitle = document.createElement('div');
+            coreTitle.className = 'archive-reader-file-path';
+            coreTitle.textContent = 'archive/core';
+            listEl.appendChild(coreTitle);
+            coreFiles.forEach(entry => listEl.appendChild(buildArchiveReaderFileButton(entry)));
         }
 
         cacheGroups.forEach(group => {
@@ -6037,19 +6063,12 @@ async function loadArchiveReaderCatalog() {
 
             const filesWrap = document.createElement('div');
             filesWrap.className = 'archive-reader-files';
-            if (fileCount === 0) {
-                const none = document.createElement('span');
-                none.className = 'message-system';
-                none.textContent = 'No markdown files in this cache.';
-                filesWrap.appendChild(none);
-            } else {
-                group.files.forEach(entry => filesWrap.appendChild(buildArchiveReaderFileButton(entry)));
-            }
+            group.files.forEach(entry => filesWrap.appendChild(buildArchiveReaderFileButton(entry)));
             details.appendChild(filesWrap);
             listEl.appendChild(details);
         });
     } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load archive markdown.</span>';
+        listEl.innerHTML = '<span class="message-system">Could not load Reader documents.</span>';
     }
 }
 
