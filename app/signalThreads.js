@@ -368,6 +368,7 @@ function addFieldLogEntry(threadId, stage, content) {
         content: text,
     };
     thread.entries.push(entry);
+    thread.currentStage = normalizedStage;
     thread.updatedAt = entry.timestamp;
     saveSignalThread(thread);
     return entry;
@@ -724,7 +725,7 @@ function exportSignalThreadBrief(thread) {
         return lines.join('\n');
     }
 
-    function entryList(title, entries) {
+    function entryList(title, entries, includeStage = false) {
         const out = [];
         out.push(title + ':');
         const list = Array.isArray(entries) ? entries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
@@ -734,7 +735,8 @@ function exportSignalThreadBrief(thread) {
         }
         list.forEach(entry => {
             const stamp = entry && entry.timestamp ? String(entry.timestamp) : '';
-            out.push('- ' + stamp);
+            const stage = includeStage ? (' · ' + String(entry && entry.stage ? entry.stage : 'observe')) : '';
+            out.push('- ' + stamp + stage);
             const content = entry && entry.content ? String(entry.content) : '';
             content.split('\n').forEach(line => {
                 out.push('  ' + line);
@@ -787,7 +789,7 @@ function exportSignalThreadBrief(thread) {
     lines.push('');
     lines.push(entryList('Recent Reflections', t.reflections));
     lines.push('');
-    lines.push(entryList('Field Log', t.entries));
+    lines.push(entryList('Field Log', t.entries, true));
     lines.push('');
     lines.push('Saga Cycles:');
     const cycles = _deriveSagaCycles(t);
