@@ -171,12 +171,11 @@ Threshold cache drafts use this normalized manifest structure:
 }
 ```
 
-## Bundled Green Fire Core Cache — Content-Version Note
+## Canonical Offline Library
 
-The Green Fire Core Cache bundled at `app/bundled-caches/green-fire-core-cache.zip`
-is currently manifest version **1.4** (`green-fire-core/manifest.json`). No
-v1.6 bundle is packaged in this build. Runtime and documentation claims are
-kept in agreement with the files actually bundled — this note exists so a
-future build does not silently relabel v1.4 content as v1.6. If a v1.6
-bundle becomes available it should replace this file and this note should
-be updated or removed.
+The repository-root installer assets are:
+
+- `green-fire-core-cache.zip` — Green Fire Core, package version **1.0.0**.
+- `green-fire-library.zip` — Green Fire Machine-Readable Library, package version **2.0.0**.
+
+Both packages install into `archive/packages/` and are available through Reader.
