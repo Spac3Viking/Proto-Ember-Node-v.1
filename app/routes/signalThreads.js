@@ -23,6 +23,7 @@ const { readLimiter, writeLimiter } = require('../rateLimiters');
 const {
     SIGNAL_THREAD_POSTURES,
     SIGNAL_THREAD_STATUSES,
+    SIGNAL_THREAD_STAGES,
     listSignalThreads,
     loadSignalThread,
     createSignalThread,
@@ -30,6 +31,7 @@ const {
     deleteSignalThread,
     addReflection,
     addObservation,
+    addFieldLogEntry,
     setCompression,
     addOpenPressure,
     addCarryForwardEntry,
@@ -66,7 +68,7 @@ router.get('/api/signal-threads', readLimiter, (req, res) => {
 
 router.post('/api/signal-threads', writeLimiter, (req, res) => {
     const {
-        title, purpose, posture, summary, tags, currentSituation, openPressure, openPressures, sourceNotes, sessionIds,
+        title, purpose, currentStage, posture, summary, tags, currentSituation, openPressure, openPressures, sourceNotes, sessionIds,
     } = req.body || {};
     const t = String(title || '').trim();
     if (!t) return res.status(400).json({ error: 'Title is required' });
@@ -74,6 +76,8 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
     if (!p || !SIGNAL_THREAD_POSTURES.includes(p)) {
         return res.status(400).json({ error: 'Invalid posture' });
     }
+    const stage = String(currentStage || 'observe').trim().toLowerCase();
+    if (!SIGNAL_THREAD_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid spiral stage' });
     if (Array.isArray(sessionIds) && sessionIds.length) {
         return res.status(409).json({ error: 'Use the canonical Thread link operation to add sessionIds' });
     }
@@ -82,6 +86,7 @@ router.post('/api/signal-threads', writeLimiter, (req, res) => {
             title: t,
             purpose: String(purpose || ''),
             posture: p,
+            currentStage: stage,
             summary: String(summary || ''),
             currentSituation: String(currentSituation || ''),
             openPressure: String(openPressure || ''),
@@ -119,6 +124,13 @@ router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
             return res.status(400).json({ error: 'Invalid status' });
         }
     }
+    if (typeof patch.currentStage === 'string') {
+        const stage = patch.currentStage.trim().toLowerCase();
+        if (!SIGNAL_THREAD_STAGES.includes(stage)) {
+            return res.status(400).json({ error: 'Invalid spiral stage' });
+        }
+        patch.currentStage = stage;
+    }
 
     const thread = updateSignalThread(req.params.id, patch);
     if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
@@ -153,6 +165,16 @@ router.post('/api/signal-threads/:id/observations', writeLimiter, (req, res) => 
         const entry = addObservation(req.params.id, req.body && req.body.content);
         if (!entry) return res.status(404).json({ error: 'Signal Thread not found' });
         res.json({ success: true, observation: entry });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+router.post('/api/signal-threads/:id/entries', writeLimiter, (req, res) => {
+    try {
+        const entry = addFieldLogEntry(req.params.id, req.body && req.body.stage, req.body && req.body.content);
+        if (!entry) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({ success: true, entry });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }

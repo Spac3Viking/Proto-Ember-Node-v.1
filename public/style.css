@@ -2647,6 +2647,16 @@ button.secondary:disabled {
   gap: 0.35rem 0.55rem;
 }
 
+.signal-thread-stage-badge {
+  border: 1px solid hsla(38, 100%, 70%, 0.35);
+  border-radius: 999px;
+  color: var(--gf-wire-amber);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.4rem;
+  text-transform: uppercase;
+}
+
 .signal-thread-editor-pane {
   flex: 1 1 auto;
   min-width: 0;

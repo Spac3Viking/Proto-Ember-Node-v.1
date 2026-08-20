@@ -1473,6 +1473,17 @@
                       </select>
                     </div>
                     <div class="signal-thread-field">
+                      <label for="signal-thread-stage-select">Current Stage</label>
+                      <select id="signal-thread-stage-select" class="gf-select">
+                        <option value="observe">observe</option>
+                        <option value="reflect">reflect</option>
+                        <option value="act">act</option>
+                        <option value="refine">refine</option>
+                        <option value="remember">remember</option>
+                        <option value="relate">relate</option>
+                      </select>
+                    </div>
+                    <div class="signal-thread-field">
                       <label for="signal-thread-status-select">Status</label>
                       <select id="signal-thread-status-select" class="gf-select">
                         <option value="active">active</option>
@@ -1579,6 +1590,18 @@
                     <button class="primary" id="signal-thread-save-cycle-btn">Save Cycle</button>
                     <span class="message-system">Saves the cycle to this thread.</span>
                   </div>
+                </div>
+              </details>
+
+              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-field-log-details" open>
+                <summary>Field Log</summary>
+                <div class="gf-collapsible-panel-body">
+                  <textarea id="signal-thread-field-log-input" rows="3" placeholder="Record this moment in the current stage."></textarea>
+                  <div class="signal-thread-actions">
+                    <button class="secondary" id="signal-thread-add-field-log-btn">Add to Thread</button>
+                    <span class="message-system">Uses the selected current stage.</span>
+                  </div>
+                  <div id="signal-thread-field-log" class="signal-thread-entries"></div>
                 </div>
               </details>
 
