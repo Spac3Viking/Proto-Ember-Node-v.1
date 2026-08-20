@@ -23,6 +23,15 @@ const SIGNAL_THREAD_STATUSES = Object.freeze([
     'archived',
 ]);
 
+const SIGNAL_THREAD_STAGES = Object.freeze([
+    'observe',
+    'reflect',
+    'act',
+    'refine',
+    'remember',
+    'relate',
+]);
+
 const SAGA_CYCLE_MODES = Object.freeze([
     'exploratory',
     'real',
@@ -54,6 +63,11 @@ function _normalizePosture(posture) {
 function _normalizeStatus(status) {
     const value = String(status || '').trim().toLowerCase();
     return SIGNAL_THREAD_STATUSES.includes(value) ? value : 'active';
+}
+
+function _normalizeStage(stage) {
+    const value = String(stage || '').trim().toLowerCase();
+    return SIGNAL_THREAD_STAGES.includes(value) ? value : 'observe';
 }
 
 function _normalizeTags(tags) {
@@ -122,6 +136,16 @@ function _normalizeEntry(entry) {
     };
 }
 
+function _normalizeFieldLogEntry(entry) {
+    const row = entry && typeof entry === 'object' ? entry : {};
+    return {
+        id: String(row.id || ''),
+        stage: _normalizeStage(row.stage),
+        timestamp: row.timestamp ? String(row.timestamp) : null,
+        content: String(row.content || ''),
+    };
+}
+
 function _normalizeCarryForwardEntry(entry) {
     const row = entry && typeof entry === 'object' ? entry : {};
     return {
@@ -142,6 +166,7 @@ function normalizeSignalThread(raw) {
         purpose: String(data.purpose || ''),
         posture: _normalizePosture(data.posture),
         status: _normalizeStatus(data.status),
+        currentStage: _normalizeStage(data.currentStage),
         createdAt: data.createdAt ? String(data.createdAt) : now,
         updatedAt: data.updatedAt ? String(data.updatedAt) : (data.createdAt ? String(data.createdAt) : now),
         summary: String(data.summary || ''),
@@ -154,6 +179,7 @@ function normalizeSignalThread(raw) {
         sourceNotes: String(data.sourceNotes || ''),
         reflections: Array.isArray(data.reflections) ? data.reflections.map(_normalizeEntry) : [],
         observations: Array.isArray(data.observations) ? data.observations.map(_normalizeEntry) : [],
+        entries: Array.isArray(data.entries) ? data.entries.map(_normalizeFieldLogEntry).filter(e => e.content) : [],
         compression: String(data.compression || ''),
         tags: _normalizeTags(data.tags),
         sessionIds: _normalizeSessionIds(data.sessionIds),
@@ -175,6 +201,7 @@ function listSignalThreads() {
                 purpose: t.purpose,
                 posture: t.posture,
                 status: t.status,
+                currentStage: t.currentStage,
                 createdAt: t.createdAt,
                 updatedAt: t.updatedAt,
                 reflectionCount: t.reflections.length,
@@ -218,6 +245,7 @@ function createSignalThread(input) {
         purpose: String(body.purpose || ''),
         posture: _normalizePosture(body.posture),
         status: 'active',
+        currentStage: _normalizeStage(body.currentStage),
         createdAt: now,
         updatedAt: now,
         summary: String(body.summary || ''),
@@ -230,6 +258,7 @@ function createSignalThread(input) {
         sourceNotes: String(body.sourceNotes || ''),
         reflections: [],
         observations: [],
+        entries: [],
         compression: '',
         tags: _normalizeTags(body.tags),
         sessionIds: _normalizeSessionIds(body.sessionIds),
@@ -249,6 +278,7 @@ function updateSignalThread(id, patch) {
     if (typeof data.purpose === 'string') existing.purpose = data.purpose;
     if (typeof data.posture === 'string') existing.posture = _normalizePosture(data.posture);
     if (typeof data.status === 'string') existing.status = _normalizeStatus(data.status);
+    if (typeof data.currentStage === 'string') existing.currentStage = _normalizeStage(data.currentStage);
     if (typeof data.summary === 'string') existing.summary = data.summary;
     if (typeof data.currentSituation === 'string') existing.currentSituation = data.currentSituation;
     if (typeof data.openPressure === 'string') {
@@ -318,6 +348,26 @@ function addObservation(threadId, content) {
         content: text,
     };
     thread.observations.push(entry);
+    thread.updatedAt = entry.timestamp;
+    saveSignalThread(thread);
+    return entry;
+}
+
+function addFieldLogEntry(threadId, stage, content) {
+    const thread = loadSignalThread(threadId);
+    if (!thread) return null;
+    const normalizedStage = String(stage || '').trim().toLowerCase();
+    if (!SIGNAL_THREAD_STAGES.includes(normalizedStage)) throw new Error('Invalid spiral stage');
+    const text = String(content || '').trim();
+    if (!text) throw new Error('Field Log content is required');
+
+    const entry = {
+        id: 'field-log-' + crypto.randomUUID(),
+        stage: normalizedStage,
+        timestamp: _nowIso(),
+        content: text,
+    };
+    thread.entries.push(entry);
     thread.updatedAt = entry.timestamp;
     saveSignalThread(thread);
     return entry;
@@ -560,6 +610,7 @@ function exportSignalThreadMarkdown(thread) {
     lines.push('Purpose: ' + String(t.purpose || ''));
     lines.push('Posture: ' + (t.posture || ''));
     lines.push('Status: ' + (t.status || ''));
+    lines.push('Current Stage: ' + (t.currentStage || 'observe'));
     lines.push('Tags: ' + (Array.isArray(t.tags) && t.tags.length ? t.tags.join(', ') : ''));
     lines.push('Thread Note: ' + String(t.summary || ''));
     lines.push('Created: ' + (t.createdAt || ''));
@@ -613,6 +664,15 @@ function exportSignalThreadMarkdown(thread) {
         lines.push(String(latestCycle.reflection || ''));
         lines.push('');
     }
+    lines.push('## Field Log');
+    const fieldLog = Array.isArray(t.entries) ? t.entries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
+    if (fieldLog.length === 0) lines.push('');
+    fieldLog.forEach(entry => {
+        lines.push('- ' + String(entry.timestamp || '') + ' · ' + String(entry.stage || 'observe'));
+        lines.push('');
+        lines.push(String(entry.content || ''));
+        lines.push('');
+    });
     lines.push('## Recent Observations');
     const obs = Array.isArray(t.observations) ? t.observations.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
     if (obs.length === 0) lines.push('');
@@ -692,6 +752,7 @@ function exportSignalThreadBrief(thread) {
     lines.push('Purpose: ' + String(t.purpose || '').trim());
     lines.push('Posture: ' + String(t.posture || ''));
     lines.push('Status: ' + String(t.status || ''));
+    lines.push('Current Stage: ' + String(t.currentStage || 'observe'));
     lines.push('Tags: ' + (Array.isArray(t.tags) && t.tags.length ? t.tags.join(', ') : ''));
     lines.push('Thread Note: ' + String(t.summary || '').trim());
     lines.push('Last Updated: ' + String(t.updatedAt || ''));
@@ -726,6 +787,8 @@ function exportSignalThreadBrief(thread) {
     lines.push('');
     lines.push(entryList('Recent Reflections', t.reflections));
     lines.push('');
+    lines.push(entryList('Field Log', t.entries));
+    lines.push('');
     lines.push('Saga Cycles:');
     const cycles = _deriveSagaCycles(t);
     if (cycles.length === 0) {
@@ -756,6 +819,7 @@ function exportSignalThreadBrief(thread) {
 module.exports = {
     SIGNAL_THREAD_POSTURES,
     SIGNAL_THREAD_STATUSES,
+    SIGNAL_THREAD_STAGES,
     SAGA_CYCLE_MODES,
     normalizeSignalThread,
     listSignalThreads,
@@ -767,6 +831,7 @@ module.exports = {
     findSignalThreadsBySessionId,
     addReflection,
     addObservation,
+    addFieldLogEntry,
     setCompression,
     addOpenPressure,
     addCarryForwardEntry,

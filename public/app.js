@@ -777,7 +777,7 @@ function renderSignalThreadEntries(host, entries) {
 
         const time = document.createElement('div');
         time.className = 'signal-thread-entry-time';
-        time.textContent = entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '';
+        time.textContent = (entry && entry.stage ? String(entry.stage) + ' · ' : '') + (entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '');
         if (entry && entry.timestamp) time.title = String(entry.timestamp);
 
         const content = document.createElement('div');
@@ -973,6 +973,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     const titleInput = document.getElementById('signal-thread-title-input');
     const postureSelect = document.getElementById('signal-thread-posture-select');
     const statusSelect = document.getElementById('signal-thread-status-select');
+    const stageSelect = document.getElementById('signal-thread-stage-select');
     const tagsInput = document.getElementById('signal-thread-tags-input');
     const purposeInput = document.getElementById('signal-thread-purpose-input');
     const summaryInput = document.getElementById('signal-thread-summary-input');
@@ -985,6 +986,7 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (titleInput) titleInput.value = thread && thread.title ? thread.title : '';
     if (postureSelect) postureSelect.value = thread && thread.posture ? thread.posture : 'exploratory';
     if (statusSelect) statusSelect.value = thread && thread.status ? thread.status : 'active';
+    if (stageSelect) stageSelect.value = thread && thread.currentStage ? thread.currentStage : 'observe';
     if (tagsInput) tagsInput.value = thread && Array.isArray(thread.tags) ? thread.tags.join(', ') : '';
     if (purposeInput) purposeInput.value = thread && typeof thread.purpose === 'string' ? thread.purpose : '';
     if (summaryInput) summaryInput.value = thread && typeof thread.summary === 'string' ? thread.summary : '';
@@ -1000,8 +1002,10 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
 
     const reflectionsHost = document.getElementById('signal-thread-reflections');
     const observationsHost = document.getElementById('signal-thread-observations');
+    const fieldLogHost = document.getElementById('signal-thread-field-log');
     renderSignalThreadEntries(reflectionsHost, thread && Array.isArray(thread.reflections) ? thread.reflections : []);
     renderSignalThreadEntries(observationsHost, thread && Array.isArray(thread.observations) ? thread.observations : []);
+    renderSignalThreadEntries(fieldLogHost, thread && Array.isArray(thread.entries) ? thread.entries : []);
 
     const sagaCyclesHost = document.getElementById('signal-thread-saga-cycles');
     renderSignalThreadSagaCycles(sagaCyclesHost, thread);
@@ -1036,6 +1040,7 @@ function _readSignalThreadEditorPayload() {
     const titleInput = document.getElementById('signal-thread-title-input');
     const postureSelect = document.getElementById('signal-thread-posture-select');
     const statusSelect = document.getElementById('signal-thread-status-select');
+    const stageSelect = document.getElementById('signal-thread-stage-select');
     const tagsInput = document.getElementById('signal-thread-tags-input');
     const purposeInput = document.getElementById('signal-thread-purpose-input');
     const summaryInput = document.getElementById('signal-thread-summary-input');
@@ -1047,6 +1052,7 @@ function _readSignalThreadEditorPayload() {
     const title = titleInput ? titleInput.value : '';
     const posture = postureSelect ? postureSelect.value : 'exploratory';
     const status = statusSelect ? statusSelect.value : 'active';
+    const currentStage = stageSelect ? stageSelect.value : 'observe';
     const purpose = purposeInput ? purposeInput.value : '';
     const summary = summaryInput ? summaryInput.value : '';
     const currentSituation = situationInput ? situationInput.value : '';
@@ -1059,6 +1065,7 @@ function _readSignalThreadEditorPayload() {
         title,
         posture,
         status,
+        currentStage,
         purpose,
         summary,
         currentSituation,
@@ -1087,6 +1094,7 @@ async function persistActiveSignalThreadFromEditor({ createIfMissing = false } =
                     title,
                     purpose: payload.purpose,
                     posture: payload.posture,
+                    currentStage: payload.currentStage,
                     summary: payload.summary,
                     tags: payload.tags,
                     currentSituation: payload.currentSituation,
@@ -1110,6 +1118,7 @@ async function persistActiveSignalThreadFromEditor({ createIfMissing = false } =
                 purpose: payload.purpose,
                 posture: payload.posture,
                 status: payload.status,
+                currentStage: payload.currentStage,
                 summary: payload.summary,
                 currentSituation: payload.currentSituation,
                 openPressure: payload.openPressure,
@@ -1184,10 +1193,14 @@ function renderSignalThreadsList(host, threads) {
         posture.textContent = 'posture: ' + String(t.posture || 'exploratory');
         const status = document.createElement('span');
         status.textContent = 'status: ' + String(t.status || 'active');
+        const stage = document.createElement('span');
+        stage.className = 'signal-thread-stage-badge';
+        stage.textContent = String(t.currentStage || 'observe');
         const updated = document.createElement('span');
         updated.textContent = t.updatedAt ? ('updated ' + formatRelativeTime(t.updatedAt)) : '';
         meta.appendChild(posture);
         meta.appendChild(status);
+        meta.appendChild(stage);
         if (updated.textContent) meta.appendChild(updated);
 
         row.appendChild(title);
@@ -1238,6 +1251,7 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
             purpose: '',
             posture: 'exploratory',
             status: 'active',
+            currentStage: 'observe',
             summary: '',
             currentSituation: '',
             openPressure: '',
@@ -1261,14 +1275,14 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
 }
 
 async function saveActiveSignalThread() {
-    const { title, posture, status, purpose, summary, currentSituation, openPressure, compression, sourceNotes, tags } = _readSignalThreadEditorPayload();
+    const { title, posture, status, currentStage, purpose, summary, currentSituation, openPressure, compression, sourceNotes, tags } = _readSignalThreadEditorPayload();
 
     try {
         if (!_activeSignalThreadId) {
             const res = await fetch('/api/signal-threads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, purpose, posture, summary, tags, currentSituation, openPressure, sourceNotes }),
+                body: JSON.stringify({ title, purpose, posture, currentStage, summary, tags, currentSituation, openPressure, sourceNotes }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data || !data.success || !data.thread) {
@@ -1285,7 +1299,7 @@ async function saveActiveSignalThread() {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, purpose, posture, status, summary, currentSituation, openPressure, compression, sourceNotes, tags }),
+            body: JSON.stringify({ title, purpose, posture, status, currentStage, summary, currentSituation, openPressure, compression, sourceNotes, tags }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success || !data.thread) {
@@ -1354,6 +1368,30 @@ async function addObservationToActiveThread() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success) {
             showFlashMessage(data && data.error ? data.error : 'Could not add observation.');
+            return;
+        }
+        if (input) input.value = '';
+        await refreshSignalThreadsOverlay({ createNew: false });
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function addFieldLogEntryToActiveThread() {
+    if (!_activeSignalThreadId) return;
+    const input = document.getElementById('signal-thread-field-log-input');
+    const stageSelect = document.getElementById('signal-thread-stage-select');
+    const content = input ? input.value : '';
+    if (!String(content || '').trim()) return;
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/entries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stage: stageSelect ? stageSelect.value : 'observe', content }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.success) {
+            showFlashMessage(data && data.error ? data.error : 'Could not add Field Log entry.');
             return;
         }
         if (input) input.value = '';
@@ -10383,6 +10421,9 @@ async function launchOllama(runtimeId) {
 
     const addObservationBtn = document.getElementById('signal-thread-add-observation-btn');
     if (addObservationBtn) addObservationBtn.addEventListener('click', addObservationToActiveThread);
+
+    const addFieldLogBtn = document.getElementById('signal-thread-add-field-log-btn');
+    if (addFieldLogBtn) addFieldLogBtn.addEventListener('click', addFieldLogEntryToActiveThread);
 
     const sagaOverlay = document.getElementById('saga-smith-overlay');
     const sagaClose = document.getElementById('saga-smith-close');
