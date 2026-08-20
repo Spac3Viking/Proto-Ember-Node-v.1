@@ -129,6 +129,7 @@ router.put('/api/signal-threads/:id', writeLimiter, (req, res) => {
         if (!SIGNAL_THREAD_STAGES.includes(stage)) {
             return res.status(400).json({ error: 'Invalid spiral stage' });
         }
+        patch.currentStage = stage;
     }
 
     const thread = updateSignalThread(req.params.id, patch);
