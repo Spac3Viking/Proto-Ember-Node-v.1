@@ -131,6 +131,29 @@ describe('Phase 22B — workspace continuity', () => {
         expect((await request(app).post('/api/workspace/migrate-sessions').send()).status).toBe(500);
     });
 
+    test('recognizes v127 migration tracking and conservatively retains its threads on rollback', async () => {
+        const { app } = require('../app/server');
+        const session = await request(app).post('/api/sessions').send({ title: 'Legacy migration' });
+        const sessionId = session.body.session.id;
+        const threadId = 'thread-v127-migration';
+        const tracking = path.join(dataRoot, 'system', 'workspace-migration.json');
+        const threadPath = path.join(dataRoot, 'system', 'signal-threads', threadId + '.json');
+        fs.mkdirSync(path.dirname(threadPath), { recursive: true });
+        fs.writeFileSync(threadPath, JSON.stringify({
+            id: threadId, title: 'Legacy migration', posture: 'practical', currentStage: 'observe',
+            createdAt: session.body.session.createdAt, updatedAt: session.body.session.updatedAt, sessionIds: [sessionId],
+        }));
+        fs.writeFileSync(tracking, JSON.stringify({
+            migratedSessionIds: [sessionId],
+            created: [{ sessionId, threadId }],
+        }));
+
+        expect((await request(app).post('/api/workspace/migrate-sessions').send()).body.created).toHaveLength(0);
+        expect((await request(app).post('/api/workspace/rollback-session-migration').send()).body.rolledBack).toHaveLength(0);
+        expect((await request(app).get('/api/signal-threads/' + threadId)).status).toBe(200);
+        expect((await request(app).post('/api/workspace/migrate-sessions').send()).body.created).toHaveLength(0);
+    });
+
     test('invalid archives and restore failures retain the existing installation', async () => {
         const { app } = require('../app/server');
         const created = await request(app).post('/api/signal-threads').send({ title: 'Safe', posture: 'practical' });
@@ -161,5 +184,27 @@ describe('Phase 22B — workspace continuity', () => {
         await request(app).post('/api/signal-threads/' + id + '/versions/' + versions.body.versions[0].id + '/restore').send();
         expect((await request(app).get('/api/signal-threads/' + id)).body.thread.title).toBe('Before');
         expect((await request(app).get('/api/signal-threads/' + id + '/versions')).body.versions.length).toBeGreaterThan(1);
+    });
+
+    test('restores v127 timestamp-named versions without replacing the displaced record', async () => {
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/signal-threads').send({ title: 'Current', posture: 'practical' });
+        const id = created.body.thread.id;
+        const versionId = '1767225600000';
+        const directory = path.join(dataRoot, 'system', 'signal-thread-versions', id);
+        fs.mkdirSync(directory, { recursive: true });
+        fs.writeFileSync(path.join(directory, versionId + '.json'), JSON.stringify({
+            ...created.body.thread,
+            title: 'v127 record',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        }));
+
+        const versions = await request(app).get('/api/signal-threads/' + id + '/versions');
+        expect(versions.body.versions.map(version => version.id)).toContain(versionId);
+        const restored = await request(app).post('/api/signal-threads/' + id + '/versions/' + versionId + '/restore').send();
+        expect(restored.status).toBe(200);
+        expect(restored.body.thread.title).toBe('v127 record');
+        expect((await request(app).get('/api/signal-threads/' + id + '/versions')).body.versions
+            .some(version => version.title === 'Current')).toBe(true);
     });
 });
