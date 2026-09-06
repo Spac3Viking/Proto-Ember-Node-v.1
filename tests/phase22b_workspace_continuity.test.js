@@ -67,14 +67,14 @@ describe('Phase 22B — workspace continuity', () => {
         const { app } = require('../app/server');
         const session = await request(app).post('/api/sessions').send({ title: 'Original title' });
         const sessionId = session.body.session.id;
-        await request(app).put('/api/sessions/' + sessionId).send({ currentStage: 'relate' });
+        await request(app).put('/api/sessions/' + sessionId).send({ currentStage: 'reflect' });
         const source = (await request(app).get('/api/sessions/' + sessionId)).body.session;
         const migration = await request(app).post('/api/workspace/migrate-sessions').send();
         const threadId = migration.body.created[0].threadId;
         const migrated = (await request(app).get('/api/signal-threads/' + threadId)).body.thread;
         expect(migrated.createdAt).toBe(source.createdAt);
         expect(migrated.updatedAt).toBe(source.updatedAt);
-        expect(migrated.currentStage).toBe('relate');
+        expect(migrated.currentStage).toBe('reflect');
         expect(migrated.sessionIds).toContain(sessionId);
 
         await request(app).put('/api/signal-threads/' + threadId).send({ title: 'Later title', currentStage: 'act' });
