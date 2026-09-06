@@ -39,6 +39,10 @@ const {
     exportSignalThreadMarkdown,
     exportSignalThreadBrief,
 } = require('../signalThreads');
+const {
+    listCheckpoints, loadCheckpoint, rememberThread, updateCheckpoint,
+    listRelations, relate, migrateSessions, rollbackMigration, createBackup, restoreBackup,
+} = require('../workspaceContinuity');
 const { loadSession } = require('../sessions');
 const { isValidStorageId } = require('../safeStorageId');
 const { linkSessionToThread, threadHasLinkedSessions } = require('../continuityContext');
@@ -172,7 +176,10 @@ router.post('/api/signal-threads/:id/observations', writeLimiter, (req, res) => 
 
 router.post('/api/signal-threads/:id/entries', writeLimiter, (req, res) => {
     try {
-        const entry = addFieldLogEntry(req.params.id, req.body && req.body.stage, req.body && req.body.content);
+        const entry = addFieldLogEntry(req.params.id, req.body && req.body.stage, req.body && req.body.content, {
+            kind: req.body && req.body.kind,
+            provenance: req.body && req.body.provenance,
+        });
         if (!entry) return res.status(404).json({ error: 'Signal Thread not found' });
         res.json({ success: true, entry });
     } catch (err) {
@@ -333,6 +340,55 @@ router.get('/api/signal-threads/:id/brief', readLimiter, (req, res) => {
     const brief = exportSignalThreadBrief(thread);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(brief);
+});
+
+router.post('/api/signal-threads/:id/remember', writeLimiter, (req, res) => {
+    const checkpoint = rememberThread(req.params.id, req.body && req.body.content);
+    if (!checkpoint) return res.status(404).json({ error: 'Signal Thread not found' });
+    res.json({ success: true, checkpoint });
+});
+
+router.get('/api/hearth/checkpoints', readLimiter, (req, res) => res.json({ checkpoints: listCheckpoints() }));
+
+router.get('/api/hearth/checkpoints/:id', readLimiter, (req, res) => {
+    const checkpoint = loadCheckpoint(req.params.id);
+    if (!checkpoint) return res.status(404).json({ error: 'Hearth checkpoint not found' });
+    res.json({ checkpoint });
+});
+
+router.put('/api/hearth/checkpoints/:id', writeLimiter, (req, res) => {
+    const checkpoint = updateCheckpoint(req.params.id, req.body || {});
+    if (!checkpoint) return res.status(404).json({ error: 'Hearth checkpoint not found' });
+    res.json({ success: true, checkpoint });
+});
+
+router.get('/api/workspace/relations', readLimiter, (req, res) => {
+    const subject = req.query.type && req.query.id ? { type: String(req.query.type), id: String(req.query.id) } : null;
+    res.json({ relations: listRelations(subject) });
+});
+
+router.post('/api/workspace/relations', writeLimiter, (req, res) => {
+    try {
+        res.json({ success: true, relation: relate(req.body && req.body.from, req.body && req.body.to) });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/api/workspace/migrate-sessions', writeLimiter, (req, res) => res.json({ success: true, ...migrateSessions() }));
+router.post('/api/workspace/rollback-session-migration', writeLimiter, (req, res) => res.json({ success: true, ...rollbackMigration() }));
+
+router.post('/api/workspace/backup', writeLimiter, (req, res) => {
+    const file = createBackup();
+    res.download(file, 'ember-node-backup.zip');
+});
+
+router.post('/api/workspace/restore', writeLimiter, (req, res) => {
+    try {
+        res.json({ success: true, ...restoreBackup(req.body && req.body.file) });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
 });
 
 module.exports = router;
