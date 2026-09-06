@@ -23,6 +23,7 @@ const SESSION_STAGES = Object.freeze([
     'act',
     'refine',
     'remember',
+    'relate',
 ]);
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -317,6 +318,10 @@ const STAGE_QUESTIONS = Object.freeze({
         'What should be remembered?',
         'What remains unresolved?',
         'What is worth carrying forward?',
+    ],
+    relate: [
+        'What connection should be retained?',
+        'What should this work remain linked to?',
     ],
 });
 

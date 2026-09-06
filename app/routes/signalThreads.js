@@ -38,6 +38,8 @@ const {
     saveSagaCycle,
     exportSignalThreadMarkdown,
     exportSignalThreadBrief,
+    listSignalThreadVersions,
+    restoreSignalThreadVersion,
 } = require('../signalThreads');
 const {
     listCheckpoints, loadCheckpoint, rememberThread, updateCheckpoint,
@@ -340,6 +342,25 @@ router.get('/api/signal-threads/:id/brief', readLimiter, (req, res) => {
     const brief = exportSignalThreadBrief(thread);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(brief);
+});
+
+router.get('/api/signal-threads/:id/versions', readLimiter, (req, res) => {
+    try {
+        if (!loadSignalThread(req.params.id)) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({ versions: listSignalThreadVersions(req.params.id) });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/api/signal-threads/:id/versions/:versionId/restore', writeLimiter, (req, res) => {
+    try {
+        const thread = restoreSignalThreadVersion(req.params.id, req.params.versionId);
+        if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({ success: true, thread });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
 });
 
 router.post('/api/signal-threads/:id/remember', writeLimiter, (req, res) => {

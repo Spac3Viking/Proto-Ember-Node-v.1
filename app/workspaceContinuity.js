@@ -23,6 +23,52 @@ function atomicWrite(file, value) {
     fs.renameSync(temp, file);
 }
 
+function readMigrationState() {
+    if (!fs.existsSync(MIGRATION_PATH)) return { version: 1, mappings: [] };
+    let state;
+    try {
+        state = JSON.parse(fs.readFileSync(MIGRATION_PATH, 'utf8'));
+    } catch {
+        throw new Error('Migration tracking is corrupt');
+    }
+    if (!state || state.version !== 1 || !Array.isArray(state.mappings) ||
+        state.mappings.some(item => !item || typeof item.sessionId !== 'string' ||
+            typeof item.threadId !== 'string' || typeof item.status !== 'string' ||
+            !['pending', 'complete'].includes(item.status) ||
+            (item.status === 'complete' && typeof item.baseline !== 'string'))) {
+        throw new Error('Migration tracking is corrupt');
+    }
+    return state;
+}
+
+function threadFingerprint(thread) {
+    return crypto.createHash('sha256').update(JSON.stringify(thread)).digest('hex');
+}
+
+function migratedThread(session, threadId) {
+    const entries = Array.isArray(session.entries) ? session.entries
+        .filter(entry => String(entry.notes || '').trim())
+        .map(entry => ({
+            id: 'migrated-' + crypto.randomUUID(),
+            stage: entry.stage,
+            timestamp: entry.completedAt || session.updatedAt,
+            content: entry.notes,
+            kind: 'note',
+            provenance: { type: 'session', id: session.id },
+        })) : [];
+    return {
+        id: threadId,
+        title: session.title,
+        posture: 'practical',
+        currentStage: session.currentStage,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        sourceNotes: 'Migrated from Session ' + session.id,
+        entries,
+        sessionIds: [session.id],
+    };
+}
+
 function checkpointPath(id) {
     return path.join(CHECKPOINTS_DIR, String(id).replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
 }
@@ -89,46 +135,50 @@ function relate(from, to) {
 }
 
 function migrateSessions() {
-    const prior = readJson(MIGRATION_PATH, { migratedSessionIds: [] });
-    const migrated = new Set(prior.migratedSessionIds || []);
-    const historicalCreated = Array.isArray(prior.created) ? prior.created : [];
+    const state = readMigrationState();
     const created = [];
     listSessions().forEach(summary => {
-        if (migrated.has(summary.id)) return;
+        let mapping = state.mappings.find(item => item.sessionId === summary.id);
+        if (mapping && mapping.status === 'complete' && loadSignalThread(mapping.threadId)) return;
         const session = loadSession(summary.id);
         if (!session) return;
-        const thread = createSignalThread({ title: session.title, posture: 'practical', currentStage: session.currentStage, sourceNotes: 'Migrated from Session ' + session.id });
-        session.entries.forEach(entry => {
-            if (String(entry.notes || '').trim()) {
-                const live = loadSignalThread(thread.id);
-                live.entries.push({ id: 'migrated-' + crypto.randomUUID(), stage: entry.stage, timestamp: entry.completedAt || session.updatedAt, content: entry.notes, kind: 'note', provenance: { type: 'session', id: session.id } });
-                live.currentStage = entry.stage;
-                live.updatedAt = entry.completedAt || session.updatedAt;
-                saveSignalThread(live);
-            }
-        });
-        migrated.add(summary.id);
-        created.push({ sessionId: summary.id, threadId: thread.id });
+        if (!mapping) {
+            mapping = { sessionId: session.id, threadId: 'thread-' + crypto.randomUUID(), status: 'pending' };
+            state.mappings.push(mapping);
+            atomicWrite(MIGRATION_PATH, state);
+        }
+        let thread = loadSignalThread(mapping.threadId);
+        if (!thread) thread = saveSignalThread(migratedThread(session, mapping.threadId));
+        mapping.status = 'complete';
+        mapping.baseline = threadFingerprint(thread);
+        atomicWrite(MIGRATION_PATH, state);
+        created.push({ sessionId: session.id, threadId: thread.id });
     });
-    atomicWrite(MIGRATION_PATH, {
-        migratedSessionIds: Array.from(migrated),
-        created: historicalCreated.concat(created),
-        updatedAt: new Date().toISOString(),
-    });
+    state.updatedAt = new Date().toISOString();
+    atomicWrite(MIGRATION_PATH, state);
     return { created, skipped: listSessions().length - created.length };
 }
 
 function rollbackMigration() {
-    const state = readJson(MIGRATION_PATH, { created: [] });
+    const state = readMigrationState();
     const rolledBack = [];
-    (state.created || []).forEach(item => {
+    const retained = [];
+    state.mappings.forEach(item => {
         const thread = loadSignalThread(item.threadId);
-        if (thread && thread.entries.every(entry => String(entry.id).startsWith('migrated-'))) {
+        const hasReferences = listRelations().some(relation =>
+            (relation.from && relation.from.type === 'thread' && relation.from.id === item.threadId) ||
+            (relation.to && relation.to.type === 'thread' && relation.to.id === item.threadId)) ||
+            listCheckpoints().some(checkpoint => checkpoint.origin && checkpoint.origin.threadId === item.threadId);
+        if (thread && item.status === 'complete' && threadFingerprint(thread) === item.baseline && !hasReferences) {
             fs.rmSync(path.join(SYSTEM_DIR, 'signal-threads', item.threadId + '.json'), { force: true });
             rolledBack.push(item.threadId);
+        } else {
+            retained.push(item);
         }
     });
-    atomicWrite(MIGRATION_PATH, { migratedSessionIds: [], created: [], rolledBackAt: new Date().toISOString() });
+    state.mappings = retained;
+    state.rolledBackAt = new Date().toISOString();
+    atomicWrite(MIGRATION_PATH, state);
     return { rolledBack };
 }
 
@@ -136,25 +186,62 @@ function createBackup() {
     fs.mkdirSync(EXPORTS_DIR, { recursive: true });
     const file = path.join(EXPORTS_DIR, 'ember-node-backup-' + Date.now() + '.zip');
     const zip = new AdmZip();
-    zip.addLocalFolder(DATA_ROOT, 'data');
+    const walk = directory => fs.readdirSync(directory, { withFileTypes: true }).forEach(entry => {
+        const source = path.join(directory, entry.name);
+        const relative = path.relative(DATA_ROOT, source);
+        if (relative === 'exports' || relative.startsWith('exports' + path.sep) ||
+            entry.name.endsWith('.tmp') || entry.name.includes('.restore-')) return;
+        if (entry.isDirectory()) return walk(source);
+        if (!entry.isFile()) return;
+        zip.addFile(path.posix.join('data', relative.split(path.sep).join('/')), fs.readFileSync(source));
+    });
+    if (fs.existsSync(DATA_ROOT)) walk(DATA_ROOT);
     zip.writeZip(file);
     return file;
+}
+
+function validateBackup(zip) {
+    const names = new Set();
+    const entries = zip.getEntries();
+    if (!entries.length) throw new Error('Backup archive is empty');
+    entries.forEach(entry => {
+        const name = String(entry.entryName || '').replace(/\\/g, '/');
+        if (!name.startsWith('data/') || name.includes('\0') || name.split('/').includes('..') ||
+            name.startsWith('/') || names.has(name)) throw new Error('Invalid backup entry: ' + name);
+        names.add(name);
+        if (!entry.isDirectory) {
+            try { entry.getData(); } catch { throw new Error('Unreadable backup entry: ' + name); }
+        }
+    });
 }
 
 function restoreBackup(file) {
     const resolved = path.resolve(file);
     if (!resolved.startsWith(path.resolve(EXPORTS_DIR) + path.sep) || !fs.existsSync(resolved)) throw new Error('Backup file not found');
     const zip = new AdmZip(resolved);
-    const target = path.resolve(DATA_ROOT) + path.sep;
-    zip.getEntries().forEach(entry => {
-        const name = entry.entryName.replace(/^data[\\/]/, '');
-        if (!name || entry.isDirectory || name.includes('..')) return;
-        const destination = path.resolve(DATA_ROOT, name);
-        if (!destination.startsWith(target)) throw new Error('Unsafe backup entry');
-        fs.mkdirSync(path.dirname(destination), { recursive: true });
-        fs.writeFileSync(destination, entry.getData());
-    });
-    return { restored: true };
+    validateBackup(zip);
+    const stage = DATA_ROOT + '.restore-stage-' + crypto.randomUUID();
+    const prior = DATA_ROOT + '.pre-restore-' + crypto.randomUUID();
+    try {
+        fs.mkdirSync(stage, { recursive: true });
+        zip.getEntries().forEach(entry => {
+            if (entry.isDirectory) return;
+            const name = entry.entryName.slice('data/'.length);
+            const destination = path.join(stage, name);
+            fs.mkdirSync(path.dirname(destination), { recursive: true });
+            fs.writeFileSync(destination, entry.getData());
+        });
+        if (fs.existsSync(DATA_ROOT)) fs.renameSync(DATA_ROOT, prior);
+        fs.renameSync(stage, DATA_ROOT);
+        return { restored: true, mode: 'replace', recoveryPath: prior };
+    } catch (error) {
+        try {
+            if (!fs.existsSync(DATA_ROOT) && fs.existsSync(prior)) fs.renameSync(prior, DATA_ROOT);
+        } catch { /* Preserve the original error. */ }
+        throw new Error('Backup restore failed: ' + error.message);
+    } finally {
+        fs.rmSync(stage, { recursive: true, force: true });
+    }
 }
 
 module.exports = { listCheckpoints, loadCheckpoint, rememberThread, updateCheckpoint, listRelations, relate, migrateSessions, rollbackMigration, createBackup, restoreBackup };
