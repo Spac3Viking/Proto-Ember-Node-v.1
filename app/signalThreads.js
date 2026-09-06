@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const { SIGNAL_THREADS_DIR } = require('./storageConfig');
+const { SIGNAL_THREADS_DIR, SYSTEM_DIR } = require('./storageConfig');
 
 const SIGNAL_THREAD_POSTURES = Object.freeze([
     'exploratory',
@@ -53,6 +53,10 @@ function _safeId(id) {
 
 function _threadPath(id) {
     return path.join(SIGNAL_THREADS_DIR, _safeId(id) + '.json');
+}
+
+function _versionDir(id) {
+    return path.join(SYSTEM_DIR, 'signal-thread-versions', _safeId(id));
 }
 
 function _normalizePosture(posture) {
@@ -143,6 +147,8 @@ function _normalizeFieldLogEntry(entry) {
         stage: _normalizeStage(row.stage),
         timestamp: row.timestamp ? String(row.timestamp) : null,
         content: String(row.content || ''),
+        kind: String(row.kind || 'note'),
+        provenance: row.provenance && typeof row.provenance === 'object' ? row.provenance : null,
     };
 }
 
@@ -177,6 +183,11 @@ function normalizeSignalThread(raw) {
             ? data.carryForwardEntries.map(_normalizeCarryForwardEntry).filter(e => e.content)
             : [],
         sourceNotes: String(data.sourceNotes || ''),
+        sources: Array.isArray(data.sources) ? data.sources.filter(source => source && typeof source === 'object').map(source => ({
+            id: String(source.id || ''),
+            label: String(source.label || ''),
+            type: String(source.type || 'note'),
+        })) : [],
         reflections: Array.isArray(data.reflections) ? data.reflections.map(_normalizeEntry) : [],
         observations: Array.isArray(data.observations) ? data.observations.map(_normalizeEntry) : [],
         entries: Array.isArray(data.entries) ? data.entries.map(_normalizeFieldLogEntry).filter(e => e.content) : [],
@@ -227,7 +238,21 @@ function saveSignalThread(thread) {
     const normalized = normalizeSignalThread(thread);
     if (!normalized.id) throw new Error('Signal Thread id is required');
     _ensureDir();
-    fs.writeFileSync(_threadPath(normalized.id), JSON.stringify(normalized, null, 2), 'utf8');
+    const target = _threadPath(normalized.id);
+    const serialized = JSON.stringify(normalized, null, 2);
+    const temporary = target + '.' + process.pid + '.tmp';
+    if (fs.existsSync(target)) {
+        const versions = _versionDir(normalized.id);
+        fs.mkdirSync(versions, { recursive: true });
+        fs.copyFileSync(target, path.join(versions, Date.now() + '.json'));
+    }
+    try {
+        fs.writeFileSync(temporary, serialized, 'utf8');
+        fs.renameSync(temporary, target);
+    } catch (error) {
+        try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch { /* retain original */ }
+        throw error;
+    }
     return normalized;
 }
 
@@ -256,6 +281,7 @@ function createSignalThread(input) {
             ? body.carryForwardEntries.map(_normalizeCarryForwardEntry).filter(e => e.content)
             : [],
         sourceNotes: String(body.sourceNotes || ''),
+        sources: Array.isArray(body.sources) ? body.sources : [],
         reflections: [],
         observations: [],
         entries: [],
@@ -353,7 +379,7 @@ function addObservation(threadId, content) {
     return entry;
 }
 
-function addFieldLogEntry(threadId, stage, content) {
+function addFieldLogEntry(threadId, stage, content, options = {}) {
     const thread = loadSignalThread(threadId);
     if (!thread) return null;
     const normalizedStage = String(stage || '').trim().toLowerCase();
@@ -366,6 +392,8 @@ function addFieldLogEntry(threadId, stage, content) {
         stage: normalizedStage,
         timestamp: _nowIso(),
         content: text,
+        kind: String(options.kind || 'note'),
+        provenance: options.provenance && typeof options.provenance === 'object' ? options.provenance : null,
     };
     thread.entries.push(entry);
     thread.currentStage = normalizedStage;
