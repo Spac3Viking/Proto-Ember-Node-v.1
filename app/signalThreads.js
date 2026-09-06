@@ -60,7 +60,14 @@ function _versionDir(id) {
 }
 
 function _versionPath(id, versionId) {
-    return path.join(_versionDir(id), _safeId(versionId) + '.json');
+    const directory = path.resolve(_versionDir(id));
+    const target = path.resolve(directory, versionId + '.json');
+    if (!target.startsWith(directory + path.sep)) throw new Error('Invalid Signal Thread version');
+    return target;
+}
+
+function _isValidVersionId(versionId) {
+    return /^(?:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|\d{13})$/i.test(versionId);
 }
 
 function _normalizePosture(posture) {
@@ -268,6 +275,7 @@ function listSignalThreadVersions(id) {
         .filter(file => file.endsWith('.json'))
         .map(file => {
             const versionId = file.slice(0, -5);
+            if (!_isValidVersionId(versionId)) throw new Error('Signal Thread version is corrupt: ' + versionId);
             let record;
             try {
                 record = JSON.parse(fs.readFileSync(_versionPath(id, versionId), 'utf8'));
@@ -285,7 +293,7 @@ function listSignalThreadVersions(id) {
 
 function restoreSignalThreadVersion(id, versionId) {
     const version = String(versionId || '');
-    if (!/^[a-f0-9-]{36}$/i.test(version)) throw new Error('Invalid Signal Thread version');
+    if (!_isValidVersionId(version)) throw new Error('Invalid Signal Thread version');
     if (!loadSignalThread(id)) return null;
     let record;
     try {

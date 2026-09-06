@@ -31,11 +31,28 @@ function readMigrationState() {
     } catch {
         throw new Error('Migration tracking is corrupt');
     }
+    const isMapping = item => item && typeof item.sessionId === 'string' &&
+        typeof item.threadId === 'string' && item.sessionId && item.threadId;
+    if (state && !Object.prototype.hasOwnProperty.call(state, 'version') &&
+        Array.isArray(state.migratedSessionIds) && Array.isArray(state.created) &&
+        state.migratedSessionIds.every(id => typeof id === 'string' && id) &&
+        state.created.every(isMapping)) {
+        return {
+            version: 1,
+            mappings: state.created.map(item => ({
+                sessionId: item.sessionId,
+                threadId: item.threadId,
+                status: 'complete',
+                legacy: true,
+            })),
+            migratedSessionIds: state.migratedSessionIds,
+        };
+    }
     if (!state || state.version !== 1 || !Array.isArray(state.mappings) ||
-        state.mappings.some(item => !item || typeof item.sessionId !== 'string' ||
-            typeof item.threadId !== 'string' || typeof item.status !== 'string' ||
+        state.mappings.some(item => !isMapping(item) || typeof item.status !== 'string' ||
             !['pending', 'complete'].includes(item.status) ||
-            (item.status === 'complete' && typeof item.baseline !== 'string'))) {
+            (item.status === 'complete' && !item.legacy && typeof item.baseline !== 'string') ||
+            (item.legacy && item.legacy !== true))) {
         throw new Error('Migration tracking is corrupt');
     }
     return state;
@@ -136,8 +153,10 @@ function relate(from, to) {
 
 function migrateSessions() {
     const state = readMigrationState();
+    const migratedSessionIds = new Set(Array.isArray(state.migratedSessionIds) ? state.migratedSessionIds : []);
     const created = [];
     listSessions().forEach(summary => {
+        if (migratedSessionIds.has(summary.id)) return;
         let mapping = state.mappings.find(item => item.sessionId === summary.id);
         if (mapping && mapping.status === 'complete' && loadSignalThread(mapping.threadId)) return;
         const session = loadSession(summary.id);
@@ -150,7 +169,7 @@ function migrateSessions() {
         let thread = loadSignalThread(mapping.threadId);
         if (!thread) thread = saveSignalThread(migratedThread(session, mapping.threadId));
         mapping.status = 'complete';
-        mapping.baseline = threadFingerprint(thread);
+        if (!mapping.legacy) mapping.baseline = threadFingerprint(thread);
         atomicWrite(MIGRATION_PATH, state);
         created.push({ sessionId: session.id, threadId: thread.id });
     });
@@ -169,7 +188,8 @@ function rollbackMigration() {
             (relation.from && relation.from.type === 'thread' && relation.from.id === item.threadId) ||
             (relation.to && relation.to.type === 'thread' && relation.to.id === item.threadId)) ||
             listCheckpoints().some(checkpoint => checkpoint.origin && checkpoint.origin.threadId === item.threadId);
-        if (thread && item.status === 'complete' && threadFingerprint(thread) === item.baseline && !hasReferences) {
+        if (thread && item.status === 'complete' && typeof item.baseline === 'string' &&
+            threadFingerprint(thread) === item.baseline && !hasReferences) {
             fs.rmSync(path.join(SYSTEM_DIR, 'signal-threads', item.threadId + '.json'), { force: true });
             rolledBack.push(item.threadId);
         } else {
