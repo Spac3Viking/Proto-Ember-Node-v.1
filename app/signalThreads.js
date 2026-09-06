@@ -59,6 +59,10 @@ function _versionDir(id) {
     return path.join(SYSTEM_DIR, 'signal-thread-versions', _safeId(id));
 }
 
+function _versionPath(id, versionId) {
+    return path.join(_versionDir(id), _safeId(versionId) + '.json');
+}
+
 function _normalizePosture(posture) {
     const value = String(posture || '').trim().toLowerCase();
     return SIGNAL_THREAD_POSTURES.includes(value) ? value : 'exploratory';
@@ -244,8 +248,9 @@ function saveSignalThread(thread) {
     if (fs.existsSync(target)) {
         const versions = _versionDir(normalized.id);
         fs.mkdirSync(versions, { recursive: true });
-        fs.copyFileSync(target, path.join(versions, Date.now() + '.json'));
+        fs.copyFileSync(target, path.join(versions, crypto.randomUUID() + '.json'));
     }
+
     try {
         fs.writeFileSync(temporary, serialized, 'utf8');
         fs.renameSync(temporary, target);
@@ -254,6 +259,44 @@ function saveSignalThread(thread) {
         throw error;
     }
     return normalized;
+}
+
+function listSignalThreadVersions(id) {
+    const directory = _versionDir(id);
+    if (!fs.existsSync(directory)) return [];
+    return fs.readdirSync(directory)
+        .filter(file => file.endsWith('.json'))
+        .map(file => {
+            const versionId = file.slice(0, -5);
+            let record;
+            try {
+                record = JSON.parse(fs.readFileSync(_versionPath(id, versionId), 'utf8'));
+            } catch {
+                throw new Error('Signal Thread version is corrupt: ' + versionId);
+            }
+            if (!record || typeof record !== 'object' || String(record.id) !== String(id)) {
+                throw new Error('Signal Thread version is corrupt: ' + versionId);
+            }
+            const thread = normalizeSignalThread(record);
+            return { id: versionId, title: thread.title, createdAt: thread.createdAt, updatedAt: thread.updatedAt };
+        })
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
+function restoreSignalThreadVersion(id, versionId) {
+    const version = String(versionId || '');
+    if (!/^[a-f0-9-]{36}$/i.test(version)) throw new Error('Invalid Signal Thread version');
+    if (!loadSignalThread(id)) return null;
+    let record;
+    try {
+        record = JSON.parse(fs.readFileSync(_versionPath(id, version), 'utf8'));
+    } catch {
+        throw new Error('Signal Thread version is corrupt or unavailable');
+    }
+    if (!record || typeof record !== 'object' || String(record.id) !== String(id)) {
+        throw new Error('Signal Thread version is corrupt or unavailable');
+    }
+    return saveSignalThread(record);
 }
 
 function createSignalThread(input) {
@@ -855,6 +898,8 @@ module.exports = {
     listSignalThreads,
     loadSignalThread,
     saveSignalThread,
+    listSignalThreadVersions,
+    restoreSignalThreadVersion,
     createSignalThread,
     updateSignalThread,
     deleteSignalThread,

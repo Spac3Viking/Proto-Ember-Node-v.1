@@ -179,3 +179,8 @@ The repository-root installer assets are:
 - `green-fire-library.zip` — Green Fire Machine-Readable Library, package version **2.0.0**.
 
 Both packages install into `archive/packages/` and are available through Reader.
+# Workspace backup recovery
+
+Workspace backups are full **replacement** snapshots: restoring one removes records not present in the backup. To restore a downloaded backup into a fresh installation, set `EMBER_NODE_DATA_ROOT` to the new empty data directory, create its `exports` directory, copy the downloaded ZIP there, then use the workspace restore operation with that local file. The previous data root is retained beside it as a `.pre-restore-<id>` directory until it is manually removed after verification.
+
+Conversation consolidation remains outside the Session migration scope.
