@@ -752,6 +752,40 @@ function recordSentinelDepthUsage(depthId) {
 let _signalThreadsListSnapshot = [];
 let _activeSignalThreadId = null;
 let _activeSignalThread = null;
+const SIGNAL_THREAD_LAST_ACTIVE_KEY = 'ember-node.fieldbook.active-thread';
+const _signalThreadDrafts = new Map();
+
+function signalThreadDraftKey(threadId = _activeSignalThreadId) {
+    return threadId || '__new__';
+}
+
+function setSignalThreadSaveStatus(message) {
+    const status = document.getElementById('signal-thread-save-status');
+    if (status) status.textContent = message;
+}
+
+function saveSignalThreadDraft(threadId = _activeSignalThreadId) {
+    const input = document.getElementById('signal-thread-field-log-input');
+    if (!input) return;
+    const content = input.value;
+    const key = signalThreadDraftKey(threadId);
+    if (content) _signalThreadDrafts.set(key, content);
+    else _signalThreadDrafts.delete(key);
+}
+
+function restoreSignalThreadDraft(threadId = _activeSignalThreadId) {
+    const input = document.getElementById('signal-thread-field-log-input');
+    if (!input) return;
+    input.value = _signalThreadDrafts.get(signalThreadDraftKey(threadId)) || '';
+    setSignalThreadSaveStatus(input.value ? 'Unsaved draft' : 'Saved');
+}
+
+function rememberActiveSignalThread(threadId) {
+    try {
+        if (threadId) window.localStorage.setItem(SIGNAL_THREAD_LAST_ACTIVE_KEY, threadId);
+        else window.localStorage.removeItem(SIGNAL_THREAD_LAST_ACTIVE_KEY);
+    } catch { /* local storage is optional */ }
+}
 
 function parseTagsFromInput(text) {
     return String(text || '')
@@ -777,7 +811,8 @@ function renderSignalThreadEntries(host, entries) {
 
         const time = document.createElement('div');
         time.className = 'signal-thread-entry-time';
-        time.textContent = (entry && entry.stage ? String(entry.stage) + ' · ' : '') + (entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '');
+        const attribution = entry && entry.attribution ? String(entry.attribution) + ' · ' : '';
+        time.textContent = (entry && entry.stage ? String(entry.stage) + ' · ' : '') + attribution + (entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '');
         if (entry && entry.timestamp) time.title = String(entry.timestamp);
 
         const content = document.createElement('div');
@@ -962,8 +997,10 @@ function renderSignalThreadOverviewMeta(host, thread) {
 }
 
 function fillSignalThreadEditor(thread, { createMode = false } = {}) {
+    saveSignalThreadDraft(_activeSignalThreadId);
     _activeSignalThread = thread;
     _activeSignalThreadId = thread && thread.id ? thread.id : null;
+    rememberActiveSignalThread(_activeSignalThreadId);
 
     const empty = document.getElementById('signal-thread-empty');
     const editor = document.getElementById('signal-thread-editor');
@@ -987,6 +1024,10 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (postureSelect) postureSelect.value = thread && thread.posture ? thread.posture : 'exploratory';
     if (statusSelect) statusSelect.value = thread && thread.status ? thread.status : 'active';
     if (stageSelect) stageSelect.value = thread && thread.currentStage ? thread.currentStage : 'observe';
+    document.querySelectorAll('[data-thread-stage]').forEach(button => {
+        const active = button.dataset.threadStage === (stageSelect ? stageSelect.value : 'observe');
+        button.setAttribute('aria-pressed', String(active));
+    });
     if (tagsInput) tagsInput.value = thread && Array.isArray(thread.tags) ? thread.tags.join(', ') : '';
     if (purposeInput) purposeInput.value = thread && typeof thread.purpose === 'string' ? thread.purpose : '';
     if (summaryInput) summaryInput.value = thread && typeof thread.summary === 'string' ? thread.summary : '';
@@ -1011,15 +1052,18 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     renderSignalThreadSagaCycles(sagaCyclesHost, thread);
 
     clearSignalThreadCycleInputs();
+    restoreSignalThreadDraft(_activeSignalThreadId);
 }
 
 function showSignalThreadEmptyState() {
+    saveSignalThreadDraft(_activeSignalThreadId);
     _activeSignalThreadId = null;
     _activeSignalThread = null;
     const empty = document.getElementById('signal-thread-empty');
     const editor = document.getElementById('signal-thread-editor');
     if (empty) empty.style.display = '';
     if (editor) editor.style.display = 'none';
+    rememberActiveSignalThread(null);
 }
 
 function clearSignalThreadCycleInputs() {
@@ -1264,6 +1308,14 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
         return;
     }
 
+    if (!_activeSignalThreadId) {
+        try {
+            const rememberedId = window.localStorage.getItem(SIGNAL_THREAD_LAST_ACTIVE_KEY);
+            if (rememberedId && _signalThreadsListSnapshot.some(thread => thread.id === rememberedId)) {
+                _activeSignalThreadId = rememberedId;
+            }
+        } catch { /* local storage is optional */ }
+    }
     if (_activeSignalThreadId) {
         const thread = await fetchSignalThread(_activeSignalThreadId);
         if (thread) {
@@ -1290,6 +1342,11 @@ async function saveActiveSignalThread() {
                 return;
             }
             _activeSignalThreadId = data.thread.id;
+            const newDraft = _signalThreadDrafts.get('__new__');
+            if (newDraft) {
+                _signalThreadDrafts.set(_activeSignalThreadId, newDraft);
+                _signalThreadDrafts.delete('__new__');
+            }
             showFlashMessage('Thread created.');
             if (compression) await persistActiveSignalThreadFromEditor();
             await refreshSignalThreadsOverlay({ createNew: false });
@@ -1382,9 +1439,11 @@ async function addFieldLogEntryToActiveThread() {
     const input = document.getElementById('signal-thread-field-log-input');
     const stageSelect = document.getElementById('signal-thread-stage-select');
     const content = input ? input.value : '';
+    const threadId = _activeSignalThreadId;
     if (!String(content || '').trim()) return;
     try {
-        const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId) + '/entries', {
+        setSignalThreadSaveStatus('Saving');
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/entries', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ stage: stageSelect ? stageSelect.value : 'observe', content }),
@@ -1392,12 +1451,51 @@ async function addFieldLogEntryToActiveThread() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success) {
             showFlashMessage(data && data.error ? data.error : 'Could not add Field Log entry.');
+            setSignalThreadSaveStatus('Save failed — retry');
             return;
         }
-        if (input) input.value = '';
+        if (_activeSignalThreadId === threadId && input && input.value === content) input.value = '';
+        if (_activeSignalThreadId === threadId) saveSignalThreadDraft(threadId);
+        setSignalThreadSaveStatus(_signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved');
         await refreshSignalThreadsOverlay({ createNew: false });
     } catch {
         showFlashMessage('Could not reach server.');
+        setSignalThreadSaveStatus('Save failed — retry');
+    }
+}
+
+async function setActiveSignalThreadStage(stage) {
+    const selectedStage = String(stage || '').toLowerCase();
+    const stageSelect = document.getElementById('signal-thread-stage-select');
+    if (!stageSelect || !['observe', 'reflect', 'act', 'refine', 'remember', 'relate'].includes(selectedStage)) return;
+    stageSelect.value = selectedStage;
+    document.querySelectorAll('[data-thread-stage]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.threadStage === selectedStage));
+    });
+    if (!_activeSignalThreadId) {
+        setSignalThreadSaveStatus('Create this thread to save its stage');
+        return;
+    }
+    const threadId = _activeSignalThreadId;
+    setSignalThreadSaveStatus('Saving');
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentStage: selectedStage }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || _activeSignalThreadId !== threadId) {
+            setSignalThreadSaveStatus('Save failed — retry');
+            return;
+        }
+        _activeSignalThread = data.thread;
+        setSignalThreadSaveStatus(_signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved');
+        renderSignalThreadsList(document.getElementById('signal-threads-list'), _signalThreadsListSnapshot.map(item =>
+            item.id === threadId ? { ...item, currentStage: selectedStage } : item,
+        ));
+    } catch {
+        setSignalThreadSaveStatus('Save failed — retry');
     }
 }
 
@@ -2024,7 +2122,7 @@ function downloadPlainText(filename, content, contentType = 'text/plain') {
    Room Tab Switching
    ================================================================ */
 
-let _activeRoomId = 'session';
+let _activeRoomId = 'threads';
 
 (function initRoomTabs() {
     const tabs   = document.querySelectorAll('.room-tab');
@@ -2044,6 +2142,10 @@ let _activeRoomId = 'session';
         panels.forEach(p => {
             p.classList.toggle('active', p.id === 'room-' + roomId);
         });
+        const threadsWorkspace = document.getElementById('signal-threads-overlay');
+        if (threadsWorkspace) threadsWorkspace.style.display = roomId === 'threads' ? 'flex' : 'none';
+        if (roomId === 'threads') refreshSignalThreadsOverlay({ createNew: false });
+        if (roomId === 'resources') loadArchiveReaderCatalog();
 
         if (roomId === 'council' && !window._councilLoaded) {
             loadCouncilPanel();
@@ -2062,11 +2164,13 @@ let _activeRoomId = 'session';
             loadHearthTrustedArchive();
             loadHearthRememberedThreads();
         }
+        if (roomId === 'system') openRoomAndSubtab('hearth', 'hearth-system');
     }
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => activateRoom(tab.dataset.room));
     });
+    activateRoom('threads');
 })();
 
 /* ================================================================
@@ -5991,14 +6095,14 @@ function buildArchiveReaderFileButton(entry) {
 }
 
 async function loadArchiveReaderCatalog() {
-    const listEl = document.getElementById('archive-reader-catalog');
-    if (!listEl) return;
-    listEl.innerHTML = '<span class="message-system">Loading Reader documents…</span>';
+    const listEls = Array.from(document.querySelectorAll('#archive-reader-catalog, #resources-reader-catalog'));
+    if (!listEls.length) return;
+    listEls.forEach(listEl => { listEl.innerHTML = '<span class="message-system">Loading Reader documents…</span>'; });
     try {
         const res = await fetch('/api/archive/reader/catalog');
         const data = await res.json();
         if (!res.ok || !data.success) {
-            listEl.innerHTML = '<span class="message-system">Could not load Reader documents.</span>';
+            listEls.forEach(listEl => { listEl.innerHTML = '<span class="message-system">Could not load Reader documents.</span>'; });
             return;
         }
 
@@ -6016,7 +6120,7 @@ async function loadArchiveReaderCatalog() {
         const hasLegacyDocuments = coreFiles.length > 0 || cacheGroups.length > 0;
 
         if (!hasCanonicalDocuments && !hasLegacyDocuments) {
-            listEl.innerHTML = '<span class="message-system">No canonical or legacy archive documents are ready in Reader.</span>';
+            listEls.forEach(listEl => { listEl.innerHTML = '<span class="message-system">No canonical or legacy archive documents are ready in Reader.</span>'; });
             const hint = buildOnboardingHint({
                 key: 'archive-reader-empty',
                 text: 'Guided Orientation can help establish the Reader context.',
@@ -6024,11 +6128,12 @@ async function loadArchiveReaderCatalog() {
                     { label: 'Guided Orientation', onClick: openFirstEmberOverlay },
                 ],
             });
-            if (hint) listEl.appendChild(hint);
+            listEls.forEach(listEl => { if (hint) listEl.appendChild(hint.cloneNode(true)); });
             return;
         }
 
-        listEl.innerHTML = '';
+        listEls.forEach(listEl => { listEl.innerHTML = ''; });
+        listEls.forEach(listEl => {
 
         if (hasCanonicalDocuments) {
             const canonicalTitle = document.createElement('div');
@@ -6105,8 +6210,9 @@ async function loadArchiveReaderCatalog() {
             details.appendChild(filesWrap);
             listEl.appendChild(details);
         });
+        });
     } catch {
-        listEl.innerHTML = '<span class="message-system">Could not load Reader documents.</span>';
+        listEls.forEach(listEl => { listEl.innerHTML = '<span class="message-system">Could not load Reader documents.</span>'; });
     }
 }
 
@@ -10391,6 +10497,12 @@ async function launchOllama(runtimeId) {
         });
     }
 
+    const signalSessionsBtn = document.getElementById('signal-threads-sessions-btn');
+    if (signalSessionsBtn) signalSessionsBtn.addEventListener('click', () => openRoomAndSubtab('session'));
+
+    const systemWorkspaceBtn = document.getElementById('open-system-workspace-btn');
+    if (systemWorkspaceBtn) systemWorkspaceBtn.addEventListener('click', () => openRoomAndSubtab('hearth', 'hearth-system'));
+
     const signalSaveBtn = document.getElementById('signal-thread-save-btn');
     if (signalSaveBtn) signalSaveBtn.addEventListener('click', saveActiveSignalThread);
 
@@ -10424,6 +10536,16 @@ async function launchOllama(runtimeId) {
 
     const addFieldLogBtn = document.getElementById('signal-thread-add-field-log-btn');
     if (addFieldLogBtn) addFieldLogBtn.addEventListener('click', addFieldLogEntryToActiveThread);
+
+    const fieldLogInput = document.getElementById('signal-thread-field-log-input');
+    if (fieldLogInput) fieldLogInput.addEventListener('input', () => {
+        saveSignalThreadDraft();
+        setSignalThreadSaveStatus(fieldLogInput.value ? 'Unsaved draft' : 'Saved');
+    });
+
+    document.querySelectorAll('[data-thread-stage]').forEach(button => {
+        button.addEventListener('click', () => setActiveSignalThreadStage(button.dataset.threadStage));
+    });
 
     const sagaOverlay = document.getElementById('saga-smith-overlay');
     const sagaClose = document.getElementById('saga-smith-close');

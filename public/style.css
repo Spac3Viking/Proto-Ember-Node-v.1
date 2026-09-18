@@ -302,6 +302,30 @@ input:focus, textarea:focus {
   background: hsla(120, 15%, 3%, 0.7);
 }
 
+.secondary-room-nav {
+  display: flex;
+  gap: 0.45rem;
+  padding: 0.45rem 2rem;
+  border-bottom: 1px solid hsla(140, 100%, 70%, 0.1);
+  background: hsla(120, 15%, 3%, 0.7);
+}
+
+.secondary-room-tab {
+  font-size: 0.7rem;
+  padding: 0.35rem 0.55rem;
+}
+
+.fieldbook-resources {
+  max-width: 980px;
+}
+
+.fieldbook-resource-heading {
+  font-family: var(--gf-font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  margin-top: 0;
+}
+
 .room-tab {
   font-family: var(--gf-font-display);
   font-size: 0.8rem;
@@ -2564,7 +2588,7 @@ button.secondary:disabled {
 }
 
 .signal-threads-panel {
-  width: min(980px, 96vw);
+  width: min(1240px, 100vw);
 }
 
 .signal-threads-body {
@@ -2617,7 +2641,7 @@ button.secondary:disabled {
 
 .signal-thread-list-item {
   border: 1px solid hsla(140, 100%, 70%, 0.08);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 0.55rem 0.65rem;
   background: rgba(0, 0, 0, 0.12);
   cursor: pointer;
@@ -2649,7 +2673,7 @@ button.secondary:disabled {
 
 .signal-thread-stage-badge {
   border: 1px solid hsla(38, 100%, 70%, 0.35);
-  border-radius: 999px;
+  border-radius: 0;
   color: var(--gf-wire-amber);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
@@ -2822,6 +2846,47 @@ button.secondary:disabled {
   line-height: 1.35;
 }
 
+.fieldbook-stage-controls {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.fieldbook-stage-controls button {
+  border: 1px solid hsla(140, 100%, 70%, 0.3);
+  background: transparent;
+  color: var(--gf-body-green);
+  cursor: pointer;
+  font-family: var(--gf-font-display);
+  font-size: 0.72rem;
+  padding: 0.45rem 0.25rem;
+}
+
+.fieldbook-stage-controls button[aria-pressed="true"] {
+  border-color: var(--gf-wire-amber);
+  color: var(--gf-wire-amber);
+}
+
+.fieldbook-workspace .signal-thread-anchor-panel,
+.fieldbook-workspace .signal-thread-cycle-panel,
+.fieldbook-workspace .signal-thread-pressure-panel {
+  display: none;
+}
+
+.fieldbook-workspace #signal-thread-overview-details .signal-thread-grid > .signal-thread-field:nth-child(2),
+.fieldbook-workspace #signal-thread-overview-details .signal-thread-grid > .signal-thread-field:nth-child(4),
+.fieldbook-workspace #signal-thread-overview-details .signal-thread-grid > .signal-thread-field:nth-child(5),
+.fieldbook-workspace #signal-thread-overview-details .signal-thread-field[style],
+.fieldbook-workspace #signal-thread-overview-meta,
+.fieldbook-workspace #signal-thread-delete-btn {
+  display: none;
+}
+
+.fieldbook-workspace .fieldbook-advanced {
+  margin-top: 0.55rem;
+}
+
 @media (max-width: 860px) {
   .signal-threads-layout {
     flex-direction: column;
@@ -2834,6 +2899,13 @@ button.secondary:disabled {
   }
   .signal-thread-overview-meta {
     grid-template-columns: 1fr;
+  }
+  .fieldbook-stage-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .secondary-room-nav {
+    overflow-x: auto;
+    padding: 0.45rem 1rem;
   }
 }
 
