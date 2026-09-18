@@ -752,14 +752,19 @@ function recordSentinelDepthUsage(depthId) {
 let _signalThreadsListSnapshot = [];
 let _activeSignalThreadId = null;
 let _activeSignalThread = null;
+let _isChatGenerating = false;
 const SIGNAL_THREAD_LAST_ACTIVE_KEY = 'ember-node.fieldbook.active-thread';
 const _signalThreadDrafts = new Map();
+const _signalThreadSaveStates = new Map();
+const _signalThreadPendingEntries = new Set();
+let _signalThreadStageRequest = Promise.resolve();
 
 function signalThreadDraftKey(threadId = _activeSignalThreadId) {
     return threadId || '__new__';
 }
 
 function setSignalThreadSaveStatus(message) {
+    _signalThreadSaveStates.set(signalThreadDraftKey(), message);
     const status = document.getElementById('signal-thread-save-status');
     if (status) status.textContent = message;
 }
@@ -776,8 +781,14 @@ function saveSignalThreadDraft(threadId = _activeSignalThreadId) {
 function restoreSignalThreadDraft(threadId = _activeSignalThreadId) {
     const input = document.getElementById('signal-thread-field-log-input');
     if (!input) return;
-    input.value = _signalThreadDrafts.get(signalThreadDraftKey(threadId)) || '';
-    setSignalThreadSaveStatus(input.value ? 'Unsaved draft' : 'Saved');
+    const key = signalThreadDraftKey(threadId);
+    input.value = _signalThreadDrafts.get(key) || '';
+    const status = _signalThreadSaveStates.get(key);
+    const display = status && status !== 'Saved'
+        ? status
+        : (input.value ? 'Unsaved draft' : 'Saved');
+    const statusEl = document.getElementById('signal-thread-save-status');
+    if (statusEl) statusEl.textContent = display;
 }
 
 function rememberActiveSignalThread(threadId) {
@@ -805,7 +816,7 @@ function renderSignalThreadEntries(host, entries) {
         host.appendChild(empty);
         return;
     }
-    list.slice().reverse().forEach(entry => {
+    list.forEach(entry => {
         const row = document.createElement('div');
         row.className = 'signal-thread-entry';
 
@@ -1269,14 +1280,11 @@ async function loadSignalThreadsSummary() {
 }
 
 function openSignalThreadsOverlay() {
-    const overlay = document.getElementById('signal-threads-overlay');
-    if (overlay) overlay.style.display = 'flex';
+    const panel = document.getElementById('room-threads');
+    if (panel) panel.classList.add('active');
 }
 
-function closeSignalThreadsOverlay() {
-    const overlay = document.getElementById('signal-threads-overlay');
-    if (overlay) overlay.style.display = 'none';
-}
+function closeSignalThreadsOverlay() {}
 
 async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
     const listHost = document.getElementById('signal-threads-list');
@@ -1441,6 +1449,8 @@ async function addFieldLogEntryToActiveThread() {
     const content = input ? input.value : '';
     const threadId = _activeSignalThreadId;
     if (!String(content || '').trim()) return;
+    if (_signalThreadPendingEntries.has(threadId)) return;
+    _signalThreadPendingEntries.add(threadId);
     try {
         setSignalThreadSaveStatus('Saving');
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/entries', {
@@ -1451,16 +1461,25 @@ async function addFieldLogEntryToActiveThread() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success) {
             showFlashMessage(data && data.error ? data.error : 'Could not add Field Log entry.');
-            setSignalThreadSaveStatus('Save failed — retry');
+            _signalThreadSaveStates.set(threadId, 'Save failed — retry');
+            if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
             return;
         }
+        if (_signalThreadDrafts.get(signalThreadDraftKey(threadId)) === content) {
+            _signalThreadDrafts.delete(signalThreadDraftKey(threadId));
+        }
         if (_activeSignalThreadId === threadId && input && input.value === content) input.value = '';
-        if (_activeSignalThreadId === threadId) saveSignalThreadDraft(threadId);
-        setSignalThreadSaveStatus(_signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved');
-        await refreshSignalThreadsOverlay({ createNew: false });
+        _signalThreadSaveStates.set(threadId, _signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved');
+        if (_activeSignalThreadId === threadId) {
+            setSignalThreadSaveStatus(_signalThreadSaveStates.get(threadId));
+            await refreshSignalThreadsOverlay({ createNew: false });
+        }
     } catch {
         showFlashMessage('Could not reach server.');
-        setSignalThreadSaveStatus('Save failed — retry');
+        _signalThreadSaveStates.set(threadId, 'Save failed — retry');
+        if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
+    } finally {
+        _signalThreadPendingEntries.delete(threadId);
     }
 }
 
@@ -1478,25 +1497,30 @@ async function setActiveSignalThreadStage(stage) {
     }
     const threadId = _activeSignalThreadId;
     setSignalThreadSaveStatus('Saving');
-    try {
+    _signalThreadStageRequest = _signalThreadStageRequest.catch(() => {}).then(async () => {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ currentStage: selectedStage }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success || _activeSignalThreadId !== threadId) {
-            setSignalThreadSaveStatus('Save failed — retry');
+        if (!res.ok || !data.success) {
+            _signalThreadSaveStates.set(threadId, 'Save failed — retry');
+            if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
             return;
         }
-        _activeSignalThread = data.thread;
-        setSignalThreadSaveStatus(_signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved');
+        if (_activeSignalThreadId === threadId) _activeSignalThread = data.thread;
+        const message = _signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved';
+        _signalThreadSaveStates.set(threadId, message);
+        if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus(message);
         renderSignalThreadsList(document.getElementById('signal-threads-list'), _signalThreadsListSnapshot.map(item =>
             item.id === threadId ? { ...item, currentStage: selectedStage } : item,
         ));
-    } catch {
-        setSignalThreadSaveStatus('Save failed — retry');
-    }
+    }).catch(() => {
+        _signalThreadSaveStates.set(threadId, 'Save failed — retry');
+        if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
+    });
+    await _signalThreadStageRequest;
 }
 
 async function exportActiveSignalThread() {
@@ -2127,6 +2151,12 @@ let _activeRoomId = 'threads';
 (function initRoomTabs() {
     const tabs   = document.querySelectorAll('.room-tab');
     const panels = document.querySelectorAll('.room-panel');
+    const systemWorkspace = document.getElementById('system-workspace');
+    const legacySystemPanel = document.getElementById('hearth-system');
+    if (systemWorkspace && legacySystemPanel) {
+        while (legacySystemPanel.firstChild) systemWorkspace.appendChild(legacySystemPanel.firstChild);
+        legacySystemPanel.remove();
+    }
 
     function activateRoom(roomId) {
         const previousRoomId = _activeRoomId;
@@ -2142,8 +2172,6 @@ let _activeRoomId = 'threads';
         panels.forEach(p => {
             p.classList.toggle('active', p.id === 'room-' + roomId);
         });
-        const threadsWorkspace = document.getElementById('signal-threads-overlay');
-        if (threadsWorkspace) threadsWorkspace.style.display = roomId === 'threads' ? 'flex' : 'none';
         if (roomId === 'threads') refreshSignalThreadsOverlay({ createNew: false });
         if (roomId === 'resources') loadArchiveReaderCatalog();
 
@@ -2164,7 +2192,7 @@ let _activeRoomId = 'threads';
             loadHearthTrustedArchive();
             loadHearthRememberedThreads();
         }
-        if (roomId === 'system') openRoomAndSubtab('hearth', 'hearth-system');
+        if (roomId === 'system') refreshSystemStatus();
     }
 
     tabs.forEach(tab => {
@@ -3196,7 +3224,6 @@ const CHAT_STATES = Object.freeze({
 
 let _chatState = CHAT_STATES.IDLE;
 let _glyphResolveEnabled = true;
-let _isChatGenerating = false;
 let _activeChatAbortController = null;
 let _activeChatRequestId = null;
 let _activeChatRevealToken = { cancelled: false };

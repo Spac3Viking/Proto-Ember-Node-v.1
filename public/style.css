@@ -48,9 +48,9 @@
   --glow-soft: hsla(45, 100%, 65%, 0.12);
   --glow-hard: hsla(45, 100%, 65%, 0.28);
 
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
 }
 
 /* ── Reset & Base ──────────────────────────────────────────── */

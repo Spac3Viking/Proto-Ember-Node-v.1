@@ -23,21 +23,26 @@ describe('Phase 17G — Living Thread workspace polish', () => {
         try { fs.rmSync(dataRoot, { recursive: true, force: true }); } catch { /* ignore */ }
     });
 
-    test('workspace HTML includes Copy Brief and Source Notes', async () => {
+    test('Fieldbook exposes the four destinations and its streamlined writing controls', async () => {
         const { app } = require('../app/server');
 
         const res = await request(app).get('/index.html');
         expect(res.status).toBe(200);
-        expect(res.text).toContain('id="signal-threads-overlay"');
-        expect(res.text).toContain('id="signal-thread-copy-brief-btn"');
-        expect(res.text).toContain('id="signal-thread-source-notes-input"');
-        expect(res.text).toContain('id="signal-thread-saga-cycle-details"');
-        expect(res.text).toContain('id="signal-thread-save-cycle-btn"');
-
-        expect(res.text.indexOf('id="signal-thread-compression-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-situation-details"'));
-        expect(res.text.indexOf('id="signal-thread-situation-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-open-pressure-details"'));
-        expect(res.text.indexOf('id="signal-thread-open-pressure-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-saga-cycle-details"'));
-        expect(res.text.indexOf('id="signal-thread-saga-cycle-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-observations-details"'));
-        expect(res.text.indexOf('id="signal-thread-saga-cycles-details"')).toBeLessThan(res.text.indexOf('id="signal-thread-source-notes-details"'));
+        expect(res.text).toContain('data-room="threads"');
+        expect(res.text).toContain('data-room="resources"');
+        expect(res.text).toContain('data-room="hearth"');
+        expect(res.text).toContain('data-room="system"');
+        expect(res.text).toContain('id="room-threads"');
+        expect(res.text).toContain('id="system-workspace"');
+        expect(res.text).not.toContain('secondary-room-nav');
+        expect(res.text).not.toContain('data-room="session"');
+        expect(res.text).not.toContain('data-room="threshold"');
+        expect(res.text).toContain('id="signal-thread-field-log-input"');
+        expect(res.text).toContain('id="signal-thread-add-field-log-btn"');
+        expect(res.text).toContain('id="signal-thread-export-btn"');
+        expect(res.text).toContain('data-thread-stage="relate"');
+        expect(res.text).not.toContain('id="signal-thread-saga-cycle-details"');
+        expect(res.text).not.toContain('id="signal-thread-copy-brief-btn"');
+        expect(res.text).not.toContain('id="signal-thread-source-notes-input"');
     });
 });
