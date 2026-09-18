@@ -180,6 +180,7 @@ router.post('/api/signal-threads/:id/entries', writeLimiter, (req, res) => {
     try {
         const entry = addFieldLogEntry(req.params.id, req.body && req.body.stage, req.body && req.body.content, {
             kind: req.body && req.body.kind,
+            attribution: req.body && req.body.attribution,
             provenance: req.body && req.body.provenance,
         });
         if (!entry) return res.status(404).json({ error: 'Signal Thread not found' });

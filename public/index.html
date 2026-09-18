@@ -49,15 +49,39 @@
       </div>
     </div>
 
-    <!-- Room Tab Row — Primary rooms -->
-    <nav class="room-tabs" role="tablist" aria-label="Rooms">
-      <button class="room-tab active" role="tab" aria-selected="true"  data-room="session"   aria-controls="room-session">ᚠ Session</button>
+    <!-- Primary workspace navigation -->
+    <nav class="room-tabs" role="tablist" aria-label="Primary workspace">
+      <button class="room-tab active" role="tab" aria-selected="true" data-room="threads" aria-controls="signal-threads-overlay">⌁ Threads</button>
+      <button class="room-tab" role="tab" aria-selected="false" data-room="resources" aria-controls="room-resources">Resources</button>
       <button class="room-tab"        role="tab" aria-selected="false" data-room="hearth"    aria-controls="room-hearth">ᚺ Hearth</button>
-      <button class="room-tab"        role="tab" aria-selected="false" data-room="threshold" aria-controls="room-threshold">ᚦ Threshold</button>
+      <button class="room-tab" role="tab" aria-selected="false" data-room="system" aria-controls="room-system">System</button>
+    </nav>
+    <nav class="secondary-room-nav" aria-label="Secondary workspace">
+      <button class="secondary secondary-room-tab room-tab" role="tab" aria-selected="false" data-room="session" aria-controls="room-session">Sessions &amp; legacy conversations</button>
+      <button class="secondary secondary-room-tab room-tab" role="tab" aria-selected="false" data-room="threshold" aria-controls="room-threshold">Threshold &amp; advanced tools</button>
     </nav>
 
     <!-- Room Content -->
     <main class="room-content">
+      <section class="room-panel" id="room-resources" role="tabpanel">
+        <div class="room-panel-inner fieldbook-resources">
+          <h2 class="room-heading">Resources</h2>
+          <p class="message-system">Green Fire Archive is a readable collection. Select, copy, and paste passages into a Thread when useful.</p>
+          <div class="ember-card" style="padding:1rem;">
+            <h3 class="fieldbook-resource-heading">Green Fire Archive · Reader</h3>
+            <div class="cache-list" id="resources-reader-catalog" aria-label="Green Fire Archive Reader documents">
+              <span class="message-system">Loading Reader documents…</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="room-panel" id="room-system" role="tabpanel">
+        <div class="room-panel-inner fieldbook-resources">
+          <h2 class="room-heading">System</h2>
+          <p class="message-system">Runtime stewardship, maintenance, and advanced system functions remain available without changing your Thread.</p>
+          <button class="primary" id="open-system-workspace-btn">Open System workspace</button>
+        </div>
+      </section>
 
       <!-- ═══════════════════════════════════════════════════════════
            SESSION CONSOLE — Primary Entry Point
@@ -1431,11 +1455,11 @@
     </div>
   </div>
 
-  <div class="source-inspector-overlay" id="signal-threads-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Threads">
+  <div class="source-inspector-overlay fieldbook-workspace" id="signal-threads-overlay" style="display:none;" role="tabpanel" aria-label="Threads">
     <div class="source-inspector-panel signal-threads-panel">
       <div class="source-inspector-header">
-        <span class="source-inspector-title">⌁ Threads</span>
-        <button class="source-inspector-close" id="signal-threads-close" aria-label="Close Threads">✕</button>
+        <span class="source-inspector-title">⌁ Fieldbook · Threads</span>
+        <button class="secondary" id="signal-threads-sessions-btn">Sessions &amp; legacy conversations</button>
       </div>
       <div class="source-inspector-body signal-threads-body">
         <div class="signal-threads-layout">
@@ -1453,7 +1477,7 @@
 
             <div id="signal-thread-editor" style="display:none;">
               <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-overview-details" open>
-                <summary>Overview</summary>
+                <summary>Thread</summary>
                 <div class="gf-collapsible-panel-body">
                   <div class="signal-thread-grid">
                     <div class="signal-thread-field">
@@ -1491,6 +1515,14 @@
                         <option value="dormant">dormant</option>
                         <option value="archived">archived</option>
                       </select>
+                    </div>
+                    <div class="fieldbook-stage-controls" role="group" aria-label="Thread stage">
+                      <button type="button" data-thread-stage="observe">Observe</button>
+                      <button type="button" data-thread-stage="reflect">Reflect</button>
+                      <button type="button" data-thread-stage="act">Act</button>
+                      <button type="button" data-thread-stage="refine">Refine</button>
+                      <button type="button" data-thread-stage="remember">Remember</button>
+                      <button type="button" data-thread-stage="relate">Relate</button>
                     </div>
                     <div class="signal-thread-field">
                       <label for="signal-thread-tags-input">Tags</label>
@@ -1596,16 +1628,16 @@
               <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-field-log-details" open>
                 <summary>Field Log</summary>
                 <div class="gf-collapsible-panel-body">
-                  <textarea id="signal-thread-field-log-input" rows="3" placeholder="Record this moment in the current stage."></textarea>
+                  <textarea id="signal-thread-field-log-input" rows="5" placeholder="Write a note for this thread."></textarea>
                   <div class="signal-thread-actions">
-                    <button class="secondary" id="signal-thread-add-field-log-btn">Add to Thread</button>
-                    <span class="message-system">Uses the selected current stage.</span>
+                    <button class="primary" id="signal-thread-add-field-log-btn">Add Note</button>
+                    <span class="message-system" id="signal-thread-save-status" role="status" aria-live="polite">Saved</span>
                   </div>
                   <div id="signal-thread-field-log" class="signal-thread-entries"></div>
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-observations-details">
+              <details class="gf-collapsible-panel signal-thread-workspace-panel fieldbook-advanced" id="signal-thread-observations-details">
                 <summary>Recent Observations</summary>
                 <div class="gf-collapsible-panel-body">
                   <textarea id="signal-thread-observation-input" rows="3" placeholder="What happened? What changed?"></textarea>
@@ -1614,7 +1646,7 @@
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-reflections-details">
+              <details class="gf-collapsible-panel signal-thread-workspace-panel fieldbook-advanced" id="signal-thread-reflections-details">
                 <summary>Recent Reflections</summary>
                 <div class="gf-collapsible-panel-body">
                   <textarea id="signal-thread-reflection-input" rows="3" placeholder="What did it mean?"></textarea>
@@ -1623,14 +1655,14 @@
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-saga-cycles-details">
+              <details class="gf-collapsible-panel signal-thread-workspace-panel fieldbook-advanced" id="signal-thread-saga-cycles-details">
                 <summary>Saga Cycles (History)</summary>
                 <div class="gf-collapsible-panel-body">
                   <div id="signal-thread-saga-cycles" class="signal-thread-cycles"></div>
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-source-notes-details">
+              <details class="gf-collapsible-panel signal-thread-workspace-panel fieldbook-advanced" id="signal-thread-source-notes-details">
                 <summary>Source Notes</summary>
                 <div class="gf-collapsible-panel-body">
                   <div class="signal-thread-field">
@@ -1640,7 +1672,7 @@
                 </div>
               </details>
 
-              <details class="gf-collapsible-panel signal-thread-workspace-panel" id="signal-thread-export-details">
+              <details class="gf-collapsible-panel signal-thread-workspace-panel fieldbook-advanced" id="signal-thread-export-details">
                 <summary>Copy / Export</summary>
                 <div class="gf-collapsible-panel-body">
                   <button class="secondary" id="signal-thread-copy-brief-btn">Copy Brief</button>

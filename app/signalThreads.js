@@ -159,6 +159,7 @@ function _normalizeFieldLogEntry(entry) {
         timestamp: row.timestamp ? String(row.timestamp) : null,
         content: String(row.content || ''),
         kind: String(row.kind || 'note'),
+        attribution: typeof row.attribution === 'string' && row.attribution.trim() ? row.attribution.trim() : null,
         provenance: row.provenance && typeof row.provenance === 'object' ? row.provenance : null,
     };
 }
@@ -444,6 +445,7 @@ function addFieldLogEntry(threadId, stage, content, options = {}) {
         timestamp: _nowIso(),
         content: text,
         kind: String(options.kind || 'note'),
+        attribution: typeof options.attribution === 'string' && options.attribution.trim() ? options.attribution.trim() : null,
         provenance: options.provenance && typeof options.provenance === 'object' ? options.provenance : null,
     };
     thread.entries.push(entry);

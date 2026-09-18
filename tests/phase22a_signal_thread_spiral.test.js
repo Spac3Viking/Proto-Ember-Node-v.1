@@ -142,4 +142,31 @@ describe('Phase 22A — Signal Thread spiral foundation', () => {
         expect(brief.text).toContain('· act');
         expect(brief.text).toContain('· observe');
     });
+
+    test('persists standalone stages and recorded attribution without creating continuity artifacts', async () => {
+        const { app } = require('../app/server');
+        const created = await request(app)
+            .post('/api/signal-threads')
+            .send({ title: 'Manual fieldbook', posture: 'practical' });
+        const id = created.body.thread.id;
+
+        const stage = await request(app).put('/api/signal-threads/' + id).send({ currentStage: 'remember' });
+        expect(stage.status).toBe(200);
+        expect(stage.body.thread.currentStage).toBe('remember');
+        expect((await request(app).get('/api/hearth/checkpoints')).body.checkpoints).toEqual([]);
+
+        const entry = await request(app).post('/api/signal-threads/' + id + '/entries').send({
+            stage: 'relate',
+            content: 'Recorded from a prior assistant exchange.',
+            attribution: 'AI',
+        });
+        expect(entry.status).toBe(200);
+        expect(entry.body.entry.attribution).toBe('AI');
+
+        const loaded = await request(app).get('/api/signal-threads/' + id);
+        expect(loaded.body.thread.entries[0]).toEqual(expect.objectContaining({
+            stage: 'relate',
+            attribution: 'AI',
+        }));
+    });
 });
