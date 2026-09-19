@@ -83,7 +83,7 @@
            SESSION CONSOLE — Primary Entry Point
            Observe → Reflect → Act → Refine → Remember
            ═══════════════════════════════════════════════════════════ -->
-      <section class="room-panel active" id="room-session" role="tabpanel">
+      <section class="room-panel" id="room-session" role="tabpanel">
         <div class="room-panel-inner ip-layout">
 
           <!-- Status strip -->
@@ -1301,6 +1301,64 @@
         </div>
       </section>
 
+      <section class="room-panel active fieldbook-workspace" id="room-threads" role="tabpanel" aria-label="Signal Threads">
+        <div class="room-panel-inner signal-threads-panel">
+          <h2 class="room-heading">⌁ Signal Threads</h2>
+          <div class="signal-threads-body">
+            <div class="signal-threads-layout">
+              <div class="signal-threads-list-pane">
+                <div class="signal-threads-list-header">
+                  <button class="secondary" id="signal-threads-new-btn">New Thread</button>
+                  <span class="message-system" id="signal-threads-list-status">—</span>
+                </div>
+                <div id="signal-threads-list" class="signal-threads-list">
+                  <span class="message-system">Loading…</span>
+                </div>
+              </div>
+              <div class="signal-thread-editor-pane">
+                <div class="message-system" id="signal-thread-empty">Select a thread, or create a new one.</div>
+                <div id="signal-thread-editor" style="display:none;">
+                  <section class="signal-thread-workspace-panel" id="signal-thread-overview-details">
+                    <div class="gf-collapsible-panel-body">
+                      <div class="signal-thread-grid">
+                        <div class="signal-thread-field">
+                          <label for="signal-thread-title-input">Title</label>
+                          <input id="signal-thread-title-input" type="text" placeholder="The Drying Well" />
+                        </div>
+                        <div class="fieldbook-stage-controls" role="group" aria-label="Thread stage">
+                          <button type="button" data-thread-stage="observe">Observe</button>
+                          <button type="button" data-thread-stage="reflect">Reflect</button>
+                          <button type="button" data-thread-stage="act">Act</button>
+                          <button type="button" data-thread-stage="refine">Refine</button>
+                          <button type="button" data-thread-stage="remember">Remember</button>
+                          <button type="button" data-thread-stage="relate">Relate</button>
+                        </div>
+                      </div>
+                      <div class="signal-thread-actions">
+                        <button class="primary" id="signal-thread-save-btn">Create Thread</button>
+                      </div>
+                    </div>
+                  </section>
+                  <section class="signal-thread-workspace-panel" id="signal-thread-field-log-details">
+                    <h3>Field Log</h3>
+                    <div class="gf-collapsible-panel-body">
+                      <textarea id="signal-thread-field-log-input" rows="5" placeholder="Write a note for this thread."></textarea>
+                      <div class="signal-thread-actions">
+                        <button class="primary" id="signal-thread-add-field-log-btn">Add Note</button>
+                        <span class="message-system" id="signal-thread-save-status" role="status" aria-live="polite">Saved</span>
+                      </div>
+                      <div id="signal-thread-field-log" class="signal-thread-entries"></div>
+                    </div>
+                  </section>
+                  <div class="signal-thread-actions">
+                    <button class="secondary" id="signal-thread-export-btn">Export Markdown</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -1447,67 +1505,6 @@
             </div>
           </div>
         </details>
-      </div>
-    </div>
-  </div>
-
-  <section class="room-panel active fieldbook-workspace" id="room-threads" role="tabpanel" aria-label="Signal Threads">
-    <div class="room-panel-inner signal-threads-panel">
-      <h2 class="room-heading">⌁ Signal Threads</h2>
-      <div class="signal-threads-body">
-        <div class="signal-threads-layout">
-          <div class="signal-threads-list-pane">
-            <div class="signal-threads-list-header">
-              <button class="secondary" id="signal-threads-new-btn">New Thread</button>
-              <span class="message-system" id="signal-threads-list-status">—</span>
-            </div>
-            <div id="signal-threads-list" class="signal-threads-list">
-              <span class="message-system">Loading…</span>
-            </div>
-          </div>
-          <div class="signal-thread-editor-pane">
-            <div class="message-system" id="signal-thread-empty">Select a thread, or create a new one.</div>
-
-            <div id="signal-thread-editor" style="display:none;">
-              <section class="signal-thread-workspace-panel" id="signal-thread-overview-details">
-                <div class="gf-collapsible-panel-body">
-                  <div class="signal-thread-grid">
-                    <div class="signal-thread-field">
-                      <label for="signal-thread-title-input">Title</label>
-                      <input id="signal-thread-title-input" type="text" placeholder="The Drying Well" />
-                    </div>
-                    <div class="fieldbook-stage-controls" role="group" aria-label="Thread stage">
-                      <button type="button" data-thread-stage="observe">Observe</button>
-                      <button type="button" data-thread-stage="reflect">Reflect</button>
-                      <button type="button" data-thread-stage="act">Act</button>
-                      <button type="button" data-thread-stage="refine">Refine</button>
-                      <button type="button" data-thread-stage="remember">Remember</button>
-                      <button type="button" data-thread-stage="relate">Relate</button>
-                    </div>
-                  </div>
-                  <div class="signal-thread-actions">
-                    <button class="primary" id="signal-thread-save-btn">Create Thread</button>
-                  </div>
-                </div>
-              </section>
-
-              <section class="signal-thread-workspace-panel" id="signal-thread-field-log-details">
-                <h3>Field Log</h3>
-                <div class="gf-collapsible-panel-body">
-                  <textarea id="signal-thread-field-log-input" rows="5" placeholder="Write a note for this thread."></textarea>
-                  <div class="signal-thread-actions">
-                    <button class="primary" id="signal-thread-add-field-log-btn">Add Note</button>
-                    <span class="message-system" id="signal-thread-save-status" role="status" aria-live="polite">Saved</span>
-                  </div>
-                  <div id="signal-thread-field-log" class="signal-thread-entries"></div>
-                </div>
-              </section>
-              <div class="signal-thread-actions">
-                <button class="secondary" id="signal-thread-export-btn">Export Markdown</button>
-              </div>
-            </div>
-          </section>
-        </div>
       </div>
     </div>
   </div>
