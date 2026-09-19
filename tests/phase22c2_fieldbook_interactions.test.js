@@ -64,6 +64,7 @@ function loadFieldbookHarness(fetch) {
             title: document.getElementById('signal-thread-title-input'),
             status: document.getElementById('signal-thread-save-status'),
             stages: () => _signalThreadStages,
+            active: () => _activeSignalThread,
         };`, context);
     return context.fieldbook;
 }
@@ -135,6 +136,7 @@ describe('Phase 22C.2 — simplified Fieldbook interactions', () => {
             }
             return { ok: true, json: async () => ({ success: true, thread: {} }) };
         });
+
         harness.setActive({ id: 'thread-a', currentStage: 'act', entries: [] });
         harness.input.value = 'Retry this note.';
         harness.saveDraft();
@@ -155,6 +157,61 @@ describe('Phase 22C.2 — simplified Fieldbook interactions', () => {
         expect(harness.input.value).toBe('Other draft.');
     });
 
+    test.each([
+        ['HTTP failure', async () => ({ ok: false, json: async () => ({ error: 'offline' }) })],
+        ['network rejection', async () => { throw new Error('offline'); }],
+    ])('preserves captured A draft while B is active after a %s', async (_name, fail) => {
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        const harness = loadFieldbookHarness(async url => {
+            if (url.endsWith('/entries')) {
+                await gate;
+                return fail();
+            }
+            return { ok: true, json: async () => ({ success: true, thread: {} }) };
+        });
+        harness.setActive({ id: 'thread-a', currentStage: 'act', entries: [] });
+        harness.input.value = 'A draft.';
+        const note = harness.note();
+        await new Promise(resolve => setImmediate(resolve));
+        harness.setActive({ id: 'thread-b', currentStage: 'observe', entries: [] });
+        harness.input.value = 'B draft.';
+        harness.saveDraft();
+        release();
+        await note;
+
+        expect(harness.input.value).toBe('B draft.');
+        harness.setActive({ id: 'thread-a', currentStage: 'act', entries: [] });
+        harness.restoreDraft();
+        expect(harness.input.value).toBe('A draft.');
+        harness.setActive({ id: 'thread-b', currentStage: 'observe', entries: [] });
+        harness.restoreDraft();
+        expect(harness.input.value).toBe('B draft.');
+    });
+
+    test('keeps newer A text when an earlier A note fails', async () => {
+        let release;
+        const gate = new Promise(resolve => { release = resolve; });
+        const harness = loadFieldbookHarness(async url => {
+            if (url.endsWith('/entries')) {
+                await gate;
+                return { ok: false, json: async () => ({ error: 'offline' }) };
+            }
+            return { ok: true, json: async () => ({ success: true, thread: {} }) };
+        });
+        harness.setActive({ id: 'thread-a', currentStage: 'act', entries: [] });
+        harness.input.value = 'Earlier text.';
+        const note = harness.note();
+        harness.input.value = 'Newer text.';
+        harness.saveDraft();
+        release();
+        await note;
+
+        expect(harness.input.value).toBe('Newer text.');
+        harness.restoreDraft();
+        expect(harness.input.value).toBe('Newer text.');
+    });
+
     test('guards duplicate pending notes while allowing the same text after completion', async () => {
         let release;
         const gate = new Promise(resolve => { release = resolve; });
@@ -164,6 +221,7 @@ describe('Phase 22C.2 — simplified Fieldbook interactions', () => {
             await gate;
             return { ok: true, json: async () => ({ success: true, entry: requests.at(-1) }) };
         });
+
         harness.setActive({ id: 'thread-1', currentStage: 'observe', entries: [] });
         harness.input.value = 'Record this once.';
         const first = harness.note();
@@ -176,6 +234,23 @@ describe('Phase 22C.2 — simplified Fieldbook interactions', () => {
         harness.input.value = 'Record this once.';
         await harness.note();
         expect(requests).toHaveLength(2);
+    });
+
+    test('clears a failed note status when its retry succeeds', async () => {
+        let attempts = 0;
+        const harness = loadFieldbookHarness(async (url, options) => {
+            if (!url.endsWith('/entries')) return { ok: true, json: async () => ({ success: true, thread: {} }) };
+            attempts += 1;
+            return attempts === 1
+                ? { ok: false, json: async () => ({ error: 'offline' }) }
+                : { ok: true, json: async () => ({ success: true, entry: JSON.parse(options.body) }) };
+        });
+        harness.setActive({ id: 'thread-1', currentStage: 'observe', entries: [] });
+        harness.input.value = 'Retry once.';
+        await harness.note();
+        expect(harness.status.textContent).toBe('Save failed — retry');
+        await harness.note();
+        expect(harness.status.textContent).toBe('Saved');
     });
 
     test('keeps Saving for queued work and does not hide failures behind another success', async () => {
@@ -198,7 +273,7 @@ describe('Phase 22C.2 — simplified Fieldbook interactions', () => {
         expect(harness.status.textContent).toBe('Saving');
         await second;
         expect(requests).toEqual([{ currentStage: 'reflect' }, { currentStage: 'act' }]);
-        expect(harness.status.textContent).toBe('Save failed — retry');
+        expect(harness.status.textContent).toBe('Saved');
         expect(harness.stages().get('thread-1')).toBe('act');
     });
 
@@ -215,6 +290,7 @@ describe('Phase 22C.2 — simplified Fieldbook interactions', () => {
             if (body.title && titleFails) return { ok: false, json: async () => ({ error: 'offline' }) };
             return { ok: true, json: async () => ({ success: true, thread: { id: 'thread-1', title: body.title } }) };
         });
+
         harness.setActive({ id: 'thread-1', title: 'Original', currentStage: 'observe', entries: [] });
         harness.input.value = 'First draft.';
         const note = harness.note();
@@ -231,6 +307,32 @@ describe('Phase 22C.2 — simplified Fieldbook interactions', () => {
         titleFails = false;
         await harness.saveThread();
         expect(harness.status.textContent).toBe('Unsaved draft');
+    });
+
+    test('serializes overlapping renames and retains the latest title', async () => {
+        let releaseFirst;
+        const firstGate = new Promise(resolve => { releaseFirst = resolve; });
+        const titles = [];
+        const harness = loadFieldbookHarness(async (url, options) => {
+            const body = JSON.parse(options.body);
+            titles.push(body.title);
+            if (body.title === 'First') await firstGate;
+            return { ok: true, json: async () => ({ success: true, thread: { id: 'thread-1', title: body.title } }) };
+        });
+        const thread = { id: 'thread-1', title: 'Original', currentStage: 'observe', entries: [] };
+        harness.setActive(thread);
+        harness.title.value = 'First';
+        const first = harness.saveThread();
+        await new Promise(resolve => setImmediate(resolve));
+        harness.title.value = 'Latest';
+        const latest = harness.saveThread();
+        expect(harness.status.textContent).toBe('Saving');
+        releaseFirst();
+        await Promise.all([first, latest]);
+
+        expect(titles).toEqual(['First', 'Latest']);
+        expect(harness.active().title).toBe('Latest');
+        expect(harness.status.textContent).toBe('Saved');
     });
 
     test('keeps a pending local stage when a stale thread response is reopened', async () => {
