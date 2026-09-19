@@ -762,6 +762,21 @@ const _signalThreadSaveQueues = new Map();
 const _signalThreadPendingOperations = new Map();
 const _signalThreadFailedOperations = new Map();
 const _signalThreadSubmittedNotes = new Map();
+const _signalThreadOperationDetails = new Map();
+let _signalThreadOperationSequence = 0;
+
+function createSignalThreadOperationId(type, scope = '') {
+    _signalThreadOperationSequence += 1;
+    const operationId = type + ':' + _signalThreadOperationSequence;
+    _signalThreadOperationDetails.set(operationId, { type, scope });
+    return operationId;
+}
+
+function signalThreadOperationField(operationId) {
+    const detail = _signalThreadOperationDetails.get(operationId);
+    const type = detail ? detail.type : String(operationId || '').split(':', 1)[0];
+    return type === 'title' || type === 'stage' ? type : null;
+}
 
 function refreshSignalThreadSaveStatus(threadId = _activeSignalThreadId) {
     const key = signalThreadDraftKey(threadId);
@@ -794,8 +809,26 @@ function finishSignalThreadSave(threadId, operationId, { failed = false } = {}) 
         if (!pending.size) _signalThreadPendingOperations.delete(key);
     }
     const failures = _signalThreadFailedOperations.get(key) || new Set();
+    const field = signalThreadOperationField(operationId);
     if (failed) failures.add(operationId);
-    else failures.delete(operationId);
+    else {
+        const detail = _signalThreadOperationDetails.get(operationId);
+        Array.from(failures).forEach(failedOperationId => {
+            const failedDetail = _signalThreadOperationDetails.get(failedOperationId);
+            if (
+                failedOperationId === operationId ||
+                (field && signalThreadOperationField(failedOperationId) === field) ||
+                (detail && detail.type === 'note' && failedDetail &&
+                    failedDetail.type === 'note' && failedDetail.scope === detail.scope)
+            ) {
+                failures.delete(failedOperationId);
+                _signalThreadOperationDetails.delete(failedOperationId);
+            }
+        });
+        if (!failures.has(operationId)) {
+            _signalThreadOperationDetails.delete(operationId);
+        }
+    }
     if (failures.size) _signalThreadFailedOperations.set(key, failures);
     else _signalThreadFailedOperations.delete(key);
     refreshSignalThreadSaveStatus(threadId);
@@ -854,6 +887,15 @@ function saveSignalThreadDraft(threadId = _activeSignalThreadId) {
     const key = signalThreadDraftKey(threadId);
     if (content) _signalThreadDrafts.set(key, content);
     else _signalThreadDrafts.delete(key);
+}
+
+function restoreFailedSignalThreadDraft(threadId, content) {
+    const key = signalThreadDraftKey(threadId);
+    if (!_signalThreadDrafts.has(key)) _signalThreadDrafts.set(key, content);
+    if (_activeSignalThreadId === threadId) {
+        const input = document.getElementById('signal-thread-field-log-input');
+        if (input && !input.value) input.value = _signalThreadDrafts.get(key) || '';
+    }
 }
 
 function restoreSignalThreadDraft(threadId = _activeSignalThreadId) {
@@ -1347,8 +1389,12 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
 async function saveActiveSignalThread() {
     const { title, currentStage } = _readSignalThreadEditorPayload();
     const threadId = _activeSignalThreadId;
-    const operationId = 'title:' + String(title || '');
+    const operationId = createSignalThreadOperationId('title');
     if (threadId) beginSignalThreadSave(threadId, operationId);
+
+    if (threadId) {
+        return queueSignalThreadSave(threadId, () => saveExistingSignalThreadTitle(threadId, title, operationId));
+    }
 
     try {
         if (!threadId) {
@@ -1374,6 +1420,13 @@ async function saveActiveSignalThread() {
             return;
         }
 
+    } catch {
+        showFlashMessage('Could not reach server.');
+    }
+}
+
+async function saveExistingSignalThreadTitle(threadId, title, operationId) {
+    try {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1390,6 +1443,7 @@ async function saveActiveSignalThread() {
         }
         _signalThreadsListSnapshot = _signalThreadsListSnapshot.map(item =>
             item.id === threadId ? { ...item, title: data.thread.title } : item);
+        renderSignalThreadsList(document.getElementById('signal-threads-list'), _signalThreadsListSnapshot);
         finishSignalThreadSave(threadId, operationId);
         showFlashMessage('Thread saved.');
     } catch {
@@ -1469,11 +1523,12 @@ async function addFieldLogEntryToActiveThread() {
     const threadId = _activeSignalThreadId;
     if (!String(content || '').trim()) return;
     const stage = getSignalThreadStage(threadId);
-    const operationId = 'note:' + stage + '\u0000' + content;
+    const submissionKey = stage + '\u0000' + content;
     const submitted = _signalThreadSubmittedNotes.get(threadId) || new Set();
-    if (submitted.has(operationId)) return;
-    submitted.add(operationId);
+    if (submitted.has(submissionKey)) return;
+    submitted.add(submissionKey);
     _signalThreadSubmittedNotes.set(threadId, submitted);
+    const operationId = createSignalThreadOperationId('note', submissionKey);
     beginSignalThreadSave(threadId, operationId);
     return queueSignalThreadSave(threadId, async () => {
         try {
@@ -1485,7 +1540,7 @@ async function addFieldLogEntryToActiveThread() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success) {
             showFlashMessage(data && data.error ? data.error : 'Could not add Field Log entry.');
-            saveSignalThreadDraft(threadId);
+            restoreFailedSignalThreadDraft(threadId, content);
             finishSignalThreadSave(threadId, operationId, { failed: true });
             return;
         }
@@ -1501,12 +1556,12 @@ async function addFieldLogEntryToActiveThread() {
         finishSignalThreadSave(threadId, operationId);
         } catch {
             showFlashMessage('Could not reach server.');
-            saveSignalThreadDraft(threadId);
+            restoreFailedSignalThreadDraft(threadId, content);
             finishSignalThreadSave(threadId, operationId, { failed: true });
         } finally {
             const pendingNotes = _signalThreadSubmittedNotes.get(threadId);
             if (pendingNotes) {
-                pendingNotes.delete(operationId);
+                pendingNotes.delete(submissionKey);
                 if (!pendingNotes.size) _signalThreadSubmittedNotes.delete(threadId);
             }
         }
@@ -1523,7 +1578,7 @@ async function setActiveSignalThreadStage(stage) {
         return;
     }
     const threadId = _activeSignalThreadId;
-    const operationId = 'stage:' + selectedStage;
+    const operationId = createSignalThreadOperationId('stage');
     beginSignalThreadSave(threadId, operationId);
     updateSignalThreadListStage(threadId, selectedStage);
     return queueSignalThreadSave(threadId, async () => {
