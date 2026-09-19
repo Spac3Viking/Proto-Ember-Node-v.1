@@ -754,10 +754,11 @@ let _activeSignalThreadId = null;
 let _activeSignalThread = null;
 let _isChatGenerating = false;
 const SIGNAL_THREAD_LAST_ACTIVE_KEY = 'ember-node.fieldbook.active-thread';
+const SIGNAL_THREAD_STAGES = new Set(['observe', 'reflect', 'act', 'refine', 'remember', 'relate']);
 const _signalThreadDrafts = new Map();
 const _signalThreadSaveStates = new Map();
-const _signalThreadPendingEntries = new Set();
-let _signalThreadStageRequest = Promise.resolve();
+const _signalThreadStages = new Map();
+const _signalThreadSaveQueues = new Map();
 
 function signalThreadDraftKey(threadId = _activeSignalThreadId) {
     return threadId || '__new__';
@@ -767,6 +768,36 @@ function setSignalThreadSaveStatus(message) {
     _signalThreadSaveStates.set(signalThreadDraftKey(), message);
     const status = document.getElementById('signal-thread-save-status');
     if (status) status.textContent = message;
+}
+
+function setSignalThreadSaveState(threadId, message) {
+    const key = signalThreadDraftKey(threadId);
+    _signalThreadSaveStates.set(key, message);
+    if (_activeSignalThreadId === threadId) {
+        const status = document.getElementById('signal-thread-save-status');
+        if (status) status.textContent = message;
+    }
+}
+
+function getSignalThreadStage(threadId = _activeSignalThreadId) {
+    return _signalThreadStages.get(signalThreadDraftKey(threadId)) || 'observe';
+}
+
+function renderSignalThreadStage(stage = getSignalThreadStage()) {
+    document.querySelectorAll('[data-thread-stage]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.threadStage === stage));
+    });
+}
+
+function queueSignalThreadSave(threadId, operation) {
+    const prior = _signalThreadSaveQueues.get(threadId) || Promise.resolve();
+    const queued = prior.catch(() => {}).then(operation);
+    _signalThreadSaveQueues.set(threadId, queued);
+    return queued.finally(() => {
+        if (_signalThreadSaveQueues.get(threadId) === queued) {
+            _signalThreadSaveQueues.delete(threadId);
+        }
+    });
 }
 
 function saveSignalThreadDraft(threadId = _activeSignalThreadId) {
@@ -1019,33 +1050,11 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     if (editor) editor.style.display = '';
 
     const titleInput = document.getElementById('signal-thread-title-input');
-    const postureSelect = document.getElementById('signal-thread-posture-select');
-    const statusSelect = document.getElementById('signal-thread-status-select');
-    const stageSelect = document.getElementById('signal-thread-stage-select');
-    const tagsInput = document.getElementById('signal-thread-tags-input');
-    const purposeInput = document.getElementById('signal-thread-purpose-input');
-    const summaryInput = document.getElementById('signal-thread-summary-input');
-    const situationInput = document.getElementById('signal-thread-current-situation-input');
-    const pressureInput = document.getElementById('signal-thread-open-pressure-input');
-    const compressionInput = document.getElementById('signal-thread-compression-input');
-    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
     const saveBtn = document.getElementById('signal-thread-save-btn');
 
     if (titleInput) titleInput.value = thread && thread.title ? thread.title : '';
-    if (postureSelect) postureSelect.value = thread && thread.posture ? thread.posture : 'exploratory';
-    if (statusSelect) statusSelect.value = thread && thread.status ? thread.status : 'active';
-    if (stageSelect) stageSelect.value = thread && thread.currentStage ? thread.currentStage : 'observe';
-    document.querySelectorAll('[data-thread-stage]').forEach(button => {
-        const active = button.dataset.threadStage === (stageSelect ? stageSelect.value : 'observe');
-        button.setAttribute('aria-pressed', String(active));
-    });
-    if (tagsInput) tagsInput.value = thread && Array.isArray(thread.tags) ? thread.tags.join(', ') : '';
-    if (purposeInput) purposeInput.value = thread && typeof thread.purpose === 'string' ? thread.purpose : '';
-    if (summaryInput) summaryInput.value = thread && typeof thread.summary === 'string' ? thread.summary : '';
-    if (situationInput) situationInput.value = thread && typeof thread.currentSituation === 'string' ? thread.currentSituation : '';
-    if (pressureInput) pressureInput.value = thread && typeof thread.openPressure === 'string' ? thread.openPressure : '';
-    if (compressionInput) compressionInput.value = thread && typeof thread.compression === 'string' ? thread.compression : '';
-    if (sourceNotesInput) sourceNotesInput.value = thread && typeof thread.sourceNotes === 'string' ? thread.sourceNotes : '';
+    _signalThreadStages.set(signalThreadDraftKey(_activeSignalThreadId), thread && thread.currentStage ? thread.currentStage : 'observe');
+    renderSignalThreadStage();
     if (saveBtn) saveBtn.textContent = createMode ? 'Create' : 'Save';
     if (createMode && titleInput) setTimeout(() => titleInput.focus(), 0);
 
@@ -1093,41 +1102,9 @@ function clearSignalThreadCycleInputs() {
 
 function _readSignalThreadEditorPayload() {
     const titleInput = document.getElementById('signal-thread-title-input');
-    const postureSelect = document.getElementById('signal-thread-posture-select');
-    const statusSelect = document.getElementById('signal-thread-status-select');
-    const stageSelect = document.getElementById('signal-thread-stage-select');
-    const tagsInput = document.getElementById('signal-thread-tags-input');
-    const purposeInput = document.getElementById('signal-thread-purpose-input');
-    const summaryInput = document.getElementById('signal-thread-summary-input');
-    const situationInput = document.getElementById('signal-thread-current-situation-input');
-    const pressureInput = document.getElementById('signal-thread-open-pressure-input');
-    const compressionInput = document.getElementById('signal-thread-compression-input');
-    const sourceNotesInput = document.getElementById('signal-thread-source-notes-input');
-
-    const title = titleInput ? titleInput.value : '';
-    const posture = postureSelect ? postureSelect.value : 'exploratory';
-    const status = statusSelect ? statusSelect.value : 'active';
-    const currentStage = stageSelect ? stageSelect.value : 'observe';
-    const purpose = purposeInput ? purposeInput.value : '';
-    const summary = summaryInput ? summaryInput.value : '';
-    const currentSituation = situationInput ? situationInput.value : '';
-    const openPressure = pressureInput ? pressureInput.value : '';
-    const compression = compressionInput ? compressionInput.value : '';
-    const sourceNotes = sourceNotesInput ? sourceNotesInput.value : '';
-    const tags = parseTagsFromInput(tagsInput ? tagsInput.value : '');
-
     return {
-        title,
-        posture,
-        status,
-        currentStage,
-        purpose,
-        summary,
-        currentSituation,
-        openPressure,
-        compression,
-        sourceNotes,
-        tags,
+        title: titleInput ? titleInput.value : '',
+        currentStage: getSignalThreadStage(),
     };
 }
 
@@ -1147,14 +1124,8 @@ async function persistActiveSignalThreadFromEditor({ createIfMissing = false } =
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title,
-                    purpose: payload.purpose,
-                    posture: payload.posture,
+                    posture: 'exploratory',
                     currentStage: payload.currentStage,
-                    summary: payload.summary,
-                    tags: payload.tags,
-                    currentSituation: payload.currentSituation,
-                    openPressure: payload.openPressure,
-                    sourceNotes: payload.sourceNotes,
                 }),
             });
             const data = await res.json().catch(() => ({}));
@@ -1170,16 +1141,6 @@ async function persistActiveSignalThreadFromEditor({ createIfMissing = false } =
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 title,
-                purpose: payload.purpose,
-                posture: payload.posture,
-                status: payload.status,
-                currentStage: payload.currentStage,
-                summary: payload.summary,
-                currentSituation: payload.currentSituation,
-                openPressure: payload.openPressure,
-                compression: payload.compression,
-                sourceNotes: payload.sourceNotes,
-                tags: payload.tags,
             }),
         });
         const data = await res.json().catch(() => ({}));
@@ -1335,14 +1296,14 @@ async function refreshSignalThreadsOverlay({ createNew = false } = {}) {
 }
 
 async function saveActiveSignalThread() {
-    const { title, posture, status, currentStage, purpose, summary, currentSituation, openPressure, compression, sourceNotes, tags } = _readSignalThreadEditorPayload();
+    const { title, currentStage } = _readSignalThreadEditorPayload();
 
     try {
         if (!_activeSignalThreadId) {
             const res = await fetch('/api/signal-threads', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, purpose, posture, currentStage, summary, tags, currentSituation, openPressure, sourceNotes }),
+                body: JSON.stringify({ title, posture: 'exploratory', currentStage }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data || !data.success || !data.thread) {
@@ -1356,7 +1317,6 @@ async function saveActiveSignalThread() {
                 _signalThreadDrafts.delete('__new__');
             }
             showFlashMessage('Thread created.');
-            if (compression) await persistActiveSignalThreadFromEditor();
             await refreshSignalThreadsOverlay({ createNew: false });
             return;
         }
@@ -1364,7 +1324,7 @@ async function saveActiveSignalThread() {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(_activeSignalThreadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, purpose, posture, status, currentStage, summary, currentSituation, openPressure, compression, sourceNotes, tags }),
+            body: JSON.stringify({ title }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success || !data.thread) {
@@ -1445,59 +1405,53 @@ async function addObservationToActiveThread() {
 async function addFieldLogEntryToActiveThread() {
     if (!_activeSignalThreadId) return;
     const input = document.getElementById('signal-thread-field-log-input');
-    const stageSelect = document.getElementById('signal-thread-stage-select');
     const content = input ? input.value : '';
     const threadId = _activeSignalThreadId;
     if (!String(content || '').trim()) return;
-    if (_signalThreadPendingEntries.has(threadId)) return;
-    _signalThreadPendingEntries.add(threadId);
-    try {
-        setSignalThreadSaveStatus('Saving');
+    const stage = getSignalThreadStage(threadId);
+    setSignalThreadSaveState(threadId, 'Saving');
+    return queueSignalThreadSave(threadId, async () => {
+        try {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/entries', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stage: stageSelect ? stageSelect.value : 'observe', content }),
+            body: JSON.stringify({ stage, content }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success) {
             showFlashMessage(data && data.error ? data.error : 'Could not add Field Log entry.');
-            _signalThreadSaveStates.set(threadId, 'Save failed — retry');
-            if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
+            setSignalThreadSaveState(threadId, 'Save failed — retry');
             return;
         }
         if (_signalThreadDrafts.get(signalThreadDraftKey(threadId)) === content) {
             _signalThreadDrafts.delete(signalThreadDraftKey(threadId));
         }
         if (_activeSignalThreadId === threadId && input && input.value === content) input.value = '';
-        _signalThreadSaveStates.set(threadId, _signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved');
-        if (_activeSignalThreadId === threadId) {
-            setSignalThreadSaveStatus(_signalThreadSaveStates.get(threadId));
-            await refreshSignalThreadsOverlay({ createNew: false });
+        if (_activeSignalThread && _activeSignalThreadId === threadId) {
+            _activeSignalThread.entries = [...(_activeSignalThread.entries || []), data.entry];
+            renderSignalThreadEntries(document.getElementById('signal-thread-field-log'), _activeSignalThread.entries);
         }
-    } catch {
-        showFlashMessage('Could not reach server.');
-        _signalThreadSaveStates.set(threadId, 'Save failed — retry');
-        if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
-    } finally {
-        _signalThreadPendingEntries.delete(threadId);
-    }
+        setSignalThreadSaveState(threadId, _signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved');
+        } catch {
+            showFlashMessage('Could not reach server.');
+            setSignalThreadSaveState(threadId, 'Save failed — retry');
+        }
+    });
 }
 
 async function setActiveSignalThreadStage(stage) {
     const selectedStage = String(stage || '').toLowerCase();
-    const stageSelect = document.getElementById('signal-thread-stage-select');
-    if (!stageSelect || !['observe', 'reflect', 'act', 'refine', 'remember', 'relate'].includes(selectedStage)) return;
-    stageSelect.value = selectedStage;
-    document.querySelectorAll('[data-thread-stage]').forEach(button => {
-        button.setAttribute('aria-pressed', String(button.dataset.threadStage === selectedStage));
-    });
+    if (!SIGNAL_THREAD_STAGES.has(selectedStage)) return;
+    _signalThreadStages.set(signalThreadDraftKey(), selectedStage);
+    renderSignalThreadStage(selectedStage);
     if (!_activeSignalThreadId) {
         setSignalThreadSaveStatus('Create this thread to save its stage');
         return;
     }
     const threadId = _activeSignalThreadId;
-    setSignalThreadSaveStatus('Saving');
-    _signalThreadStageRequest = _signalThreadStageRequest.catch(() => {}).then(async () => {
+    setSignalThreadSaveState(threadId, 'Saving');
+    return queueSignalThreadSave(threadId, async () => {
+        try {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1505,22 +1459,21 @@ async function setActiveSignalThreadStage(stage) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) {
-            _signalThreadSaveStates.set(threadId, 'Save failed — retry');
-            if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
+            setSignalThreadSaveState(threadId, 'Save failed — retry');
             return;
         }
-        if (_activeSignalThreadId === threadId) _activeSignalThread = data.thread;
+        if (_activeSignalThreadId === threadId && _activeSignalThread) {
+            _activeSignalThread.currentStage = getSignalThreadStage(threadId);
+        }
         const message = _signalThreadDrafts.get(signalThreadDraftKey(threadId)) ? 'Unsaved draft' : 'Saved';
-        _signalThreadSaveStates.set(threadId, message);
-        if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus(message);
-        renderSignalThreadsList(document.getElementById('signal-threads-list'), _signalThreadsListSnapshot.map(item =>
-            item.id === threadId ? { ...item, currentStage: selectedStage } : item,
-        ));
-    }).catch(() => {
-        _signalThreadSaveStates.set(threadId, 'Save failed — retry');
-        if (_activeSignalThreadId === threadId) setSignalThreadSaveStatus('Save failed — retry');
+        setSignalThreadSaveState(threadId, message);
+        _signalThreadsListSnapshot = _signalThreadsListSnapshot.map(item =>
+            item.id === threadId ? { ...item, currentStage: getSignalThreadStage(threadId) } : item);
+        renderSignalThreadsList(document.getElementById('signal-threads-list'), _signalThreadsListSnapshot);
+        } catch {
+            setSignalThreadSaveState(threadId, 'Save failed — retry');
+        }
     });
-    await _signalThreadStageRequest;
 }
 
 async function exportActiveSignalThread() {
