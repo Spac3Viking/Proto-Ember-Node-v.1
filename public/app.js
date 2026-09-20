@@ -126,7 +126,6 @@ function normalizeCourtMemberId(value) {
     const normalized = value.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
     return normalized || null;
 }
-
 function getActiveCourtMemberId() {
     if (_activeCourtMemberId) return _activeCourtMemberId;
     try {
@@ -134,7 +133,53 @@ function getActiveCourtMemberId() {
     } catch {
         _activeCourtMemberId = null;
     }
+
     return _activeCourtMemberId;
+}
+
+let _rememberSubmissionPending = false;
+
+async function rememberActiveSignalThreadInHearth() {
+    if (!_activeSignalThreadId || _rememberSubmissionPending) return;
+    const contentEl = document.getElementById('signal-thread-remember-content');
+    const entryEl = document.getElementById('signal-thread-remember-entry');
+    const status = document.getElementById('signal-thread-remember-status');
+    const content = contentEl ? contentEl.value : '';
+    if (!String(content || '').trim()) {
+        if (status) status.textContent = 'Write material to preserve.';
+        return;
+    }
+    const selectedEntryIds = entryEl && entryEl.value ? [entryEl.value] : [];
+    const threadId = _activeSignalThreadId;
+    _rememberSubmissionPending = true;
+    if (status) status.textContent = 'Saving…';
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/remember', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content, selectedEntryIds }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !data.checkpoint) {
+            if (status) status.textContent = data.error || 'Save failed. Your material is still here.';
+            return;
+        }
+        if (status) status.textContent = 'Saved in Hearth.';
+        openRoomAndSubtab('hearth', 'hearth-chat');
+        await loadHearthCheckpoints(data.checkpoint.id);
+    } catch {
+        if (status) status.textContent = 'Save failed. Your material is still here.';
+    } finally {
+        _rememberSubmissionPending = false;
+    }
+}
+
+function applyRememberEntrySelection() {
+    const select = document.getElementById('signal-thread-remember-entry');
+    const content = document.getElementById('signal-thread-remember-content');
+    if (!select || !content || !select.value) return;
+    const option = select.options[select.selectedIndex];
+    content.value = option && option.dataset.content ? option.dataset.content : content.value;
 }
 
 function setActiveCourtMemberId(memberId) {
@@ -1158,12 +1203,29 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     renderSignalThreadEntries(reflectionsHost, thread && Array.isArray(thread.reflections) ? thread.reflections : []);
     renderSignalThreadEntries(observationsHost, thread && Array.isArray(thread.observations) ? thread.observations : []);
     renderSignalThreadEntries(fieldLogHost, thread && Array.isArray(thread.entries) ? thread.entries : []);
+    renderSignalThreadRememberEntries(thread);
 
     const sagaCyclesHost = document.getElementById('signal-thread-saga-cycles');
     renderSignalThreadSagaCycles(sagaCyclesHost, thread);
 
     clearSignalThreadCycleInputs();
     restoreSignalThreadDraft(_activeSignalThreadId);
+}
+
+function renderSignalThreadRememberEntries(thread) {
+    const select = document.getElementById('signal-thread-remember-entry');
+    const content = document.getElementById('signal-thread-remember-content');
+    if (!select) return;
+    select.innerHTML = '<option value="">Write preserved material below</option>';
+    (thread && Array.isArray(thread.entries) ? thread.entries : []).forEach(entry => {
+        if (!entry || !entry.id || !String(entry.content || '').trim()) return;
+        const option = document.createElement('option');
+        option.value = entry.id;
+        option.textContent = String(entry.stage || 'note') + ' · ' + String(entry.content).slice(0, 100);
+        option.dataset.content = String(entry.content);
+        select.appendChild(option);
+    });
+    if (content) content.value = '';
 }
 
 function showSignalThreadEmptyState() {
@@ -2272,6 +2334,7 @@ let _activeRoomId = 'threads';
             loadHearthArchive();
             loadHearthTrustedArchive();
             loadHearthRememberedThreads();
+            loadHearthCheckpoints();
         }
         if (roomId === 'system') refreshSystemStatus();
     }
@@ -2323,6 +2386,9 @@ let _activeRoomId = 'threads';
                     loadArchiveCacheManager();
                     loadArchiveSignalPanel();
                 }
+                if (panelId === 'hearth-chat') {
+                    loadHearthCheckpoints();
+                }
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
                     loadHearthRuntimeRegistry();
@@ -2346,6 +2412,8 @@ let _activeRoomId = 'threads';
    ================================================================ */
 
 let hearthActiveThreadId = null;
+let _hearthCheckpoint = null;
+let _hearthCheckpointSavePending = false;
 
 (function initHearth() {
     const sendButton   = document.getElementById('send-button');
@@ -2387,6 +2455,128 @@ let hearthActiveThreadId = null;
         });
     }
 })();
+
+async function loadHearthCheckpoints(selectId = _hearthCheckpoint && _hearthCheckpoint.id) {
+    const list = document.getElementById('hearth-checkpoint-list');
+    if (!list) return;
+    try {
+        const res = await fetch('/api/hearth/checkpoints');
+        const data = await res.json().catch(() => ({}));
+        const checkpoints = res.ok && Array.isArray(data.checkpoints) ? data.checkpoints : [];
+        list.innerHTML = '';
+        if (!checkpoints.length) {
+            list.innerHTML = '<span class="message-system">No Hearth checkpoints yet. Deliberately preserve material from a Signal Thread.</span>';
+            showHearthCheckpoint(null);
+            return;
+        }
+        checkpoints.forEach(checkpoint => {
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'signal-thread-list-item' + (checkpoint.id === selectId ? ' active' : '');
+            row.textContent = String(checkpoint.title || 'Untitled checkpoint');
+            row.addEventListener('click', () => loadHearthCheckpoint(checkpoint.id));
+            list.appendChild(row);
+        });
+        const id = selectId && checkpoints.some(item => item.id === selectId) ? selectId : checkpoints[0].id;
+        await loadHearthCheckpoint(id);
+    } catch {
+        list.innerHTML = '<span class="message-system">Could not load Hearth checkpoints.</span>';
+    }
+}
+
+async function loadHearthCheckpoint(id) {
+    try {
+        const res = await fetch('/api/hearth/checkpoints/' + encodeURIComponent(id));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.checkpoint) throw new Error('Checkpoint unavailable');
+        const origin = data.checkpoint.origin || {};
+        if (origin.threadId) {
+            const threadRes = await fetch('/api/signal-threads/' + encodeURIComponent(origin.threadId));
+            data.checkpoint.originUnavailable = !threadRes.ok;
+        }
+        showHearthCheckpoint(data.checkpoint);
+    } catch {
+        showHearthCheckpoint(null, 'Checkpoint is unavailable.');
+    }
+}
+
+function showHearthCheckpoint(checkpoint, message = '') {
+    _hearthCheckpoint = checkpoint || null;
+    const empty = document.getElementById('hearth-checkpoint-empty');
+    const detail = document.getElementById('hearth-checkpoint-detail');
+    if (!checkpoint) {
+        if (empty) {
+            empty.style.display = '';
+            empty.textContent = message || 'Select a checkpoint to review it.';
+        }
+        if (detail) detail.style.display = 'none';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+    if (detail) detail.style.display = '';
+    const title = document.getElementById('hearth-checkpoint-title');
+    const content = document.getElementById('hearth-checkpoint-content');
+    const meta = document.getElementById('hearth-checkpoint-meta');
+    const status = document.getElementById('hearth-checkpoint-save-status');
+    if (title) title.textContent = checkpoint.title || 'Untitled checkpoint';
+    if (content) content.value = checkpoint.content || '';
+    if (status) status.textContent = 'Saved';
+    if (meta) {
+        const origin = checkpoint.origin || {};
+        const entries = Array.isArray(origin.selectedEntryIds) && origin.selectedEntryIds.length
+            ? 'Selected Field Log entries: ' + origin.selectedEntryIds.join(', ')
+            : 'No Field Log entry selected.';
+        meta.textContent = 'Origin: ' + (checkpoint.originUnavailable
+            ? 'Signal Thread unavailable'
+            : (origin.title || origin.threadId || 'Unavailable Signal Thread')) +
+            ' · Created: ' + (checkpoint.createdAt || 'unknown') +
+            ' · Updated: ' + (checkpoint.updatedAt || 'unknown') + ' · ' + entries;
+    }
+}
+
+async function saveHearthCheckpoint() {
+    if (!_hearthCheckpoint || _hearthCheckpointSavePending) return;
+    const content = document.getElementById('hearth-checkpoint-content');
+    const status = document.getElementById('hearth-checkpoint-save-status');
+    const value = content ? content.value : '';
+    if (!String(value || '').trim()) {
+        if (status) status.textContent = 'Checkpoint content is required.';
+        return;
+    }
+    _hearthCheckpointSavePending = true;
+    if (status) status.textContent = 'Saving…';
+    try {
+        const res = await fetch('/api/hearth/checkpoints/' + encodeURIComponent(_hearthCheckpoint.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !data.checkpoint) {
+            if (status) status.textContent = data.error || 'Save failed. Your edits are still here.';
+            return;
+        }
+        showHearthCheckpoint(data.checkpoint);
+        await loadHearthCheckpoints(data.checkpoint.id);
+    } catch {
+        if (status) status.textContent = 'Save failed. Your edits are still here.';
+    } finally {
+        _hearthCheckpointSavePending = false;
+    }
+}
+
+async function returnToCheckpointOrigin() {
+    const origin = _hearthCheckpoint && _hearthCheckpoint.origin;
+    if (!origin || !origin.threadId) return;
+    saveSignalThreadDraft();
+    openRoomAndSubtab('threads');
+    const thread = await fetchSignalThread(origin.threadId);
+    if (thread) {
+        fillSignalThreadEditor(thread, { createMode: false });
+    } else {
+        showFlashMessage('The originating Signal Thread is unavailable.');
+    }
+}
 
 async function loadHearthThreads() {
     const listEl = document.getElementById('hearth-thread-list');
@@ -10644,6 +10834,18 @@ async function launchOllama(runtimeId) {
 
     const addFieldLogBtn = document.getElementById('signal-thread-add-field-log-btn');
     if (addFieldLogBtn) addFieldLogBtn.addEventListener('click', addFieldLogEntryToActiveThread);
+
+    const rememberEntry = document.getElementById('signal-thread-remember-entry');
+    if (rememberEntry) rememberEntry.addEventListener('change', applyRememberEntrySelection);
+
+    const rememberSaveBtn = document.getElementById('signal-thread-remember-save-btn');
+    if (rememberSaveBtn) rememberSaveBtn.addEventListener('click', rememberActiveSignalThreadInHearth);
+
+    const checkpointSaveBtn = document.getElementById('hearth-checkpoint-save-btn');
+    if (checkpointSaveBtn) checkpointSaveBtn.addEventListener('click', saveHearthCheckpoint);
+
+    const checkpointReturnBtn = document.getElementById('hearth-checkpoint-return-btn');
+    if (checkpointReturnBtn) checkpointReturnBtn.addEventListener('click', returnToCheckpointOrigin);
 
     const fieldLogInput = document.getElementById('signal-thread-field-log-input');
     if (fieldLogInput) fieldLogInput.addEventListener('input', () => {

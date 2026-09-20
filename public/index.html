@@ -295,100 +295,37 @@
           <div class="room-header-row">
             <h2 class="room-heading"><span class="room-rune">ᚺ</span> Hearth · Memory <span class="lifecycle-pill remembered">Remembered</span></h2>
             <nav class="sub-tabs" role="tablist" aria-label="Hearth tabs">
-              <button class="sub-tab active" data-subtab="hearth-chat"    aria-selected="true">Threads</button>
+              <button class="sub-tab active" data-subtab="hearth-chat"    aria-selected="true">Checkpoints</button>
               <button class="sub-tab"        data-subtab="hearth-archive" aria-selected="false">Archive</button>
               <button class="sub-tab"        data-subtab="hearth-system"  aria-selected="false">Status</button>
             </nav>
           </div>
 
-          <!-- Hearth / Chat -->
-          <div class="sub-panel active" id="hearth-chat">
-            <!-- Thread list sidebar -->
-            <div class="thread-layout">
-              <aside class="thread-sidebar">
-                <div class="thread-sidebar-header">
-                  <span class="council-section-title" style="border:none;margin:0;padding:0;">Active Threads</span>
-                  <button class="secondary" id="hearth-new-thread-btn" title="New thread">+</button>
-                </div>
-                <div class="thread-list" id="hearth-thread-list">
-                  <span class="message-system">No threads.</span>
-                </div>
-              </aside>
-
-              <!-- Active thread -->
-              <div class="thread-main ember-card hearth-chat-card">
-                <div class="thread-title-bar">
-                  <span class="thread-active-title" id="hearth-active-thread-title">Select or create a thread</span>
-                </div>
-                <div class="chat-window" id="messages" aria-live="polite" aria-label="Conversation"></div>
-
-                <!-- Signal Trace Panel -->
-                <div class="signal-trace-panel collapsed" id="signal-trace-panel">
-                  <div class="signal-trace-header">
-                    <span class="signal-trace-label" title="Signal Trace"><span aria-hidden="true">⌁ </span>Trace</span>
-                    <span class="signal-trace-status" id="signal-trace-status">awaiting exchange</span>
-                    <button class="signal-trace-toggle" id="signal-trace-toggle" aria-label="Toggle signal trace" aria-expanded="false" title="Expand signal trace">▸</button>
+            <!-- Hearth / Checkpoints -->
+            <div class="sub-panel active" id="hearth-chat">
+              <div class="checkpoint-layout">
+                <aside class="checkpoint-list-pane">
+                  <div class="council-section-title">Hearth Checkpoints</div>
+                  <div id="hearth-checkpoint-list" class="signal-threads-list">
+                    <span class="message-system">Loading checkpoints…</span>
                   </div>
-                  <div class="signal-trace-sources" id="signal-trace-sources"></div>
-                </div>
-
-                <!-- Active Chat References Bar — shown when sources are attached to this thread -->
-                <div class="chat-refs-bar" id="chat-refs-bar" style="display:none;">
-                  <div class="chat-refs-header">
-                    <span class="chat-refs-label">Active References</span>
-                    <button class="secondary chat-refs-clear-btn" id="clear-chat-refs" title="Clear all references">✕ Clear</button>
+                </aside>
+                <section class="ember-card checkpoint-detail-pane">
+                  <div id="hearth-checkpoint-empty" class="message-system">Select a checkpoint to review it.</div>
+                  <div id="hearth-checkpoint-detail" style="display:none;">
+                    <h3 id="hearth-checkpoint-title"></h3>
+                    <div id="hearth-checkpoint-meta" class="checkpoint-meta"></div>
+                    <label for="hearth-checkpoint-content">Preserved material</label>
+                    <textarea id="hearth-checkpoint-content" rows="12"></textarea>
+                    <p class="message-system">Selected Field Log entries record provenance only; edited material is not presented as an exact quotation.</p>
+                    <div class="signal-thread-actions">
+                      <button class="primary" id="hearth-checkpoint-save-btn">Save checkpoint</button>
+                      <button class="secondary" id="hearth-checkpoint-return-btn">Return to Signal Thread</button>
+                      <span class="message-system" id="hearth-checkpoint-save-status" role="status" aria-live="polite">Saved</span>
+                    </div>
                   </div>
-                  <div class="chat-refs-chips" id="chat-refs-chips"></div>
-                </div>
-
-                <details class="runtime-controls-panel">
-                  <summary class="runtime-controls-summary" title="Runtime controls"><span aria-hidden="true">⚑ </span>Runtime Stance</summary>
-                  <div class="runtime-controls-body">
-                    <div class="response-depth-control">
-                      <label for="response-depth-select" class="response-depth-label" title="Response Depth"><span aria-hidden="true">◎ </span>Depth:</label>
-                      <select id="response-depth-select" class="response-depth-select" aria-label="Response depth" aria-describedby="response-depth-help">
-                        <option value="spark">Spark</option>
-                        <option value="ember" selected>Ember</option>
-                        <option value="hearth">Hearth</option>
-                        <option value="archive">Archive</option>
-                      </select>
-                      <span class="visually-hidden" id="response-depth-help">Spark is fast with minimal context. Ember is the balanced default. Hearth enables deeper synthesis. Archive is broadest and slowest.</span>
-                    </div>
-                    <div class="response-depth-control response-depth-control-inline">
-                      <label for="runtime-profile-select" class="response-depth-label" title="Runtime Profile"><span aria-hidden="true">⚑ </span>Profile:</label>
-                      <select id="runtime-profile-select" class="response-depth-select" aria-label="Runtime profile" aria-describedby="runtime-profile-help">
-                        <option value="spark-compression">Spark Compression</option>
-                        <option value="balanced-ember" selected>Balanced Ember</option>
-                        <option value="field-guide">Field Guide</option>
-                        <option value="scholar-weave">Scholar Weave</option>
-                        <option value="narrative-forge">Narrative Forge</option>
-                        <option value="minimal-retrieval">Minimal Retrieval</option>
-                        <option value="deep-hearth">Deep Hearth</option>
-                      </select>
-                      <span class="visually-hidden" id="runtime-profile-help">Runtime cognition profile shapes response posture, retrieval posture, and mentor pacing.</span>
-                    </div>
-                    <div class="response-depth-control response-depth-control-inline loadout-focus-control">
-                      <label for="loadout-focus-toggle" class="response-depth-label" title="Loadout Focus"><span aria-hidden="true">◆ </span>Carry:</label>
-                      <input type="checkbox" id="loadout-focus-toggle" class="loadout-focus-toggle" aria-describedby="loadout-focus-help">
-                      <span class="loadout-focus-state" id="loadout-focus-state">OFF</span>
-                      <span class="visually-hidden" id="loadout-focus-help">Focus answers through the current Cache Loadout.</span>
-                    </div>
-                    <div class="runtime-controls-help">Open when needed: profile sets posture, depth sets breadth, carry prioritizes loaded caches.</div>
-                  </div>
-                </details>
-                <div class="chat-input-row" style="padding: 0.75rem 1rem;">
-                  <textarea
-                    id="message-input"
-                    placeholder="Speak with Ember Prime… (Enter sends, Shift+Enter newline)"
-                    aria-label="Message input"
-                    autocomplete="off"
-                    rows="2"
-                  ></textarea>
-                  <button class="primary" id="send-button" aria-label="Send">Send</button>
-                  <button class="secondary" id="stop-response-button" aria-label="Still the Signal" style="display:none;">Still the Signal</button>
-                </div>
+                </section>
               </div>
-            </div>
           </div>
 
           <!-- Hearth / Archive -->
@@ -1348,6 +1285,21 @@
                         <span class="message-system" id="signal-thread-save-status" role="status" aria-live="polite">Saved</span>
                       </div>
                       <div id="signal-thread-field-log" class="signal-thread-entries"></div>
+                    </div>
+                  </section>
+                  <section class="signal-thread-workspace-panel">
+                    <h3>Remember in Hearth</h3>
+                    <div class="gf-collapsible-panel-body">
+                      <label for="signal-thread-remember-entry">Field Log entry (optional)</label>
+                      <select id="signal-thread-remember-entry">
+                        <option value="">Write preserved material below</option>
+                      </select>
+                      <textarea id="signal-thread-remember-content" rows="5" placeholder="Write the material you deliberately want to preserve."></textarea>
+                      <p class="message-system">Review and edit before saving. Nothing is preserved until you explicitly save.</p>
+                      <div class="signal-thread-actions">
+                        <button class="primary" id="signal-thread-remember-save-btn">Remember in Hearth</button>
+                        <span class="message-system" id="signal-thread-remember-status" role="status" aria-live="polite"></span>
+                      </div>
                     </div>
                   </section>
                   <div class="signal-thread-actions">

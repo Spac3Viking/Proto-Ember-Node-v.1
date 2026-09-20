@@ -365,9 +365,17 @@ router.post('/api/signal-threads/:id/versions/:versionId/restore', writeLimiter,
 });
 
 router.post('/api/signal-threads/:id/remember', writeLimiter, (req, res) => {
-    const checkpoint = rememberThread(req.params.id, req.body && req.body.content);
-    if (!checkpoint) return res.status(404).json({ error: 'Signal Thread not found' });
-    res.json({ success: true, checkpoint });
+    try {
+        const checkpoint = rememberThread(
+            req.params.id,
+            req.body && req.body.content,
+            req.body && req.body.selectedEntryIds,
+        );
+        if (!checkpoint) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({ success: true, checkpoint });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
 });
 
 router.get('/api/hearth/checkpoints', readLimiter, (req, res) => res.json({ checkpoints: listCheckpoints() }));
@@ -379,9 +387,13 @@ router.get('/api/hearth/checkpoints/:id', readLimiter, (req, res) => {
 });
 
 router.put('/api/hearth/checkpoints/:id', writeLimiter, (req, res) => {
-    const checkpoint = updateCheckpoint(req.params.id, req.body || {});
-    if (!checkpoint) return res.status(404).json({ error: 'Hearth checkpoint not found' });
-    res.json({ success: true, checkpoint });
+    try {
+        const checkpoint = updateCheckpoint(req.params.id, req.body || {});
+        if (!checkpoint) return res.status(404).json({ error: 'Hearth checkpoint not found' });
+        res.json({ success: true, checkpoint });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
 });
 
 router.get('/api/workspace/relations', readLimiter, (req, res) => {

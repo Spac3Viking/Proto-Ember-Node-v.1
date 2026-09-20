@@ -101,18 +101,29 @@ function loadCheckpoint(id) {
     return readJson(checkpointPath(id), null);
 }
 
-function rememberThread(threadId, content) {
+function rememberThread(threadId, content, selectedEntryIds) {
     const thread = loadSignalThread(threadId);
     if (!thread) return null;
+    const text = String(content || '').trim();
+    if (!text) throw new Error('Checkpoint content is required');
     const existing = listCheckpoints().find(item => item.origin && item.origin.threadId === thread.id);
     const now = new Date().toISOString();
     const checkpoint = {
         id: existing ? existing.id : 'checkpoint-' + crypto.randomUUID(),
         title: existing ? existing.title : thread.title,
-        content: String(content || thread.compression || thread.summary || '').trim(),
+        content: text,
         createdAt: existing ? existing.createdAt : now,
         updatedAt: now,
-        origin: { type: 'signal-thread', threadId: thread.id, title: thread.title },
+        origin: {
+            type: 'signal-thread',
+            threadId: thread.id,
+            title: thread.title,
+            selectedEntryIds: Array.isArray(selectedEntryIds)
+                ? selectedEntryIds.filter(id => typeof id === 'string' && id)
+                : (existing && existing.origin && Array.isArray(existing.origin.selectedEntryIds)
+                    ? existing.origin.selectedEntryIds
+                    : []),
+        },
     };
     atomicWrite(checkpointPath(checkpoint.id), checkpoint);
     return checkpoint;
@@ -122,7 +133,11 @@ function updateCheckpoint(id, patch) {
     const current = loadCheckpoint(id);
     if (!current) return null;
     if (typeof patch.title === 'string' && patch.title.trim()) current.title = patch.title.trim();
-    if (typeof patch.content === 'string') current.content = patch.content;
+    if (typeof patch.content === 'string') {
+        const content = patch.content.trim();
+        if (!content) throw new Error('Checkpoint content is required');
+        current.content = content;
+    }
     current.updatedAt = new Date().toISOString();
     atomicWrite(checkpointPath(id), current);
     return current;

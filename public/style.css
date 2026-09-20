@@ -2714,6 +2714,34 @@ button.secondary:disabled {
   margin-top: 0.55rem;
 }
 
+.checkpoint-layout {
+  display: flex;
+  gap: 1rem;
+  min-height: 60vh;
+}
+
+.checkpoint-list-pane {
+  width: 280px;
+  flex: 0 0 auto;
+}
+
+.checkpoint-detail-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.checkpoint-meta {
+  color: var(--archive-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin: 0.4rem 0 0.75rem;
+}
+
+@media (max-width: 860px) {
+  .checkpoint-layout { flex-direction: column; }
+  .checkpoint-list-pane { width: auto; }
+}
+
 .signal-thread-anchor-panel {
   border-color: hsla(38, 100%, 70%, 0.18);
   background: linear-gradient(180deg, hsla(38, 100%, 70%, 0.04), hsla(120, 16%, 5%, 0.72));
