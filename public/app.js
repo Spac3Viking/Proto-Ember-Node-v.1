@@ -126,8 +126,6 @@ function normalizeCourtMemberId(value) {
     const normalized = value.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
     return normalized || null;
 }
-if (panelId === 'hearth-chat') loadHearthCheckpoints();
-
 function getActiveCourtMemberId() {
     if (_activeCourtMemberId) return _activeCourtMemberId;
     try {
@@ -136,21 +134,6 @@ function getActiveCourtMemberId() {
         _activeCourtMemberId = null;
     }
 
-    function renderSignalThreadRememberEntries(thread) {
-        const select = document.getElementById('signal-thread-remember-entry');
-        const content = document.getElementById('signal-thread-remember-content');
-        if (!select) return;
-        select.innerHTML = '<option value="">Write preserved material below</option>';
-        (thread && Array.isArray(thread.entries) ? thread.entries : []).forEach(entry => {
-            if (!entry || !entry.id || !String(entry.content || '').trim()) return;
-            const option = document.createElement('option');
-            option.value = entry.id;
-            option.textContent = String(entry.stage || 'note') + ' · ' + String(entry.content).slice(0, 100);
-            option.dataset.content = String(entry.content);
-            select.appendChild(option);
-        });
-        if (content) content.value = '';
-    }
     return _activeCourtMemberId;
 }
 
@@ -1227,6 +1210,22 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
 
     clearSignalThreadCycleInputs();
     restoreSignalThreadDraft(_activeSignalThreadId);
+}
+
+function renderSignalThreadRememberEntries(thread) {
+    const select = document.getElementById('signal-thread-remember-entry');
+    const content = document.getElementById('signal-thread-remember-content');
+    if (!select) return;
+    select.innerHTML = '<option value="">Write preserved material below</option>';
+    (thread && Array.isArray(thread.entries) ? thread.entries : []).forEach(entry => {
+        if (!entry || !entry.id || !String(entry.content || '').trim()) return;
+        const option = document.createElement('option');
+        option.value = entry.id;
+        option.textContent = String(entry.stage || 'note') + ' · ' + String(entry.content).slice(0, 100);
+        option.dataset.content = String(entry.content);
+        select.appendChild(option);
+    });
+    if (content) content.value = '';
 }
 
 function showSignalThreadEmptyState() {
@@ -2386,6 +2385,9 @@ let _activeRoomId = 'threads';
                     loadHearthRememberedThreads();
                     loadArchiveCacheManager();
                     loadArchiveSignalPanel();
+                }
+                if (panelId === 'hearth-chat') {
+                    loadHearthCheckpoints();
                 }
                 if (panelId === 'hearth-system') {
                     refreshSystemStatus();
