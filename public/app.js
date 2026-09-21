@@ -221,7 +221,7 @@ function applyRememberEntrySelection() {
     if (!select || !content || !select.value) return;
     const option = select.options[select.selectedIndex];
     content.value = option && option.dataset.content ? option.dataset.content : content.value;
-    rememberDraft(_activeSignalThreadId);
+    if (typeof rememberDraft === 'function') rememberDraft(_activeSignalThreadId);
 }
 
 function setActiveCourtMemberId(memberId) {
@@ -1211,7 +1211,7 @@ function renderSignalThreadOverviewMeta(host, thread) {
 
 function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     saveSignalThreadDraft(_activeSignalThreadId);
-    rememberDraft(_activeSignalThreadId);
+    if (typeof rememberDraft === 'function') rememberDraft(_activeSignalThreadId);
     _activeSignalThread = thread;
     _activeSignalThreadId = thread && thread.id ? thread.id : null;
     rememberActiveSignalThread(_activeSignalThreadId);
@@ -1246,8 +1246,10 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     renderSignalThreadEntries(reflectionsHost, thread && Array.isArray(thread.reflections) ? thread.reflections : []);
     renderSignalThreadEntries(observationsHost, thread && Array.isArray(thread.observations) ? thread.observations : []);
     renderSignalThreadEntries(fieldLogHost, thread && Array.isArray(thread.entries) ? thread.entries : []);
-    renderSignalThreadRememberEntries(thread, _rememberCheckpoints.get(_activeSignalThreadId));
-    loadRememberCheckpoint(_activeSignalThreadId);
+    if (typeof renderSignalThreadRememberEntries === 'function' && typeof _rememberCheckpoints !== 'undefined') {
+        renderSignalThreadRememberEntries(thread, _rememberCheckpoints.get(_activeSignalThreadId));
+    }
+    if (typeof loadRememberCheckpoint === 'function') loadRememberCheckpoint(_activeSignalThreadId);
 
     const sagaCyclesHost = document.getElementById('signal-thread-saga-cycles');
     renderSignalThreadSagaCycles(sagaCyclesHost, thread);
@@ -1256,11 +1258,14 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     restoreSignalThreadDraft(_activeSignalThreadId);
 }
 
-function renderSignalThreadRememberEntries(thread, checkpoint = _rememberCheckpoints.get(thread && thread.id)) {
+function renderSignalThreadRememberEntries(thread, checkpoint) {
     const select = document.getElementById('signal-thread-remember-entry');
     const content = document.getElementById('signal-thread-remember-content');
     if (!select) return;
-    const draft = _rememberDrafts.get(thread && thread.id);
+    if (typeof _rememberCheckpoints !== 'undefined' && checkpoint === undefined) {
+        checkpoint = _rememberCheckpoints.get(thread && thread.id);
+    }
+    const draft = typeof _rememberDrafts !== 'undefined' ? _rememberDrafts.get(thread && thread.id) : null;
     const selectedEntryIds = checkpoint && checkpoint.origin && Array.isArray(checkpoint.origin.selectedEntryIds)
         ? checkpoint.origin.selectedEntryIds : [];
     select.innerHTML = '<option value="">Write preserved material below</option>';
