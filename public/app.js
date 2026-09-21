@@ -137,7 +137,41 @@ function getActiveCourtMemberId() {
     return _activeCourtMemberId;
 }
 
+const _rememberDrafts = new Map();
+const _rememberCheckpoints = new Map();
 let _rememberSubmissionPending = false;
+let _rememberLoadToken = 0;
+
+function rememberDraft(threadId) {
+    const content = document.getElementById('signal-thread-remember-content');
+    const entry = document.getElementById('signal-thread-remember-entry');
+    if (!threadId || !content || !entry) return;
+    _rememberDrafts.set(threadId, { content: content.value, entryId: entry.value });
+}
+
+function setRememberStatus(threadId, message) {
+    if (_activeSignalThreadId === threadId) {
+        const status = document.getElementById('signal-thread-remember-status');
+        if (status) status.textContent = message;
+    }
+}
+
+async function loadRememberCheckpoint(threadId) {
+    const token = ++_rememberLoadToken;
+    try {
+        const res = await fetch('/api/hearth/checkpoints');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !Array.isArray(data.checkpoints)) throw new Error('Could not load Hearth checkpoints');
+        const checkpoint = data.checkpoints.find(item => item.origin && item.origin.threadId === threadId) || null;
+        _rememberCheckpoints.set(threadId, checkpoint);
+        if (token !== _rememberLoadToken || _activeSignalThreadId !== threadId) return;
+        renderSignalThreadRememberEntries(_activeSignalThread, checkpoint);
+    } catch {
+        if (token === _rememberLoadToken && _activeSignalThreadId === threadId) {
+            setRememberStatus(threadId, 'Could not check for an existing Hearth checkpoint.');
+        }
+    }
+}
 
 async function rememberActiveSignalThreadInHearth() {
     if (!_activeSignalThreadId || _rememberSubmissionPending) return;
@@ -164,9 +198,16 @@ async function rememberActiveSignalThreadInHearth() {
             if (status) status.textContent = data.error || 'Save failed. Your material is still here.';
             return;
         }
-        if (status) status.textContent = 'Saved in Hearth.';
-        openRoomAndSubtab('hearth', 'hearth-chat');
-        await loadHearthCheckpoints(data.checkpoint.id);
+        _rememberCheckpoints.set(threadId, data.checkpoint);
+        const current = _rememberDrafts.get(threadId);
+        if (!current || (current.content === content && current.entryId === (selectedEntryIds[0] || ''))) {
+            _rememberDrafts.delete(threadId);
+        }
+        if (_activeSignalThreadId === threadId) {
+            setRememberStatus(threadId, 'Saved in Hearth.');
+            renderSignalThreadRememberEntries(_activeSignalThread, data.checkpoint);
+        }
+        await loadHearthCheckpoints(data.checkpoint.id, { loadSelected: false });
     } catch {
         if (status) status.textContent = 'Save failed. Your material is still here.';
     } finally {
@@ -180,6 +221,7 @@ function applyRememberEntrySelection() {
     if (!select || !content || !select.value) return;
     const option = select.options[select.selectedIndex];
     content.value = option && option.dataset.content ? option.dataset.content : content.value;
+    if (typeof rememberDraft === 'function') rememberDraft(_activeSignalThreadId);
 }
 
 function setActiveCourtMemberId(memberId) {
@@ -1169,6 +1211,7 @@ function renderSignalThreadOverviewMeta(host, thread) {
 
 function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     saveSignalThreadDraft(_activeSignalThreadId);
+    if (typeof rememberDraft === 'function') rememberDraft(_activeSignalThreadId);
     _activeSignalThread = thread;
     _activeSignalThreadId = thread && thread.id ? thread.id : null;
     rememberActiveSignalThread(_activeSignalThreadId);
@@ -1203,7 +1246,10 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     renderSignalThreadEntries(reflectionsHost, thread && Array.isArray(thread.reflections) ? thread.reflections : []);
     renderSignalThreadEntries(observationsHost, thread && Array.isArray(thread.observations) ? thread.observations : []);
     renderSignalThreadEntries(fieldLogHost, thread && Array.isArray(thread.entries) ? thread.entries : []);
-    renderSignalThreadRememberEntries(thread);
+    if (typeof renderSignalThreadRememberEntries === 'function' && typeof _rememberCheckpoints !== 'undefined') {
+        renderSignalThreadRememberEntries(thread, _rememberCheckpoints.get(_activeSignalThreadId));
+    }
+    if (typeof loadRememberCheckpoint === 'function') loadRememberCheckpoint(_activeSignalThreadId);
 
     const sagaCyclesHost = document.getElementById('signal-thread-saga-cycles');
     renderSignalThreadSagaCycles(sagaCyclesHost, thread);
@@ -1212,10 +1258,16 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     restoreSignalThreadDraft(_activeSignalThreadId);
 }
 
-function renderSignalThreadRememberEntries(thread) {
+function renderSignalThreadRememberEntries(thread, checkpoint) {
     const select = document.getElementById('signal-thread-remember-entry');
     const content = document.getElementById('signal-thread-remember-content');
     if (!select) return;
+    if (typeof _rememberCheckpoints !== 'undefined' && checkpoint === undefined) {
+        checkpoint = _rememberCheckpoints.get(thread && thread.id);
+    }
+    const draft = typeof _rememberDrafts !== 'undefined' ? _rememberDrafts.get(thread && thread.id) : null;
+    const selectedEntryIds = checkpoint && checkpoint.origin && Array.isArray(checkpoint.origin.selectedEntryIds)
+        ? checkpoint.origin.selectedEntryIds : [];
     select.innerHTML = '<option value="">Write preserved material below</option>';
     (thread && Array.isArray(thread.entries) ? thread.entries : []).forEach(entry => {
         if (!entry || !entry.id || !String(entry.content || '').trim()) return;
@@ -1225,7 +1277,14 @@ function renderSignalThreadRememberEntries(thread) {
         option.dataset.content = String(entry.content);
         select.appendChild(option);
     });
-    if (content) content.value = '';
+    const selected = draft ? draft.entryId : selectedEntryIds[0];
+    if (selected && Array.from(select.options).some(option => option.value === selected)) select.value = selected;
+    if (content) content.value = draft ? draft.content : (checkpoint ? checkpoint.content || '' : '');
+    const heading = document.getElementById('signal-thread-remember-heading');
+    const save = document.getElementById('signal-thread-remember-save-btn');
+    const label = checkpoint ? 'Update Hearth checkpoint' : 'Remember in Hearth';
+    if (heading) heading.textContent = label;
+    if (save) save.textContent = label;
 }
 
 function showSignalThreadEmptyState() {
@@ -1614,6 +1673,7 @@ async function addFieldLogEntryToActiveThread() {
         if (_activeSignalThread && _activeSignalThreadId === threadId) {
             _activeSignalThread.entries = [...(_activeSignalThread.entries || []), data.entry];
             renderSignalThreadEntries(document.getElementById('signal-thread-field-log'), _activeSignalThread.entries);
+            renderSignalThreadRememberEntries(_activeSignalThread);
         }
         finishSignalThreadSave(threadId, operationId);
         } catch {
@@ -2413,7 +2473,25 @@ let _activeRoomId = 'threads';
 
 let hearthActiveThreadId = null;
 let _hearthCheckpoint = null;
-let _hearthCheckpointSavePending = false;
+const _hearthCheckpointDrafts = new Map();
+const _hearthCheckpointSavePending = new Set();
+let _hearthCheckpointLoadToken = 0;
+
+function saveHearthCheckpointDraft(checkpointId = _hearthCheckpoint && _hearthCheckpoint.id) {
+    const content = document.getElementById('hearth-checkpoint-content');
+    if (!checkpointId || !content) return;
+    const draft = _hearthCheckpointDrafts.get(checkpointId) || {};
+    _hearthCheckpointDrafts.set(checkpointId, { ...draft, content: content.value, status: 'Unsaved changes' });
+}
+
+function setHearthCheckpointStatus(checkpointId, status) {
+    const draft = _hearthCheckpointDrafts.get(checkpointId) || {};
+    _hearthCheckpointDrafts.set(checkpointId, { ...draft, status });
+    if (_hearthCheckpoint && _hearthCheckpoint.id === checkpointId) {
+        const element = document.getElementById('hearth-checkpoint-save-status');
+        if (element) element.textContent = status;
+    }
+}
 
 (function initHearth() {
     const sendButton   = document.getElementById('send-button');
@@ -2456,17 +2534,18 @@ let _hearthCheckpointSavePending = false;
     }
 })();
 
-async function loadHearthCheckpoints(selectId = _hearthCheckpoint && _hearthCheckpoint.id) {
+async function loadHearthCheckpoints(selectId = _hearthCheckpoint && _hearthCheckpoint.id, { loadSelected = true } = {}) {
     const list = document.getElementById('hearth-checkpoint-list');
     if (!list) return;
     try {
         const res = await fetch('/api/hearth/checkpoints');
         const data = await res.json().catch(() => ({}));
-        const checkpoints = res.ok && Array.isArray(data.checkpoints) ? data.checkpoints : [];
+        if (!res.ok || !Array.isArray(data.checkpoints)) throw new Error('Could not load Hearth checkpoints');
+        const checkpoints = data.checkpoints;
         list.innerHTML = '';
         if (!checkpoints.length) {
             list.innerHTML = '<span class="message-system">No Hearth checkpoints yet. Deliberately preserve material from a Signal Thread.</span>';
-            showHearthCheckpoint(null);
+            if (loadSelected) showHearthCheckpoint(null);
             return;
         }
         checkpoints.forEach(checkpoint => {
@@ -2478,13 +2557,15 @@ async function loadHearthCheckpoints(selectId = _hearthCheckpoint && _hearthChec
             list.appendChild(row);
         });
         const id = selectId && checkpoints.some(item => item.id === selectId) ? selectId : checkpoints[0].id;
-        await loadHearthCheckpoint(id);
+        if (loadSelected) await loadHearthCheckpoint(id);
     } catch {
         list.innerHTML = '<span class="message-system">Could not load Hearth checkpoints.</span>';
     }
 }
 
 async function loadHearthCheckpoint(id) {
+    saveHearthCheckpointDraft();
+    const token = ++_hearthCheckpointLoadToken;
     try {
         const res = await fetch('/api/hearth/checkpoints/' + encodeURIComponent(id));
         const data = await res.json().catch(() => ({}));
@@ -2494,13 +2575,16 @@ async function loadHearthCheckpoint(id) {
             const threadRes = await fetch('/api/signal-threads/' + encodeURIComponent(origin.threadId));
             data.checkpoint.originUnavailable = !threadRes.ok;
         }
-        showHearthCheckpoint(data.checkpoint);
+        if (token === _hearthCheckpointLoadToken) showHearthCheckpoint(data.checkpoint);
     } catch {
-        showHearthCheckpoint(null, 'Checkpoint is unavailable.');
+        if (token === _hearthCheckpointLoadToken) showHearthCheckpoint(null, 'Checkpoint is unavailable.');
     }
 }
 
 function showHearthCheckpoint(checkpoint, message = '') {
+    if (_hearthCheckpoint && (!checkpoint || _hearthCheckpoint.id !== checkpoint.id)) {
+        saveHearthCheckpointDraft(_hearthCheckpoint.id);
+    }
     _hearthCheckpoint = checkpoint || null;
     const empty = document.getElementById('hearth-checkpoint-empty');
     const detail = document.getElementById('hearth-checkpoint-detail');
@@ -2519,8 +2603,9 @@ function showHearthCheckpoint(checkpoint, message = '') {
     const meta = document.getElementById('hearth-checkpoint-meta');
     const status = document.getElementById('hearth-checkpoint-save-status');
     if (title) title.textContent = checkpoint.title || 'Untitled checkpoint';
-    if (content) content.value = checkpoint.content || '';
-    if (status) status.textContent = 'Saved';
+    const draft = _hearthCheckpointDrafts.get(checkpoint.id);
+    if (content) content.value = draft ? draft.content : (checkpoint.content || '');
+    if (status) status.textContent = draft ? draft.status : 'Saved';
     if (meta) {
         const origin = checkpoint.origin || {};
         const entries = Array.isArray(origin.selectedEntryIds) && origin.selectedEntryIds.length
@@ -2535,7 +2620,7 @@ function showHearthCheckpoint(checkpoint, message = '') {
 }
 
 async function saveHearthCheckpoint() {
-    if (!_hearthCheckpoint || _hearthCheckpointSavePending) return;
+    if (!_hearthCheckpoint || _hearthCheckpointSavePending.has(_hearthCheckpoint.id)) return;
     const content = document.getElementById('hearth-checkpoint-content');
     const status = document.getElementById('hearth-checkpoint-save-status');
     const value = content ? content.value : '';
@@ -2543,25 +2628,35 @@ async function saveHearthCheckpoint() {
         if (status) status.textContent = 'Checkpoint content is required.';
         return;
     }
-    _hearthCheckpointSavePending = true;
-    if (status) status.textContent = 'Saving…';
+    const checkpointId = _hearthCheckpoint.id;
+    const submittedContent = value;
+    _hearthCheckpointSavePending.add(checkpointId);
+    setHearthCheckpointStatus(checkpointId, 'Saving…');
     try {
-        const res = await fetch('/api/hearth/checkpoints/' + encodeURIComponent(_hearthCheckpoint.id), {
+        const res = await fetch('/api/hearth/checkpoints/' + encodeURIComponent(checkpointId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: value }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success || !data.checkpoint) {
-            if (status) status.textContent = data.error || 'Save failed. Your edits are still here.';
+            setHearthCheckpointStatus(checkpointId, data.error || 'Save failed. Your edits are still here. Retry.');
             return;
         }
-        showHearthCheckpoint(data.checkpoint);
-        await loadHearthCheckpoints(data.checkpoint.id);
+        const draft = _hearthCheckpointDrafts.get(checkpointId);
+        if (!draft || draft.content === submittedContent) {
+            _hearthCheckpointDrafts.set(checkpointId, { content: submittedContent, status: 'Saved' });
+        } else {
+            setHearthCheckpointStatus(checkpointId, 'Unsaved changes');
+        }
+        if (_hearthCheckpoint && _hearthCheckpoint.id === checkpointId && (!draft || draft.content === submittedContent)) {
+            showHearthCheckpoint(data.checkpoint);
+        }
+        await loadHearthCheckpoints(checkpointId, { loadSelected: false });
     } catch {
-        if (status) status.textContent = 'Save failed. Your edits are still here.';
+        setHearthCheckpointStatus(checkpointId, 'Save failed. Your edits are still here. Retry.');
     } finally {
-        _hearthCheckpointSavePending = false;
+        _hearthCheckpointSavePending.delete(checkpointId);
     }
 }
 
@@ -10837,12 +10932,18 @@ async function launchOllama(runtimeId) {
 
     const rememberEntry = document.getElementById('signal-thread-remember-entry');
     if (rememberEntry) rememberEntry.addEventListener('change', applyRememberEntrySelection);
+    const rememberContent = document.getElementById('signal-thread-remember-content');
+    if (rememberContent) rememberContent.addEventListener('input', () => rememberDraft(_activeSignalThreadId));
 
     const rememberSaveBtn = document.getElementById('signal-thread-remember-save-btn');
     if (rememberSaveBtn) rememberSaveBtn.addEventListener('click', rememberActiveSignalThreadInHearth);
 
     const checkpointSaveBtn = document.getElementById('hearth-checkpoint-save-btn');
     if (checkpointSaveBtn) checkpointSaveBtn.addEventListener('click', saveHearthCheckpoint);
+    const checkpointContent = document.getElementById('hearth-checkpoint-content');
+    if (checkpointContent) checkpointContent.addEventListener('input', () => {
+        if (_hearthCheckpoint) saveHearthCheckpointDraft(_hearthCheckpoint.id);
+    });
 
     const checkpointReturnBtn = document.getElementById('hearth-checkpoint-return-btn');
     if (checkpointReturnBtn) checkpointReturnBtn.addEventListener('click', returnToCheckpointOrigin);

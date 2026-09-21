@@ -106,6 +106,13 @@ function rememberThread(threadId, content, selectedEntryIds) {
     if (!thread) return null;
     const text = String(content || '').trim();
     if (!text) throw new Error('Checkpoint content is required');
+    const validEntryIds = new Set((Array.isArray(thread.entries) ? thread.entries : [])
+        .map(entry => entry && entry.id)
+        .filter(Boolean));
+    if (Array.isArray(selectedEntryIds) && selectedEntryIds.some(id =>
+        typeof id !== 'string' || !validEntryIds.has(id))) {
+        throw new Error('Selected Field Log entries must belong to the originating Signal Thread');
+    }
     const existing = listCheckpoints().find(item => item.origin && item.origin.threadId === thread.id);
     const now = new Date().toISOString();
     const checkpoint = {
