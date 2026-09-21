@@ -5,11 +5,12 @@ const path = require('path');
 const vm = require('vm');
 
 function element() {
-    return {
+    const value = {
         value: '',
         textContent: '',
         style: {},
         children: [],
+        dataset: {},
         listeners: new Map(),
         appendChild(child) { this.children.push(child); return child; },
         addEventListener(type, listener) { this.listeners.set(type, listener); },
@@ -18,6 +19,12 @@ function element() {
             if (listener) listener(event);
         },
     };
+    Object.defineProperty(value, 'options', { get() { return this.children; } });
+    Object.defineProperty(value, 'innerHTML', {
+        get() { return ''; },
+        set() { this.children = []; },
+    });
+    return value;
 }
 
 function loadHarness(fetch) {
@@ -26,6 +33,8 @@ function loadHarness(fetch) {
         source.indexOf('function applyRememberEntrySelection()'));
     const rememberSelection = source.slice(source.indexOf('function applyRememberEntrySelection()'),
         source.indexOf('function setActiveCourtMemberId('));
+    const rememberRenderer = source.slice(source.indexOf('function renderSignalThreadRememberEntries(thread, checkpoint)'),
+        source.indexOf('function showSignalThreadEmptyState()'));
     const hearth = source.slice(source.indexOf('let hearthActiveThreadId = null;'),
         source.indexOf('async function returnToCheckpointOrigin()'));
     const inputBindings = source.slice(source.indexOf('const rememberEntry = document.getElementById'),
@@ -50,11 +59,10 @@ function loadHarness(fetch) {
         },
         _activeSignalThreadId: null,
         _activeSignalThread: null,
-        renderSignalThreadRememberEntries() {},
         console,
     };
     vm.createContext(context);
-    vm.runInContext(`${remember}\n${rememberSelection}\n${hearth}\n${inputBindings}\nglobalThis.harness = {
+    vm.runInContext(`${remember}\n${rememberSelection}\n${hearth}\n${rememberRenderer}\n${inputBindings}\nglobalThis.harness = {
         rememberDraft, loadRememberCheckpoint, rememberActiveSignalThreadInHearth,
         saveHearthCheckpointDraft, showHearthCheckpoint, saveHearthCheckpoint,
         syncCheckpointEditors, setRememberStatus,
@@ -63,6 +71,7 @@ function loadHarness(fetch) {
         rememberDrafts: _rememberDrafts, rememberStatuses: _rememberStatuses,
         hearthDrafts: _hearthCheckpointDrafts, hearthBaselines: _hearthCheckpointBaselines,
         rememberContent: document.getElementById('signal-thread-remember-content'),
+        rememberEntry: document.getElementById('signal-thread-remember-entry'),
         rememberStatus: document.getElementById('signal-thread-remember-status'),
         hearthContent: document.getElementById('hearth-checkpoint-content'),
         hearthStatus: document.getElementById('hearth-checkpoint-save-status'),
@@ -153,6 +162,89 @@ describe('Phase 22D.2 — consistent checkpoint editing', () => {
 
         expect(ui.rememberContent.value).toBe('newer draft');
         expect(ui.rememberStatus.textContent).toBe('Unsaved changes');
+    });
+
+    test('Remember creation and update clear unchanged drafts as saved', async () => {
+        const ui = loadHarness(async (url, options) => {
+            if (url.includes('/remember')) {
+                const body = JSON.parse(options.body);
+                return {
+                    ok: true,
+                    json: async () => ({
+                        success: true,
+                        checkpoint: checkpoint('a', body.content, 'thread-a'),
+                    }),
+                };
+            }
+            return { ok: true, json: async () => ({ checkpoints: [] }) };
+        });
+        ui.setActive('thread-a');
+        ui.setLookup('thread-a', 'ready');
+
+        ui.rememberContent.value = 'created';
+        ui.input(ui.rememberContent);
+        await ui.rememberActiveSignalThreadInHearth();
+        expect(ui.rememberDrafts.has('thread-a')).toBe(false);
+        expect(ui.rememberStatus.textContent).toBe('Saved in Hearth.');
+
+        ui.rememberContent.value = 'updated';
+        ui.input(ui.rememberContent);
+        await ui.rememberActiveSignalThreadInHearth();
+        expect(ui.rememberDrafts.has('thread-a')).toBe(false);
+        expect(ui.rememberStatus.textContent).toBe('Saved in Hearth.');
+    });
+
+    test('unchanged Remember content does not become a draft during navigation', async () => {
+        const saved = checkpoint('a', 'saved', 'thread-a');
+        const ui = loadHarness(async () => ({ ok: true, json: async () => ({ checkpoints: [saved] }) }));
+        ui.setActive('thread-a');
+        await ui.loadRememberCheckpoint('thread-a');
+        await ui.loadRememberCheckpoint('thread-a');
+
+        expect(ui.rememberDrafts.has('thread-a')).toBe(false);
+        expect(ui.rememberContent.value).toBe('saved');
+        expect(ui.rememberStatus.textContent).toBe('Saved in Hearth.');
+    });
+
+    test('metadata-only Remember synchronization keeps identical editable content saved', () => {
+        const ui = loadHarness(async () => ({ ok: true, json: async () => ({ checkpoints: [] }) }));
+        ui.setActive('thread-a');
+        const original = {
+            ...checkpoint('a', 'saved', 'thread-a'),
+            createdAt: 'first',
+            updatedAt: 'first',
+        };
+        const refreshed = {
+            ...checkpoint('a', 'saved', 'thread-a'),
+            createdAt: 'first',
+            updatedAt: 'second',
+            title: 'New title',
+        };
+
+        ui.syncCheckpointEditors(original);
+        ui.syncCheckpointEditors(refreshed);
+        expect(ui.rememberDrafts.has('thread-a')).toBe(false);
+        expect(ui.rememberStatus.textContent).toBe('Saved in Hearth.');
+    });
+
+    test('returning to saved Remember content and provenance clears dirty state', () => {
+        const ui = loadHarness(async () => ({ ok: true, json: async () => ({ checkpoints: [] }) }));
+        ui.setActive('thread-a');
+        const saved = {
+            ...checkpoint('a', 'saved', 'thread-a'),
+            origin: { threadId: 'thread-a', selectedEntryIds: ['entry-a'] },
+        };
+        ui.syncCheckpointEditors(saved);
+        ui.rememberContent.value = 'changed';
+        ui.rememberEntry.value = '';
+        ui.input(ui.rememberContent);
+        expect(ui.rememberDrafts.has('thread-a')).toBe(true);
+
+        ui.rememberContent.value = 'saved';
+        ui.rememberEntry.value = 'entry-a';
+        ui.input(ui.rememberContent);
+        expect(ui.rememberDrafts.has('thread-a')).toBe(false);
+        expect(ui.rememberStatus.textContent).toBe('Saved in Hearth.');
     });
 
     test('Hearth preserves an edit back to the old baseline after delayed save completion', async () => {
