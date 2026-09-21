@@ -137,27 +137,63 @@ function getActiveCourtMemberId() {
     return _activeCourtMemberId;
 }
 
+function checkpointEditorValuesMatch(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function trackCheckpointEditorValue({ baselines, drafts, pending, id, value }) {
+    const saved = baselines.get(id);
+    const matchesSaved = Boolean(saved) && checkpointEditorValuesMatch(value, saved.value);
+    if (matchesSaved && !pending.has(id)) {
+        drafts.delete(id);
+    } else {
+        drafts.set(id, value);
+    }
+    return { matchesSaved, pending: pending.has(id) };
+}
+
+function applyCheckpointEditorSave({ baselines, drafts, submissions, pending, id, value }) {
+    baselines.set(id, { value });
+    submissions.delete(id);
+    const current = drafts.get(id);
+    if (current && checkpointEditorValuesMatch(current, value)) {
+        drafts.delete(id);
+        return true;
+    }
+    return !current;
+}
+
+function syncCheckpointEditorBaseline({ baselines, drafts, pending, id, value }) {
+    baselines.set(id, { value });
+    const current = drafts.get(id);
+    if (current && checkpointEditorValuesMatch(current, value) && !pending.has(id)) {
+        drafts.delete(id);
+        return true;
+    }
+    return !current;
+}
+
 const _rememberDrafts = new Map();
 const _rememberCheckpoints = new Map();
 const _rememberBaselines = new Map();
 const _rememberLookupStates = new Map();
 const _rememberStatuses = new Map();
-let _rememberSubmissionPending = false;
+const _rememberSubmissionPending = new Set();
+const _rememberSubmissions = new Map();
 let _rememberLoadToken = 0;
 
 function rememberDraft(threadId) {
     const content = document.getElementById('signal-thread-remember-content');
     const entry = document.getElementById('signal-thread-remember-entry');
     if (!threadId || !content || !entry) return;
-    const baseline = _rememberBaselines.get(threadId) || { content: '', entryId: '' };
     const draft = { content: content.value, entryId: entry.value };
-    if (draft.content === baseline.content && draft.entryId === baseline.entryId) {
-        _rememberDrafts.delete(threadId);
-        setRememberStatus(threadId, baseline.checkpoint ? 'Saved in Hearth.' : '');
-    } else {
-        _rememberDrafts.set(threadId, draft);
-        setRememberStatus(threadId, 'Unsaved changes');
-    }
+    const state = trackCheckpointEditorValue({
+        baselines: _rememberBaselines, drafts: _rememberDrafts, pending: _rememberSubmissionPending,
+        id: threadId, value: draft,
+    });
+    setRememberStatus(threadId, state.pending
+        ? 'Saving… — newer unsaved changes'
+        : (state.matchesSaved && _rememberBaselines.get(threadId).value.checkpoint ? 'Saved in Hearth.' : 'Unsaved changes'));
 }
 
 function setRememberStatus(threadId, message) {
@@ -185,10 +221,13 @@ async function loadRememberCheckpoint(threadId) {
                 ? checkpoint.origin.selectedEntryIds[0] || '' : '',
         };
         const previous = _rememberBaselines.get(threadId);
-        _rememberBaselines.set(threadId, baseline);
+        syncCheckpointEditorBaseline({
+            baselines: _rememberBaselines, drafts: _rememberDrafts, pending: _rememberSubmissionPending,
+            id: threadId, value: baseline,
+        });
         _rememberLookupStates.set(threadId, 'ready');
         const draft = _rememberDrafts.get(threadId);
-        if (draft && previous && (previous.content !== baseline.content || previous.entryId !== baseline.entryId)) {
+        if (draft && previous && !checkpointEditorValuesMatch(previous.value, baseline)) {
             setRememberStatus(threadId, 'Newer saved content is available. Review before replacing.');
         } else if (!draft) {
             setRememberStatus(threadId, checkpoint ? 'Saved in Hearth.' : '');
@@ -204,7 +243,7 @@ async function loadRememberCheckpoint(threadId) {
 }
 
 async function rememberActiveSignalThreadInHearth() {
-    if (!_activeSignalThreadId || _rememberSubmissionPending) return;
+    if (!_activeSignalThreadId || _rememberSubmissionPending.has(_activeSignalThreadId)) return;
     const threadId = _activeSignalThreadId;
     const contentEl = document.getElementById('signal-thread-remember-content');
     const entryEl = document.getElementById('signal-thread-remember-entry');
@@ -220,7 +259,13 @@ async function rememberActiveSignalThreadInHearth() {
             : 'Checking Hearth checkpoint…');
         return;
     }
-    _rememberSubmissionPending = true;
+    const submitted = { content, entryId: selectedEntryIds[0] || '' };
+    trackCheckpointEditorValue({
+        baselines: _rememberBaselines, drafts: _rememberDrafts, pending: _rememberSubmissionPending,
+        id: threadId, value: submitted,
+    });
+    _rememberSubmissions.set(threadId, submitted);
+    _rememberSubmissionPending.add(threadId);
     setRememberStatus(threadId, 'Saving…');
     try {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/remember', {
@@ -234,26 +279,28 @@ async function rememberActiveSignalThreadInHearth() {
             return;
         }
         _rememberCheckpoints.set(threadId, data.checkpoint);
-        _rememberBaselines.set(threadId, {
+        const saved = {
             checkpoint: data.checkpoint,
             content: data.checkpoint.content || '',
             entryId: data.checkpoint.origin && Array.isArray(data.checkpoint.origin.selectedEntryIds)
                 ? data.checkpoint.origin.selectedEntryIds[0] || '' : '',
+        };
+        _rememberSubmissionPending.delete(threadId);
+        const isSaved = applyCheckpointEditorSave({
+            baselines: _rememberBaselines, drafts: _rememberDrafts, submissions: _rememberSubmissions,
+            pending: _rememberSubmissionPending, id: threadId, value: saved,
         });
         syncCheckpointEditors(data.checkpoint);
-        const current = _rememberDrafts.get(threadId);
-        if (!current || (current.content === content && current.entryId === (selectedEntryIds[0] || ''))) {
-            _rememberDrafts.delete(threadId);
-        }
         if (_activeSignalThreadId === threadId) {
-            setRememberStatus(threadId, 'Saved in Hearth.');
+            setRememberStatus(threadId, isSaved ? 'Saved in Hearth.' : 'Unsaved changes');
             renderSignalThreadRememberEntries(_activeSignalThread, data.checkpoint);
         }
         await loadHearthCheckpoints(data.checkpoint.id, { loadSelected: false });
     } catch {
         setRememberStatus(threadId, 'Save failed. Your material is still here.');
     } finally {
-        _rememberSubmissionPending = false;
+        _rememberSubmissionPending.delete(threadId);
+        _rememberSubmissions.delete(threadId);
     }
 }
 
@@ -2521,20 +2568,20 @@ const _hearthCheckpointDrafts = new Map();
 const _hearthCheckpointBaselines = new Map();
 const _hearthCheckpointStatuses = new Map();
 const _hearthCheckpointSavePending = new Set();
+const _hearthCheckpointSubmissions = new Map();
 let _hearthCheckpointLoadToken = 0;
 let _hearthCheckpointListLoadToken = 0;
 
 function saveHearthCheckpointDraft(checkpointId = _hearthCheckpoint && _hearthCheckpoint.id) {
     const content = document.getElementById('hearth-checkpoint-content');
     if (!checkpointId || !content) return;
-    const baseline = _hearthCheckpointBaselines.get(checkpointId);
-    if (baseline && content.value === baseline.content) {
-        _hearthCheckpointDrafts.delete(checkpointId);
-        setHearthCheckpointStatus(checkpointId, 'Saved');
-        return;
-    }
-    _hearthCheckpointDrafts.set(checkpointId, { content: content.value });
-    setHearthCheckpointStatus(checkpointId, 'Unsaved changes');
+    const state = trackCheckpointEditorValue({
+        baselines: _hearthCheckpointBaselines, drafts: _hearthCheckpointDrafts,
+        pending: _hearthCheckpointSavePending, id: checkpointId, value: { content: content.value },
+    });
+    setHearthCheckpointStatus(checkpointId, state.pending
+        ? 'Saving… — newer unsaved changes'
+        : (state.matchesSaved ? 'Saved' : 'Unsaved changes'));
 }
 
 function setHearthCheckpointStatus(checkpointId, status) {
@@ -2557,11 +2604,14 @@ function syncCheckpointEditors(checkpoint) {
         };
         const previous = _rememberBaselines.get(threadId);
         _rememberCheckpoints.set(threadId, checkpoint);
-        _rememberBaselines.set(threadId, baseline);
+        const isSaved = syncCheckpointEditorBaseline({
+            baselines: _rememberBaselines, drafts: _rememberDrafts, pending: _rememberSubmissionPending,
+            id: threadId, value: baseline,
+        });
         if (_rememberDrafts.has(threadId) && previous &&
-            (previous.content !== baseline.content || previous.entryId !== baseline.entryId)) {
+            !checkpointEditorValuesMatch(previous.value, baseline)) {
             setRememberStatus(threadId, 'Newer saved content is available. Review before replacing.');
-        } else if (!_rememberDrafts.has(threadId)) {
+        } else if (isSaved) {
             setRememberStatus(threadId, 'Saved in Hearth.');
             if (_activeSignalThreadId === threadId) {
                 renderSignalThreadRememberEntries(_activeSignalThread, checkpoint);
@@ -2572,8 +2622,12 @@ function syncCheckpointEditors(checkpoint) {
         const draft = _hearthCheckpointDrafts.get(checkpoint.id);
         if (draft) {
             const previous = _hearthCheckpointBaselines.get(checkpoint.id);
-            _hearthCheckpointBaselines.set(checkpoint.id, { content: checkpoint.content || '', checkpoint });
-            if (previous && previous.content !== checkpoint.content) {
+            syncCheckpointEditorBaseline({
+                baselines: _hearthCheckpointBaselines, drafts: _hearthCheckpointDrafts,
+                pending: _hearthCheckpointSavePending, id: checkpoint.id,
+                value: { content: checkpoint.content || '' },
+            });
+            if (previous && previous.value.content !== checkpoint.content) {
                 setHearthCheckpointStatus(checkpoint.id, 'Newer saved content is available. Review before replacing.');
             }
         } else {
@@ -2695,10 +2749,13 @@ function showHearthCheckpoint(checkpoint, message = '') {
     const draft = _hearthCheckpointDrafts.get(checkpoint.id);
     const previous = _hearthCheckpointBaselines.get(checkpoint.id);
     const baseline = { content: checkpoint.content || '', checkpoint };
-    _hearthCheckpointBaselines.set(checkpoint.id, baseline);
-    if (draft && previous && previous.content !== baseline.content) {
+    const isSaved = syncCheckpointEditorBaseline({
+        baselines: _hearthCheckpointBaselines, drafts: _hearthCheckpointDrafts,
+        pending: _hearthCheckpointSavePending, id: checkpoint.id, value: { content: baseline.content },
+    });
+    if (draft && previous && previous.value.content !== baseline.content) {
         setHearthCheckpointStatus(checkpoint.id, 'Newer saved content is available. Review before replacing.');
-    } else if (!draft) {
+    } else if (isSaved) {
         setHearthCheckpointStatus(checkpoint.id, 'Saved');
     }
     if (content) content.value = draft ? draft.content : (checkpoint.content || '');
@@ -2727,6 +2784,12 @@ async function saveHearthCheckpoint() {
     }
     const checkpointId = _hearthCheckpoint.id;
     const submittedContent = value;
+    const submitted = { content: value };
+    trackCheckpointEditorValue({
+        baselines: _hearthCheckpointBaselines, drafts: _hearthCheckpointDrafts,
+        pending: _hearthCheckpointSavePending, id: checkpointId, value: submitted,
+    });
+    _hearthCheckpointSubmissions.set(checkpointId, submitted);
     _hearthCheckpointSavePending.add(checkpointId);
     setHearthCheckpointStatus(checkpointId, 'Saving…');
     try {
@@ -2740,15 +2803,14 @@ async function saveHearthCheckpoint() {
             setHearthCheckpointStatus(checkpointId, data.error || 'Save failed. Your edits are still here. Retry.');
             return;
         }
-        const draft = _hearthCheckpointDrafts.get(checkpointId);
-        _hearthCheckpointBaselines.set(checkpointId, { content: data.checkpoint.content || '', checkpoint: data.checkpoint });
-        if (!draft || draft.content === submittedContent) {
-            _hearthCheckpointDrafts.delete(checkpointId);
-            setHearthCheckpointStatus(checkpointId, 'Saved');
-        } else {
-            setHearthCheckpointStatus(checkpointId, 'Unsaved changes');
-        }
-        if (_hearthCheckpoint && _hearthCheckpoint.id === checkpointId && (!draft || draft.content === submittedContent)) {
+        _hearthCheckpointSavePending.delete(checkpointId);
+        const isSaved = applyCheckpointEditorSave({
+            baselines: _hearthCheckpointBaselines, drafts: _hearthCheckpointDrafts,
+            submissions: _hearthCheckpointSubmissions, pending: _hearthCheckpointSavePending,
+            id: checkpointId, value: { content: data.checkpoint.content || '' },
+        });
+        setHearthCheckpointStatus(checkpointId, isSaved ? 'Saved' : 'Unsaved changes');
+        if (_hearthCheckpoint && _hearthCheckpoint.id === checkpointId && isSaved) {
             showHearthCheckpoint(data.checkpoint);
         }
         syncCheckpointEditors(data.checkpoint);
@@ -2757,6 +2819,7 @@ async function saveHearthCheckpoint() {
         setHearthCheckpointStatus(checkpointId, 'Save failed. Your edits are still here. Retry.');
     } finally {
         _hearthCheckpointSavePending.delete(checkpointId);
+        _hearthCheckpointSubmissions.delete(checkpointId);
     }
 }
 
