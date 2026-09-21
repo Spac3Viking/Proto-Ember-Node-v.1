@@ -182,18 +182,33 @@ const _rememberSubmissionPending = new Set();
 const _rememberSubmissions = new Map();
 let _rememberLoadToken = 0;
 
+function normalizeRememberEditorValue({ content, entryId } = {}) {
+    return {
+        content: String(content || ''),
+        entryId: String(entryId || ''),
+    };
+}
+
+function rememberCheckpointEditorValue(checkpoint) {
+    const origin = checkpoint && checkpoint.origin ? checkpoint.origin : {};
+    return normalizeRememberEditorValue({
+        content: checkpoint && checkpoint.content,
+        entryId: Array.isArray(origin.selectedEntryIds) ? origin.selectedEntryIds[0] : '',
+    });
+}
+
 function rememberDraft(threadId) {
     const content = document.getElementById('signal-thread-remember-content');
     const entry = document.getElementById('signal-thread-remember-entry');
     if (!threadId || !content || !entry) return;
-    const draft = { content: content.value, entryId: entry.value };
+    const draft = normalizeRememberEditorValue({ content: content.value, entryId: entry.value });
     const state = trackCheckpointEditorValue({
         baselines: _rememberBaselines, drafts: _rememberDrafts, pending: _rememberSubmissionPending,
         id: threadId, value: draft,
     });
     setRememberStatus(threadId, state.pending
         ? 'Saving… — newer unsaved changes'
-        : (state.matchesSaved && _rememberBaselines.get(threadId).value.checkpoint ? 'Saved in Hearth.' : 'Unsaved changes'));
+        : (state.matchesSaved && _rememberCheckpoints.get(threadId) ? 'Saved in Hearth.' : 'Unsaved changes'));
 }
 
 function setRememberStatus(threadId, message) {
@@ -214,12 +229,7 @@ async function loadRememberCheckpoint(threadId) {
         if (!res.ok || !Array.isArray(data.checkpoints)) throw new Error('Could not load Hearth checkpoints');
         const checkpoint = data.checkpoints.find(item => item.origin && item.origin.threadId === threadId) || null;
         _rememberCheckpoints.set(threadId, checkpoint);
-        const baseline = {
-            checkpoint,
-            content: checkpoint ? checkpoint.content || '' : '',
-            entryId: checkpoint && checkpoint.origin && Array.isArray(checkpoint.origin.selectedEntryIds)
-                ? checkpoint.origin.selectedEntryIds[0] || '' : '',
-        };
+        const baseline = rememberCheckpointEditorValue(checkpoint);
         const previous = _rememberBaselines.get(threadId);
         syncCheckpointEditorBaseline({
             baselines: _rememberBaselines, drafts: _rememberDrafts, pending: _rememberSubmissionPending,
@@ -259,7 +269,7 @@ async function rememberActiveSignalThreadInHearth() {
             : 'Checking Hearth checkpoint…');
         return;
     }
-    const submitted = { content, entryId: selectedEntryIds[0] || '' };
+    const submitted = normalizeRememberEditorValue({ content, entryId: selectedEntryIds[0] });
     trackCheckpointEditorValue({
         baselines: _rememberBaselines, drafts: _rememberDrafts, pending: _rememberSubmissionPending,
         id: threadId, value: submitted,
@@ -279,12 +289,7 @@ async function rememberActiveSignalThreadInHearth() {
             return;
         }
         _rememberCheckpoints.set(threadId, data.checkpoint);
-        const saved = {
-            checkpoint: data.checkpoint,
-            content: data.checkpoint.content || '',
-            entryId: data.checkpoint.origin && Array.isArray(data.checkpoint.origin.selectedEntryIds)
-                ? data.checkpoint.origin.selectedEntryIds[0] || '' : '',
-        };
+        const saved = rememberCheckpointEditorValue(data.checkpoint);
         _rememberSubmissionPending.delete(threadId);
         const isSaved = applyCheckpointEditorSave({
             baselines: _rememberBaselines, drafts: _rememberDrafts, submissions: _rememberSubmissions,
@@ -2597,11 +2602,7 @@ function syncCheckpointEditors(checkpoint) {
     const origin = checkpoint.origin || {};
     const threadId = origin.threadId;
     if (threadId) {
-        const baseline = {
-            checkpoint,
-            content: checkpoint.content || '',
-            entryId: Array.isArray(origin.selectedEntryIds) ? origin.selectedEntryIds[0] || '' : '',
-        };
+        const baseline = rememberCheckpointEditorValue(checkpoint);
         const previous = _rememberBaselines.get(threadId);
         _rememberCheckpoints.set(threadId, checkpoint);
         const isSaved = syncCheckpointEditorBaseline({
