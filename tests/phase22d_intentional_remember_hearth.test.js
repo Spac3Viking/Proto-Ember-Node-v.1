@@ -63,6 +63,21 @@ describe('Phase 22D — intentional Remember to Hearth', () => {
         expect(loaded.body.checkpoint.content).toBe('Deliberately revised material.');
     });
 
+    test('rejects Field Log provenance that does not belong to the originating thread', async () => {
+        const { app, id } = await createThread();
+        const other = await createThread();
+        const foreignEntry = await request(app).post('/api/signal-threads/' + other.id + '/entries')
+            .send({ stage: 'reflect', content: 'This belongs to another thread.' }).expect(200);
+
+        await request(app).post('/api/signal-threads/' + id + '/remember')
+            .send({ content: 'Do not accept foreign provenance.', selectedEntryIds: [foreignEntry.body.entry.id] })
+            .expect(400)
+            .expect(({ body }) => expect(body.error).toMatch(/must belong/i));
+
+        await request(app).get('/api/hearth/checkpoints').expect(200)
+            .expect(({ body }) => expect(body.checkpoints).toEqual([]));
+    });
+
     test('failed writes retain the persisted checkpoint and a retry succeeds without duplication', async () => {
         const { app, id } = await createThread();
         const created = await request(app).post('/api/signal-threads/' + id + '/remember')
