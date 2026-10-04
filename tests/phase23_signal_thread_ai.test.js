@@ -84,4 +84,27 @@ describe('Phase 23 — deliberate Signal Thread AI consultation', () => {
         expect(axios.post).not.toHaveBeenCalled();
         expect((await request(app).get('/api/signal-threads/' + id)).body.thread.entries).toEqual([]);
     });
+
+    test('cancels an in-flight request without saving an AI response', async () => {
+        const { app } = require('../app/server');
+        const id = await createThread(app);
+        axios.get.mockResolvedValue({ data: { models: [{ name: 'gemma3:4b' }] } });
+        let started;
+        const startedRequest = new Promise(resolve => { started = resolve; });
+        axios.post.mockImplementation((_url, _body, config) => new Promise((_resolve, reject) => {
+            started();
+            config.signal.addEventListener('abort', () => reject(new Error('cancelled')));
+        }));
+
+        const answer = request(app).post('/api/signal-threads/' + id + '/ask-ai').send({
+            question: 'Can this wait?', requestId: 'request-3', selectedEntryIds: [],
+        }).then(response => response);
+        await startedRequest;
+        const cancelled = await request(app).post('/api/signal-threads/' + id + '/ask-ai/cancel')
+            .send({ requestId: 'request-3' });
+
+        expect(cancelled.body).toEqual({ success: true, cancelled: true });
+        expect((await answer).status).toBe(409);
+        expect((await request(app).get('/api/signal-threads/' + id)).body.thread.entries).toEqual([]);
+    });
 });
