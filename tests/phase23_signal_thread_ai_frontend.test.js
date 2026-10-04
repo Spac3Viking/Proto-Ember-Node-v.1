@@ -109,7 +109,7 @@ describe('Phase 23 — Signal Thread AI frontend interactions', () => {
         expect(harness.requests().size).toBe(0);
     });
 
-    test('keeps newer edits after a request failure and cancellation', async () => {
+    test('keeps newer edits after server-confirmed cancellation', async () => {
         let rejectRequest;
         const harness = loadAiHarness((url, options) => {
             if (url.endsWith('/cancel')) return Promise.resolve({ ok: true, json: async () => ({ cancelled: true }) });
@@ -129,5 +129,54 @@ describe('Phase 23 — Signal Thread AI frontend interactions', () => {
 
         expect(harness.drafts().get('thread-a')).toBe('Newer question');
         expect(harness.status.textContent).toMatch(/cancelled/i);
+    });
+
+    test('reconciles a completed request when the server reports cancellation was too late', async () => {
+        let rejectRequest;
+        const harness = loadAiHarness((url, options) => {
+            if (url.endsWith('/cancel')) return Promise.resolve({ ok: true, json: async () => ({ cancelled: false }) });
+            if (url.endsWith('/thread-a')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({ thread: { id: 'thread-a', entries: [{ id: 'ai-1', kind: 'ai', content: 'Saved answer' }] } }),
+                });
+            }
+            return new Promise((_resolve, reject) => {
+                rejectRequest = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+                options.signal.addEventListener('abort', rejectRequest);
+            });
+        });
+        harness.activate({ id: 'thread-a', entries: [], currentStage: 'reflect' });
+        harness.question.value = 'Original question';
+        const asking = harness.ask();
+        harness.question.value = 'Newer question';
+        harness.context.selectedOptions = [{ value: 'new-entry' }];
+        harness.saveDraft();
+
+        await harness.cancel();
+        await asking;
+
+        expect(harness.drafts().get('thread-a')).toBe('Newer question');
+        expect(harness.status.textContent).toMatch(/already completed.*refreshed/i);
+    });
+
+    test('reports an unconfirmed cancellation after attempting to reconcile', async () => {
+        let rejectRequest;
+        const harness = loadAiHarness((url, options) => {
+            if (url.endsWith('/cancel')) return Promise.reject(new Error('offline'));
+            if (url.endsWith('/thread-a')) return Promise.reject(new Error('offline'));
+            return new Promise((_resolve, reject) => {
+                rejectRequest = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+                options.signal.addEventListener('abort', rejectRequest);
+            });
+        });
+        harness.activate({ id: 'thread-a', entries: [], currentStage: 'reflect' });
+        harness.question.value = 'Question';
+        const asking = harness.ask();
+
+        await harness.cancel();
+        await asking;
+
+        expect(harness.status.textContent).toMatch(/could not confirm whether ai stopped/i);
     });
 });
