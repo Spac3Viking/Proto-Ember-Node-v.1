@@ -947,6 +947,7 @@ const _signalThreadSubmittedNotes = new Map();
 const _signalThreadOperationDetails = new Map();
 const _signalThreadAiDrafts = new Map();
 const _signalThreadAiSelections = new Map();
+const _signalThreadEntryMetadata = new Map();
 const _signalThreadAiStatuses = new Map();
 const _signalThreadAiRequests = new Map();
 let _signalThreadDraftsLoaded = false;
@@ -1045,6 +1046,9 @@ function loadPersistedSignalThreadDrafts() {
         Object.entries(saved.selections || {}).forEach(([id, value]) => {
             if (Array.isArray(value)) _signalThreadAiSelections.set(id, value.map(String));
         });
+        Object.entries(saved.entryMetadata || {}).forEach(([id, value]) => {
+            if (value && typeof value === 'object') _signalThreadEntryMetadata.set(id, value);
+        });
     } catch { /* local storage is optional */ }
 }
 
@@ -1054,6 +1058,7 @@ function persistSignalThreadDrafts() {
             notes: Object.fromEntries(_signalThreadDrafts),
             questions: Object.fromEntries(_signalThreadAiDrafts),
             selections: Object.fromEntries(_signalThreadAiSelections),
+            entryMetadata: Object.fromEntries(_signalThreadEntryMetadata),
         }));
     } catch { /* local storage is optional */ }
 }
@@ -1100,8 +1105,18 @@ function saveSignalThreadDraft(threadId = _activeSignalThreadId) {
     if (!input) return;
     const content = input.value;
     const key = signalThreadDraftKey(threadId);
+    const kind = document.getElementById('signal-thread-entry-kind');
+    const attribution = document.getElementById('signal-thread-entry-attribution');
     if (content) _signalThreadDrafts.set(key, content);
     else _signalThreadDrafts.delete(key);
+    if (content && (kind || attribution)) {
+        _signalThreadEntryMetadata.set(key, {
+            kind: kind && kind.value === 'quotation' ? 'quotation' : 'note',
+            attribution: attribution ? attribution.value : '',
+        });
+    } else if (!content) {
+        _signalThreadEntryMetadata.delete(key);
+    }
     persistSignalThreadDrafts();
 }
 
@@ -1120,6 +1135,11 @@ function restoreSignalThreadDraft(threadId = _activeSignalThreadId) {
     if (!input) return;
     const key = signalThreadDraftKey(threadId);
     input.value = _signalThreadDrafts.get(key) || '';
+    const metadata = _signalThreadEntryMetadata.get(key) || {};
+    const kind = document.getElementById('signal-thread-entry-kind');
+    const attribution = document.getElementById('signal-thread-entry-attribution');
+    if (kind) kind.value = metadata.kind === 'quotation' ? 'quotation' : 'note';
+    if (attribution) attribution.value = metadata.attribution || '';
     refreshSignalThreadSaveStatus(threadId);
 }
 
@@ -1856,6 +1876,7 @@ async function addFieldLogEntryToActiveThread() {
         }
         if (_signalThreadDrafts.get(signalThreadDraftKey(threadId)) === content) {
             _signalThreadDrafts.delete(signalThreadDraftKey(threadId));
+            _signalThreadEntryMetadata.delete(signalThreadDraftKey(threadId));
             persistSignalThreadDrafts();
         }
         if (_activeSignalThreadId === threadId && input && input.value === content) input.value = '';
@@ -11292,6 +11313,10 @@ async function launchOllama(runtimeId) {
         saveSignalThreadDraft();
         refreshSignalThreadSaveStatus();
     });
+    const fieldLogKind = document.getElementById('signal-thread-entry-kind');
+    if (fieldLogKind) fieldLogKind.addEventListener('change', () => saveSignalThreadDraft());
+    const fieldLogAttribution = document.getElementById('signal-thread-entry-attribution');
+    if (fieldLogAttribution) fieldLogAttribution.addEventListener('input', () => saveSignalThreadDraft());
 
     document.querySelectorAll('[data-thread-stage]').forEach(button => {
         button.addEventListener('click', () => setActiveSignalThreadStage(button.dataset.threadStage));
