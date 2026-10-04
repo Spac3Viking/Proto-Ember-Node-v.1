@@ -128,7 +128,7 @@ describe('Phase 23 — Signal Thread AI frontend interactions', () => {
         await asking;
 
         expect(harness.drafts().get('thread-a')).toBe('Newer question');
-        expect(harness.status.textContent).toMatch(/cancelled/i);
+        expect(harness.status.textContent).toMatch(/cancellation confirmed/i);
     });
 
     test('reconciles a completed request when the server reports cancellation was too late', async () => {
