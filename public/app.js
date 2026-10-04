@@ -935,6 +935,7 @@ let _activeSignalThreadId = null;
 let _activeSignalThread = null;
 let _isChatGenerating = false;
 const SIGNAL_THREAD_LAST_ACTIVE_KEY = 'ember-node.fieldbook.active-thread';
+const SIGNAL_THREAD_DRAFTS_STORAGE_KEY = 'ember-node.fieldbook.drafts';
 const SIGNAL_THREAD_STAGES = new Set(['observe', 'reflect', 'act', 'refine', 'remember', 'relate']);
 const _signalThreadDrafts = new Map();
 const _signalThreadSaveStates = new Map();
@@ -944,6 +945,12 @@ const _signalThreadPendingOperations = new Map();
 const _signalThreadFailedOperations = new Map();
 const _signalThreadSubmittedNotes = new Map();
 const _signalThreadOperationDetails = new Map();
+const _signalThreadAiDrafts = new Map();
+const _signalThreadAiSelections = new Map();
+const _signalThreadEntryMetadata = new Map();
+const _signalThreadAiStatuses = new Map();
+const _signalThreadAiRequests = new Map();
+let _signalThreadDraftsLoaded = false;
 let _signalThreadOperationSequence = 0;
 
 function createSignalThreadOperationId(type, scope = '') {
@@ -1025,6 +1032,37 @@ function signalThreadDraftKey(threadId = _activeSignalThreadId) {
     return threadId || '__new__';
 }
 
+function loadPersistedSignalThreadDrafts() {
+    if (_signalThreadDraftsLoaded) return;
+    _signalThreadDraftsLoaded = true;
+    try {
+        const saved = JSON.parse(window.localStorage.getItem(SIGNAL_THREAD_DRAFTS_STORAGE_KEY) || '{}');
+        Object.entries(saved.notes || {}).forEach(([id, value]) => {
+            if (typeof value === 'string' && value) _signalThreadDrafts.set(id, value);
+        });
+        Object.entries(saved.questions || {}).forEach(([id, value]) => {
+            if (typeof value === 'string' && value) _signalThreadAiDrafts.set(id, value);
+        });
+        Object.entries(saved.selections || {}).forEach(([id, value]) => {
+            if (Array.isArray(value)) _signalThreadAiSelections.set(id, value.map(String));
+        });
+        Object.entries(saved.entryMetadata || {}).forEach(([id, value]) => {
+            if (value && typeof value === 'object') _signalThreadEntryMetadata.set(id, value);
+        });
+    } catch { /* local storage is optional */ }
+}
+
+function persistSignalThreadDrafts() {
+    try {
+        window.localStorage.setItem(SIGNAL_THREAD_DRAFTS_STORAGE_KEY, JSON.stringify({
+            notes: Object.fromEntries(_signalThreadDrafts),
+            questions: Object.fromEntries(_signalThreadAiDrafts),
+            selections: Object.fromEntries(_signalThreadAiSelections),
+            entryMetadata: Object.fromEntries(_signalThreadEntryMetadata),
+        }));
+    } catch { /* local storage is optional */ }
+}
+
 function setSignalThreadSaveStatus(message) {
     _signalThreadSaveStates.set(signalThreadDraftKey(), message);
     const status = document.getElementById('signal-thread-save-status');
@@ -1062,12 +1100,24 @@ function queueSignalThreadSave(threadId, operation) {
 }
 
 function saveSignalThreadDraft(threadId = _activeSignalThreadId) {
+    loadPersistedSignalThreadDrafts();
     const input = document.getElementById('signal-thread-field-log-input');
     if (!input) return;
     const content = input.value;
     const key = signalThreadDraftKey(threadId);
+    const kind = document.getElementById('signal-thread-entry-kind');
+    const attribution = document.getElementById('signal-thread-entry-attribution');
     if (content) _signalThreadDrafts.set(key, content);
     else _signalThreadDrafts.delete(key);
+    if (content && (kind || attribution)) {
+        _signalThreadEntryMetadata.set(key, {
+            kind: kind && kind.value === 'quotation' ? 'quotation' : 'note',
+            attribution: attribution ? attribution.value : '',
+        });
+    } else if (!content) {
+        _signalThreadEntryMetadata.delete(key);
+    }
+    persistSignalThreadDrafts();
 }
 
 function restoreFailedSignalThreadDraft(threadId, content) {
@@ -1080,10 +1130,16 @@ function restoreFailedSignalThreadDraft(threadId, content) {
 }
 
 function restoreSignalThreadDraft(threadId = _activeSignalThreadId) {
+    loadPersistedSignalThreadDrafts();
     const input = document.getElementById('signal-thread-field-log-input');
     if (!input) return;
     const key = signalThreadDraftKey(threadId);
     input.value = _signalThreadDrafts.get(key) || '';
+    const metadata = _signalThreadEntryMetadata.get(key) || {};
+    const kind = document.getElementById('signal-thread-entry-kind');
+    const attribution = document.getElementById('signal-thread-entry-attribution');
+    if (kind) kind.value = metadata.kind === 'quotation' ? 'quotation' : 'note';
+    if (attribution) attribution.value = metadata.attribution || '';
     refreshSignalThreadSaveStatus(threadId);
 }
 
@@ -1118,8 +1174,14 @@ function renderSignalThreadEntries(host, entries) {
 
         const time = document.createElement('div');
         time.className = 'signal-thread-entry-time';
-        const attribution = entry && entry.attribution ? String(entry.attribution) + ' · ' : '';
-        time.textContent = (entry && entry.stage ? String(entry.stage) + ' · ' : '') + attribution + (entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '');
+        const descriptor = [
+            entry && entry.stage ? String(entry.stage) : '',
+            entry && entry.kind === 'quotation' ? 'quotation' : entry && entry.kind === 'ai' ? 'AI' : 'human note',
+            entry && entry.attribution ? String(entry.attribution) : '',
+            entry && entry.model ? 'model: ' + String(entry.model) : '',
+            entry && entry.timestamp ? formatRelativeTime(entry.timestamp) : '',
+        ].filter(Boolean);
+        time.textContent = descriptor.join(' · ');
         if (entry && entry.timestamp) time.title = String(entry.timestamp);
 
         const content = document.createElement('div');
@@ -1304,6 +1366,7 @@ function renderSignalThreadOverviewMeta(host, thread) {
 }
 
 function fillSignalThreadEditor(thread, { createMode = false } = {}) {
+    loadPersistedSignalThreadDrafts();
     saveSignalThreadDraft(_activeSignalThreadId);
     if (typeof rememberDraft === 'function') rememberDraft(_activeSignalThreadId);
     _activeSignalThread = thread;
@@ -1340,8 +1403,49 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
     renderSignalThreadEntries(reflectionsHost, thread && Array.isArray(thread.reflections) ? thread.reflections : []);
     renderSignalThreadEntries(observationsHost, thread && Array.isArray(thread.observations) ? thread.observations : []);
     renderSignalThreadEntries(fieldLogHost, thread && Array.isArray(thread.entries) ? thread.entries : []);
+    renderSignalThreadAiContext(thread);
     if (typeof renderSignalThreadRememberEntries === 'function' && typeof _rememberCheckpoints !== 'undefined') {
         renderSignalThreadRememberEntries(thread, _rememberCheckpoints.get(_activeSignalThreadId));
+    }
+
+    function renderSignalThreadAiContext(thread) {
+        const select = document.getElementById('signal-thread-ai-context');
+        const question = document.getElementById('signal-thread-ai-question');
+        if (!select) return;
+        const id = thread && thread.id;
+        const selected = new Set(_signalThreadAiSelections.get(signalThreadDraftKey(id)) || []);
+        select.innerHTML = '';
+        (thread && Array.isArray(thread.entries) ? thread.entries : []).forEach(entry => {
+            if (!entry || !entry.id || !String(entry.content || '').trim()) return;
+            const option = document.createElement('option');
+            option.value = entry.id;
+            option.selected = selected.has(entry.id);
+            const type = entry.kind === 'quotation' ? 'Quotation' : entry.kind === 'ai' ? 'AI' : 'Human note';
+            option.textContent = type + (entry.attribution ? ' — ' + entry.attribution : '') + ': ' + String(entry.content).slice(0, 110);
+            select.appendChild(option);
+        });
+        if (question) question.value = _signalThreadAiDrafts.get(signalThreadDraftKey(id)) || '';
+        const status = document.getElementById('signal-thread-ai-status');
+        if (status) status.textContent = _signalThreadAiStatuses.get(signalThreadDraftKey(id)) || '';
+    }
+
+    function saveSignalThreadAiDraft(threadId = _activeSignalThreadId) {
+        const question = document.getElementById('signal-thread-ai-question');
+        const select = document.getElementById('signal-thread-ai-context');
+        const key = signalThreadDraftKey(threadId);
+        if (question && question.value) _signalThreadAiDrafts.set(key, question.value);
+        else _signalThreadAiDrafts.delete(key);
+        if (select) _signalThreadAiSelections.set(key, Array.from(select.selectedOptions).map(option => option.value));
+        persistSignalThreadDrafts();
+    }
+
+    function setSignalThreadAiStatus(threadId, message) {
+        const key = signalThreadDraftKey(threadId);
+        _signalThreadAiStatuses.set(key, message);
+        if (_activeSignalThreadId === threadId) {
+            const status = document.getElementById('signal-thread-ai-status');
+            if (status) status.textContent = message;
+        }
     }
     if (typeof loadRememberCheckpoint === 'function') loadRememberCheckpoint(_activeSignalThreadId);
 
@@ -1737,6 +1841,10 @@ async function addFieldLogEntryToActiveThread() {
     if (!_activeSignalThreadId) return;
     const input = document.getElementById('signal-thread-field-log-input');
     const content = input ? input.value : '';
+    const kindInput = document.getElementById('signal-thread-entry-kind');
+    const attributionInput = document.getElementById('signal-thread-entry-attribution');
+    const kind = kindInput && kindInput.value === 'quotation' ? 'quotation' : 'note';
+    const attribution = attributionInput ? attributionInput.value.trim() : '';
     const threadId = _activeSignalThreadId;
     if (!String(content || '').trim()) return;
     const stage = getSignalThreadStage(threadId);
@@ -1752,7 +1860,12 @@ async function addFieldLogEntryToActiveThread() {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/entries', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stage, content }),
+            body: JSON.stringify({
+                stage,
+                content,
+                ...(kind === 'quotation' ? { kind } : {}),
+                ...(attribution ? { attribution } : {}),
+            }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data || !data.success) {
@@ -1763,8 +1876,11 @@ async function addFieldLogEntryToActiveThread() {
         }
         if (_signalThreadDrafts.get(signalThreadDraftKey(threadId)) === content) {
             _signalThreadDrafts.delete(signalThreadDraftKey(threadId));
+            _signalThreadEntryMetadata.delete(signalThreadDraftKey(threadId));
+            persistSignalThreadDrafts();
         }
         if (_activeSignalThreadId === threadId && input && input.value === content) input.value = '';
+        if (_activeSignalThreadId === threadId && input && input.value === '' && attributionInput) attributionInput.value = '';
         else if (_activeSignalThreadId === threadId && input) saveSignalThreadDraft(threadId);
         if (_activeSignalThread && _activeSignalThreadId === threadId) {
             _activeSignalThread.entries = [...(_activeSignalThread.entries || []), data.entry];
@@ -1784,6 +1900,77 @@ async function addFieldLogEntryToActiveThread() {
             }
         }
     });
+}
+
+async function askAiAboutActiveSignalThread() {
+    if (!_activeSignalThreadId || _signalThreadAiRequests.has(_activeSignalThreadId)) return;
+    const threadId = _activeSignalThreadId;
+    const questionEl = document.getElementById('signal-thread-ai-question');
+    const contextEl = document.getElementById('signal-thread-ai-context');
+    const question = questionEl ? questionEl.value.trim() : '';
+    if (!question) {
+        setSignalThreadAiStatus(threadId, 'Write a question before asking AI.');
+        return;
+    }
+    saveSignalThreadAiDraft(threadId);
+    const requestId = (window.crypto && window.crypto.randomUUID)
+        ? window.crypto.randomUUID()
+        : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+    const controller = new AbortController();
+    _signalThreadAiRequests.set(threadId, { controller, requestId });
+    const ask = document.getElementById('signal-thread-ask-ai-btn');
+    const cancel = document.getElementById('signal-thread-cancel-ai-btn');
+    if (ask) ask.disabled = true;
+    if (cancel) cancel.style.display = '';
+    setSignalThreadAiStatus(threadId, 'Asking configured local model…');
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/ask-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+                question,
+                requestId,
+                selectedEntryIds: contextEl ? Array.from(contextEl.selectedOptions).map(option => option.value) : [],
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !data.entry) {
+            setSignalThreadAiStatus(threadId, data.error || 'AI request failed. Your question is still here.');
+            return;
+        }
+        if (_activeSignalThreadId === threadId && _activeSignalThread) {
+            _activeSignalThread.entries = [...(_activeSignalThread.entries || []), data.entry];
+            renderSignalThreadEntries(document.getElementById('signal-thread-field-log'), _activeSignalThread.entries);
+            renderSignalThreadAiContext(_activeSignalThread);
+            renderSignalThreadRememberEntries(_activeSignalThread);
+        }
+        setSignalThreadAiStatus(threadId, 'AI response saved with model: ' + String(data.entry.model || 'configured local model'));
+    } catch (error) {
+        setSignalThreadAiStatus(threadId, error && error.name === 'AbortError'
+            ? 'AI request cancelled. Your question is still here.'
+            : 'Could not reach local AI. Your question is still here.');
+    } finally {
+        _signalThreadAiRequests.delete(threadId);
+        if (_activeSignalThreadId === threadId) {
+            if (ask) ask.disabled = false;
+            if (cancel) cancel.style.display = 'none';
+        }
+    }
+}
+
+async function cancelActiveSignalThreadAiRequest() {
+    const threadId = _activeSignalThreadId;
+    const pending = _signalThreadAiRequests.get(threadId);
+    if (!threadId || !pending) return;
+    pending.controller.abort();
+    try {
+        await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/ask-ai/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: pending.requestId }),
+        });
+    } catch { /* the local abort already preserves the draft */ }
 }
 
 async function setActiveSignalThreadStage(stage) {
@@ -11094,6 +11281,15 @@ async function launchOllama(runtimeId) {
     const addFieldLogBtn = document.getElementById('signal-thread-add-field-log-btn');
     if (addFieldLogBtn) addFieldLogBtn.addEventListener('click', addFieldLogEntryToActiveThread);
 
+    const askAiBtn = document.getElementById('signal-thread-ask-ai-btn');
+    if (askAiBtn) askAiBtn.addEventListener('click', askAiAboutActiveSignalThread);
+    const cancelAiBtn = document.getElementById('signal-thread-cancel-ai-btn');
+    if (cancelAiBtn) cancelAiBtn.addEventListener('click', cancelActiveSignalThreadAiRequest);
+    const aiQuestion = document.getElementById('signal-thread-ai-question');
+    if (aiQuestion) aiQuestion.addEventListener('input', () => saveSignalThreadAiDraft());
+    const aiContext = document.getElementById('signal-thread-ai-context');
+    if (aiContext) aiContext.addEventListener('change', () => saveSignalThreadAiDraft());
+
     const rememberEntry = document.getElementById('signal-thread-remember-entry');
     if (rememberEntry) rememberEntry.addEventListener('change', applyRememberEntrySelection);
     const rememberContent = document.getElementById('signal-thread-remember-content');
@@ -11117,6 +11313,10 @@ async function launchOllama(runtimeId) {
         saveSignalThreadDraft();
         refreshSignalThreadSaveStatus();
     });
+    const fieldLogKind = document.getElementById('signal-thread-entry-kind');
+    if (fieldLogKind) fieldLogKind.addEventListener('change', () => saveSignalThreadDraft());
+    const fieldLogAttribution = document.getElementById('signal-thread-entry-attribution');
+    if (fieldLogAttribution) fieldLogAttribution.addEventListener('input', () => saveSignalThreadDraft());
 
     document.querySelectorAll('[data-thread-stage]').forEach(button => {
         button.addEventListener('click', () => setActiveSignalThreadStage(button.dataset.threadStage));
