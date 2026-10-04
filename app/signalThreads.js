@@ -451,7 +451,7 @@ function addFieldLogEntry(threadId, stage, content, options = {}) {
         provenance: options.provenance && typeof options.provenance === 'object' ? options.provenance : null,
     };
     thread.entries.push(entry);
-    thread.currentStage = normalizedStage;
+    if (!options.preserveCurrentStage) thread.currentStage = normalizedStage;
     thread.updatedAt = entry.timestamp;
     saveSignalThread(thread);
     return entry;
@@ -761,6 +761,14 @@ function exportSignalThreadMarkdown(thread) {
         ].filter(Boolean).join(' · ');
         lines.push('- ' + descriptor);
         lines.push('');
+        if (entry.kind === 'ai' && entry.provenance && entry.provenance.question) {
+            lines.push('Question: ' + String(entry.provenance.question));
+            const selectedEntryIds = Array.isArray(entry.provenance.selectedEntryIds)
+                ? entry.provenance.selectedEntryIds : [];
+            lines.push('Selected entry IDs: ' + (selectedEntryIds.length ? selectedEntryIds.join(', ') : '(none)'));
+            if (entry.provenance.requestedAt) lines.push('Question submitted: ' + String(entry.provenance.requestedAt));
+            lines.push('');
+        }
         lines.push(String(entry.content || ''));
         lines.push('');
     });
