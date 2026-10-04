@@ -29,6 +29,7 @@ describe('Phase 23 — deliberate Signal Thread AI consultation', () => {
     async function createThread(app) {
         const created = await request(app).post('/api/signal-threads')
             .send({ title: 'Water repair', posture: 'practical', currentStage: 'reflect' });
+        expect(created.status).toBe(200);
         return created.body.thread.id;
     }
 

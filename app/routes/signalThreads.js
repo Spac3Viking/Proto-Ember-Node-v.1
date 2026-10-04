@@ -186,8 +186,14 @@ router.post('/api/signal-threads/:id/entries', writeLimiter, (req, res) => {
             attribution: req.body && req.body.attribution,
             provenance: req.body && req.body.provenance,
         });
+        if (!entry) return res.status(404).json({ error: 'Signal Thread not found' });
+        res.json({ success: true, entry });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
 
-        function buildThreadAiPrompt(question, selectedEntries) {
+function buildThreadAiPrompt(question, selectedEntries) {
             const material = selectedEntries.map(entry => {
                 const label = entry.kind === 'quotation'
                     ? ('Quotation' + (entry.attribution ? ' — ' + entry.attribution : ''))
@@ -206,7 +212,7 @@ router.post('/api/signal-threads/:id/entries', writeLimiter, (req, res) => {
             };
         }
 
-        router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
+router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
             const thread = loadSignalThread(req.params.id);
             if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
             const question = String(req.body && req.body.question || '').trim();
@@ -253,19 +259,13 @@ router.post('/api/signal-threads/:id/entries', writeLimiter, (req, res) => {
             } finally {
                 if (requestId) activeThreadAiRequests.delete(requestKey);
             }
-        });
+});
 
-        router.post('/api/signal-threads/:id/ask-ai/cancel', writeLimiter, (req, res) => {
+router.post('/api/signal-threads/:id/ask-ai/cancel', writeLimiter, (req, res) => {
             const requestId = String(req.body && req.body.requestId || '');
             const controller = requestId ? activeThreadAiRequests.get(req.params.id + ':' + requestId) : null;
             if (controller) controller.abort();
             res.json({ success: true, cancelled: Boolean(controller) });
-        });
-        if (!entry) return res.status(404).json({ error: 'Signal Thread not found' });
-        res.json({ success: true, entry });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
 });
 
 router.put('/api/signal-threads/:id/compression', writeLimiter, (req, res) => {
