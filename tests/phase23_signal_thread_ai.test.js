@@ -168,4 +168,20 @@ describe('Phase 23 — deliberate Signal Thread AI consultation', () => {
         expect(axios.post).not.toHaveBeenCalled();
         expect((await request(app).get('/api/signal-threads/' + id)).body.thread.entries).toEqual([]);
     });
+
+    test('reports a request that completed before cancellation arrived', async () => {
+        const { app } = require('../app/server');
+        const id = await createThread(app);
+        axios.get.mockResolvedValue({ data: { models: [{ name: 'gemma3:4b' }] } });
+        axios.post.mockResolvedValue({ data: { message: { content: 'Saved before cancellation.' } } });
+
+        const answer = await request(app).post('/api/signal-threads/' + id + '/ask-ai').send({
+            question: 'What is next?', requestId: 'request-completed', selectedEntryIds: [],
+        });
+        const cancelled = await request(app).post('/api/signal-threads/' + id + '/ask-ai/cancel')
+            .send({ requestId: 'request-completed' });
+
+        expect(answer.status).toBe(200);
+        expect(cancelled.body).toEqual({ success: true, cancelled: false, completed: true });
+    });
 });

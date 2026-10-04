@@ -1932,7 +1932,8 @@ async function askAiAboutActiveSignalThread() {
         ? window.crypto.randomUUID()
         : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
     const controller = new AbortController();
-    _signalThreadAiRequests.set(threadId, { controller, requestId });
+    const request = { controller, requestId, cancelling: false };
+    _signalThreadAiRequests.set(threadId, request);
     syncSignalThreadAiControls(threadId);
     setSignalThreadAiStatus(threadId, 'Asking configured local model…');
     try {
@@ -1959,6 +1960,7 @@ async function askAiAboutActiveSignalThread() {
         }
         setSignalThreadAiStatus(threadId, 'AI response saved with model: ' + String(data.entry.model || 'configured local model'));
     } catch (error) {
+        if (error && error.name === 'AbortError' && request.cancelling) return;
         setSignalThreadAiStatus(threadId, error && error.name === 'AbortError'
             ? 'AI request cancelled. Your question is still here.'
             : 'Could not reach local AI. Your question is still here.');
@@ -1968,19 +1970,57 @@ async function askAiAboutActiveSignalThread() {
     }
 }
 
+async function reconcileSignalThreadAfterAiRequest(threadId) {
+    try {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || !data.thread) return false;
+        if (_activeSignalThreadId === threadId) {
+            _activeSignalThread = data.thread;
+            renderSignalThreadEntries(document.getElementById('signal-thread-field-log'), data.thread.entries || []);
+            renderSignalThreadAiContext(data.thread);
+            renderSignalThreadRememberEntries(data.thread);
+        }
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function cancelActiveSignalThreadAiRequest() {
     const threadId = _activeSignalThreadId;
     const pending = _signalThreadAiRequests.get(threadId);
     if (!threadId || !pending) return;
     setSignalThreadAiStatus(threadId, 'Cancelling AI request…');
+    pending.cancelling = true;
     pending.controller.abort();
     try {
-        await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/ask-ai/cancel', {
+        const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/ask-ai/cancel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ requestId: pending.requestId }),
         });
-    } catch { /* the local abort already preserves the draft */ }
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data && data.cancelled === true) {
+            setSignalThreadAiStatus(threadId, 'AI cancellation confirmed. Your question is still here.');
+            return;
+        }
+        const reconciled = await reconcileSignalThreadAfterAiRequest(threadId);
+        if (data && data.completed === true) {
+            setSignalThreadAiStatus(threadId, reconciled
+                ? 'AI request had already completed. Saved thread refreshed.'
+                : 'AI request had already completed, but the saved thread could not be refreshed.');
+            return;
+        }
+        setSignalThreadAiStatus(threadId, reconciled
+            ? 'Could not confirm whether AI stopped. Saved thread refreshed.'
+            : 'Could not confirm whether AI stopped. Your question is still here.');
+    } catch {
+        const reconciled = await reconcileSignalThreadAfterAiRequest(threadId);
+        setSignalThreadAiStatus(threadId, reconciled
+            ? 'Could not confirm whether AI stopped. Saved thread refreshed.'
+            : 'Could not confirm whether AI stopped. Your question is still here.');
+    }
 }
 
 async function setActiveSignalThreadStage(stage) {
