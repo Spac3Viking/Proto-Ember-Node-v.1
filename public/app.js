@@ -1186,7 +1186,10 @@ function renderSignalThreadEntries(host, entries) {
 
         const content = document.createElement('div');
         content.className = 'signal-thread-entry-content';
-        content.textContent = entry && entry.content ? String(entry.content) : '';
+        const consultation = entry && entry.kind === 'ai' && entry.provenance && entry.provenance.question
+            ? 'Question: ' + String(entry.provenance.question) + '\n\nAnswer:\n'
+            : '';
+        content.textContent = consultation + (entry && entry.content ? String(entry.content) : '');
 
         row.appendChild(time);
         row.appendChild(content);
@@ -1408,45 +1411,6 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
         renderSignalThreadRememberEntries(thread, _rememberCheckpoints.get(_activeSignalThreadId));
     }
 
-    function renderSignalThreadAiContext(thread) {
-        const select = document.getElementById('signal-thread-ai-context');
-        const question = document.getElementById('signal-thread-ai-question');
-        if (!select) return;
-        const id = thread && thread.id;
-        const selected = new Set(_signalThreadAiSelections.get(signalThreadDraftKey(id)) || []);
-        select.innerHTML = '';
-        (thread && Array.isArray(thread.entries) ? thread.entries : []).forEach(entry => {
-            if (!entry || !entry.id || !String(entry.content || '').trim()) return;
-            const option = document.createElement('option');
-            option.value = entry.id;
-            option.selected = selected.has(entry.id);
-            const type = entry.kind === 'quotation' ? 'Quotation' : entry.kind === 'ai' ? 'AI' : 'Human note';
-            option.textContent = type + (entry.attribution ? ' — ' + entry.attribution : '') + ': ' + String(entry.content).slice(0, 110);
-            select.appendChild(option);
-        });
-        if (question) question.value = _signalThreadAiDrafts.get(signalThreadDraftKey(id)) || '';
-        const status = document.getElementById('signal-thread-ai-status');
-        if (status) status.textContent = _signalThreadAiStatuses.get(signalThreadDraftKey(id)) || '';
-    }
-
-    function saveSignalThreadAiDraft(threadId = _activeSignalThreadId) {
-        const question = document.getElementById('signal-thread-ai-question');
-        const select = document.getElementById('signal-thread-ai-context');
-        const key = signalThreadDraftKey(threadId);
-        if (question && question.value) _signalThreadAiDrafts.set(key, question.value);
-        else _signalThreadAiDrafts.delete(key);
-        if (select) _signalThreadAiSelections.set(key, Array.from(select.selectedOptions).map(option => option.value));
-        persistSignalThreadDrafts();
-    }
-
-    function setSignalThreadAiStatus(threadId, message) {
-        const key = signalThreadDraftKey(threadId);
-        _signalThreadAiStatuses.set(key, message);
-        if (_activeSignalThreadId === threadId) {
-            const status = document.getElementById('signal-thread-ai-status');
-            if (status) status.textContent = message;
-        }
-    }
     if (typeof loadRememberCheckpoint === 'function') loadRememberCheckpoint(_activeSignalThreadId);
 
     const sagaCyclesHost = document.getElementById('signal-thread-saga-cycles');
@@ -1454,6 +1418,56 @@ function fillSignalThreadEditor(thread, { createMode = false } = {}) {
 
     clearSignalThreadCycleInputs();
     restoreSignalThreadDraft(_activeSignalThreadId);
+}
+
+function syncSignalThreadAiControls(threadId = _activeSignalThreadId) {
+    if (_activeSignalThreadId !== threadId) return;
+    const pending = _signalThreadAiRequests.has(threadId);
+    const ask = document.getElementById('signal-thread-ask-ai-btn');
+    const cancel = document.getElementById('signal-thread-cancel-ai-btn');
+    if (ask) ask.disabled = pending;
+    if (cancel) cancel.style.display = pending ? '' : 'none';
+}
+
+function renderSignalThreadAiContext(thread) {
+    const select = document.getElementById('signal-thread-ai-context');
+    const question = document.getElementById('signal-thread-ai-question');
+    if (!select) return;
+    const id = thread && thread.id;
+    const selected = new Set(_signalThreadAiSelections.get(signalThreadDraftKey(id)) || []);
+    select.innerHTML = '';
+    (thread && Array.isArray(thread.entries) ? thread.entries : []).forEach(entry => {
+        if (!entry || !entry.id || !String(entry.content || '').trim()) return;
+        const option = document.createElement('option');
+        option.value = entry.id;
+        option.selected = selected.has(entry.id);
+        const type = entry.kind === 'quotation' ? 'Quotation' : entry.kind === 'ai' ? 'AI' : 'Human note';
+        option.textContent = type + (entry.attribution ? ' — ' + entry.attribution : '') + ': ' + String(entry.content).slice(0, 110);
+        select.appendChild(option);
+    });
+    if (question) question.value = _signalThreadAiDrafts.get(signalThreadDraftKey(id)) || '';
+    const status = document.getElementById('signal-thread-ai-status');
+    if (status) status.textContent = _signalThreadAiStatuses.get(signalThreadDraftKey(id)) || '';
+    syncSignalThreadAiControls(id);
+}
+
+function saveSignalThreadAiDraft(threadId = _activeSignalThreadId) {
+    const question = document.getElementById('signal-thread-ai-question');
+    const select = document.getElementById('signal-thread-ai-context');
+    const key = signalThreadDraftKey(threadId);
+    if (question && question.value) _signalThreadAiDrafts.set(key, question.value);
+    else _signalThreadAiDrafts.delete(key);
+    if (select) _signalThreadAiSelections.set(key, Array.from(select.selectedOptions).map(option => option.value));
+    persistSignalThreadDrafts();
+}
+
+function setSignalThreadAiStatus(threadId, message) {
+    const key = signalThreadDraftKey(threadId);
+    _signalThreadAiStatuses.set(key, message);
+    if (_activeSignalThreadId === threadId) {
+        const status = document.getElementById('signal-thread-ai-status');
+        if (status) status.textContent = message;
+    }
 }
 
 function renderSignalThreadRememberEntries(thread, checkpoint) {
@@ -1908,6 +1922,7 @@ async function askAiAboutActiveSignalThread() {
     const questionEl = document.getElementById('signal-thread-ai-question');
     const contextEl = document.getElementById('signal-thread-ai-context');
     const question = questionEl ? questionEl.value.trim() : '';
+    const selectedEntryIds = contextEl ? Array.from(contextEl.selectedOptions).map(option => option.value) : [];
     if (!question) {
         setSignalThreadAiStatus(threadId, 'Write a question before asking AI.');
         return;
@@ -1918,10 +1933,7 @@ async function askAiAboutActiveSignalThread() {
         : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
     const controller = new AbortController();
     _signalThreadAiRequests.set(threadId, { controller, requestId });
-    const ask = document.getElementById('signal-thread-ask-ai-btn');
-    const cancel = document.getElementById('signal-thread-cancel-ai-btn');
-    if (ask) ask.disabled = true;
-    if (cancel) cancel.style.display = '';
+    syncSignalThreadAiControls(threadId);
     setSignalThreadAiStatus(threadId, 'Asking configured local model…');
     try {
         const res = await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/ask-ai', {
@@ -1931,7 +1943,7 @@ async function askAiAboutActiveSignalThread() {
             body: JSON.stringify({
                 question,
                 requestId,
-                selectedEntryIds: contextEl ? Array.from(contextEl.selectedOptions).map(option => option.value) : [],
+                selectedEntryIds,
             }),
         });
         const data = await res.json().catch(() => ({}));
@@ -1952,10 +1964,7 @@ async function askAiAboutActiveSignalThread() {
             : 'Could not reach local AI. Your question is still here.');
     } finally {
         _signalThreadAiRequests.delete(threadId);
-        if (_activeSignalThreadId === threadId) {
-            if (ask) ask.disabled = false;
-            if (cancel) cancel.style.display = 'none';
-        }
+        syncSignalThreadAiControls(threadId);
     }
 }
 
@@ -1963,6 +1972,7 @@ async function cancelActiveSignalThreadAiRequest() {
     const threadId = _activeSignalThreadId;
     const pending = _signalThreadAiRequests.get(threadId);
     if (!threadId || !pending) return;
+    setSignalThreadAiStatus(threadId, 'Cancelling AI request…');
     pending.controller.abort();
     try {
         await fetch('/api/signal-threads/' + encodeURIComponent(threadId) + '/ask-ai/cancel', {

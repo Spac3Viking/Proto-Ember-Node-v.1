@@ -217,6 +217,8 @@ router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
             if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
             const question = String(req.body && req.body.question || '').trim();
             if (!question) return res.status(400).json({ error: 'Question is required' });
+            const requestId = String(req.body && req.body.requestId || '').trim();
+            if (!requestId) return res.status(400).json({ error: 'requestId is required' });
             const selectedIds = Array.isArray(req.body && req.body.selectedEntryIds)
                 ? req.body.selectedEntryIds.map(String)
                 : [];
@@ -224,19 +226,20 @@ router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
             if (selectedEntries.length !== new Set(selectedIds).size) {
                 return res.status(400).json({ error: 'Selected thread material is unavailable' });
             }
-            const model = String(getSelectedModelFallback() || '').trim();
-            const probe = await probeOllamaRuntime();
-            if (!probe.ok) return res.status(503).json({ error: 'Local model runtime is unavailable. Start Ollama and try again.' });
-            if (!model || !probe.models.includes(model)) {
-                return res.status(503).json({ error: 'Configured local model is unavailable: ' + (model || 'none') });
-            }
-
-            const requestId = String(req.body && req.body.requestId || '');
             const controller = new AbortController();
             const requestKey = req.params.id + ':' + requestId;
-            if (requestId) activeThreadAiRequests.set(requestKey, controller);
-            const prompt = buildThreadAiPrompt(question, selectedEntries);
+            activeThreadAiRequests.set(requestKey, controller);
+            const requestedAt = new Date().toISOString();
+            const requestStage = thread.currentStage;
             try {
+                const model = String(getSelectedModelFallback() || '').trim();
+                const probe = await probeOllamaRuntime();
+                if (controller.signal.aborted) return res.status(409).json({ cancelled: true, error: 'AI request cancelled' });
+                if (!probe.ok) return res.status(503).json({ error: 'Local model runtime is unavailable. Start Ollama and try again.' });
+                if (!model || !probe.models.includes(model)) {
+                    return res.status(503).json({ error: 'Configured local model is unavailable: ' + (model || 'none') });
+                }
+                const prompt = buildThreadAiPrompt(question, selectedEntries);
                 const completion = await requestLocalCompletion({
                     runtime: { chatUrl: OLLAMA_CHAT_URL, model, runtimeId: 'ollama-local', modelRole: 'thread' },
                     signal: controller.signal,
@@ -248,16 +251,23 @@ router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
                 });
                 const content = String(completion.content || '').trim();
                 if (!content) return res.status(502).json({ error: 'Local model returned an empty response' });
-                const entry = addFieldLogEntry(req.params.id, thread.currentStage, content, {
+                if (controller.signal.aborted) return res.status(409).json({ cancelled: true, error: 'AI request cancelled' });
+                const entry = addFieldLogEntry(req.params.id, requestStage, content, {
                     kind: 'ai',
                     model,
+                    preserveCurrentStage: true,
+                    provenance: {
+                        question,
+                        selectedEntryIds: selectedIds,
+                        requestedAt,
+                    },
                 });
                 return res.json({ success: true, entry });
             } catch (error) {
                 if (controller.signal.aborted) return res.status(409).json({ cancelled: true, error: 'AI request cancelled' });
                 return res.status(503).json({ error: 'Local model request failed. Your question and draft are unchanged.' });
             } finally {
-                if (requestId) activeThreadAiRequests.delete(requestKey);
+                activeThreadAiRequests.delete(requestKey);
             }
 });
 
