@@ -54,6 +54,14 @@ const { linkSessionToThread, threadHasLinkedSessions } = require('../continuityC
 const router = express.Router();
 const SUMMARY_PROGRESS_PATTERN = /done|improv|progress|worked|learned|completed|resolved/i;
 const activeThreadAiRequests = new Map();
+const completedThreadAiRequests = new Map();
+
+function markThreadAiRequestCompleted(requestKey) {
+    completedThreadAiRequests.set(requestKey, true);
+    if (completedThreadAiRequests.size > 200) {
+        completedThreadAiRequests.delete(completedThreadAiRequests.keys().next().value);
+    }
+}
 
 router.param('id', (req, res, next, id) => {
     if (!isValidStorageId(id)) return res.status(400).json({ error: 'Invalid thread id' });
@@ -262,6 +270,7 @@ router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
                         requestedAt,
                     },
                 });
+                markThreadAiRequestCompleted(requestKey);
                 return res.json({ success: true, entry });
             } catch (error) {
                 if (controller.signal.aborted) return res.status(409).json({ cancelled: true, error: 'AI request cancelled' });
@@ -273,9 +282,12 @@ router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
 
 router.post('/api/signal-threads/:id/ask-ai/cancel', writeLimiter, (req, res) => {
             const requestId = String(req.body && req.body.requestId || '');
-            const controller = requestId ? activeThreadAiRequests.get(req.params.id + ':' + requestId) : null;
+            const requestKey = req.params.id + ':' + requestId;
+            const controller = requestId ? activeThreadAiRequests.get(requestKey) : null;
             if (controller) controller.abort();
-            res.json({ success: true, cancelled: Boolean(controller) });
+            if (controller) return res.json({ success: true, cancelled: true });
+            const completed = requestId && completedThreadAiRequests.delete(requestKey);
+            res.json({ success: true, cancelled: false, completed: Boolean(completed) });
 });
 
 router.put('/api/signal-threads/:id/compression', writeLimiter, (req, res) => {

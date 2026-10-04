@@ -2006,9 +2006,15 @@ async function cancelActiveSignalThreadAiRequest() {
             return;
         }
         const reconciled = await reconcileSignalThreadAfterAiRequest(threadId);
+        if (data && data.completed === true) {
+            setSignalThreadAiStatus(threadId, reconciled
+                ? 'AI request had already completed. Saved thread refreshed.'
+                : 'AI request had already completed, but the saved thread could not be refreshed.');
+            return;
+        }
         setSignalThreadAiStatus(threadId, reconciled
-            ? 'AI request had already completed. Saved thread refreshed.'
-            : 'AI request had already completed, but the saved thread could not be refreshed.');
+            ? 'Could not confirm whether AI stopped. Saved thread refreshed.'
+            : 'Could not confirm whether AI stopped. Your question is still here.');
     } catch {
         const reconciled = await reconcileSignalThreadAfterAiRequest(threadId);
         setSignalThreadAiStatus(threadId, reconciled

@@ -134,7 +134,7 @@ describe('Phase 23 — Signal Thread AI frontend interactions', () => {
     test('reconciles a completed request when the server reports cancellation was too late', async () => {
         let rejectRequest;
         const harness = loadAiHarness((url, options) => {
-            if (url.endsWith('/cancel')) return Promise.resolve({ ok: true, json: async () => ({ cancelled: false }) });
+            if (url.endsWith('/cancel')) return Promise.resolve({ ok: true, json: async () => ({ cancelled: false, completed: true }) });
             if (url.endsWith('/thread-a')) {
                 return Promise.resolve({
                     ok: true,
