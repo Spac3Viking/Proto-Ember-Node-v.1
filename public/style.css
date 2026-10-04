@@ -2710,6 +2710,19 @@ button.secondary:disabled {
   margin-top: 0.55rem;
 }
 
+.signal-thread-entry-options {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 1fr);
+  gap: 0.35rem 0.55rem;
+  align-items: center;
+  margin-top: 0.55rem;
+  font-size: 0.75rem;
+}
+
+.signal-thread-entry-options label {
+  color: var(--archive-muted);
+}
+
 .signal-thread-workspace-panel {
   margin-top: 0.55rem;
 }

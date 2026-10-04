@@ -19,7 +19,9 @@
 
 const express = require('express');
 
-const { readLimiter, writeLimiter } = require('../rateLimiters');
+const { readLimiter, writeLimiter, chatLimiter } = require('../rateLimiters');
+const { getSelectedModelFallback, probeOllamaRuntime, OLLAMA_CHAT_URL } = require('../runtimeStewardship');
+const { requestLocalCompletion } = require('../aiGateway');
 const {
     SIGNAL_THREAD_POSTURES,
     SIGNAL_THREAD_STATUSES,
@@ -51,6 +53,7 @@ const { linkSessionToThread, threadHasLinkedSessions } = require('../continuityC
 
 const router = express.Router();
 const SUMMARY_PROGRESS_PATTERN = /done|improv|progress|worked|learned|completed|resolved/i;
+const activeThreadAiRequests = new Map();
 
 router.param('id', (req, res, next, id) => {
     if (!isValidStorageId(id)) return res.status(400).json({ error: 'Invalid thread id' });
@@ -182,6 +185,81 @@ router.post('/api/signal-threads/:id/entries', writeLimiter, (req, res) => {
             kind: req.body && req.body.kind,
             attribution: req.body && req.body.attribution,
             provenance: req.body && req.body.provenance,
+        });
+
+        function buildThreadAiPrompt(question, selectedEntries) {
+            const material = selectedEntries.map(entry => {
+                const label = entry.kind === 'quotation'
+                    ? ('Quotation' + (entry.attribution ? ' — ' + entry.attribution : ''))
+                    : entry.kind === 'ai'
+                        ? ('Earlier AI response' + (entry.model ? ' — ' + entry.model : ''))
+                        : 'Human note';
+                return '[' + label + ']\n' + entry.content;
+            }).join('\n\n');
+            return {
+                system: [
+                    'You are a fallible local writing companion for one Signal Thread.',
+                    'Use only the user-selected material below and the question. Do not infer or retrieve library contents, Hearth memories, or other records.',
+                    'Distinguish direct support from inference where useful. Be concise and practical.',
+                ].join('\n'),
+                user: 'Selected thread material:\n\n' + (material || '(none selected)') + '\n\nQuestion:\n' + question,
+            };
+        }
+
+        router.post('/api/signal-threads/:id/ask-ai', chatLimiter, async (req, res) => {
+            const thread = loadSignalThread(req.params.id);
+            if (!thread) return res.status(404).json({ error: 'Signal Thread not found' });
+            const question = String(req.body && req.body.question || '').trim();
+            if (!question) return res.status(400).json({ error: 'Question is required' });
+            const selectedIds = Array.isArray(req.body && req.body.selectedEntryIds)
+                ? req.body.selectedEntryIds.map(String)
+                : [];
+            const selectedEntries = thread.entries.filter(entry => selectedIds.includes(entry.id));
+            if (selectedEntries.length !== new Set(selectedIds).size) {
+                return res.status(400).json({ error: 'Selected thread material is unavailable' });
+            }
+            const model = String(getSelectedModelFallback() || '').trim();
+            const probe = await probeOllamaRuntime();
+            if (!probe.ok) return res.status(503).json({ error: 'Local model runtime is unavailable. Start Ollama and try again.' });
+            if (!model || !probe.models.includes(model)) {
+                return res.status(503).json({ error: 'Configured local model is unavailable: ' + (model || 'none') });
+            }
+
+            const requestId = String(req.body && req.body.requestId || '');
+            const controller = new AbortController();
+            const requestKey = req.params.id + ':' + requestId;
+            if (requestId) activeThreadAiRequests.set(requestKey, controller);
+            const prompt = buildThreadAiPrompt(question, selectedEntries);
+            try {
+                const completion = await requestLocalCompletion({
+                    runtime: { chatUrl: OLLAMA_CHAT_URL, model, runtimeId: 'ollama-local', modelRole: 'thread' },
+                    signal: controller.signal,
+                    timeout: 60000,
+                    messages: [
+                        { role: 'system', content: prompt.system },
+                        { role: 'user', content: prompt.user },
+                    ],
+                });
+                const content = String(completion.content || '').trim();
+                if (!content) return res.status(502).json({ error: 'Local model returned an empty response' });
+                const entry = addFieldLogEntry(req.params.id, thread.currentStage, content, {
+                    kind: 'ai',
+                    model,
+                });
+                return res.json({ success: true, entry });
+            } catch (error) {
+                if (controller.signal.aborted) return res.status(409).json({ cancelled: true, error: 'AI request cancelled' });
+                return res.status(503).json({ error: 'Local model request failed. Your question and draft are unchanged.' });
+            } finally {
+                if (requestId) activeThreadAiRequests.delete(requestKey);
+            }
+        });
+
+        router.post('/api/signal-threads/:id/ask-ai/cancel', writeLimiter, (req, res) => {
+            const requestId = String(req.body && req.body.requestId || '');
+            const controller = requestId ? activeThreadAiRequests.get(req.params.id + ':' + requestId) : null;
+            if (controller) controller.abort();
+            res.json({ success: true, cancelled: Boolean(controller) });
         });
         if (!entry) return res.status(404).json({ error: 'Signal Thread not found' });
         res.json({ success: true, entry });

@@ -1280,11 +1280,36 @@
                     <h3>Field Log</h3>
                     <div class="gf-collapsible-panel-body">
                       <textarea id="signal-thread-field-log-input" rows="5" placeholder="Write a note for this thread."></textarea>
+                      <div class="signal-thread-entry-options">
+                        <label for="signal-thread-entry-kind">Record as</label>
+                        <select id="signal-thread-entry-kind">
+                          <option value="note">Human note</option>
+                          <option value="quotation">Quotation</option>
+                        </select>
+                        <label for="signal-thread-entry-attribution">Source label (optional)</label>
+                        <input id="signal-thread-entry-attribution" type="text" placeholder="Author, book, or link label" />
+                      </div>
                       <div class="signal-thread-actions">
                         <button class="primary" id="signal-thread-add-field-log-btn">Add Note</button>
                         <span class="message-system" id="signal-thread-save-status" role="status" aria-live="polite">Saved</span>
                       </div>
                       <div id="signal-thread-field-log" class="signal-thread-entries"></div>
+                    </div>
+                  </section>
+                  <section class="signal-thread-workspace-panel">
+                    <h3>Ask AI</h3>
+                    <div class="gf-collapsible-panel-body">
+                      <p class="message-system">Only the selected thread material is sent to the configured local model. Library and Hearth material are not included.</p>
+                      <label for="signal-thread-ai-context">Thread material to include</label>
+                      <select id="signal-thread-ai-context" multiple size="6" aria-describedby="signal-thread-ai-context-note"></select>
+                      <p class="message-system" id="signal-thread-ai-context-note">Select any human notes, quotations, or earlier AI responses you want to supply.</p>
+                      <label for="signal-thread-ai-question">Question</label>
+                      <textarea id="signal-thread-ai-question" rows="4" placeholder="Ask about the selected material."></textarea>
+                      <div class="signal-thread-actions">
+                        <button class="primary" id="signal-thread-ask-ai-btn">Ask AI</button>
+                        <button class="secondary" id="signal-thread-cancel-ai-btn" style="display:none;">Cancel</button>
+                        <span class="message-system" id="signal-thread-ai-status" role="status" aria-live="polite"></span>
+                      </div>
                     </div>
                   </section>
                   <section class="signal-thread-workspace-panel">

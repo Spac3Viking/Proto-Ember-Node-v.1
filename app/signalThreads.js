@@ -160,6 +160,7 @@ function _normalizeFieldLogEntry(entry) {
         content: String(row.content || ''),
         kind: String(row.kind || 'note'),
         attribution: typeof row.attribution === 'string' && row.attribution.trim() ? row.attribution.trim() : null,
+        model: typeof row.model === 'string' && row.model.trim() ? row.model.trim() : null,
         provenance: row.provenance && typeof row.provenance === 'object' ? row.provenance : null,
     };
 }
@@ -446,6 +447,7 @@ function addFieldLogEntry(threadId, stage, content, options = {}) {
         content: text,
         kind: String(options.kind || 'note'),
         attribution: typeof options.attribution === 'string' && options.attribution.trim() ? options.attribution.trim() : null,
+        model: typeof options.model === 'string' && options.model.trim() ? options.model.trim() : null,
         provenance: options.provenance && typeof options.provenance === 'object' ? options.provenance : null,
     };
     thread.entries.push(entry);
@@ -750,7 +752,14 @@ function exportSignalThreadMarkdown(thread) {
     const fieldLog = Array.isArray(t.entries) ? t.entries.slice().sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || ''))) : [];
     if (fieldLog.length === 0) lines.push('');
     fieldLog.forEach(entry => {
-        lines.push('- ' + String(entry.timestamp || '') + ' · ' + String(entry.stage || 'observe'));
+        const descriptor = [
+            String(entry.timestamp || ''),
+            String(entry.stage || 'observe'),
+            entry.kind === 'ai' ? 'AI response' : entry.kind === 'quotation' ? 'quotation' : 'human note',
+            entry.attribution ? String(entry.attribution) : '',
+            entry.model ? ('model: ' + String(entry.model)) : '',
+        ].filter(Boolean).join(' · ');
+        lines.push('- ' + descriptor);
         lines.push('');
         lines.push(String(entry.content || ''));
         lines.push('');
