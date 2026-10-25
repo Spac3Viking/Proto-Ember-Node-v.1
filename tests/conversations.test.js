@@ -85,6 +85,8 @@ describe('local conversations', () => {
         expect(retried.body.outcome).toBe('response_saved');
         const saved = (await request(app).get('/api/conversations/' + id)).body.conversation.messages;
         expect(saved.filter(message => message.role === 'user')).toHaveLength(1);
+        await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'stable-request', content: 'Different content.' }).expect(409);
 
         const cancelled = await request(app).post('/api/conversations/' + id + '/respond/cancel')
             .send({ requestId: 'stable-request' }).expect(200);
@@ -110,5 +112,58 @@ describe('local conversations', () => {
         expect(conversations.loadConversation(conversation.id).messages).toEqual([
             expect.objectContaining({ content: 'Last valid message.' }),
         ]);
+    });
+
+    test('recovers a backup when the primary is missing and deletes both copies', () => {
+        const conversations = require('../app/conversations');
+        const conversation = conversations.createConversation('Backup only');
+        conversations.appendMessage(conversation.id, { role: 'user', content: 'Recover me.' });
+        const primary = path.join(dataRoot, 'threads', conversation.id + '.json');
+        fs.copyFileSync(primary, primary + '.bak');
+        fs.unlinkSync(primary);
+
+        expect(conversations.loadConversation(conversation.id).messages)
+            .toEqual([expect.objectContaining({ content: 'Recover me.' })]);
+        expect(conversations.deleteConversation(conversation.id)).toBe(true);
+        expect(fs.existsSync(primary + '.bak')).toBe(false);
+    });
+
+    test('preserves a readable backup when replacing the primary fails', () => {
+        const conversations = require('../app/conversations');
+        const conversation = conversations.createConversation('Failed replacement');
+        conversations.appendMessage(conversation.id, { role: 'user', content: 'Readable backup.' });
+        const primary = path.join(dataRoot, 'threads', conversation.id + '.json');
+        const renameSync = fs.renameSync;
+        jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+            if (to === primary) throw new Error('replacement failed');
+            return renameSync(from, to);
+        });
+
+        expect(() => conversations.appendMessage(conversation.id, { role: 'user', content: 'Not saved.' }))
+            .toThrow('replacement failed');
+        fs.renameSync.mockRestore();
+        fs.writeFileSync(primary, '{ corrupt', 'utf8');
+        expect(conversations.loadConversation(conversation.id).messages)
+            .toEqual([expect.objectContaining({ content: 'Readable backup.' })]);
+    });
+
+    test('reports omitted saved context while retaining the complete transcript', async () => {
+        const axios = require('axios');
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/conversations').send({});
+        const id = created.body.conversation.id;
+        for (let index = 0; index < 18; index += 1) {
+            await request(app).post('/api/conversations/' + id + '/messages')
+                .send({ role: 'user', content: 'Earlier message ' + index }).expect(201);
+        }
+        axios.post.mockResolvedValue({ data: { message: { content: 'Current response.' } } });
+        const result = await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'context-limit', content: 'Current message.' }).expect(200);
+
+        expect(result.body.context).toMatchObject({
+            omittedMessages: 1,
+            notice: '1 older saved message(s) were omitted from this model request.',
+        });
+        expect(result.body.conversation.messages).toHaveLength(20);
     });
 });

@@ -85,6 +85,10 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
     try {
         const current = loadConversation(conversationId);
         if (!current) return res.status(404).json({ error: 'Conversation not found' });
+        const priorUser = findMessageByRequestId(current, requestId, 'user');
+        if (priorUser && priorUser.content !== content) {
+            return res.status(409).json({ error: 'requestId does not match the saved message', outcome: 'request_conflict' });
+        }
         const priorAssistant = findMessageByRequestId(current, requestId, 'assistant');
         if (priorAssistant) {
             return res.json({
@@ -95,10 +99,6 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
                 outcome: 'response_saved',
                 context: { omittedMessages: 0, notice: '' },
             });
-        }
-        const priorUser = findMessageByRequestId(current, requestId, 'user');
-        if (priorUser && priorUser.content !== content) {
-            return res.status(409).json({ error: 'requestId does not match the saved message', outcome: 'request_conflict' });
         }
         appended = priorUser
             ? { conversation: current, message: priorUser }
@@ -192,6 +192,12 @@ router.post('/api/conversations/:id/respond/cancel', writeLimiter, (req, res) =>
 });
 
 router.delete('/api/conversations/:id', writeLimiter, (req, res) => {
+    const active = activeRequests.get(req.params.id);
+    if (active) {
+        active.cancelled = true;
+        active.controller.abort();
+        activeRequests.delete(req.params.id);
+    }
     if (!deleteConversation(req.params.id)) return res.status(404).json({ error: 'Conversation not found' });
     res.status(204).end();
 });

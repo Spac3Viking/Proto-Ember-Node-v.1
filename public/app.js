@@ -1,7 +1,7 @@
 'use strict';
 
 let activeConversation = null;
-let activeRequest = null;
+const activeRequests = new Map();
 let loadVersion = 0;
 const draftPrefix = 'ember-node-draft:';
 const composerDraftKey = draftPrefix + 'composer';
@@ -12,7 +12,21 @@ const draftKey = id => draftPrefix + (id || 'composer');
 const getDraft = id => localStorage.getItem(draftKey(id)) || '';
 const setDraft = (id, value) => localStorage.setItem(draftKey(id), value);
 const clearDraft = id => localStorage.removeItem(draftKey(id));
-const requestKey = id => draftPrefix + 'request:' + id;
+const requestKey = id => draftPrefix + 'requests:' + id;
+const getRequests = id => {
+    try { return JSON.parse(localStorage.getItem(requestKey(id)) || '{}'); } catch { return {}; }
+};
+const setRequests = (id, requests) => localStorage.setItem(requestKey(id), JSON.stringify(requests));
+const saveRequest = state => {
+    const requests = getRequests(state.conversationId);
+    requests[state.requestId] = { requestId: state.requestId, content: state.content };
+    setRequests(state.conversationId, requests);
+};
+const removeRequest = state => {
+    const requests = getRequests(state.conversationId);
+    delete requests[state.requestId];
+    setRequests(state.conversationId, requests);
+};
 
 async function request(url, options) {
     const response = await fetch(url, options);
@@ -50,8 +64,10 @@ function applyConversation(conversation) {
     byId('chat-title').value = conversation.title;
     byId('draft').value = getDraft(conversation.id);
     renderMessages(conversation.messages);
-    byId('send').disabled = Boolean(activeRequest && activeRequest.conversationId === conversation.id);
-    byId('stop').disabled = !(activeRequest && activeRequest.conversationId === conversation.id);
+    const activeRequest = activeRequests.get(conversation.id);
+    byId('send').disabled = Boolean(activeRequest);
+    byId('stop').disabled = !activeRequest;
+    byId('retry').hidden = !Object.keys(getRequests(conversation.id)).length;
 }
 
 async function loadConversation(id) {
@@ -79,10 +95,14 @@ async function refreshList() {
 }
 
 async function createChat() {
+    const version = ++loadVersion;
     const { conversation } = await request('/api/conversations', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
     });
-    await loadConversation(conversation.id);
+    if (version === loadVersion) {
+        applyConversation(conversation);
+        refreshList().catch(() => {});
+    }
     return conversation;
 }
 
@@ -92,6 +112,45 @@ function clearSubmittedDraft(requestState) {
     if (activeConversation && activeConversation.id === requestState.conversationId &&
         byId('draft').value === requestState.content) {
         byId('draft').value = '';
+    }
+}
+
+async function submitRequest(conversation, requestState) {
+    activeRequests.set(conversation.id, requestState);
+    saveRequest(requestState);
+    if (activeConversation && activeConversation.id === conversation.id) {
+        byId('send').disabled = true;
+        byId('stop').disabled = false;
+        byId('retry').hidden = true;
+    }
+    status('Saving your message and requesting local AI…');
+    try {
+        const result = await request('/api/conversations/' + encodeURIComponent(conversation.id) + '/respond', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: requestState.requestId, content: requestState.content }),
+        });
+        if (result.outcome === 'response_saved') {
+            clearSubmittedDraft(requestState);
+            removeRequest(requestState);
+            if (activeConversation && activeConversation.id === conversation.id) {
+                activeConversation = result.conversation;
+                renderMessages(result.conversation.messages);
+                const notice = result.context && result.context.notice;
+                byId('context-notice').textContent = notice || '';
+                byId('context-notice').hidden = !notice;
+            }
+            status('Message and response saved locally.');
+            refreshList().catch(() => {});
+        }
+    } catch (error) {
+        const outcome = error.data && error.data.outcome;
+        if (outcome === 'cancelled') status('Cancellation confirmed. Your message remains saved.');
+        else if (outcome === 'ai_failed') status('Your message was saved, but local AI failed. Retry will not duplicate it.');
+        else if (outcome === 'save_failed') status('Message save failed or could not be confirmed. Your draft remains.');
+        else status(error.message);
+    } finally {
+        if (activeRequests.get(requestState.conversationId) === requestState) activeRequests.delete(requestState.conversationId);
+        if (activeConversation && activeConversation.id === conversation.id) applyConversation(activeConversation);
     }
 }
 
@@ -107,50 +166,11 @@ async function sendMessage(event) {
         if (activeConversation && activeConversation.id === conversation.id) byId('draft').value = content;
         clearDraft(null);
     }
-    if (activeRequest && activeRequest.conversationId === conversation.id) {
+    if (activeRequests.has(conversation.id)) {
         status('A response is already running for this chat.');
         return;
     }
-    const requestState = {
-        conversationId: conversation.id,
-        requestId: localStorage.getItem(requestKey(conversation.id)) || crypto.randomUUID(),
-        content,
-    };
-    localStorage.setItem(requestKey(conversation.id), requestState.requestId);
-    activeRequest = requestState;
-    if (activeConversation && activeConversation.id === conversation.id) {
-        byId('send').disabled = true;
-        byId('stop').disabled = false;
-    }
-    status('Saving your message and requesting local AI…');
-    try {
-        const result = await request('/api/conversations/' + encodeURIComponent(conversation.id) + '/respond', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requestId: requestState.requestId, content }),
-        });
-        if (result.outcome === 'response_saved') {
-            clearSubmittedDraft(requestState);
-            localStorage.removeItem(requestKey(requestState.conversationId));
-            if (activeConversation && activeConversation.id === conversation.id) {
-                activeConversation = result.conversation;
-                renderMessages(result.conversation.messages);
-            }
-            status('Message and response saved locally.');
-            refreshList().catch(() => {});
-        }
-    } catch (error) {
-        const outcome = error.data && error.data.outcome;
-        if (outcome === 'cancelled') status('Cancellation confirmed. Your message remains saved.');
-        else if (outcome === 'ai_failed') status('Your message was saved, but local AI failed. Retry will not duplicate it.');
-        else if (outcome === 'save_failed') status('Message save failed or could not be confirmed. Your draft remains.');
-        else status(error.message);
-    } finally {
-        if (activeRequest === requestState) activeRequest = null;
-        if (activeConversation && activeConversation.id === conversation.id) {
-            byId('send').disabled = false;
-            byId('stop').disabled = true;
-        }
-    }
+    return submitRequest(conversation, { conversationId: conversation.id, requestId: crypto.randomUUID(), content });
 }
 
 async function loadRuntime() {
@@ -185,8 +205,13 @@ async function loadRuntime() {
 
 byId('new-chat').onclick = () => createChat().catch(error => status(error.message));
 byId('composer').onsubmit = sendMessage;
+byId('retry').onclick = () => {
+    if (!activeConversation || activeRequests.has(activeConversation.id)) return;
+    const request = Object.values(getRequests(activeConversation.id)).at(-1);
+    if (request) submitRequest(activeConversation, { ...request, conversationId: activeConversation.id });
+};
 byId('stop').onclick = async () => {
-    const requestState = activeRequest;
+    const requestState = activeConversation && activeRequests.get(activeConversation.id);
     if (!requestState) return;
     try {
         const result = await request('/api/conversations/' + encodeURIComponent(requestState.conversationId) + '/respond/cancel', {
@@ -200,21 +225,29 @@ byId('stop').onclick = async () => {
 };
 byId('rename-chat').onclick = async () => {
     if (!activeConversation) return;
+    const conversationId = activeConversation.id;
     try {
         const data = await request('/api/conversations/' + encodeURIComponent(activeConversation.id), {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: byId('chat-title').value }),
         });
-        activeConversation = data.conversation;
+        if (activeConversation && activeConversation.id === conversationId) activeConversation = data.conversation;
         status('Name saved locally.');
         refreshList();
     } catch (error) { status(error.message); }
 };
 byId('delete-chat').onclick = async () => {
     if (!activeConversation || !window.confirm('Delete this chat?')) return;
+    const conversationId = activeConversation.id;
     try {
-        await request('/api/conversations/' + encodeURIComponent(activeConversation.id), { method: 'DELETE' });
-        clearDraft(activeConversation.id);
+        await request('/api/conversations/' + encodeURIComponent(conversationId), { method: 'DELETE' });
+        clearDraft(conversationId);
+        localStorage.removeItem(requestKey(conversationId));
+        activeRequests.delete(conversationId);
+        if (!activeConversation || activeConversation.id !== conversationId) {
+            refreshList();
+            return;
+        }
         activeConversation = null;
         byId('chat-title').value = 'New chat';
         byId('draft').value = getDraft(null);
@@ -266,7 +299,6 @@ byId('instructions-button').onclick = async () => {
 };
 byId('draft').addEventListener('input', () => {
     persistVisibleDraft();
-    if (activeConversation) localStorage.removeItem(requestKey(activeConversation.id));
 });
 
 byId('draft').value = getDraft(null);

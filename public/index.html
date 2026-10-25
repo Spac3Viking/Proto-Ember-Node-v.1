@@ -27,12 +27,14 @@
         <button id="instructions-button" aria-controls="instructions" aria-expanded="false">Active instructions</button>
       </div>
       <p id="save-status" role="status">Choose or create a chat.</p>
+      <p id="context-notice" role="status" hidden></p>
       <div id="messages" aria-live="polite"></div>
       <form id="composer">
         <label for="draft">Message</label>
         <textarea id="draft" rows="4" placeholder="Write or paste a passage…"></textarea>
         <div>
           <button id="send" type="submit">Send</button>
+          <button id="retry" type="button" hidden>Retry unresolved request</button>
           <button id="stop" type="button" disabled>Stop</button>
         </div>
       </form>
