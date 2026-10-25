@@ -89,7 +89,7 @@ describe('local conversations', () => {
         expect(messages[0].content).toContain('Harmonious Integration');
         expect(messages[0].content).toContain('Observe → Reflect → Act → Refine → Remember → Relate');
         expect(messages[0].content).toContain('no access to an unsupplied library');
-        expect(messages[0].content).not.toMatch(/Council|retrieval|persona|hidden context/i);
+        expect(messages[0].content).not.toMatch(/# Ember Council|# Retrieval Context|# Archetype|# Memory/i);
         expect(messages[1]).toEqual(expect.objectContaining({ content: 'Earlier message 3' }));
         expect(messages.at(-1)).toEqual(expect.objectContaining({ content: 'Current message.' }));
     });
