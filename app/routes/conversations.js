@@ -11,10 +11,11 @@ const {
     listConversations,
     loadConversation,
     renameConversation,
+    setContextNotice,
 } = require('../conversations');
 const { isValidStorageId } = require('../safeStorageId');
 const { requestLocalCompletion } = require('../aiGateway');
-const { boundedTranscript, getActiveInstructions } = require('../chatInstructions');
+const { boundedTranscript, getActiveInstructions, replaceDefaultInstructionFiles } = require('../chatInstructions');
 
 const router = express.Router();
 const activeRequests = new Map();
@@ -30,7 +31,21 @@ router.get('/api/conversations', readLimiter, (_req, res) => {
 
 router.get('/api/conversations/instructions', readLimiter, (_req, res) => {
     const instructions = getActiveInstructions();
-    res.json({ files: instructions.files });
+    res.json({ files: instructions.files, errors: instructions.errors });
+});
+
+router.post('/api/conversations/instructions/adopt-defaults', writeLimiter, (req, res) => {
+    if (!req.body || req.body.confirm !== 'replace-defaults') {
+        return res.status(400).json({ error: 'Confirm default replacement before continuing' });
+    }
+    try {
+        replaceDefaultInstructionFiles();
+        const instructions = getActiveInstructions();
+        if (instructions.errors.length) return res.status(500).json({ error: instructions.errors.join(' ') });
+        res.json({ files: instructions.files, message: 'Default instructions replaced; prior defaults were saved with .previous.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Could not adopt default instructions: ' + error.message });
+    }
 });
 
 router.post('/api/conversations', writeLimiter, (req, res) => {
@@ -112,6 +127,16 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
     const state = { controller, requestId, cancelled: false };
     activeRequests.set(conversationId, state);
     const instructions = getActiveInstructions();
+    if (instructions.errors.length) {
+        activeRequests.delete(conversationId);
+        return res.status(503).json({
+            error: 'Chat instructions are unavailable: ' + instructions.errors.join(' '),
+            saved: true,
+            message_saved: true,
+            response_saved: false,
+            outcome: 'instructions_unavailable',
+        });
+    }
     const transcript = boundedTranscript(appended.conversation.messages);
     let completionReceived = false;
     try {
@@ -131,17 +156,19 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
         }
         const saved = appendMessage(conversationId, { role: 'assistant', content: completion.content, requestId });
         if (!saved) return res.status(404).json({ error: 'Conversation was deleted while generating' });
+        const notice = transcript.omittedMessages
+            ? transcript.omittedMessages + ' older saved message(s) were omitted from this model request.'
+            : '';
+        const conversation = setContextNotice(conversationId, notice);
         res.json({
-            conversation: saved.conversation,
+            conversation,
             response: saved.message,
             message_saved: true,
             response_saved: true,
             outcome: 'response_saved',
             context: {
                 omittedMessages: transcript.omittedMessages,
-                notice: transcript.omittedMessages
-                    ? transcript.omittedMessages + ' older saved message(s) were omitted from this model request.'
-                    : '',
+                notice,
             },
         });
     } catch (error) {

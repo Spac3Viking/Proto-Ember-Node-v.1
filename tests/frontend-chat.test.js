@@ -153,6 +153,9 @@ test('background results, retries, cancellation, and context notices stay with t
         two: { requestId: 'two', content: 'second unresolved' },
     }));
     await elements['conversation-list'].children.find(button => button.textContent === 'A').onclick();
+    await flush();
+    expect(elements['context-notice'].textContent).toBe('A context notice');
+    expect(elements['context-notice'].hidden).toBe(false);
     await elements['conversation-list'].children.find(button => button.textContent === 'B').onclick();
     await flush();
     await flush();

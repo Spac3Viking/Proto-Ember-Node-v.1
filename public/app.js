@@ -99,7 +99,7 @@ function applyConversation(conversation) {
         : 'Retry selected unresolved request';
     const currentUi = uiState(conversation.id);
     status(currentUi.status || 'Saved locally.');
-    setContextNotice(conversation.id, currentUi.contextNotice);
+    setContextNotice(conversation.id, currentUi.contextNotice || conversation.contextNotice);
     if (conversation.recovery && conversation.recovery.recovered) {
         setConversationStatus(conversation.id, 'Recovered an earlier backup; newer work may be absent.');
     }
@@ -191,11 +191,11 @@ async function submitRequest(conversation, requestState) {
         if (result.outcome === 'response_saved') {
             clearSubmittedDraft(requestState);
             removeRequest(requestState);
+            const notice = result.context && result.context.notice;
+            setContextNotice(conversation.id, notice);
             if (activeConversation && activeConversation.id === conversation.id) {
                 activeConversation = result.conversation;
                 renderMessages(result.conversation.messages);
-                const notice = result.context && result.context.notice;
-                setContextNotice(conversation.id, notice);
             }
             setConversationStatus(conversation.id, 'Message and response saved locally.');
             refreshList().catch(() => {});

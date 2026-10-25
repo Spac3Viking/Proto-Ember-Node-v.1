@@ -68,6 +68,32 @@ describe('local conversations', () => {
         expect((await request(app).get('/api/conversations/instructions')).body.files).toHaveLength(3);
     });
 
+    test('assembles only active instructions and bounded saved history', async () => {
+        const axios = require('axios');
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/conversations').send({});
+        const id = created.body.conversation.id;
+        for (let index = 0; index < 20; index += 1) {
+            await request(app).post('/api/conversations/' + id + '/messages')
+                .send({ role: 'user', content: 'Earlier message ' + index }).expect(201);
+        }
+        axios.post.mockResolvedValue({ data: { message: { content: 'Bounded response.' } } });
+
+        await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'bounded-prompt', content: 'Current message.' }).expect(200);
+
+        const messages = axios.post.mock.calls[0][1].messages;
+        expect(messages).toHaveLength(19);
+        expect(messages[0]).toMatchObject({ role: 'system' });
+        expect(messages[0].content).toContain('fallible librarian');
+        expect(messages[0].content).toContain('Harmonious Integration');
+        expect(messages[0].content).toContain('Observe → Reflect → Act → Refine → Remember → Relate');
+        expect(messages[0].content).toContain('no access to an unsupplied library');
+        expect(messages[0].content).not.toMatch(/Council|retrieval|persona|hidden context/i);
+        expect(messages[1]).toEqual(expect.objectContaining({ content: 'Earlier message 3' }));
+        expect(messages.at(-1)).toEqual(expect.objectContaining({ content: 'Current message.' }));
+    });
+
     test('retries a saved request without duplicating its user message and reports saved responses on cancellation', async () => {
         const axios = require('axios');
         const { app } = require('../app/server');
@@ -181,5 +207,27 @@ describe('local conversations', () => {
             notice: '1 older saved message(s) were omitted from this model request.',
         });
         expect(result.body.conversation.messages).toHaveLength(20);
+        expect((await request(app).get('/api/conversations/' + id)).body.conversation.contextNotice)
+            .toBe('1 older saved message(s) were omitted from this model request.');
+    });
+
+    test('rejects a chat request when an instruction file cannot be read', async () => {
+        const axios = require('axios');
+        const { IDENTITY_FILE } = require('../app/chatInstructions');
+        const readFileSync = fs.readFileSync;
+        jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+            if (file === IDENTITY_FILE) throw new Error('permission denied');
+            return readFileSync(file, ...args);
+        });
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/conversations').send({});
+
+        const response = await request(app).post('/api/conversations/' + created.body.conversation.id + '/respond')
+            .send({ requestId: 'unreadable-instructions', content: 'Do not drop guidance.' }).expect(503);
+
+        expect(response.body).toMatchObject({ outcome: 'instructions_unavailable', message_saved: true });
+        expect(response.body.error).toContain('Could not read green-fire-identity.md');
+        expect(axios.post).not.toHaveBeenCalled();
+        fs.readFileSync.mockRestore();
     });
 });
