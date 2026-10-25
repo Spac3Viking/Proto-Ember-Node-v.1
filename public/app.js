@@ -2,12 +2,30 @@
 
 let activeConversation = null;
 const activeRequests = new Map();
+const conversationUi = new Map();
+let creatingConversation = null;
 let loadVersion = 0;
 const draftPrefix = 'ember-node-draft:';
 const composerDraftKey = draftPrefix + 'composer';
 
 const byId = id => document.getElementById(id);
 const status = text => { byId('save-status').textContent = text; };
+const uiState = id => {
+    const key = id || 'composer';
+    if (!conversationUi.has(key)) conversationUi.set(key, { status: '', contextNotice: '' });
+    return conversationUi.get(key);
+};
+const setConversationStatus = (id, text) => {
+    uiState(id).status = text;
+    if ((activeConversation && activeConversation.id === id) || (!activeConversation && !id)) status(text);
+};
+const setContextNotice = (id, text) => {
+    uiState(id).contextNotice = text || '';
+    if (activeConversation && activeConversation.id === id) {
+        byId('context-notice').textContent = text || '';
+        byId('context-notice').hidden = !text;
+    }
+};
 const draftKey = id => draftPrefix + (id || 'composer');
 const getDraft = id => localStorage.getItem(draftKey(id)) || '';
 const setDraft = (id, value) => localStorage.setItem(draftKey(id), value);
@@ -67,7 +85,24 @@ function applyConversation(conversation) {
     const activeRequest = activeRequests.get(conversation.id);
     byId('send').disabled = Boolean(activeRequest);
     byId('stop').disabled = !activeRequest;
-    byId('retry').hidden = !Object.keys(getRequests(conversation.id)).length;
+    const unresolved = Object.values(getRequests(conversation.id));
+    const retryTarget = byId('retry-target');
+    retryTarget.replaceChildren();
+    unresolved.forEach(requestState => {
+        const option = new Option(requestState.content.slice(0, 80), requestState.requestId);
+        retryTarget.append(option);
+    });
+    retryTarget.hidden = unresolved.length < 2;
+    byId('retry').hidden = !unresolved.length;
+    byId('retry').textContent = unresolved.length === 1
+        ? 'Retry: ' + unresolved[0].content.slice(0, 48)
+        : 'Retry selected unresolved request';
+    const currentUi = uiState(conversation.id);
+    status(currentUi.status || 'Saved locally.');
+    setContextNotice(conversation.id, currentUi.contextNotice);
+    if (conversation.recovery && conversation.recovery.recovered) {
+        setConversationStatus(conversation.id, 'Recovered an earlier backup; newer work may be absent.');
+    }
 }
 
 async function loadConversation(id) {
@@ -76,7 +111,6 @@ async function loadConversation(id) {
     const data = await request('/api/conversations/' + encodeURIComponent(id));
     if (version !== loadVersion) return;
     applyConversation(data.conversation);
-    status('Saved locally.');
     refreshList().catch(() => {});
 }
 
@@ -86,7 +120,7 @@ async function refreshList() {
     list.replaceChildren();
     conversations.forEach(conversation => {
         const button = document.createElement('button');
-        button.textContent = conversation.title;
+        button.textContent = conversation.title + (conversation.recovery && conversation.recovery.recovered ? ' (recovered)' : '');
         button.className = conversation.id === (activeConversation && activeConversation.id) ? 'selected' : '';
         button.onclick = () => loadConversation(conversation.id).catch(error => status(error.message));
         list.append(button);
@@ -106,6 +140,31 @@ async function createChat() {
     return conversation;
 }
 
+async function createConversationForFirstMessage(content) {
+    if (creatingConversation) return null;
+    const version = ++loadVersion;
+    creatingConversation = { version, content };
+    byId('send').disabled = true;
+    setConversationStatus(null, 'Creating chat…');
+    try {
+        const { conversation } = await request('/api/conversations', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+        });
+        const newerDraft = getDraft(null);
+        setDraft(conversation.id, newerDraft);
+        clearDraft(null);
+        if (version === loadVersion && !activeConversation) applyConversation(conversation);
+        refreshList().catch(() => {});
+        return conversation;
+    } catch (error) {
+        setConversationStatus(null, 'Could not create chat: ' + error.message);
+        throw error;
+    } finally {
+        creatingConversation = null;
+        if (!activeConversation) byId('send').disabled = false;
+    }
+}
+
 function clearSubmittedDraft(requestState) {
     if (getDraft(requestState.conversationId) !== requestState.content) return;
     clearDraft(requestState.conversationId);
@@ -123,7 +182,7 @@ async function submitRequest(conversation, requestState) {
         byId('stop').disabled = false;
         byId('retry').hidden = true;
     }
-    status('Saving your message and requesting local AI…');
+    setConversationStatus(conversation.id, 'Saving your message and requesting local AI…');
     try {
         const result = await request('/api/conversations/' + encodeURIComponent(conversation.id) + '/respond', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -136,18 +195,17 @@ async function submitRequest(conversation, requestState) {
                 activeConversation = result.conversation;
                 renderMessages(result.conversation.messages);
                 const notice = result.context && result.context.notice;
-                byId('context-notice').textContent = notice || '';
-                byId('context-notice').hidden = !notice;
+                setContextNotice(conversation.id, notice);
             }
-            status('Message and response saved locally.');
+            setConversationStatus(conversation.id, 'Message and response saved locally.');
             refreshList().catch(() => {});
         }
     } catch (error) {
         const outcome = error.data && error.data.outcome;
-        if (outcome === 'cancelled') status('Cancellation confirmed. Your message remains saved.');
-        else if (outcome === 'ai_failed') status('Your message was saved, but local AI failed. Retry will not duplicate it.');
-        else if (outcome === 'save_failed') status('Message save failed or could not be confirmed. Your draft remains.');
-        else status(error.message);
+        if (outcome === 'cancelled') setConversationStatus(conversation.id, 'Cancellation confirmed. Your message remains saved.');
+        else if (outcome === 'ai_failed') setConversationStatus(conversation.id, 'Your message was saved, but local AI failed. Retry will not duplicate it.');
+        else if (outcome === 'save_failed') setConversationStatus(conversation.id, 'Message save failed or could not be confirmed. Your draft remains.');
+        else setConversationStatus(conversation.id, error.message);
     } finally {
         if (activeRequests.get(requestState.conversationId) === requestState) activeRequests.delete(requestState.conversationId);
         if (activeConversation && activeConversation.id === conversation.id) applyConversation(activeConversation);
@@ -161,10 +219,9 @@ async function sendMessage(event) {
     persistVisibleDraft();
     let conversation = activeConversation;
     if (!conversation) {
-        conversation = await createChat();
-        setDraft(conversation.id, content);
-        if (activeConversation && activeConversation.id === conversation.id) byId('draft').value = content;
-        clearDraft(null);
+        if (creatingConversation) return;
+        conversation = await createConversationForFirstMessage(content);
+        if (!conversation) return;
     }
     if (activeRequests.has(conversation.id)) {
         status('A response is already running for this chat.');
@@ -207,9 +264,29 @@ byId('new-chat').onclick = () => createChat().catch(error => status(error.messag
 byId('composer').onsubmit = sendMessage;
 byId('retry').onclick = () => {
     if (!activeConversation || activeRequests.has(activeConversation.id)) return;
-    const request = Object.values(getRequests(activeConversation.id)).at(-1);
+    const unresolved = Object.values(getRequests(activeConversation.id));
+    const selectedId = byId('retry-target').value;
+    const request = unresolved.length === 1
+        ? unresolved[0]
+        : unresolved.find(candidate => candidate.requestId === selectedId);
+    if (unresolved.length > 1 && !request) {
+        setConversationStatus(activeConversation.id, 'Select the unresolved message to retry.');
+        return;
+    }
     if (request) submitRequest(activeConversation, { ...request, conversationId: activeConversation.id });
 };
+async function reconcileConversation(conversationId) {
+    try {
+        const data = await request('/api/conversations/' + encodeURIComponent(conversationId));
+        if (activeConversation && activeConversation.id === conversationId) {
+            persistVisibleDraft();
+            applyConversation(data.conversation);
+        }
+        refreshList().catch(() => {});
+    } catch (error) {
+        setConversationStatus(conversationId, error.message);
+    }
+}
 byId('stop').onclick = async () => {
     const requestState = activeConversation && activeRequests.get(activeConversation.id);
     if (!requestState) return;
@@ -218,10 +295,14 @@ byId('stop').onclick = async () => {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ requestId: requestState.requestId }),
         });
-        if (result.outcome === 'response_saved') status('Response was already saved.');
-        else if (result.outcome === 'cancellation_unknown') status('Cancellation outcome is unknown; your draft remains.');
-        else status('Cancellation requested…');
-    } catch (error) { status(error.message); }
+        if (result.outcome === 'response_saved') {
+            setConversationStatus(requestState.conversationId, 'Response was already saved.');
+            reconcileConversation(requestState.conversationId);
+        } else if (result.outcome === 'cancellation_unknown') {
+            setConversationStatus(requestState.conversationId, 'Cancellation outcome is unknown; your draft remains.');
+            reconcileConversation(requestState.conversationId);
+        } else setConversationStatus(requestState.conversationId, 'Cancellation requested…');
+    } catch (error) { setConversationStatus(requestState.conversationId, error.message); }
 };
 byId('rename-chat').onclick = async () => {
     if (!activeConversation) return;
@@ -252,6 +333,8 @@ byId('delete-chat').onclick = async () => {
         byId('chat-title').value = 'New chat';
         byId('draft').value = getDraft(null);
         renderMessages([]);
+        byId('context-notice').textContent = '';
+        byId('context-notice').hidden = true;
         status('Chat deleted.');
         refreshList();
     } catch (error) { status(error.message); }

@@ -122,8 +122,24 @@ describe('local conversations', () => {
         fs.copyFileSync(primary, primary + '.bak');
         fs.unlinkSync(primary);
 
+        expect(conversations.listConversations()).toEqual([
+            expect.objectContaining({
+                id: conversation.id,
+                title: 'Backup only',
+                recovery: { recovered: true, source: 'backup' },
+            }),
+        ]);
+        expect(conversations.loadConversation(conversation.id)).toEqual(expect.objectContaining({
+            recovery: { recovered: true, source: 'backup' },
+            messages: [expect.objectContaining({ content: 'Recover me.' })],
+        }));
+        conversations.appendMessage(conversation.id, { role: 'user', content: 'Saved after recovery.' });
+        expect(fs.existsSync(primary)).toBe(true);
         expect(conversations.loadConversation(conversation.id).messages)
-            .toEqual([expect.objectContaining({ content: 'Recover me.' })]);
+            .toEqual([
+                expect.objectContaining({ content: 'Recover me.' }),
+                expect.objectContaining({ content: 'Saved after recovery.' }),
+            ]);
         expect(conversations.deleteConversation(conversation.id)).toBe(true);
         expect(fs.existsSync(primary + '.bak')).toBe(false);
     });

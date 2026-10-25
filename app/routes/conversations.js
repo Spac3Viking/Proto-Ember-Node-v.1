@@ -44,7 +44,7 @@ router.post('/api/conversations', writeLimiter, (req, res) => {
 router.get('/api/conversations/:id', readLimiter, (req, res) => {
     const conversation = loadConversation(req.params.id);
     if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
-    res.json({ conversation });
+    res.json({ conversation, recovery: conversation.recovery || null });
 });
 
 router.put('/api/conversations/:id', writeLimiter, (req, res) => {
