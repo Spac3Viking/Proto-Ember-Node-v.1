@@ -33,6 +33,7 @@ const { installBundledCanonicalPackages } = require('./archiveCacheService');
 const { ensureUserConceptIndex } = require('./conceptIndex');
 const { ensureCourtConfig } = require('./courtConfig');
 const { runLegacyCleanupPass } = require('./system/nodeMaintenance');
+const { ensureChatInstructionFiles } = require('./chatInstructions');
 
 // Re-export legacy symbols for backward compatibility with tests
 const { listCaches, loadCache } = require('./cacheLoader');
@@ -54,6 +55,7 @@ const MIGRATION_RESULT = migrateLegacyData();
 seedDataRoot();
 installBundledCanonicalPackages();
 ensureCanonicalDataFiles();
+ensureChatInstructionFiles();
 ensureCourtConfig();
 ensureUserConceptIndex();
 runLegacyCleanupPass();
@@ -72,6 +74,7 @@ const archiveRouter        = require('./routes/archive');
 const bootstrapRouter      = require('./routes/bootstrap');
 const cachesRouter         = require('./routes/caches');
 const sessionsRouter       = require('./routes/sessions');
+const conversationsRouter  = require('./routes/conversations');
 
 // ── Express setup ─────────────────────────────────────────────────────────────
 
@@ -96,6 +99,7 @@ app.use(archiveRouter);
 app.use(bootstrapRouter);
 app.use(cachesRouter);
 app.use(sessionsRouter);
+app.use(conversationsRouter);
 
 // ── Server start ──────────────────────────────────────────────────────────────
 
