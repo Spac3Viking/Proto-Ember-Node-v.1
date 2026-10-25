@@ -2,6 +2,7 @@
 
 let activeConversation = null;
 const drafts = new Map();
+let activeRequest = null;
 
 const byId = id => document.getElementById(id);
 const status = text => { byId('save-status').textContent = text; };
@@ -66,30 +67,45 @@ async function sendMessage(event) {
     if (!activeConversation) return createChat();
     const content = byId('draft').value.trim();
     if (!content) return;
-    status('Saving message…');
+    status('Sending to local AI…');
+    const requestId = crypto.randomUUID();
+    activeRequest = { conversationId: activeConversation.id, requestId };
+    byId('send').disabled = true;
+    byId('stop').disabled = false;
     try {
-        const result = await request('/api/conversations/' + encodeURIComponent(activeConversation.id) + '/messages', {
+        const result = await request('/api/conversations/' + encodeURIComponent(activeConversation.id) + '/respond', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role: 'user', content }),
+            body: JSON.stringify({ requestId, content }),
         });
+        if (!activeConversation || activeConversation.id !== result.conversation.id) return;
         activeConversation = result.conversation;
         drafts.delete(activeConversation.id);
         byId('draft').value = '';
         renderMessages(activeConversation.messages);
-        status('Saved locally. Local AI sending will be enabled after the instruction pass.');
+        status(result.context.notice || 'Saved locally.');
         refreshList().catch(() => {});
     } catch (error) {
-        status('Not saved: ' + error.message);
+        if (activeConversation) {
+            await loadConversation(activeConversation.id).catch(() => {});
+            byId('draft').value = content;
+            drafts.set(activeConversation.id, content);
+        }
+        status('Your message was saved. ' + error.message);
+    } finally {
+        activeRequest = null;
+        byId('send').disabled = false;
+        byId('stop').disabled = true;
     }
 }
 
 async function loadRuntime() {
     try {
-        const data = await request('/api/status');
+        const [data, models] = await Promise.all([request('/api/status'), request('/api/ai/models')]);
         const ai = data.ai || {};
         byId('runtime-status').textContent = ai.runtimeReachable ? 'Available' : 'Unavailable — chats remain usable';
         const select = byId('model-select');
-        select.replaceChildren(new Option(data.model || ai.configuredModel || 'No model selected'));
+        select.replaceChildren(...(models.models || []).map(model => new Option(model, model)));
+        select.value = models.selectedModel || data.model || ai.configuredModel || '';
     } catch {
         byId('runtime-status').textContent = 'Unavailable — chats remain usable';
     }
@@ -97,6 +113,16 @@ async function loadRuntime() {
 
 byId('new-chat').onclick = () => createChat().catch(error => status(error.message));
 byId('composer').onsubmit = sendMessage;
+byId('stop').onclick = async () => {
+    if (!activeRequest) return;
+    try {
+        await request('/api/conversations/' + encodeURIComponent(activeRequest.conversationId) + '/respond/cancel', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: activeRequest.requestId }),
+        });
+        status('Stopping request…');
+    } catch (error) { status(error.message); }
+};
 byId('rename-chat').onclick = async () => {
     if (!activeConversation) return;
     try {
@@ -132,6 +158,33 @@ byId('settings-button').onclick = () => {
     const settings = byId('settings');
     settings.hidden = !settings.hidden;
     byId('settings-button').setAttribute('aria-expanded', String(!settings.hidden));
+};
+byId('model-select').onchange = async () => {
+    try {
+        await request('/api/ai/models/select', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: byId('model-select').value }),
+        });
+        status('Installed model selected.');
+    } catch (error) { status(error.message); }
+};
+byId('instructions-button').onclick = async () => {
+    const panel = byId('instructions');
+    panel.hidden = !panel.hidden;
+    byId('instructions-button').setAttribute('aria-expanded', String(!panel.hidden));
+    if (panel.hidden) return;
+    try {
+        const { files } = await request('/api/conversations/instructions');
+        const host = byId('instruction-files');
+        host.replaceChildren();
+        files.forEach(file => {
+            const heading = document.createElement('h3');
+            heading.textContent = file.label;
+            const content = document.createElement('pre');
+            content.textContent = file.content;
+            host.append(heading, content);
+        });
+    } catch (error) { status(error.message); }
 };
 byId('draft').addEventListener('input', () => {
     if (activeConversation) drafts.set(activeConversation.id, byId('draft').value);

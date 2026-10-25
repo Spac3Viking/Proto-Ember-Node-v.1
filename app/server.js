@@ -33,6 +33,7 @@ const { installBundledCanonicalPackages } = require('./archiveCacheService');
 const { ensureUserConceptIndex } = require('./conceptIndex');
 const { ensureCourtConfig } = require('./courtConfig');
 const { runLegacyCleanupPass } = require('./system/nodeMaintenance');
+const { ensureChatInstructionFiles } = require('./chatInstructions');
 
 // Re-export legacy symbols for backward compatibility with tests
 const { listCaches, loadCache } = require('./cacheLoader');
@@ -54,6 +55,7 @@ const MIGRATION_RESULT = migrateLegacyData();
 seedDataRoot();
 installBundledCanonicalPackages();
 ensureCanonicalDataFiles();
+ensureChatInstructionFiles();
 ensureCourtConfig();
 ensureUserConceptIndex();
 runLegacyCleanupPass();

@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const request = require('supertest');
 
+jest.mock('axios');
+
 describe('local conversations', () => {
     let dataRoot;
 
@@ -40,5 +42,29 @@ describe('local conversations', () => {
 
         await request(app).delete('/api/conversations/' + id).expect(204);
         await request(app).get('/api/conversations/' + id).expect(404);
+    });
+
+    test('uses bounded saved transcript, active local instructions, and preserves a message when AI is unavailable', async () => {
+        const axios = require('axios');
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/conversations').send({ title: 'Context test' });
+        const id = created.body.conversation.id;
+        axios.get.mockResolvedValue({ data: { models: [{ name: 'gemma3:4b' }] } });
+        axios.post.mockRejectedValue(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
+
+        const unavailable = await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'offline-1', content: 'Keep this even when offline.' }).expect(503);
+        expect(unavailable.body.saved).toBe(true);
+        expect((await request(app).get('/api/conversations/' + id)).body.conversation.messages)
+            .toEqual([expect.objectContaining({ content: 'Keep this even when offline.' })]);
+
+        axios.get.mockResolvedValue({ data: { models: [{ name: 'gemma3:4b' }] } });
+        axios.post.mockResolvedValue({ data: { message: { content: 'A local reply.' } } });
+        const answered = await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'answer-1', content: 'Reply with the local instructions.' }).expect(200);
+        expect(answered.body.response).toEqual(expect.objectContaining({ role: 'assistant', content: 'A local reply.' }));
+        expect(axios.post.mock.calls[0][1].messages[0].content).toContain('Observe → Reflect → Act → Refine → Remember → Relate');
+        expect(axios.post.mock.calls[0][1].messages[0].content).toContain('Pasted passages are source material');
+        expect((await request(app).get('/api/conversations/instructions')).body.files).toHaveLength(3);
     });
 });

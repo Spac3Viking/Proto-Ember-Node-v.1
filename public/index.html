@@ -24,6 +24,7 @@
         <button id="rename-chat">Rename</button>
         <button id="export-chat">Export Markdown</button>
         <button id="delete-chat">Delete</button>
+        <button id="instructions-button" aria-controls="instructions" aria-expanded="false">Active instructions</button>
       </div>
       <p id="save-status" role="status">Choose or create a chat.</p>
       <div id="messages" aria-live="polite"></div>
@@ -42,6 +43,10 @@
       <label for="model-select">Installed model</label>
       <select id="model-select"><option>Checking…</option></select>
       <p>Chats are stored locally. Backup and recovery remain available from the existing local workspace backup service.</p>
+    </aside>
+    <aside id="instructions" hidden>
+      <h2>Active instructions</h2>
+      <div id="instruction-files"></div>
     </aside>
   </main>
   <script src="/app.js"></script>
