@@ -53,7 +53,14 @@ function loadConversation(id) {
     for (const candidate of [file, file + '.bak']) {
         if (!fs.existsSync(candidate)) continue;
         try {
-            return readConversationFile(candidate, id);
+            const conversation = readConversationFile(candidate, id);
+            if (candidate !== file) {
+                conversation.recovery = {
+                    recovered: true,
+                    source: 'backup',
+                };
+            }
+            return conversation;
         } catch {
             // Try the recoverable prior version when an interrupted write left the primary unreadable.
         }
@@ -87,8 +94,11 @@ function saveConversation(conversation) {
 function listConversations() {
     if (!fs.existsSync(THREADS_DIR)) return [];
     return fs.readdirSync(THREADS_DIR)
-        .filter(file => file.endsWith('.json'))
-        .map(file => loadConversation(path.basename(file, '.json')))
+        .map(file => file.match(/^(.+)\.json(?:\.bak)?$/))
+        .filter(Boolean)
+        .map(match => match[1])
+        .filter((id, index, ids) => ids.indexOf(id) === index)
+        .map(loadConversation)
         .filter(Boolean)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
         .map(({ messages, ...summary }) => ({ ...summary, messageCount: messages.length }));
