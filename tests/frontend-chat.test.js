@@ -128,6 +128,11 @@ test('background results, retries, cancellation, and context notices stay with t
     elements.draft.value = 'request A';
     elements.draft.oninput();
     elements.composer.onsubmit({ preventDefault() {} });
+    elements.draft.value = 'newer A draft';
+    elements.draft.oninput();
+    await elements.stop.onclick();
+    await flush();
+    expect(storage.get('ember-node-draft:a')).toBe('newer A draft');
     elements['conversation-list'].children[1].onclick();
     await flush();
     elements.draft.value = 'draft B';
