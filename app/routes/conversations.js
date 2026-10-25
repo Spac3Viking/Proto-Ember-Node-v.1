@@ -113,11 +113,13 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
     activeRequests.set(conversationId, state);
     const instructions = getActiveInstructions();
     const transcript = boundedTranscript(appended.conversation.messages);
+    let completionReceived = false;
     try {
         const completion = await requestLocalCompletion({
             messages: [{ role: 'system', content: instructions.systemPrompt }, ...transcript.messages],
             signal: controller.signal,
         });
+        completionReceived = true;
         if (state.cancelled) {
             return res.status(409).json({
                 error: 'Request cancelled',
@@ -152,8 +154,17 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
                 outcome: 'cancelled',
             });
         }
+        if (completionReceived) {
+            return res.status(500).json({
+                error: 'The AI response could not be saved',
+                message_saved: true,
+                response_saved: false,
+                outcome: 'save_failed',
+            });
+        }
         res.status(error.offline ? 503 : 500).json({
             error: error.offline ? 'Local AI is unavailable' : error.message,
+            saved: true,
             message_saved: true,
             response_saved: false,
             outcome: 'ai_failed',
