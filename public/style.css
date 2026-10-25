@@ -1,23 +1,74 @@
-:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101310; color: #e6eee1; }
+:root {
+    color-scheme: dark;
+    --ground: #090d09;
+    --panel: #0e140e;
+    --line: #3c553d;
+    --green: #b8d9a7;
+    --muted: #91a58b;
+    --amber: #e6b85c;
+    --ink: #edf3e9;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: system-ui, sans-serif;
+}
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; min-width: 20rem; }
 button, input, select, textarea { font: inherit; }
-button { cursor: pointer; }
-.bar { display: flex; align-items: center; justify-content: space-between; padding: .75rem 1rem; border-bottom: 1px solid #506050; }
-.bar h1 { font-size: 1rem; margin: 0; }
-main { display: grid; grid-template-columns: 16rem minmax(0, 1fr) 18rem; min-height: calc(100vh - 3.5rem); }
-aside, #chat { padding: 1rem; }
-aside { border-right: 1px solid #506050; }
-#settings { border-left: 1px solid #506050; border-right: 0; }
+button, label, h1, h2, h3, #save-status, #conversation-status {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+button {
+    border: 1px solid var(--line);
+    border-radius: .2rem;
+    background: transparent;
+    color: var(--green);
+    cursor: pointer;
+    min-height: 2.25rem;
+    padding: .35rem .6rem;
+}
+button:hover, button.selected { border-color: var(--amber); color: var(--amber); }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 3px solid var(--amber);
+    outline-offset: 2px;
+}
+input, select, textarea {
+    border: 1px solid var(--line);
+    border-radius: .2rem;
+    background: var(--ground);
+    color: var(--ink);
+    padding: .5rem;
+}
+.bar {
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: .75rem 1rem;
+}
+.bar h1 { color: var(--green); font-size: 1rem; letter-spacing: .08em; margin: 0; }
+main { display: grid; grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr) minmax(16rem, 22rem); min-height: calc(100vh - 3.75rem); }
+aside, #chat { padding: clamp(.8rem, 2vw, 1.5rem); }
+aside { background: var(--panel); border-right: 1px solid var(--line); }
+#settings, #instructions { border-left: 1px solid var(--line); border-right: 0; }
 #conversation-list { display: grid; gap: .4rem; margin-top: .75rem; }
 #conversation-list button { text-align: left; }
-#chat { display: grid; grid-template-rows: auto auto minmax(12rem, 1fr) auto; gap: .75rem; }
-#chat-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+#conversation-status, #save-status { color: var(--muted); font-size: .8rem; margin: .25rem 0; }
+#chat { display: grid; gap: .9rem; grid-template-rows: auto auto minmax(16rem, 1fr) auto; }
+#chat-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 #chat-title { flex: 1; min-width: 12rem; }
-#messages { overflow: auto; display: grid; align-content: start; gap: .75rem; }
-.message { border: 1px solid #506050; padding: .75rem; }
-.message p { white-space: pre-wrap; margin: .5rem 0 0; }
-.assistant { border-color: #7a9f65; }
-#composer { display: grid; gap: .5rem; }
-textarea { width: 100%; resize: vertical; }
-@media (max-width: 760px) { main { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid #506050; } #settings { border-left: 0; } }
+#messages { display: grid; align-content: start; gap: .8rem; max-height: 60vh; overflow: auto; padding-right: .3rem; }
+.message { border-left: 2px solid var(--line); padding: .2rem 0 .2rem 1rem; }
+.message strong { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; }
+.message p { font-size: clamp(1rem, 1.1vw, 1.18rem); line-height: 1.65; margin: .35rem 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.assistant { border-color: var(--green); }
+.assistant strong { color: var(--green); }
+#composer { border-top: 1px solid var(--line); display: grid; gap: .55rem; padding-top: .9rem; }
+textarea { min-height: 7rem; resize: vertical; width: 100%; }
+#instruction-files pre { color: var(--green); font: .8rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+    aside, #settings, #instructions { border: 0; border-bottom: 1px solid var(--line); }
+    #messages { max-height: none; }
+}
