@@ -38,13 +38,22 @@ function normalizeConversation(raw) {
     };
 }
 
+function readConversationFile(file, id) {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.id !== id || !Array.isArray(raw.messages)) {
+        throw new Error('Invalid conversation record');
+    }
+    return normalizeConversation(raw);
+}
+
 function loadConversation(id) {
     if (!isValidStorageId(id)) return null;
     const file = conversationPath(id);
-    if (!file || !fs.existsSync(file)) return null;
+    if (!file) return null;
     for (const candidate of [file, file + '.bak']) {
+        if (!fs.existsSync(candidate)) continue;
         try {
-            return normalizeConversation(JSON.parse(fs.readFileSync(candidate, 'utf8')));
+            return readConversationFile(candidate, id);
         } catch {
             // Try the recoverable prior version when an interrupted write left the primary unreadable.
         }
@@ -59,7 +68,15 @@ function saveConversation(conversation) {
     const temporary = file + '.' + process.pid + '.' + crypto.randomUUID() + '.tmp';
     try {
         fs.writeFileSync(temporary, JSON.stringify(conversation, null, 2), 'utf8');
-        if (fs.existsSync(file)) fs.copyFileSync(file, file + '.bak');
+        if (fs.existsSync(file)) {
+            // Never overwrite the recovery copy with a corrupt primary.
+            try {
+                readConversationFile(file, conversation.id);
+                fs.copyFileSync(file, file + '.bak');
+            } catch {
+                // A prior readable backup, if any, remains untouched.
+            }
+        }
         fs.renameSync(temporary, file);
     } finally {
         if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
@@ -117,9 +134,12 @@ function findMessageByRequestId(conversation, requestId, role) {
 
 function deleteConversation(id) {
     const file = conversationPath(id);
-    if (!file || !fs.existsSync(file)) return false;
-    fs.unlinkSync(file);
-    return true;
+    if (!file) return false;
+    const backup = file + '.bak';
+    const exists = fs.existsSync(file) || fs.existsSync(backup);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    if (fs.existsSync(backup)) fs.unlinkSync(backup);
+    return exists;
 }
 
 function exportConversationMarkdown(id) {
