@@ -67,4 +67,48 @@ describe('local conversations', () => {
         expect(axios.post.mock.calls[0][1].messages[0].content).toContain('Pasted passages are source material');
         expect((await request(app).get('/api/conversations/instructions')).body.files).toHaveLength(3);
     });
+
+    test('retries a saved request without duplicating its user message and reports saved responses on cancellation', async () => {
+        const axios = require('axios');
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/conversations').send({});
+        const id = created.body.conversation.id;
+        axios.post.mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'ECONNREFUSED' }));
+
+        const failed = await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'stable-request', content: 'Do not duplicate me.' }).expect(503);
+        expect(failed.body).toMatchObject({ message_saved: true, response_saved: false, outcome: 'ai_failed' });
+
+        axios.post.mockResolvedValueOnce({ data: { message: { content: 'Recovered response.' } } });
+        const retried = await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'stable-request', content: 'Do not duplicate me.' }).expect(200);
+        expect(retried.body.outcome).toBe('response_saved');
+        const saved = (await request(app).get('/api/conversations/' + id)).body.conversation.messages;
+        expect(saved.filter(message => message.role === 'user')).toHaveLength(1);
+
+        const cancelled = await request(app).post('/api/conversations/' + id + '/respond/cancel')
+            .send({ requestId: 'stable-request' }).expect(200);
+        expect(cancelled.body.outcome).toBe('response_saved');
+    });
+
+    test('reports an unknown cancellation instead of treating it as completed', async () => {
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/conversations').send({});
+        const response = await request(app).post('/api/conversations/' + created.body.conversation.id + '/respond/cancel')
+            .send({ requestId: 'unknown-request' }).expect(200);
+        expect(response.body).toMatchObject({ cancelled: false, outcome: 'cancellation_unknown' });
+    });
+
+    test('recovers the prior conversation when an interrupted primary write is unreadable', async () => {
+        const conversations = require('../app/conversations');
+        const conversation = conversations.createConversation('Recovery');
+        conversations.appendMessage(conversation.id, { role: 'user', content: 'Last valid message.' });
+        conversations.appendMessage(conversation.id, { role: 'user', content: 'Interrupted message.' });
+        const primary = path.join(dataRoot, 'threads', conversation.id + '.json');
+        expect(fs.existsSync(primary + '.bak')).toBe(true);
+        fs.writeFileSync(primary, '{ incomplete', 'utf8');
+        expect(conversations.loadConversation(conversation.id).messages).toEqual([
+            expect.objectContaining({ content: 'Last valid message.' }),
+        ]);
+    });
 });

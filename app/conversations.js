@@ -17,12 +17,14 @@ function conversationPath(id) {
 function normalizeMessage(message) {
     const raw = message && typeof message === 'object' ? message : {};
     const role = raw.role === 'assistant' ? 'assistant' : 'user';
-    return {
+    const normalized = {
         id: String(raw.id || crypto.randomUUID()),
         role,
         content: String(raw.content || ''),
         timestamp: raw.timestamp ? String(raw.timestamp) : now(),
     };
+    if (typeof raw.requestId === 'string' && raw.requestId.trim()) normalized.requestId = raw.requestId.trim();
+    return normalized;
 }
 
 function normalizeConversation(raw) {
@@ -40,18 +42,28 @@ function loadConversation(id) {
     if (!isValidStorageId(id)) return null;
     const file = conversationPath(id);
     if (!file || !fs.existsSync(file)) return null;
-    try {
-        return normalizeConversation(JSON.parse(fs.readFileSync(file, 'utf8')));
-    } catch {
-        return null;
+    for (const candidate of [file, file + '.bak']) {
+        try {
+            return normalizeConversation(JSON.parse(fs.readFileSync(candidate, 'utf8')));
+        } catch {
+            // Try the recoverable prior version when an interrupted write left the primary unreadable.
+        }
     }
+    return null;
 }
 
 function saveConversation(conversation) {
     const file = conversationPath(conversation.id);
     if (!file) throw new Error('Invalid conversation id');
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(conversation, null, 2), 'utf8');
+    const temporary = file + '.' + process.pid + '.' + crypto.randomUUID() + '.tmp';
+    try {
+        fs.writeFileSync(temporary, JSON.stringify(conversation, null, 2), 'utf8');
+        if (fs.existsSync(file)) fs.copyFileSync(file, file + '.bak');
+        fs.renameSync(temporary, file);
+    } finally {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    }
     return conversation;
 }
 
@@ -97,6 +109,12 @@ function appendMessage(id, message) {
     return { conversation, message: saved };
 }
 
+function findMessageByRequestId(conversation, requestId, role) {
+    if (!conversation || !requestId) return null;
+    return conversation.messages.find(message => message.requestId === requestId &&
+        (!role || message.role === role)) || null;
+}
+
 function deleteConversation(id) {
     const file = conversationPath(id);
     if (!file || !fs.existsSync(file)) return false;
@@ -132,6 +150,7 @@ module.exports = {
     createConversation,
     deleteConversation,
     exportConversationMarkdown,
+    findMessageByRequestId,
     listConversations,
     loadConversation,
     renameConversation,
