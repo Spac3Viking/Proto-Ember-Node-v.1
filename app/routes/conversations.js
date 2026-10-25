@@ -7,6 +7,7 @@ const {
     createConversation,
     deleteConversation,
     exportConversationMarkdown,
+    findMessageByRequestId,
     listConversations,
     loadConversation,
     renameConversation,
@@ -70,20 +71,46 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
     const requestId = String(req.body && req.body.requestId || '').trim();
     const content = String(req.body && req.body.content || '').trim();
     if (!requestId || !content) return res.status(400).json({ error: 'requestId and content are required' });
-    const key = req.params.id + ':' + requestId;
-    if (activeRequests.has(key)) return res.status(409).json({ error: 'This request is already running' });
+    const conversationId = req.params.id;
+    const active = activeRequests.get(conversationId);
+    if (active) {
+        return res.status(409).json({
+            error: 'A response is already running for this conversation',
+            outcome: 'request_running',
+            requestId: active.requestId,
+        });
+    }
 
     let appended;
     try {
-        appended = appendMessage(req.params.id, { role: 'user', content });
+        const current = loadConversation(conversationId);
+        if (!current) return res.status(404).json({ error: 'Conversation not found' });
+        const priorAssistant = findMessageByRequestId(current, requestId, 'assistant');
+        if (priorAssistant) {
+            return res.json({
+                conversation: current,
+                response: priorAssistant,
+                message_saved: true,
+                response_saved: true,
+                outcome: 'response_saved',
+                context: { omittedMessages: 0, notice: '' },
+            });
+        }
+        const priorUser = findMessageByRequestId(current, requestId, 'user');
+        if (priorUser && priorUser.content !== content) {
+            return res.status(409).json({ error: 'requestId does not match the saved message', outcome: 'request_conflict' });
+        }
+        appended = priorUser
+            ? { conversation: current, message: priorUser }
+            : appendMessage(conversationId, { role: 'user', content, requestId });
         if (!appended) return res.status(404).json({ error: 'Conversation not found' });
     } catch (error) {
-        return res.status(400).json({ error: error.message });
+        return res.status(500).json({ error: error.message, message_saved: false, outcome: 'save_failed' });
     }
 
     const controller = new AbortController();
-    const state = { controller, completed: false, cancelled: false };
-    activeRequests.set(key, state);
+    const state = { controller, requestId, cancelled: false };
+    activeRequests.set(conversationId, state);
     const instructions = getActiveInstructions();
     const transcript = boundedTranscript(appended.conversation.messages);
     try {
@@ -91,13 +118,23 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
             messages: [{ role: 'system', content: instructions.systemPrompt }, ...transcript.messages],
             signal: controller.signal,
         });
-        state.completed = true;
-        if (state.cancelled) return res.status(409).json({ error: 'Request cancelled', cancelled: true });
-        const saved = appendMessage(req.params.id, { role: 'assistant', content: completion.content });
+        if (state.cancelled) {
+            return res.status(409).json({
+                error: 'Request cancelled',
+                cancelled: true,
+                message_saved: true,
+                response_saved: false,
+                outcome: 'cancelled',
+            });
+        }
+        const saved = appendMessage(conversationId, { role: 'assistant', content: completion.content, requestId });
         if (!saved) return res.status(404).json({ error: 'Conversation was deleted while generating' });
         res.json({
             conversation: saved.conversation,
             response: saved.message,
+            message_saved: true,
+            response_saved: true,
+            outcome: 'response_saved',
             context: {
                 omittedMessages: transcript.omittedMessages,
                 notice: transcript.omittedMessages
@@ -107,25 +144,40 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
         });
     } catch (error) {
         if (state.cancelled || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
-            return res.status(409).json({ error: 'Request cancelled', cancelled: true });
+            return res.status(409).json({
+                error: 'Request cancelled',
+                cancelled: true,
+                message_saved: true,
+                response_saved: false,
+                outcome: 'cancelled',
+            });
         }
         res.status(error.offline ? 503 : 500).json({
             error: error.offline ? 'Local AI is unavailable' : error.message,
-            saved: true,
+            message_saved: true,
+            response_saved: false,
+            outcome: 'ai_failed',
         });
     } finally {
-        activeRequests.delete(key);
+        if (activeRequests.get(conversationId) === state) activeRequests.delete(conversationId);
     }
 });
 
 router.post('/api/conversations/:id/respond/cancel', writeLimiter, (req, res) => {
     const requestId = String(req.body && req.body.requestId || '').trim();
-    const state = activeRequests.get(req.params.id + ':' + requestId);
-    if (!state) return res.json({ success: true, cancelled: false, completed: true });
-    if (state.completed) return res.json({ success: true, cancelled: false, completed: true });
+    const state = activeRequests.get(req.params.id);
+    if (!state || state.requestId !== requestId) {
+        const conversation = loadConversation(req.params.id);
+        const savedResponse = findMessageByRequestId(conversation, requestId, 'assistant');
+        return res.json({
+            success: true,
+            cancelled: false,
+            outcome: savedResponse ? 'response_saved' : 'cancellation_unknown',
+        });
+    }
     state.cancelled = true;
     state.controller.abort();
-    res.json({ success: true, cancelled: true });
+    res.json({ success: true, cancelled: true, outcome: 'cancellation_requested' });
 });
 
 router.delete('/api/conversations/:id', writeLimiter, (req, res) => {
