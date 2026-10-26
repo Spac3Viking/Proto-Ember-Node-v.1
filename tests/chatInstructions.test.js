@@ -50,4 +50,27 @@ describe('chat instruction ownership', () => {
         expect(active.files.find(file => file.path === instructions.IDENTITY_FILE).content).toBe('');
         fs.readFileSync.mockRestore();
     });
+
+    test('keeps valid files and recoverable prior versions when default replacement is interrupted', () => {
+        const instructions = require('../app/chatInstructions');
+        instructions.ensureChatInstructionFiles();
+        fs.writeFileSync(instructions.IDENTITY_FILE, 'Prior identity.', 'utf8');
+        fs.writeFileSync(instructions.SPIRAL_FILE, 'Prior spiral.', 'utf8');
+        const renameSync = fs.renameSync;
+        jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+            if (from === instructions.SPIRAL_FILE + '.new' && to === instructions.SPIRAL_FILE) {
+                throw new Error('interrupted replacement');
+            }
+            return renameSync(from, to);
+        });
+
+        expect(() => instructions.replaceDefaultInstructionFiles()).toThrow('Some defaults were replaced');
+        fs.renameSync.mockRestore();
+
+        expect(fs.readFileSync(instructions.IDENTITY_FILE, 'utf8')).toContain('fallible librarian');
+        expect(fs.readFileSync(instructions.IDENTITY_FILE + '.previous', 'utf8')).toBe('Prior identity.');
+        expect(fs.readFileSync(instructions.SPIRAL_FILE, 'utf8')).toBe('Prior spiral.');
+        expect(fs.readFileSync(instructions.SPIRAL_FILE + '.previous', 'utf8')).toBe('Prior spiral.');
+        expect(fs.existsSync(instructions.SPIRAL_FILE + '.new')).toBe(false);
+    });
 });

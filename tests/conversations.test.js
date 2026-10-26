@@ -230,4 +230,56 @@ describe('local conversations', () => {
         expect(axios.post).not.toHaveBeenCalled();
         fs.readFileSync.mockRestore();
     });
+
+    test('reviews and adopts defaults while retaining user context and prior defaults', async () => {
+        const instructions = require('../app/chatInstructions');
+        instructions.ensureChatInstructionFiles();
+        fs.writeFileSync(instructions.IDENTITY_FILE, 'Local identity.', 'utf8');
+        fs.writeFileSync(instructions.SPIRAL_FILE, 'Local spiral.', 'utf8');
+        fs.writeFileSync(instructions.USER_CONTEXT_FILE, 'Local user context.', 'utf8');
+        const { app } = require('../app/server');
+
+        const review = await request(app).get('/api/conversations/instructions').expect(200);
+        expect(review.body.files).toEqual(expect.arrayContaining([
+            expect.objectContaining({ content: 'Local identity.' }),
+            expect.objectContaining({ content: 'Local spiral.' }),
+            expect.objectContaining({ content: 'Local user context.' }),
+        ]));
+        expect(review.body.defaults).toEqual(expect.arrayContaining([
+            expect.objectContaining({ content: expect.stringContaining('fallible librarian') }),
+            expect.objectContaining({ content: expect.stringContaining('Observe → Reflect → Act') }),
+        ]));
+        await request(app).post('/api/conversations/instructions/adopt-defaults').send({}).expect(400);
+        const adopted = await request(app).post('/api/conversations/instructions/adopt-defaults')
+            .send({ confirm: 'replace-defaults' }).expect(200);
+        expect(adopted.body.message).toContain('prior defaults were saved');
+        expect(fs.readFileSync(instructions.IDENTITY_FILE + '.previous', 'utf8')).toBe('Local identity.');
+        expect(fs.readFileSync(instructions.SPIRAL_FILE + '.previous', 'utf8')).toBe('Local spiral.');
+        expect(fs.readFileSync(instructions.USER_CONTEXT_FILE, 'utf8')).toBe('Local user context.');
+    });
+
+    test('releases a request after instruction setup fails so it can be retried', async () => {
+        const axios = require('axios');
+        const instructions = require('../app/chatInstructions');
+        const writeFileSync = fs.writeFileSync;
+        jest.spyOn(fs, 'writeFileSync').mockImplementation((file, ...args) => {
+            if (file === instructions.IDENTITY_FILE) throw new Error('disk unavailable');
+            return writeFileSync(file, ...args);
+        });
+        const { app } = require('../app/server');
+        const created = await request(app).post('/api/conversations').send({});
+        const id = created.body.conversation.id;
+
+        const failed = await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'retry-instructions', content: 'Keep my message.' }).expect(503);
+        expect(failed.body).toMatchObject({ outcome: 'instructions_unavailable', message_saved: true });
+        expect(axios.post).not.toHaveBeenCalled();
+        fs.writeFileSync.mockRestore();
+        axios.post.mockResolvedValue({ data: { message: { content: 'Recovered after setup.' } } });
+
+        const retried = await request(app).post('/api/conversations/' + id + '/respond')
+            .send({ requestId: 'retry-instructions', content: 'Keep my message.' }).expect(200);
+        expect(retried.body.outcome).toBe('response_saved');
+        expect(axios.post).toHaveBeenCalledTimes(1);
+    });
 });
