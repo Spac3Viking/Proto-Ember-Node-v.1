@@ -32,6 +32,7 @@ function boot(fetch) {
         setAttribute(name, value) { this.attributes[name] = value; }
         addEventListener(event, handler) { this['on' + event] = handler; }
         focus() { this.focused = true; }
+        isVisible() { return !this.hidden && (!this.parentDetails || this.parentDetails.open); }
     }
     const ids = [
         'save-status', 'draft', 'messages', 'chat-title', 'send', 'stop', 'retry', 'retry-target',
@@ -42,6 +43,7 @@ function boot(fetch) {
         'sidebar', 'settings', 'chat-tools', 'latest-message', 'close-settings', 'close-instructions',
     ];
     const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
+    elements['instructions-button'].parentDetails = elements['chat-tools'];
     const storage = new Map();
     const documentEvents = {};
     const context = {
@@ -251,6 +253,53 @@ test('message scrolling stays put until the reader asks for the latest message',
     expect(elements['latest-message'].hidden).toBe(true);
 });
 
+test('delayed responses preserve older reading positions or follow the latest reply', async () => {
+    const pending = deferred();
+    const conversations = [{ id: 'a', title: 'A', messages: [{ role: 'assistant', content: 'Earlier reply' }] }];
+    const fetch = jest.fn((url, options = {}) => {
+        if (url === '/api/conversations') return response({ conversations });
+        if (url === '/api/status') return response({ ai: {} });
+        if (url === '/api/ai/models') return response({ available: false, models: [] });
+        if (url === '/api/conversations/a') return response({ conversation: conversations[0] });
+        if (url === '/api/conversations/a/respond' && options.method === 'POST') return pending.promise;
+        throw new Error(url);
+    });
+    const { elements } = boot(fetch);
+    await flush();
+    await flush();
+    elements.messages.scrollHeight = 1000;
+    elements.messages.clientHeight = 100;
+    elements.messages.scrollTop = 250;
+    elements.draft.value = 'Question';
+    const olderReader = elements.composer.onsubmit({ preventDefault() {} });
+    pending.resolve(await response({
+        outcome: 'response_saved',
+        conversation: { id: 'a', title: 'A', messages: [{ role: 'assistant', content: 'Earlier reply' }, { role: 'assistant', content: 'New reply' }] },
+    }));
+    await olderReader;
+    expect(elements.messages.scrollTop).toBe(250);
+
+    const latestPending = deferred();
+    fetch.mockImplementation((url, options = {}) => {
+        if (url === '/api/conversations') return response({ conversations });
+        if (url === '/api/status') return response({ ai: {} });
+        if (url === '/api/ai/models') return response({ available: false, models: [] });
+        if (url === '/api/conversations/a') return response({ conversation: conversations[0] });
+        if (url === '/api/conversations/a/respond' && options.method === 'POST') return latestPending.promise;
+        throw new Error(url);
+    });
+    elements.messages.scrollTop = 900;
+    elements.draft.value = 'Another question';
+    const latestReader = elements.composer.onsubmit({ preventDefault() {} });
+    latestPending.resolve(await response({
+        outcome: 'response_saved',
+        conversation: { id: 'a', title: 'A', messages: [{ role: 'assistant', content: 'Earlier reply' }, { role: 'assistant', content: 'Newest reply' }] },
+    }));
+    await latestReader;
+    expect(elements.messages.scrollTop).toBe(1000);
+    expect(elements['latest-message'].hidden).toBe(true);
+});
+
 test('panels close with their controls or Escape and return focus to their opener', async () => {
     const { elements, documentEvents } = boot(url => {
         if (url === '/api/conversations') return response({ conversations: [] });
@@ -273,5 +322,7 @@ test('panels close with their controls or Escape and return focus to their opene
     expect(elements['chat-tools'].open).toBe(false);
     documentEvents.keydown({ key: 'Escape' });
     expect(elements.instructions.hidden).toBe(true);
+    expect(elements['chat-tools'].open).toBe(true);
+    expect(elements['instructions-button'].isVisible()).toBe(true);
     expect(elements['instructions-button'].focused).toBe(true);
 });

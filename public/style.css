@@ -101,6 +101,12 @@ textarea { min-height: 7rem; resize: vertical; width: 100%; }
 #instruction-status { color: var(--amber); font-size: .85rem; }
 .panel-heading { align-items: center; display: flex; gap: .75rem; justify-content: space-between; }
 .panel-heading h2 { margin: 0; }
+@media (min-width: 861px) {
+    body { overflow: hidden; }
+    main { height: 100%; overflow: hidden; }
+    #sidebar { overflow: auto; }
+    #chat { height: 100%; overflow: hidden; }
+}
 @media (max-width: 860px) {
     main { grid-template-columns: 1fr; }
     main:has(#sidebar:not([hidden])) { grid-template-columns: 1fr; }
