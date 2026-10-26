@@ -122,37 +122,6 @@ test('background results, retries, cancellation, and context notices stay with t
         throw new Error(url);
     });
 
-    test('instructions panel reviews defaults, exposes file errors, and confirms adoption feedback', async () => {
-        const fetch = jest.fn((url, options = {}) => {
-            if (url === '/api/conversations') return response({ conversations: [] });
-            if (url === '/api/status') return response({ ai: {} });
-            if (url === '/api/ai/models') return response({ available: false, models: [] });
-            if (url === '/api/conversations/instructions') {
-                return response({
-                    files: [{ label: 'Identity and principles', content: '', error: 'Could not read identity.' }],
-                    errors: ['Could not read identity.'],
-                    defaults: [{ label: 'Bundled identity and principles', content: 'Bundled identity.' }],
-                });
-            }
-            if (url === '/api/conversations/instructions/adopt-defaults' && options.method === 'POST') {
-                return response({ message: 'Default instructions replaced; prior defaults were saved with .previous.' });
-            }
-            throw new Error(url);
-        });
-        const { elements } = boot(fetch);
-        await flush();
-        await elements['instructions-button'].onclick();
-        expect(elements['instruction-files'].children[0].textContent).toContain('unavailable');
-        expect(elements['instruction-files'].children[1].textContent).toContain('Could not read identity.');
-        expect(elements['instruction-defaults'].children[1].textContent).toBe('Bundled identity.');
-        expect(elements['instruction-status'].textContent).toContain('Could not read identity.');
-        elements['adopt-defaults-confirm'].checked = true;
-        elements['adopt-defaults-confirm'].onchange();
-        expect(elements['adopt-defaults'].disabled).toBe(false);
-        await elements['adopt-defaults'].onclick();
-        expect(fetch).toHaveBeenCalledWith('/api/conversations/instructions/adopt-defaults', expect.objectContaining({ method: 'POST' }));
-        expect(elements['instruction-status'].textContent).toContain('prior defaults were saved');
-    });
     const { elements, storage } = boot(fetch);
     await flush();
     await flush();
@@ -196,4 +165,37 @@ test('background results, retries, cancellation, and context notices stay with t
     await flush();
     expect(elements['retry-target'].hidden).toBe(false);
     expect(elements.retry.textContent).toContain('selected');
+});
+
+test('instructions panel reviews defaults, exposes file errors, and confirms adoption feedback', async () => {
+    const fetch = jest.fn((url, options = {}) => {
+        if (url === '/api/conversations') return response({ conversations: [] });
+        if (url === '/api/status') return response({ ai: {} });
+        if (url === '/api/ai/models') return response({ available: false, models: [] });
+        if (url === '/api/conversations/instructions') {
+            return response({
+                files: [{ label: 'Identity and principles', content: '', error: 'Could not read identity.' }],
+                errors: ['Could not read identity.'],
+                defaults: [{ label: 'Bundled identity and principles', content: 'Bundled identity.' }],
+            });
+        }
+        if (url === '/api/conversations/instructions/adopt-defaults' && options.method === 'POST') {
+            return response({ message: 'Default instructions replaced; prior defaults were saved with .previous.' });
+        }
+        throw new Error(url);
+    });
+    const { elements } = boot(fetch);
+    await flush();
+    elements.instructions.hidden = true;
+    await elements['instructions-button'].onclick();
+    expect(elements['instruction-files'].children[0].textContent).toContain('unavailable');
+    expect(elements['instruction-files'].children[1].textContent).toContain('Could not read identity.');
+    expect(elements['instruction-defaults'].children[1].textContent).toBe('Bundled identity.');
+    expect(elements['instruction-status'].textContent).toContain('Could not read identity.');
+    elements['adopt-defaults-confirm'].checked = true;
+    elements['adopt-defaults-confirm'].onchange();
+    expect(elements['adopt-defaults'].disabled).toBe(false);
+    await elements['adopt-defaults'].onclick();
+    expect(fetch).toHaveBeenCalledWith('/api/conversations/instructions/adopt-defaults', expect.objectContaining({ method: 'POST' }));
+    expect(elements['instruction-status'].textContent).toContain('prior defaults were saved');
 });

@@ -261,12 +261,13 @@ describe('local conversations', () => {
     test('releases a request after instruction setup fails so it can be retried', async () => {
         const axios = require('axios');
         const instructions = require('../app/chatInstructions');
+        const { app } = require('../app/server');
+        fs.unlinkSync(instructions.IDENTITY_FILE);
         const writeFileSync = fs.writeFileSync;
         jest.spyOn(fs, 'writeFileSync').mockImplementation((file, ...args) => {
             if (file === instructions.IDENTITY_FILE) throw new Error('disk unavailable');
             return writeFileSync(file, ...args);
         });
-        const { app } = require('../app/server');
         const created = await request(app).post('/api/conversations').send({});
         const id = created.body.conversation.id;
 
