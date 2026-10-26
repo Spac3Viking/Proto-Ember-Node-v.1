@@ -11,9 +11,10 @@
     background: var(--ground);
     color: var(--ink);
     font-family: system-ui, sans-serif;
+    min-height: 100%;
 }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 20rem; min-height: 100vh; }
+body { display: grid; grid-template-rows: auto minmax(0, 1fr); margin: 0; min-height: 100vh; min-height: 100dvh; }
 button, input, select, textarea { font: inherit; }
 button, label, h1, h2, h3, #save-status, #conversation-status {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -50,9 +51,10 @@ input, select, textarea {
     min-height: 3.25rem;
     padding: .5rem 1rem;
 }
-.bar h1 { color: var(--green); font-size: 1rem; letter-spacing: .08em; margin: 0; }
+.bar h1 { align-items: center; color: var(--green); display: flex; font-size: 1rem; gap: .4rem; letter-spacing: .08em; margin: 0; }
+.node-glyph { height: 1.65rem; width: 1.65rem; }
 .header-actions { display: flex; gap: .5rem; }
-main { display: grid; grid-template-columns: minmax(0, 1fr); min-height: calc(100vh - 3.25rem); }
+main { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
 main:has(#sidebar:not([hidden])) { grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr); }
 aside, #chat { padding: clamp(.8rem, 2vw, 1.5rem); }
 aside { background: var(--panel); border-right: 1px solid var(--line); }
@@ -62,36 +64,43 @@ aside { background: var(--panel); border-right: 1px solid var(--line); }
     border: 1px solid var(--line);
     border-right: 0;
     box-shadow: -1rem 0 2rem rgba(0, 0, 0, .28);
-    height: calc(100vh - 3.25rem);
+    bottom: 0;
+    height: auto;
     max-width: min(28rem, 92vw);
     overflow: auto;
     position: fixed;
     right: 0;
-    top: 3.25rem;
+    top: auto;
     width: 24rem;
     z-index: 2;
 }
 #conversation-list { display: grid; gap: .4rem; margin-top: .75rem; }
 #conversation-list button { text-align: left; }
 #conversation-status, #save-status { color: var(--muted); font-size: .8rem; margin: .25rem 0; }
-#chat { display: grid; gap: .75rem; grid-template-rows: auto auto minmax(18rem, 1fr) auto; min-height: calc(100vh - 3.25rem); }
+#chat { display: grid; gap: .75rem; grid-template-areas: "actions" "notices" "messages" "composer"; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; }
+#chat-actions { grid-area: actions; }
+#notices { display: grid; gap: .35rem; grid-area: notices; }
 #chat-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 #chat-title { flex: 1; min-width: 12rem; }
 #chat-tools { position: relative; }
 #chat-tools summary { border: 1px solid var(--line); color: var(--green); cursor: pointer; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; min-height: 2.25rem; padding: .5rem .6rem; }
 #chat-tools summary:hover { border-color: var(--amber); color: var(--amber); }
 .tool-menu { background: var(--panel-raised); border: 1px solid var(--line); display: grid; gap: .4rem; min-width: 12rem; padding: .5rem; position: absolute; right: 0; top: calc(100% + .35rem); z-index: 3; }
-#messages { display: grid; align-content: start; gap: .8rem; min-height: 0; overflow: auto; padding-right: .5rem; }
+#message-area { grid-area: messages; min-height: 0; position: relative; }
+#messages { display: grid; align-content: start; gap: .8rem; height: 100%; min-height: 0; overflow: auto; padding-right: .5rem; }
+#latest-message { bottom: .6rem; font-size: .85rem; position: absolute; right: 1rem; }
 .message { border-left: 2px solid var(--line); max-width: 78ch; padding: .2rem 0 .2rem 1rem; }
 .message strong { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; }
 .message p { font-size: clamp(1rem, 1.1vw, 1.18rem); line-height: 1.65; margin: .35rem 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .assistant { border-color: var(--green); }
 .assistant strong { color: var(--green); }
-#composer { border-top: 1px solid var(--line); display: grid; gap: .55rem; padding-top: .9rem; }
+#composer { border-top: 1px solid var(--line); display: grid; gap: .55rem; grid-area: composer; padding-top: .9rem; }
 textarea { min-height: 7rem; resize: vertical; width: 100%; }
 #context-notice, .notice { border-left: 2px solid var(--amber); color: var(--muted); font-size: .85rem; margin: 0; padding-left: .65rem; }
 #instruction-files pre, #instruction-defaults pre { color: var(--green); font: .8rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
 #instruction-status { color: var(--amber); font-size: .85rem; }
+.panel-heading { align-items: center; display: flex; gap: .75rem; justify-content: space-between; }
+.panel-heading h2 { margin: 0; }
 @media (max-width: 860px) {
     main { grid-template-columns: 1fr; }
     main:has(#sidebar:not([hidden])) { grid-template-columns: 1fr; }
@@ -99,21 +108,24 @@ textarea { min-height: 7rem; resize: vertical; width: 100%; }
         border: 1px solid var(--line);
         border-right: 0;
         box-shadow: -1rem 0 2rem rgba(0, 0, 0, .28);
-        height: calc(100vh - 3.25rem);
+        bottom: 0;
+        height: auto;
         max-width: 92vw;
         overflow: auto;
         position: fixed;
         right: 0;
-        top: 3.25rem;
+        top: 0;
         width: min(24rem, 92vw);
         z-index: 2;
     }
-    #chat { min-height: calc(100vh - 3.25rem); }
+    main:has(#settings:not([hidden])) #sidebar,
+    main:has(#instructions:not([hidden])) #sidebar { display: none; }
 }
 @media (max-width: 560px) {
     .bar { align-items: flex-start; flex-wrap: wrap; }
     .bar h1 { flex: 1; padding-top: .6rem; }
     .header-actions { margin-left: auto; }
+    .header-actions button, #toggle-sidebar { flex: 1 1 auto; }
     #chat-title { min-width: 0; width: 100%; }
     #chat-tools { width: 100%; }
     #chat-tools summary { width: 100%; }

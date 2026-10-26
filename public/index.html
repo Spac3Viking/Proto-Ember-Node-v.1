@@ -9,7 +9,7 @@
 <body>
   <header class="bar">
     <button id="toggle-sidebar" aria-controls="sidebar" aria-expanded="true">Conversations</button>
-    <h1>ᚠ Ember Node</h1>
+    <h1><img class="node-glyph" src="/ember-node-icon.png" alt=""> Ember Node</h1>
     <div class="header-actions">
       <button id="new-chat">New chat</button>
       <button id="settings-button" aria-controls="settings" aria-expanded="false">Settings</button>
@@ -33,9 +33,14 @@
           </div>
         </details>
       </div>
-      <p id="save-status" class="notice" role="status">Choose or create a chat.</p>
-      <p id="context-notice" role="status" hidden></p>
-      <div id="messages" aria-live="polite"></div>
+      <div id="notices">
+        <p id="save-status" class="notice" role="status">Choose or create a chat.</p>
+        <p id="context-notice" role="status" hidden></p>
+      </div>
+      <div id="message-area">
+        <div id="messages" aria-live="polite"></div>
+        <button id="latest-message" type="button" hidden>Latest message</button>
+      </div>
       <form id="composer">
         <label for="draft">Message</label>
         <textarea id="draft" rows="4" placeholder="Write or paste a passage…"></textarea>
@@ -48,14 +53,20 @@
       </form>
     </section>
     <aside id="settings" hidden>
-      <h2>Settings</h2>
+      <div class="panel-heading">
+        <h2>Settings</h2>
+        <button id="close-settings" type="button">Close</button>
+      </div>
       <p>Local runtime: <strong id="runtime-status">Checking…</strong></p>
       <label for="model-select">Installed model</label>
       <select id="model-select"><option>Checking…</option></select>
       <p>Chats are stored locally. Backup and recovery controls are not available in Settings yet.</p>
     </aside>
     <aside id="instructions" hidden>
-      <h2>Active instructions</h2>
+      <div class="panel-heading">
+        <h2>Active instructions</h2>
+        <button id="close-instructions" type="button">Close</button>
+      </div>
       <p id="instruction-status" role="status"></p>
       <div id="instruction-files"></div>
       <h3>Bundled defaults to review</h3>
