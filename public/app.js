@@ -12,7 +12,7 @@ const byId = id => document.getElementById(id);
 const status = text => { byId('save-status').textContent = text; };
 const uiState = id => {
     const key = id || 'composer';
-    if (!conversationUi.has(key)) conversationUi.set(key, { status: '', contextNotice: '' });
+    if (!conversationUi.has(key)) conversationUi.set(key, { status: '', contextNotice: '', scrollTop: 0 });
     return conversationUi.get(key);
 };
 const setConversationStatus = (id, text) => {
@@ -57,7 +57,12 @@ async function request(url, options) {
     return data;
 }
 
-function renderMessages(messages) {
+const isNearBottom = host => host.scrollHeight - host.scrollTop - host.clientHeight < 72;
+function updateLatestMessageAction() {
+    const host = byId('messages');
+    byId('latest-message').hidden = isNearBottom(host);
+}
+function renderMessages(messages, { scrollTop = 0, followLatest = false } = {}) {
     const host = byId('messages');
     host.replaceChildren();
     messages.forEach(message => {
@@ -70,6 +75,8 @@ function renderMessages(messages) {
         article.append(label, content);
         host.append(article);
     });
+    host.scrollTop = followLatest ? host.scrollHeight : scrollTop;
+    updateLatestMessageAction();
 }
 
 function persistVisibleDraft() {
@@ -77,10 +84,17 @@ function persistVisibleDraft() {
 }
 
 function applyConversation(conversation) {
+    const messages = byId('messages');
+    const sameConversation = activeConversation && activeConversation.id === conversation.id;
+    if (sameConversation) uiState(conversation.id).scrollTop = messages.scrollTop;
     activeConversation = conversation;
     byId('chat-title').value = conversation.title;
     byId('draft').value = getDraft(conversation.id);
-    renderMessages(conversation.messages);
+    const currentUi = uiState(conversation.id);
+    renderMessages(conversation.messages, {
+        followLatest: sameConversation && isNearBottom(messages),
+        scrollTop: currentUi.scrollTop,
+    });
     const activeRequest = activeRequests.get(conversation.id);
     byId('send').disabled = Boolean(activeRequest);
     byId('stop').disabled = !activeRequest;
@@ -96,7 +110,6 @@ function applyConversation(conversation) {
     byId('retry').textContent = unresolved.length === 1
         ? 'Retry: ' + unresolved[0].content.slice(0, 48)
         : 'Retry selected unresolved request';
-    const currentUi = uiState(conversation.id);
     status(currentUi.status || 'Saved locally.');
     setContextNotice(conversation.id, currentUi.contextNotice || conversation.contextNotice);
     if (conversation.recovery && conversation.recovery.recovered) {
@@ -345,16 +358,34 @@ byId('toggle-sidebar').onclick = () => {
     const sidebar = byId('sidebar');
     sidebar.hidden = !sidebar.hidden;
     byId('toggle-sidebar').setAttribute('aria-expanded', String(!sidebar.hidden));
+    if (!sidebar.hidden) {
+        closePanel('settings', 'settings-button');
+        closePanel('instructions', 'instructions-button');
+    }
 };
-function closePanel(id, buttonId) {
-    byId(id).hidden = true;
+const panelOpeners = new Map();
+function closePanel(id, buttonId, restoreFocus = false) {
+    const panel = byId(id);
+    if (panel.hidden) return;
+    panel.hidden = true;
     byId(buttonId).setAttribute('aria-expanded', 'false');
+    if (restoreFocus && panelOpeners.get(id) && typeof panelOpeners.get(id).focus === 'function') {
+        panelOpeners.get(id).focus();
+    }
+}
+function openPanel(id, buttonId) {
+    const panel = byId(id);
+    panelOpeners.set(id, byId(buttonId));
+    panel.hidden = false;
+    byId(buttonId).setAttribute('aria-expanded', 'true');
+    closePanel(id === 'settings' ? 'instructions' : 'settings', id === 'settings' ? 'instructions-button' : 'settings-button');
+    const tools = byId('chat-tools');
+    if (tools) tools.open = false;
 }
 byId('settings-button').onclick = () => {
     const settings = byId('settings');
-    settings.hidden = !settings.hidden;
-    byId('settings-button').setAttribute('aria-expanded', String(!settings.hidden));
-    if (!settings.hidden) closePanel('instructions', 'instructions-button');
+    if (settings.hidden) openPanel('settings', 'settings-button');
+    else closePanel('settings', 'settings-button', true);
 };
 byId('model-select').onchange = async () => {
     try {
@@ -396,10 +427,11 @@ async function loadInstructions(message = '') {
 }
 byId('instructions-button').onclick = async () => {
     const panel = byId('instructions');
-    panel.hidden = !panel.hidden;
-    byId('instructions-button').setAttribute('aria-expanded', String(!panel.hidden));
-    if (panel.hidden) return;
-    closePanel('settings', 'settings-button');
+    if (!panel.hidden) {
+        closePanel('instructions', 'instructions-button', true);
+        return;
+    }
+    openPanel('instructions', 'instructions-button');
     await loadInstructions();
 };
 byId('adopt-defaults-confirm').onchange = () => {
@@ -419,6 +451,22 @@ byId('adopt-defaults').onclick = async () => {
 };
 byId('draft').addEventListener('input', () => {
     persistVisibleDraft();
+});
+byId('messages').addEventListener('scroll', () => {
+    if (activeConversation) uiState(activeConversation.id).scrollTop = byId('messages').scrollTop;
+    updateLatestMessageAction();
+});
+byId('latest-message').onclick = () => {
+    const messages = byId('messages');
+    messages.scrollTop = messages.scrollHeight;
+    updateLatestMessageAction();
+};
+byId('close-settings').onclick = () => closePanel('settings', 'settings-button', true);
+byId('close-instructions').onclick = () => closePanel('instructions', 'instructions-button', true);
+document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    if (!byId('instructions').hidden) closePanel('instructions', 'instructions-button', true);
+    else if (!byId('settings').hidden) closePanel('settings', 'settings-button', true);
 });
 
 byId('draft').value = getDraft(null);

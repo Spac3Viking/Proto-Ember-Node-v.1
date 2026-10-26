@@ -20,12 +20,18 @@ function boot(fetch) {
             this.hidden = false;
             this.children = [];
             this.style = {};
+            this.attributes = {};
+            this.scrollTop = 0;
+            this.scrollHeight = 0;
+            this.clientHeight = 0;
+            this.focused = false;
         }
         append(...children) { this.children.push(...children); }
         appendChild(child) { this.children.push(child); return child; }
         replaceChildren(...children) { this.children = children; }
-        setAttribute() {}
-        addEventListener(_event, handler) { this.oninput = handler; }
+        setAttribute(name, value) { this.attributes[name] = value; }
+        addEventListener(event, handler) { this['on' + event] = handler; }
+        focus() { this.focused = true; }
     }
     const ids = [
         'save-status', 'draft', 'messages', 'chat-title', 'send', 'stop', 'retry', 'retry-target',
@@ -33,14 +39,16 @@ function boot(fetch) {
         'rename-chat', 'delete-chat', 'export-chat', 'toggle-sidebar', 'settings-button',
         'model-select', 'runtime-status', 'instructions-button', 'instructions', 'instruction-files',
         'instruction-status', 'instruction-defaults', 'adopt-defaults-confirm', 'adopt-defaults',
-        'sidebar', 'settings',
+        'sidebar', 'settings', 'chat-tools', 'latest-message', 'close-settings', 'close-instructions',
     ];
     const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
     const storage = new Map();
+    const documentEvents = {};
     const context = {
         document: {
             getElementById: id => elements[id],
             createElement: () => new Element(),
+            addEventListener: (event, handler) => { documentEvents[event] = handler; },
         },
         Option: class Option extends Element {
             constructor(text, value) { super(); this.textContent = text; this.value = value; }
@@ -56,7 +64,7 @@ function boot(fetch) {
         console,
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'), context);
-    return { elements, storage };
+    return { elements, storage, documentEvents };
 }
 
 function response(body, ok = true) {
@@ -180,6 +188,7 @@ test('instructions panel reviews defaults, exposes file errors, and confirms ado
                     errors: [],
                     defaults: [{ label: 'Bundled identity and principles', content: 'Updated bundled identity.' }],
                 });
+
             }
             return response({
                 files: [{ label: 'Identity and principles', content: '', error: 'Could not read identity.' }],
@@ -210,4 +219,59 @@ test('instructions panel reviews defaults, exposes file errors, and confirms ado
     expect(elements['instruction-files'].children[0].textContent).toBe('Identity and principles');
     expect(elements['instruction-files'].children[1].textContent).toBe('Updated identity.');
     expect(elements['instruction-status'].textContent).toContain('prior defaults were saved');
+});
+
+test('message scrolling stays put until the reader asks for the latest message', async () => {
+    const conversations = [
+        { id: 'a', title: 'A', messages: [{ role: 'assistant', content: 'Older message' }] },
+        { id: 'b', title: 'B', messages: [] },
+    ];
+    const { elements } = boot(url => {
+        if (url === '/api/conversations') return response({ conversations });
+        if (url === '/api/status') return response({ ai: {} });
+        if (url === '/api/ai/models') return response({ available: false, models: [] });
+        if (url === '/api/conversations/a') return response({ conversation: conversations[0] });
+        if (url === '/api/conversations/b') return response({ conversation: conversations[1] });
+        throw new Error(url);
+    });
+    await flush();
+    await flush();
+    elements.messages.scrollHeight = 1000;
+    elements.messages.clientHeight = 100;
+    elements.messages.scrollTop = 100;
+    elements.messages.onscroll();
+    expect(elements['latest-message'].hidden).toBe(false);
+    await elements['conversation-list'].children.find(button => button.textContent === 'B').onclick();
+    await flush();
+    await elements['conversation-list'].children.find(button => button.textContent === 'A').onclick();
+    await flush();
+    expect(elements.messages.scrollTop).toBe(100);
+    elements['latest-message'].onclick();
+    expect(elements.messages.scrollTop).toBe(1000);
+    expect(elements['latest-message'].hidden).toBe(true);
+});
+
+test('panels close with their controls or Escape and return focus to their opener', async () => {
+    const { elements, documentEvents } = boot(url => {
+        if (url === '/api/conversations') return response({ conversations: [] });
+        if (url === '/api/status') return response({ ai: {} });
+        if (url === '/api/ai/models') return response({ available: false, models: [] });
+        if (url === '/api/conversations/instructions') return response({ files: [], errors: [], defaults: [] });
+        throw new Error(url);
+    });
+    await flush();
+    elements.settings.hidden = true;
+    elements.instructions.hidden = true;
+    elements['settings-button'].onclick();
+    expect(elements.settings.hidden).toBe(false);
+    elements['close-settings'].onclick();
+    expect(elements.settings.hidden).toBe(true);
+    expect(elements['settings-button'].focused).toBe(true);
+    elements['chat-tools'].open = true;
+    await elements['instructions-button'].onclick();
+    expect(elements.instructions.hidden).toBe(false);
+    expect(elements['chat-tools'].open).toBe(false);
+    documentEvents.keydown({ key: 'Escape' });
+    expect(elements.instructions.hidden).toBe(true);
+    expect(elements['instructions-button'].focused).toBe(true);
 });
