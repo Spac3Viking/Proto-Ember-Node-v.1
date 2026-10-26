@@ -10,23 +10,30 @@
   <header class="bar">
     <button id="toggle-sidebar" aria-controls="sidebar" aria-expanded="true">Conversations</button>
     <h1>ᚠ Ember Node</h1>
-    <button id="settings-button" aria-controls="settings" aria-expanded="false">Settings</button>
-  </header>
-  <main>
-    <aside id="sidebar">
+    <div class="header-actions">
       <button id="new-chat">New chat</button>
+      <button id="settings-button" aria-controls="settings" aria-expanded="false">Settings</button>
+    </div>
+  </header>
+  <main id="terminal">
+    <aside id="sidebar">
       <p id="conversation-status" role="status">Loading saved chats…</p>
       <nav id="conversation-list" aria-label="Saved conversations"></nav>
     </aside>
     <section id="chat" aria-label="Chat">
       <div id="chat-actions">
         <input id="chat-title" aria-label="Chat name" value="New chat">
-        <button id="rename-chat">Rename</button>
-        <button id="export-chat">Export Markdown</button>
-        <button id="delete-chat">Delete</button>
-        <button id="instructions-button" aria-controls="instructions" aria-expanded="false">Active instructions</button>
+        <details id="chat-tools">
+          <summary>Chat tools</summary>
+          <div class="tool-menu">
+            <button id="rename-chat">Rename</button>
+            <button id="export-chat">Export Markdown</button>
+            <button id="delete-chat">Delete</button>
+            <button id="instructions-button" aria-controls="instructions" aria-expanded="false">Active instructions</button>
+          </div>
+        </details>
       </div>
-      <p id="save-status" role="status">Choose or create a chat.</p>
+      <p id="save-status" class="notice" role="status">Choose or create a chat.</p>
       <p id="context-notice" role="status" hidden></p>
       <div id="messages" aria-live="polite"></div>
       <form id="composer">

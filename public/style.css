@@ -1,25 +1,26 @@
 :root {
     color-scheme: dark;
-    --ground: #090d09;
-    --panel: #0e140e;
-    --line: #3c553d;
-    --green: #b8d9a7;
-    --muted: #91a58b;
-    --amber: #e6b85c;
-    --ink: #edf3e9;
+    --ground: #060906;
+    --panel: #0b110b;
+    --panel-raised: #101810;
+    --line: #385139;
+    --green: #b9dba8;
+    --muted: #91aa8d;
+    --amber: #e7b95e;
+    --ink: #edf5e9;
     background: var(--ground);
     color: var(--ink);
     font-family: system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 20rem; }
+body { margin: 0; min-width: 20rem; min-height: 100vh; }
 button, input, select, textarea { font: inherit; }
 button, label, h1, h2, h3, #save-status, #conversation-status {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 button {
     border: 1px solid var(--line);
-    border-radius: .2rem;
+    border-radius: 0;
     background: transparent;
     color: var(--green);
     cursor: pointer;
@@ -27,6 +28,7 @@ button {
     padding: .35rem .6rem;
 }
 button:hover, button.selected { border-color: var(--amber); color: var(--amber); }
+button.selected { background: rgba(231, 185, 94, .08); }
 button:disabled { cursor: not-allowed; opacity: .55; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
     outline: 3px solid var(--amber);
@@ -43,33 +45,77 @@ input, select, textarea {
     align-items: center;
     border-bottom: 1px solid var(--line);
     display: flex;
-    gap: 1rem;
+    gap: .75rem;
     justify-content: space-between;
-    padding: .75rem 1rem;
+    min-height: 3.25rem;
+    padding: .5rem 1rem;
 }
 .bar h1 { color: var(--green); font-size: 1rem; letter-spacing: .08em; margin: 0; }
-main { display: grid; grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr) minmax(16rem, 22rem); min-height: calc(100vh - 3.75rem); }
+.header-actions { display: flex; gap: .5rem; }
+main { display: grid; grid-template-columns: minmax(0, 1fr); min-height: calc(100vh - 3.25rem); }
+main:has(#sidebar:not([hidden])) { grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr); }
 aside, #chat { padding: clamp(.8rem, 2vw, 1.5rem); }
 aside { background: var(--panel); border-right: 1px solid var(--line); }
-#settings, #instructions { border-left: 1px solid var(--line); border-right: 0; }
+#sidebar { min-width: 0; }
+#settings, #instructions {
+    background: var(--panel-raised);
+    border: 1px solid var(--line);
+    border-right: 0;
+    box-shadow: -1rem 0 2rem rgba(0, 0, 0, .28);
+    height: calc(100vh - 3.25rem);
+    max-width: min(28rem, 92vw);
+    overflow: auto;
+    position: fixed;
+    right: 0;
+    top: 3.25rem;
+    width: 24rem;
+    z-index: 2;
+}
 #conversation-list { display: grid; gap: .4rem; margin-top: .75rem; }
 #conversation-list button { text-align: left; }
 #conversation-status, #save-status { color: var(--muted); font-size: .8rem; margin: .25rem 0; }
-#chat { display: grid; gap: .9rem; grid-template-rows: auto auto minmax(16rem, 1fr) auto; }
+#chat { display: grid; gap: .75rem; grid-template-rows: auto auto minmax(18rem, 1fr) auto; min-height: calc(100vh - 3.25rem); }
 #chat-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 #chat-title { flex: 1; min-width: 12rem; }
-#messages { display: grid; align-content: start; gap: .8rem; max-height: 60vh; overflow: auto; padding-right: .3rem; }
-.message { border-left: 2px solid var(--line); padding: .2rem 0 .2rem 1rem; }
+#chat-tools { position: relative; }
+#chat-tools summary { border: 1px solid var(--line); color: var(--green); cursor: pointer; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; min-height: 2.25rem; padding: .5rem .6rem; }
+#chat-tools summary:hover { border-color: var(--amber); color: var(--amber); }
+.tool-menu { background: var(--panel-raised); border: 1px solid var(--line); display: grid; gap: .4rem; min-width: 12rem; padding: .5rem; position: absolute; right: 0; top: calc(100% + .35rem); z-index: 3; }
+#messages { display: grid; align-content: start; gap: .8rem; min-height: 0; overflow: auto; padding-right: .5rem; }
+.message { border-left: 2px solid var(--line); max-width: 78ch; padding: .2rem 0 .2rem 1rem; }
 .message strong { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; }
 .message p { font-size: clamp(1rem, 1.1vw, 1.18rem); line-height: 1.65; margin: .35rem 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .assistant { border-color: var(--green); }
 .assistant strong { color: var(--green); }
 #composer { border-top: 1px solid var(--line); display: grid; gap: .55rem; padding-top: .9rem; }
 textarea { min-height: 7rem; resize: vertical; width: 100%; }
+#context-notice, .notice { border-left: 2px solid var(--amber); color: var(--muted); font-size: .85rem; margin: 0; padding-left: .65rem; }
 #instruction-files pre, #instruction-defaults pre { color: var(--green); font: .8rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
 #instruction-status { color: var(--amber); font-size: .85rem; }
 @media (max-width: 860px) {
     main { grid-template-columns: 1fr; }
-    aside, #settings, #instructions { border: 0; border-bottom: 1px solid var(--line); }
-    #messages { max-height: none; }
+    main:has(#sidebar:not([hidden])) { grid-template-columns: 1fr; }
+    #sidebar:not([hidden]), #settings, #instructions {
+        border: 1px solid var(--line);
+        border-right: 0;
+        box-shadow: -1rem 0 2rem rgba(0, 0, 0, .28);
+        height: calc(100vh - 3.25rem);
+        max-width: 92vw;
+        overflow: auto;
+        position: fixed;
+        right: 0;
+        top: 3.25rem;
+        width: min(24rem, 92vw);
+        z-index: 2;
+    }
+    #chat { min-height: calc(100vh - 3.25rem); }
+}
+@media (max-width: 560px) {
+    .bar { align-items: flex-start; flex-wrap: wrap; }
+    .bar h1 { flex: 1; padding-top: .6rem; }
+    .header-actions { margin-left: auto; }
+    #chat-title { min-width: 0; width: 100%; }
+    #chat-tools { width: 100%; }
+    #chat-tools summary { width: 100%; }
+    .tool-menu { left: 0; right: auto; width: 100%; }
 }

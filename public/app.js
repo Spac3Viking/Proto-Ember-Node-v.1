@@ -70,7 +70,6 @@ function renderMessages(messages) {
         article.append(label, content);
         host.append(article);
     });
-    host.scrollTop = host.scrollHeight;
 }
 
 function persistVisibleDraft() {
@@ -347,10 +346,15 @@ byId('toggle-sidebar').onclick = () => {
     sidebar.hidden = !sidebar.hidden;
     byId('toggle-sidebar').setAttribute('aria-expanded', String(!sidebar.hidden));
 };
+function closePanel(id, buttonId) {
+    byId(id).hidden = true;
+    byId(buttonId).setAttribute('aria-expanded', 'false');
+}
 byId('settings-button').onclick = () => {
     const settings = byId('settings');
     settings.hidden = !settings.hidden;
     byId('settings-button').setAttribute('aria-expanded', String(!settings.hidden));
+    if (!settings.hidden) closePanel('instructions', 'instructions-button');
 };
 byId('model-select').onchange = async () => {
     try {
@@ -362,14 +366,12 @@ byId('model-select').onchange = async () => {
         status('Installed model selected.');
     } catch (error) { status(error.message); }
 };
-byId('instructions-button').onclick = async () => {
-    const panel = byId('instructions');
-    panel.hidden = !panel.hidden;
-    byId('instructions-button').setAttribute('aria-expanded', String(!panel.hidden));
-    if (panel.hidden) return;
+async function loadInstructions(message = '') {
+    const host = byId('instruction-files');
+    const defaultsHost = byId('instruction-defaults');
+    byId('instruction-status').textContent = message;
     try {
         const { files, errors, defaults } = await request('/api/conversations/instructions');
-        const host = byId('instruction-files');
         host.replaceChildren();
         files.forEach(file => {
             const heading = document.createElement('h3');
@@ -378,7 +380,6 @@ byId('instructions-button').onclick = async () => {
             content.textContent = file.error || file.content;
             host.append(heading, content);
         });
-        const defaultsHost = byId('instruction-defaults');
         defaultsHost.replaceChildren();
         (defaults || []).forEach(file => {
             const heading = document.createElement('h4');
@@ -387,11 +388,19 @@ byId('instructions-button').onclick = async () => {
             content.textContent = file.content;
             defaultsHost.append(heading, content);
         });
-        byId('instruction-status').textContent = (errors || []).join(' ');
+        byId('instruction-status').textContent = message || (errors || []).join(' ');
     } catch (error) {
         byId('instruction-status').textContent = error.message;
         status(error.message);
     }
+}
+byId('instructions-button').onclick = async () => {
+    const panel = byId('instructions');
+    panel.hidden = !panel.hidden;
+    byId('instructions-button').setAttribute('aria-expanded', String(!panel.hidden));
+    if (panel.hidden) return;
+    closePanel('settings', 'settings-button');
+    await loadInstructions();
 };
 byId('adopt-defaults-confirm').onchange = () => {
     byId('adopt-defaults').disabled = !byId('adopt-defaults-confirm').checked;
@@ -403,9 +412,9 @@ byId('adopt-defaults').onclick = async () => {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ confirm: 'replace-defaults' }),
         });
-        byId('instruction-status').textContent = result.message;
         byId('adopt-defaults-confirm').checked = false;
         byId('adopt-defaults').disabled = true;
+        await loadInstructions(result.message);
     } catch (error) { byId('instruction-status').textContent = error.message; }
 };
 byId('draft').addEventListener('input', () => {

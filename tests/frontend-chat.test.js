@@ -168,11 +168,19 @@ test('background results, retries, cancellation, and context notices stay with t
 });
 
 test('instructions panel reviews defaults, exposes file errors, and confirms adoption feedback', async () => {
+    let adopted = false;
     const fetch = jest.fn((url, options = {}) => {
         if (url === '/api/conversations') return response({ conversations: [] });
         if (url === '/api/status') return response({ ai: {} });
         if (url === '/api/ai/models') return response({ available: false, models: [] });
         if (url === '/api/conversations/instructions') {
+            if (adopted) {
+                return response({
+                    files: [{ label: 'Identity and principles', content: 'Updated identity.' }],
+                    errors: [],
+                    defaults: [{ label: 'Bundled identity and principles', content: 'Updated bundled identity.' }],
+                });
+            }
             return response({
                 files: [{ label: 'Identity and principles', content: '', error: 'Could not read identity.' }],
                 errors: ['Could not read identity.'],
@@ -180,6 +188,7 @@ test('instructions panel reviews defaults, exposes file errors, and confirms ado
             });
         }
         if (url === '/api/conversations/instructions/adopt-defaults' && options.method === 'POST') {
+            adopted = true;
             return response({ message: 'Default instructions replaced; prior defaults were saved with .previous.' });
         }
         throw new Error(url);
@@ -197,5 +206,8 @@ test('instructions panel reviews defaults, exposes file errors, and confirms ado
     expect(elements['adopt-defaults'].disabled).toBe(false);
     await elements['adopt-defaults'].onclick();
     expect(fetch).toHaveBeenCalledWith('/api/conversations/instructions/adopt-defaults', expect.objectContaining({ method: 'POST' }));
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/conversations/instructions')).toHaveLength(2);
+    expect(elements['instruction-files'].children[0].textContent).toBe('Identity and principles');
+    expect(elements['instruction-files'].children[1].textContent).toBe('Updated identity.');
     expect(elements['instruction-status'].textContent).toContain('prior defaults were saved');
 });
