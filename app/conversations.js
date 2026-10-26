@@ -35,6 +35,7 @@ function normalizeConversation(raw) {
         createdAt: record.createdAt ? String(record.createdAt) : now(),
         updatedAt: record.updatedAt ? String(record.updatedAt) : now(),
         messages: Array.isArray(record.messages) ? record.messages.map(normalizeMessage) : [],
+        contextNotice: typeof record.contextNotice === 'string' ? record.contextNotice : '',
     };
 }
 
@@ -136,6 +137,14 @@ function appendMessage(id, message) {
     return { conversation, message: saved };
 }
 
+function setContextNotice(id, notice) {
+    const conversation = loadConversation(id);
+    if (!conversation) return null;
+    conversation.contextNotice = String(notice || '');
+    conversation.updatedAt = now();
+    return saveConversation(conversation);
+}
+
 function findMessageByRequestId(conversation, requestId, role) {
     if (!conversation || !requestId) return null;
     return conversation.messages.find(message => message.requestId === requestId &&
@@ -184,4 +193,5 @@ module.exports = {
     listConversations,
     loadConversation,
     renameConversation,
+    setContextNotice,
 };
