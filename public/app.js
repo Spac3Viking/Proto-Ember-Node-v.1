@@ -368,17 +368,45 @@ byId('instructions-button').onclick = async () => {
     byId('instructions-button').setAttribute('aria-expanded', String(!panel.hidden));
     if (panel.hidden) return;
     try {
-        const { files } = await request('/api/conversations/instructions');
+        const { files, errors, defaults } = await request('/api/conversations/instructions');
         const host = byId('instruction-files');
         host.replaceChildren();
         files.forEach(file => {
             const heading = document.createElement('h3');
+            heading.textContent = file.label + (file.error ? ' — unavailable' : '');
+            const content = document.createElement('pre');
+            content.textContent = file.error || file.content;
+            host.append(heading, content);
+        });
+        const defaultsHost = byId('instruction-defaults');
+        defaultsHost.replaceChildren();
+        (defaults || []).forEach(file => {
+            const heading = document.createElement('h4');
             heading.textContent = file.label;
             const content = document.createElement('pre');
             content.textContent = file.content;
-            host.append(heading, content);
+            defaultsHost.append(heading, content);
         });
-    } catch (error) { status(error.message); }
+        byId('instruction-status').textContent = (errors || []).join(' ');
+    } catch (error) {
+        byId('instruction-status').textContent = error.message;
+        status(error.message);
+    }
+};
+byId('adopt-defaults-confirm').onchange = () => {
+    byId('adopt-defaults').disabled = !byId('adopt-defaults-confirm').checked;
+};
+byId('adopt-defaults').onclick = async () => {
+    if (!byId('adopt-defaults-confirm').checked) return;
+    try {
+        const result = await request('/api/conversations/instructions/adopt-defaults', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: 'replace-defaults' }),
+        });
+        byId('instruction-status').textContent = result.message;
+        byId('adopt-defaults-confirm').checked = false;
+        byId('adopt-defaults').disabled = true;
+    } catch (error) { byId('instruction-status').textContent = error.message; }
 };
 byId('draft').addEventListener('input', () => {
     persistVisibleDraft();

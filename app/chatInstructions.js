@@ -54,9 +54,30 @@ function ensureChatInstructionFiles() {
 
 function replaceDefaultInstructionFiles() {
     fs.mkdirSync(path.dirname(IDENTITY_FILE), { recursive: true });
-    for (const [file, content] of [[IDENTITY_FILE, identity], [SPIRAL_FILE, spiral]]) {
-        if (fs.existsSync(file)) fs.copyFileSync(file, file + '.previous');
-        fs.writeFileSync(file, content, 'utf8');
+    let replaced = 0;
+    try {
+        for (const [file, content] of [[IDENTITY_FILE, identity], [SPIRAL_FILE, spiral]]) {
+            const temporary = file + '.new';
+            const previousTemporary = file + '.previous.new';
+            if (fs.existsSync(file)) {
+                fs.copyFileSync(file, previousTemporary);
+                fs.renameSync(previousTemporary, file + '.previous');
+            }
+            fs.writeFileSync(temporary, content, 'utf8');
+            fs.renameSync(temporary, file);
+            replaced += 1;
+        }
+    } catch (error) {
+        const partial = replaced ? ' Some defaults were replaced, but every prior version saved before replacement remains in its .previous file.' : '';
+        throw new Error('Could not replace default instructions safely.' + partial + ' ' + error.message);
+    } finally {
+        for (const file of [IDENTITY_FILE, SPIRAL_FILE]) {
+            for (const temporary of [file + '.new', file + '.previous.new']) {
+                try { fs.unlinkSync(temporary); } catch (error) {
+                    if (error.code !== 'ENOENT') throw error;
+                }
+            }
+        }
     }
     writeIfMissing(USER_CONTEXT_FILE, '# Optional local context\n\nAdd context you want included in local chat requests. This file is yours; Ember Node does not overwrite it.\n');
 }
@@ -84,6 +105,15 @@ function getActiveInstructions() {
     };
 }
 
+function getBundledInstructionDefaults() {
+    return {
+        files: [
+            { label: 'Bundled identity and principles', path: IDENTITY_FILE, content: identity.trim() },
+            { label: 'Bundled spiral practice', path: SPIRAL_FILE, content: spiral.trim() },
+        ],
+    };
+}
+
 function boundedTranscript(messages) {
     const transcript = Array.isArray(messages) ? messages : [];
     const omittedMessages = Math.max(0, transcript.length - MAX_CONTEXT_MESSAGES);
@@ -103,6 +133,7 @@ module.exports = {
     USER_CONTEXT_FILE,
     boundedTranscript,
     ensureChatInstructionFiles,
+    getBundledInstructionDefaults,
     getActiveInstructions,
     replaceDefaultInstructionFiles,
 };

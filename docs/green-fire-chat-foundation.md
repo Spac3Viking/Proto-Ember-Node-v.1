@@ -27,6 +27,15 @@ archive. Their claims are limited to these bundled sources:
   boundaries”: practical observation/reflection/action language and explicit
   knowledge limits.
 
+The bundled philosophy text uses **“Decentralized Knowledge”** and
+**“Collective Memory”**, exactly as named in `green-fire-library.zip` package
+`green-fire-library` version `2.0.0`,
+`documents/codices/foundational-works/green-fire-philosophy.md`, Chapter III.
+Earlier project materials used **“Decentralized Networks”** and **“Collective
+Wisdom.”** This implementation records the discrepancy rather than silently
+renaming either edition or claiming their terminology is identical. Resolving
+or changing doctrine remains outside this pass.
+
 The defaults do not activate retrieval, personas, Council, archetypes, or
 automatic memory. A chat request contains the active system instructions and
 at most 18 saved messages. Conversation records remain local continuity, while

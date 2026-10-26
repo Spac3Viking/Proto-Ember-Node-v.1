@@ -66,7 +66,8 @@ aside { background: var(--panel); border-right: 1px solid var(--line); }
 .assistant strong { color: var(--green); }
 #composer { border-top: 1px solid var(--line); display: grid; gap: .55rem; padding-top: .9rem; }
 textarea { min-height: 7rem; resize: vertical; width: 100%; }
-#instruction-files pre { color: var(--green); font: .8rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+#instruction-files pre, #instruction-defaults pre { color: var(--green); font: .8rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+#instruction-status { color: var(--amber); font-size: .85rem; }
 @media (max-width: 860px) {
     main { grid-template-columns: 1fr; }
     aside, #settings, #instructions { border: 0; border-bottom: 1px solid var(--line); }

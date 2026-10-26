@@ -15,7 +15,12 @@ const {
 } = require('../conversations');
 const { isValidStorageId } = require('../safeStorageId');
 const { requestLocalCompletion } = require('../aiGateway');
-const { boundedTranscript, getActiveInstructions, replaceDefaultInstructionFiles } = require('../chatInstructions');
+const {
+    boundedTranscript,
+    getActiveInstructions,
+    getBundledInstructionDefaults,
+    replaceDefaultInstructionFiles,
+} = require('../chatInstructions');
 
 const router = express.Router();
 const activeRequests = new Map();
@@ -30,8 +35,16 @@ router.get('/api/conversations', readLimiter, (_req, res) => {
 });
 
 router.get('/api/conversations/instructions', readLimiter, (_req, res) => {
-    const instructions = getActiveInstructions();
-    res.json({ files: instructions.files, errors: instructions.errors });
+    try {
+        const instructions = getActiveInstructions();
+        res.json({ files: instructions.files, errors: instructions.errors, defaults: getBundledInstructionDefaults().files });
+    } catch (error) {
+        res.status(503).json({
+            files: [],
+            defaults: getBundledInstructionDefaults().files,
+            errors: ['Chat instructions are unavailable: ' + error.message],
+        });
+    }
 });
 
 router.post('/api/conversations/instructions/adopt-defaults', writeLimiter, (req, res) => {
@@ -126,20 +139,30 @@ router.post('/api/conversations/:id/respond', writeLimiter, async (req, res) => 
     const controller = new AbortController();
     const state = { controller, requestId, cancelled: false };
     activeRequests.set(conversationId, state);
-    const instructions = getActiveInstructions();
-    if (instructions.errors.length) {
-        activeRequests.delete(conversationId);
-        return res.status(503).json({
-            error: 'Chat instructions are unavailable: ' + instructions.errors.join(' '),
-            saved: true,
-            message_saved: true,
-            response_saved: false,
-            outcome: 'instructions_unavailable',
-        });
-    }
-    const transcript = boundedTranscript(appended.conversation.messages);
     let completionReceived = false;
     try {
+        let instructions;
+        try {
+            instructions = getActiveInstructions();
+        } catch (error) {
+            return res.status(503).json({
+                error: 'Chat instructions are unavailable: ' + error.message,
+                saved: true,
+                message_saved: true,
+                response_saved: false,
+                outcome: 'instructions_unavailable',
+            });
+        }
+        if (instructions.errors.length) {
+            return res.status(503).json({
+                error: 'Chat instructions are unavailable: ' + instructions.errors.join(' '),
+                saved: true,
+                message_saved: true,
+                response_saved: false,
+                outcome: 'instructions_unavailable',
+            });
+        }
+        const transcript = boundedTranscript(appended.conversation.messages);
         const completion = await requestLocalCompletion({
             messages: [{ role: 'system', content: instructions.systemPrompt }, ...transcript.messages],
             signal: controller.signal,
