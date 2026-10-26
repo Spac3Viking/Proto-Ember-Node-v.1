@@ -79,11 +79,16 @@ function renderMessages(messages, { scrollTop = 0, followLatest = false } = {}) 
     updateLatestMessageAction();
 }
 
+function captureMessagePosition() {
+    const messages = byId('messages');
+    return { scrollTop: messages.scrollTop, followLatest: isNearBottom(messages) };
+}
+
 function persistVisibleDraft() {
     setDraft(activeConversation && activeConversation.id, byId('draft').value);
 }
 
-function applyConversation(conversation) {
+function applyConversation(conversation, messagePosition) {
     const messages = byId('messages');
     const sameConversation = activeConversation && activeConversation.id === conversation.id;
     if (sameConversation) uiState(conversation.id).scrollTop = messages.scrollTop;
@@ -92,8 +97,8 @@ function applyConversation(conversation) {
     byId('draft').value = getDraft(conversation.id);
     const currentUi = uiState(conversation.id);
     renderMessages(conversation.messages, {
-        followLatest: sameConversation && isNearBottom(messages),
-        scrollTop: currentUi.scrollTop,
+        followLatest: messagePosition ? messagePosition.followLatest : sameConversation && isNearBottom(messages),
+        scrollTop: messagePosition ? messagePosition.scrollTop : currentUi.scrollTop,
     });
     const activeRequest = activeRequests.get(conversation.id);
     byId('send').disabled = Boolean(activeRequest);
@@ -187,6 +192,7 @@ function clearSubmittedDraft(requestState) {
 }
 
 async function submitRequest(conversation, requestState) {
+    let responseSaved = false;
     activeRequests.set(conversation.id, requestState);
     saveRequest(requestState);
     if (activeConversation && activeConversation.id === conversation.id) {
@@ -201,14 +207,18 @@ async function submitRequest(conversation, requestState) {
             body: JSON.stringify({ requestId: requestState.requestId, content: requestState.content }),
         });
         if (result.outcome === 'response_saved') {
+            const messagePosition = activeConversation && activeConversation.id === conversation.id
+                ? captureMessagePosition()
+                : null;
             clearSubmittedDraft(requestState);
             removeRequest(requestState);
             const notice = result.context && result.context.notice;
             setContextNotice(conversation.id, notice);
+            if (activeRequests.get(requestState.conversationId) === requestState) activeRequests.delete(requestState.conversationId);
             if (activeConversation && activeConversation.id === conversation.id) {
-                activeConversation = result.conversation;
-                renderMessages(result.conversation.messages);
+                applyConversation(result.conversation, messagePosition);
             }
+            responseSaved = true;
             setConversationStatus(conversation.id, 'Message and response saved locally.');
             refreshList().catch(() => {});
         }
@@ -220,7 +230,7 @@ async function submitRequest(conversation, requestState) {
         else setConversationStatus(conversation.id, error.message);
     } finally {
         if (activeRequests.get(requestState.conversationId) === requestState) activeRequests.delete(requestState.conversationId);
-        if (activeConversation && activeConversation.id === conversation.id) applyConversation(activeConversation);
+        if (!responseSaved && activeConversation && activeConversation.id === conversation.id) applyConversation(activeConversation);
     }
 }
 
@@ -369,8 +379,12 @@ function closePanel(id, buttonId, restoreFocus = false) {
     if (panel.hidden) return;
     panel.hidden = true;
     byId(buttonId).setAttribute('aria-expanded', 'false');
-    if (restoreFocus && panelOpeners.get(id) && typeof panelOpeners.get(id).focus === 'function') {
-        panelOpeners.get(id).focus();
+    const opener = panelOpeners.get(id);
+    if (restoreFocus && opener && typeof opener.focus === 'function') {
+        if (id === 'instructions' && opener === byId('instructions-button')) {
+            byId('chat-tools').open = true;
+        }
+        opener.focus();
     }
 }
 function openPanel(id, buttonId) {
